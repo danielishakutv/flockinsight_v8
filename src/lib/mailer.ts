@@ -1,7 +1,16 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
+import { Resend } from "resend";
 
 let cached: Transporter | null | undefined;
+let resendCached: Resend | null | undefined;
+
+function getResend(): Resend | null {
+  if (resendCached !== undefined) return resendCached;
+  const key = process.env.RESEND_API_KEY;
+  resendCached = key ? new Resend(key) : null;
+  return resendCached;
+}
 
 function getTransport(): Transporter | null {
   if (cached !== undefined) return cached;
@@ -23,7 +32,7 @@ function getTransport(): Transporter | null {
 }
 
 export function isEmailConfigured() {
-  return !!process.env.SMTP_HOST;
+  return !!(process.env.RESEND_API_KEY || process.env.SMTP_HOST);
 }
 
 export async function sendEmail(opts: {
@@ -32,12 +41,31 @@ export async function sendEmail(opts: {
   html: string;
   text?: string;
 }): Promise<boolean> {
-  const t = getTransport();
   const from =
     process.env.EMAIL_FROM ?? "FlockInsight <no-reply@flockinsight.com>";
+
+  // Preferred: Resend API (uses RESEND_API_KEY).
+  const resend = getResend();
+  if (resend) {
+    const { error } = await resend.emails.send({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.text ? { text: opts.text } : {}),
+    });
+    if (error) {
+      console.error(`[mailer] Resend error for "${opts.subject}":`, error);
+      return false;
+    }
+    return true;
+  }
+
+  // Fallback: SMTP.
+  const t = getTransport();
   if (!t) {
     console.warn(
-      `[mailer] SMTP not configured — skipped "${opts.subject}" to ${opts.to}`,
+      `[mailer] No email provider configured — skipped "${opts.subject}" to ${opts.to}`,
     );
     return false;
   }
