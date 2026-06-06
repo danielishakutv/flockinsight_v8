@@ -14,6 +14,7 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/flockinsight}"
 KEY_FILE="${KEY_FILE:-$HOME/.flockinsight-backup.key}"
+DB_CONTAINER="${DB_CONTAINER:-}"   # set to e.g. "flockinsight-db" if Postgres is in Docker
 
 target="${1:-latest}"
 assume_yes=false
@@ -36,8 +37,13 @@ fi
 # 1) safety dump of current state
 safety="$BACKUP_DIR/pre-restore_$(date +%Y%m%d_%H%M%S).dump"
 echo "[$(date)] Safety dump → $safety"
-pg_dump -Fc -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" > "$safety" || \
-  echo "WARN: safety dump failed (continuing)" >&2
+if [[ -n "$DB_CONTAINER" ]]; then
+  docker exec "$DB_CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$safety" || \
+    echo "WARN: safety dump failed (continuing)" >&2
+else
+  pg_dump -Fc -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" > "$safety" || \
+    echo "WARN: safety dump failed (continuing)" >&2
+fi
 
 # 2) decrypt + restore (clean existing objects first)
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
@@ -45,6 +51,10 @@ echo "[$(date)] Decrypting …"
 openssl enc -d -aes-256-cbc -pbkdf2 -in "$target" -out "$tmp" -pass "file:$KEY_FILE"
 
 echo "[$(date)] Restoring …"
-pg_restore --clean --if-exists --no-owner -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$tmp"
+if [[ -n "$DB_CONTAINER" ]]; then
+  docker exec -i "$DB_CONTAINER" pg_restore --clean --if-exists --no-owner -U "$DB_USER" -d "$DB_NAME" < "$tmp"
+else
+  pg_restore --clean --if-exists --no-owner -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$tmp"
+fi
 
 echo "[$(date)] Restore complete. (Safety dump kept at $safety)"

@@ -19,7 +19,9 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/flockinsight}"
 KEY_FILE="${KEY_FILE:-$HOME/.flockinsight-backup.key}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"        # local retention; off-site keeps long-term
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"            # e.g. "b2:flockinsight-backups" or "contabo:bucket/path"
-# PGPASSWORD should be exported by the caller/cron, or use a ~/.pgpass file.
+# If Postgres runs in Docker (no host pg_dump), set the container name:
+DB_CONTAINER="${DB_CONTAINER:-}"              # e.g. "flockinsight-db"
+# PGPASSWORD/.pgpass only needed for the non-Docker (host pg_dump) path.
 
 ts="$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
@@ -34,7 +36,11 @@ fi
 
 echo "[$(date)] Dumping $DB_NAME …"
 # Custom format (-Fc) = compressed + supports selective/parallel restore.
-pg_dump -Fc -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" > "$tmp"
+if [[ -n "$DB_CONTAINER" ]]; then
+  docker exec "$DB_CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$tmp"
+else
+  pg_dump -Fc -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" > "$tmp"
+fi
 
 echo "[$(date)] Encrypting → $out"
 openssl enc -aes-256-cbc -pbkdf2 -salt -in "$tmp" -out "$out" -pass "file:$KEY_FILE"

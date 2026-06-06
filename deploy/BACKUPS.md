@@ -4,6 +4,11 @@ One PostgreSQL database holds **all churches**, so backing it up backs up
 everyone. Strategy: encrypted `pg_dump` every 6 hours, short local retention,
 long-term retention off-site.
 
+> **Docker setup (flockinsight.com server):** Postgres runs in the
+> `flockinsight-db` container and the host has no `pg_dump`. Set
+> `DB_CONTAINER=flockinsight-db` and the scripts run `pg_dump`/`pg_restore`
+> via `docker exec` — no host Postgres client or `~/.pgpass` needed.
+
 ## One-time setup (on the VPS)
 
 ```bash
@@ -28,8 +33,8 @@ ls -lh /var/backups/flockinsight
 ## Schedule (every 6 hours) — cron
 ```bash
 crontab -e
-# add:
-0 */6 * * * /home/LINUXUSER/apps/flockinsight/deploy/backup-db.sh >> /var/log/flockinsight-backup.log 2>&1
+# add (Docker DB — note DB_CONTAINER):
+0 */6 * * * DB_CONTAINER=flockinsight-db /home/flockinsight/app/deploy/backup-db.sh >> /var/log/flockinsight-backup.log 2>&1
 ```
 
 ## Off-site (strongly recommended — survives VPS loss)
