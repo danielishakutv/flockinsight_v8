@@ -17,10 +17,12 @@ export function Sidebar({
   churchName,
   userName,
   userEmail,
+  isSuperAdmin = false,
 }: {
   churchName: string;
   userName: string;
   userEmail: string;
+  isSuperAdmin?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -69,7 +71,12 @@ export function Sidebar({
       </nav>
 
       <div className="border-t p-3">
-        <UserMenu name={userName} email={userEmail} className="w-full" />
+        <UserMenu
+          name={userName}
+          email={userEmail}
+          isSuperAdmin={isSuperAdmin}
+          className="w-full"
+        />
       </div>
     </aside>
   );

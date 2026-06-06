@@ -23,5 +23,7 @@ export const config = {
     "/members/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
+    "/suspended",
+    "/superadmin/:path*",
   ],
 };

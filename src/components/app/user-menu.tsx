@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Settings, Moon, Sun, Laptop } from "lucide-react";
+import { LogOut, Settings, Moon, Sun, Laptop, Shield } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
@@ -30,10 +30,12 @@ export function UserMenu({
   name,
   email,
   className,
+  isSuperAdmin = false,
 }: {
   name: string;
   email: string;
   className?: string;
+  isSuperAdmin?: boolean;
 }) {
   const router = useRouter();
   const { setTheme } = useTheme();
@@ -74,6 +76,14 @@ export function UserMenu({
             Settings
           </Link>
         </DropdownMenuItem>
+        {isSuperAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/superadmin">
+              <Shield />
+              Platform Admin
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
           Theme

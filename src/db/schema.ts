@@ -23,6 +23,9 @@ export const user = pgTable("user", {
   email: text().notNull().unique(),
   emailVerified: boolean().notNull().default(false),
   image: text(),
+  // Platform-level superadmin (FlockInsight operator), distinct from
+  // per-church roles. Bootstrap manually in the DB for your account.
+  isSuperAdmin: boolean().notNull().default(false),
   createdAt: timestamp().notNull().defaultNow(),
   updatedAt: timestamp().notNull().defaultNow(),
 });
@@ -75,6 +78,12 @@ export const verification = pgTable("verification", {
  * member       -> `staff`  (login users + their role per church)
  * ========================================================== */
 
+// Platform status for a church (set by superadmin).
+export const churchStatusEnum = pgEnum("church_status", [
+  "active",
+  "suspended",
+]);
+
 export const church = pgTable("church", {
   id: text().primaryKey(),
   name: text().notNull(),
@@ -84,6 +93,7 @@ export const church = pgTable("church", {
   metadata: text(),
   // ----- FlockInsight additional fields -----
   timezone: text().notNull().default("Africa/Lagos"),
+  status: churchStatusEnum().notNull().default("active"),
 });
 
 export const staff = pgTable("staff", {

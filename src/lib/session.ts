@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "./auth";
 import { db } from "@/db";
-import { church } from "@/db/schema";
+import { church, user } from "@/db/schema";
 
 /**
  * Returns the current Better Auth session (user + session) or null.
@@ -43,6 +43,33 @@ export async function requireChurch() {
     .limit(1);
 
   if (!activeChurch) redirect("/onboarding");
+  if (activeChurch.status === "suspended") redirect("/suspended");
 
   return { user: data.user, session: data.session, church: activeChurch };
+}
+
+/**
+ * True if the signed-in user is a platform superadmin (FlockInsight operator).
+ * Reads the flag from the DB (it isn't part of the Better Auth session object).
+ */
+export const getIsSuperAdmin = cache(async () => {
+  const data = await getSession();
+  if (!data?.user) return false;
+  const [row] = await db
+    .select({ isSuperAdmin: user.isSuperAdmin })
+    .from(user)
+    .where(eq(user.id, data.user.id))
+    .limit(1);
+  return !!row?.isSuperAdmin;
+});
+
+/**
+ * Require a platform superadmin. Redirects non-admins away.
+ */
+export async function requireSuperAdmin() {
+  const data = await getSession();
+  if (!data?.user) redirect("/login");
+  const ok = await getIsSuperAdmin();
+  if (!ok) redirect("/dashboard");
+  return data.user;
 }

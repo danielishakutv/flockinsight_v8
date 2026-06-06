@@ -8,6 +8,13 @@
       "when": 1780701932057,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780757890128,
+      "tag": "0001_superadmin",
+      "breakpoints": true
     }
   ]
 }
