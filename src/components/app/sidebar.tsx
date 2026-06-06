@@ -1,0 +1,76 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Church } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { mainNav, recordAction } from "@/lib/nav";
+import { Wordmark } from "@/components/brand";
+import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/app/user-menu";
+
+function isActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+export function Sidebar({
+  churchName,
+  userName,
+  userEmail,
+}: {
+  churchName: string;
+  userName: string;
+  userEmail: string;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 flex-col border-r lg:flex">
+      <div className="flex h-16 items-center px-5">
+        <Wordmark />
+      </div>
+
+      {/* church badge */}
+      <div className="px-3">
+        <div className="bg-sidebar-accent/60 flex items-center gap-2.5 rounded-xl px-3 py-2.5">
+          <Church className="text-primary size-4 shrink-0" />
+          <span className="truncate text-sm font-semibold">{churchName}</span>
+        </div>
+      </div>
+
+      <div className="px-3 pt-4">
+        <Button asChild size="lg" className="w-full justify-start gap-3">
+          <Link href={recordAction.href}>
+            <recordAction.icon className="size-5" />
+            Record Attendance
+          </Link>
+        </Button>
+      </div>
+
+      <nav className="flex-1 space-y-1 p-3">
+        {mainNav.map((item) => {
+          const active = isActive(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              )}
+            >
+              <item.icon className="size-5 shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t p-3">
+        <UserMenu name={userName} email={userEmail} className="w-full" />
+      </div>
+    </aside>
+  );
+}

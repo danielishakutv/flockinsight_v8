@@ -1,0 +1,124 @@
+"use server";
+
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { church, service } from "@/db/schema";
+import { requireChurch } from "@/lib/session";
+
+export type ActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/* ----------------------------- Church profile ----------------------------- */
+
+const profileSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  timezone: z.string().trim().min(1).max(64),
+});
+
+export async function updateChurchProfile(input: {
+  name: string;
+  timezone: string;
+}): Promise<ActionResult> {
+  const parsed = profileSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const { church: c } = await requireChurch();
+  await db
+    .update(church)
+    .set({ name: parsed.data.name, timezone: parsed.data.timezone })
+    .where(eq(church.id, c.id));
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/* -------------------------------- Services -------------------------------- */
+
+const serviceSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  dayOfWeek: z.number().int().min(0).max(6).nullable(),
+  startTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Use HH:MM")
+    .nullable(),
+});
+
+export async function createService(input: {
+  name: string;
+  dayOfWeek: number | null;
+  startTime: string | null;
+}): Promise<ActionResult> {
+  const parsed = serviceSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const { church: c } = await requireChurch();
+  const existing = await db
+    .select({ id: service.id })
+    .from(service)
+    .where(eq(service.churchId, c.id));
+
+  await db.insert(service).values({
+    churchId: c.id,
+    name: parsed.data.name,
+    dayOfWeek: parsed.data.dayOfWeek,
+    startTime: parsed.data.startTime,
+    sortOrder: existing.length,
+  });
+
+  revalidatePath("/settings/services");
+  revalidatePath("/attendance/record");
+  return { ok: true };
+}
+
+export async function updateService(input: {
+  id: string;
+  name: string;
+  dayOfWeek: number | null;
+  startTime: string | null;
+  isActive: boolean;
+}): Promise<ActionResult> {
+  const parsed = serviceSchema
+    .extend({ id: z.string().uuid(), isActive: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const { church: c } = await requireChurch();
+  const [row] = await db
+    .update(service)
+    .set({
+      name: parsed.data.name,
+      dayOfWeek: parsed.data.dayOfWeek,
+      startTime: parsed.data.startTime,
+      isActive: parsed.data.isActive,
+    })
+    .where(and(eq(service.id, parsed.data.id), eq(service.churchId, c.id)))
+    .returning({ id: service.id });
+  if (!row) return { ok: false, error: "Service not found." };
+
+  revalidatePath("/settings/services");
+  revalidatePath("/attendance/record");
+  return { ok: true };
+}
+
+export async function deleteService(id: string): Promise<ActionResult> {
+  if (!z.string().uuid().safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+
+  const { church: c } = await requireChurch();
+  const [row] = await db
+    .delete(service)
+    .where(and(eq(service.id, id), eq(service.churchId, c.id)))
+    .returning({ id: service.id });
+  if (!row) return { ok: false, error: "Service not found." };
+
+  revalidatePath("/settings/services");
+  revalidatePath("/attendance/record");
+  return { ok: true };
+}

@@ -1,0 +1,41 @@
+import { asc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { member } from "@/db/schema";
+import { requireChurch } from "@/lib/session";
+import { PageContainer, PageHeader } from "@/components/app/page-header";
+import { MembersList, type MemberRow } from "@/components/members/members-list";
+
+export const metadata = { title: "Members" };
+
+export default async function MembersPage() {
+  const { church } = await requireChurch();
+
+  const rows: MemberRow[] = await db
+    .select({
+      id: member.id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      gender: member.gender,
+      phone: member.phone,
+      email: member.email,
+      status: member.status,
+      dateOfBirth: member.dateOfBirth,
+      notes: member.notes,
+    })
+    .from(member)
+    .where(eq(member.churchId, church.id))
+    .orderBy(asc(member.firstName), asc(member.lastName));
+
+  const active = rows.filter((r) => r.status === "active").length;
+  const visitors = rows.filter((r) => r.status === "visitor").length;
+
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Members"
+        description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}`}
+      />
+      <MembersList members={rows} />
+    </PageContainer>
+  );
+}

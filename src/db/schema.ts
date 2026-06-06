@@ -1,0 +1,254 @@
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  date,
+  uuid,
+  pgEnum,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+/* ============================================================
+ * Better Auth — core tables
+ * Property names are camelCase to match Better Auth field names;
+ * columns are snake_case via drizzle `casing: "snake_case"`.
+ * ========================================================== */
+
+export const user = pgTable("user", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  email: text().notNull().unique(),
+  emailVerified: boolean().notNull().default(false),
+  image: text(),
+  createdAt: timestamp().notNull().defaultNow(),
+  updatedAt: timestamp().notNull().defaultNow(),
+});
+
+export const session = pgTable("session", {
+  id: text().primaryKey(),
+  expiresAt: timestamp().notNull(),
+  token: text().notNull().unique(),
+  createdAt: timestamp().notNull().defaultNow(),
+  updatedAt: timestamp().notNull().defaultNow(),
+  ipAddress: text(),
+  userAgent: text(),
+  userId: text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // organization plugin: the church the user is currently acting within
+  activeOrganizationId: text(),
+});
+
+export const account = pgTable("account", {
+  id: text().primaryKey(),
+  accountId: text().notNull(),
+  providerId: text().notNull(),
+  userId: text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text(),
+  refreshToken: text(),
+  idToken: text(),
+  accessTokenExpiresAt: timestamp(),
+  refreshTokenExpiresAt: timestamp(),
+  scope: text(),
+  password: text(),
+  createdAt: timestamp().notNull().defaultNow(),
+  updatedAt: timestamp().notNull().defaultNow(),
+});
+
+export const verification = pgTable("verification", {
+  id: text().primaryKey(),
+  identifier: text().notNull(),
+  value: text().notNull(),
+  expiresAt: timestamp().notNull(),
+  createdAt: timestamp().notNull().defaultNow(),
+  updatedAt: timestamp().notNull().defaultNow(),
+});
+
+/* ============================================================
+ * Better Auth — organization plugin
+ * organization -> `church` (the tenant)
+ * member       -> `staff`  (login users + their role per church)
+ * ========================================================== */
+
+export const church = pgTable("church", {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  slug: text().notNull().unique(),
+  logo: text(),
+  createdAt: timestamp().notNull().defaultNow(),
+  metadata: text(),
+  // ----- FlockInsight additional fields -----
+  timezone: text().notNull().default("Africa/Lagos"),
+});
+
+export const staff = pgTable("staff", {
+  id: text().primaryKey(),
+  organizationId: text()
+    .notNull()
+    .references(() => church.id, { onDelete: "cascade" }),
+  userId: text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  role: text().notNull().default("member"),
+  createdAt: timestamp().notNull().defaultNow(),
+});
+
+export const invitation = pgTable("invitation", {
+  id: text().primaryKey(),
+  organizationId: text()
+    .notNull()
+    .references(() => church.id, { onDelete: "cascade" }),
+  email: text().notNull(),
+  role: text(),
+  status: text().notNull().default("pending"),
+  expiresAt: timestamp().notNull(),
+  inviterId: text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+
+/* ============================================================
+ * FlockInsight domain — enums
+ * ========================================================== */
+
+export const genderEnum = pgEnum("gender", ["male", "female"]);
+export const memberStatusEnum = pgEnum("member_status", [
+  "active",
+  "inactive",
+  "visitor",
+  "new_convert",
+]);
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "present",
+  "absent",
+]);
+
+/* ============================================================
+ * FlockInsight domain — congregation
+ * `member` = a person in the congregation (not necessarily a login).
+ * Every record is scoped to a church (tenant).
+ * ========================================================== */
+
+export const member = pgTable(
+  "member",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    firstName: text().notNull(),
+    lastName: text(),
+    gender: genderEnum(),
+    phone: text(),
+    email: text(),
+    dateOfBirth: date(),
+    status: memberStatusEnum().notNull().default("active"),
+    joinedAt: date(),
+    photoUrl: text(),
+    address: text(),
+    notes: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("member_church_idx").on(t.churchId)],
+);
+
+/* ============================================================
+ * FlockInsight domain — services (recurring gathering types)
+ * ========================================================== */
+
+export const service = pgTable(
+  "service",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    dayOfWeek: integer(), // 0=Sun .. 6=Sat; null = ad-hoc
+    startTime: text(), // "09:00"
+    description: text(),
+    isActive: boolean().notNull().default(true),
+    sortOrder: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("service_church_idx").on(t.churchId)],
+);
+
+/* ============================================================
+ * FlockInsight domain — attendance
+ * A session = one instance of taking attendance (fast headcounts),
+ * with optional per-member check-in records.
+ * ========================================================== */
+
+export const attendanceSession = pgTable(
+  "attendance_session",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    serviceId: uuid().references(() => service.id, { onDelete: "set null" }),
+    title: text(), // label for one-off events (when serviceId is null)
+    date: date().notNull(),
+    // ----- fast headcounts -----
+    totalCount: integer().notNull().default(0),
+    maleCount: integer().notNull().default(0),
+    femaleCount: integer().notNull().default(0),
+    childrenCount: integer().notNull().default(0),
+    firstTimerCount: integer().notNull().default(0),
+    newConvertCount: integer().notNull().default(0),
+    notes: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("att_session_church_idx").on(t.churchId),
+    index("att_session_date_idx").on(t.date),
+    // one session per service per day per church (nulls allowed -> many ad-hoc)
+    uniqueIndex("att_session_unique").on(t.churchId, t.serviceId, t.date),
+  ],
+);
+
+export const attendanceRecord = pgTable(
+  "attendance_record",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    sessionId: uuid()
+      .notNull()
+      .references(() => attendanceSession.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    status: attendanceStatusEnum().notNull().default("present"),
+    checkedInAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("att_record_unique").on(t.sessionId, t.memberId)],
+);
+
+/* ============================================================
+ * Type helpers
+ * ========================================================== */
+
+export type Member = typeof member.$inferSelect;
+export type NewMember = typeof member.$inferInsert;
+export type Service = typeof service.$inferSelect;
+export type NewService = typeof service.$inferInsert;
+export type AttendanceSession = typeof attendanceSession.$inferSelect;
+export type NewAttendanceSession = typeof attendanceSession.$inferInsert;
+export type AttendanceRecord = typeof attendanceRecord.$inferSelect;
+export type Church = typeof church.$inferSelect;
+export type Staff = typeof staff.$inferSelect;
