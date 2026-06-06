@@ -43,6 +43,7 @@ next-env.d.ts
 
 # local backups / scratch artifacts (not for the repo)
 *.bak
+.next.bak.*/
 /node_modules.broken.bak/
 /_flockinsight-web.emptied/
 /src/app/_old_dashboard/

@@ -30,7 +30,10 @@ export function MobileNav() {
   const recordActive = isActive(pathname, recordAction.href);
 
   return (
-    <nav className="bg-background/90 fixed inset-x-0 bottom-0 z-30 flex items-end border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+    <nav
+      className="bg-background/90 fixed inset-x-0 bottom-0 z-30 flex items-end border-t backdrop-blur lg:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <div className="flex flex-1 items-stretch">
         {mobileNavLeft.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} />
