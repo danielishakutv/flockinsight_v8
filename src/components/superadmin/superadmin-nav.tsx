@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { label: "Overview", href: "/superadmin" },
   { label: "Churches", href: "/superadmin/churches" },
+  { label: "Backups", href: "/superadmin/backups" },
 ];
 
 export function SuperadminNav() {

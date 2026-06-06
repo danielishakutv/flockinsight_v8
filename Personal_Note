@@ -1,0 +1,8 @@
+***UPDATE AND DEPLOYS***
+cd /home/flockinsight/app
+git pull && pnpm install --prod=false && pnpm db:migrate && pnpm build && pm2 restart flockinsight
+
+
+****GRANT SUPERADMIN RIGHTS TO ACCOUNT VIA EMAIL****
+docker exec flockinsight-db psql -U flockinsight -d flockinsight \
+  -c "UPDATE \"user\" SET is_super_admin=true WHERE email='YOUR_EMAIL_HERE';"
