@@ -20,7 +20,7 @@ export default async function AppLayout({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar userName={user.name} userEmail={user.email} />
-        <main className="flex-1 pb-24 lg:pb-0">{children}</main>
+        <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">{children}</main>
       </div>
 
       <MobileNav />

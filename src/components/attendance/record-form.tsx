@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, StickyNote, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   recordAttendance,
@@ -56,6 +56,7 @@ export function RecordForm({
   const [firstTimers, setFirstTimers] = useState(initial?.firstTimerCount ?? 0);
   const [newConverts, setNewConverts] = useState(initial?.newConvertCount ?? 0);
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [showNotes, setShowNotes] = useState(!!initial?.notes);
 
   const total = men + women + children;
   const isAdhoc = serviceKey === ADHOC;
@@ -136,57 +137,90 @@ export function RecordForm({
         </CardContent>
       </Card>
 
-      {/* Big total */}
+      {/* Total banner */}
       <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/15 text-primary grid size-12 place-items-center rounded-xl">
-              <Users className="size-6" />
+        <CardContent className="flex items-center justify-between gap-3 py-1">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-primary/15 text-primary grid size-10 shrink-0 place-items-center rounded-xl">
+              <Users className="size-5" />
             </div>
-            <div>
-              <div className="text-muted-foreground text-sm font-medium">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold leading-tight">
                 Total attendance
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-muted-foreground text-xs leading-tight">
                 Men + Women + Children
               </div>
             </div>
           </div>
-          <div className="text-5xl font-extrabold tabular-nums lg:text-6xl">
+          <div className="text-4xl font-extrabold tabular-nums sm:text-5xl">
             {total}
           </div>
         </CardContent>
       </Card>
 
-      {/* Counts */}
-      <div className="grid gap-3">
-        <Stepper label="Men" value={men} onChange={setMen} accent />
-        <Stepper label="Women" value={women} onChange={setWomen} accent />
-        <Stepper label="Children" value={children} onChange={setChildren} accent />
-        <Stepper
-          label="First-timers"
-          hint="Already counted above"
-          value={firstTimers}
-          onChange={setFirstTimers}
-        />
-        <Stepper
-          label="New converts"
-          hint="Already counted above"
-          value={newConverts}
-          onChange={setNewConverts}
-        />
-      </div>
+      {/* Headcount */}
+      <section className="space-y-2">
+        <h2 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
+          Headcount
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Stepper label="Men" value={men} onChange={setMen} accent />
+          <Stepper label="Women" value={women} onChange={setWomen} accent />
+          <div className="col-span-2">
+            <Stepper
+              label="Children"
+              value={children}
+              onChange={setChildren}
+              accent
+            />
+          </div>
+        </div>
+      </section>
 
-      {/* Notes */}
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notes (optional)</Label>
-        <Textarea
-          id="notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Anything notable about this service…"
-        />
-      </div>
+      {/* Highlights */}
+      <section className="space-y-2">
+        <h2 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
+          First-timers &amp; converts
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Stepper
+            label="First-timers"
+            hint="incl. above"
+            value={firstTimers}
+            onChange={setFirstTimers}
+          />
+          <Stepper
+            label="New converts"
+            hint="incl. above"
+            value={newConverts}
+            onChange={setNewConverts}
+          />
+        </div>
+      </section>
+
+      {/* Notes (collapsed by default) */}
+      {showNotes ? (
+        <div className="space-y-2">
+          <Label htmlFor="notes">Note</Label>
+          <Textarea
+            id="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Anything notable about this service…"
+            autoFocus
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowNotes(true)}
+          className="text-muted-foreground hover:text-foreground hover:border-primary/40 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed py-3 text-sm font-medium transition-colors"
+        >
+          <StickyNote className="size-4" />
+          Add a note
+        </button>
+      )}
 
       <div className="sticky bottom-20 z-10 lg:bottom-4">
         <Button

@@ -28,26 +28,28 @@ export function Stepper({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-2xl border p-3 sm:p-4",
+        "flex flex-col gap-2 rounded-2xl border p-3 text-center",
         accent ? "border-primary/30 bg-primary/5" : "bg-card",
       )}
     >
-      <div className="min-w-0">
-        <div className="truncate text-base font-bold sm:text-lg">{label}</div>
+      <div className="min-h-7">
+        <div className="truncate text-sm font-bold">{label}</div>
         {hint && (
-          <div className="text-muted-foreground truncate text-xs">{hint}</div>
+          <div className="text-muted-foreground text-[10px] leading-tight">
+            {hint}
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex w-full items-center gap-2">
         <button
           type="button"
           aria-label={`Decrease ${label}`}
           onClick={() => set(value - step)}
           disabled={value <= min}
-          className="grid size-12 shrink-0 place-items-center rounded-full border bg-background text-foreground shadow-sm transition active:scale-90 disabled:opacity-40 sm:size-14"
+          className="bg-background grid size-10 shrink-0 place-items-center rounded-full border shadow-sm transition active:scale-90 disabled:opacity-40"
         >
-          <Minus className="size-5" strokeWidth={3} />
+          <Minus className="size-4" strokeWidth={3} />
         </button>
 
         <input
@@ -59,7 +61,7 @@ export function Stepper({
           max={max}
           onChange={(e) => set(parseInt(e.target.value, 10))}
           onFocus={(e) => e.target.select()}
-          className="w-16 bg-transparent text-center text-3xl font-extrabold tabular-nums outline-none sm:w-20 sm:text-4xl"
+          className="w-0 min-w-0 flex-1 bg-transparent text-center text-2xl font-extrabold tabular-nums outline-none sm:text-3xl"
         />
 
         <button
@@ -67,9 +69,9 @@ export function Stepper({
           aria-label={`Increase ${label}`}
           onClick={() => set(value + step)}
           disabled={value >= max}
-          className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition active:scale-90 disabled:opacity-40 sm:size-14"
+          className="bg-primary text-primary-foreground grid size-10 shrink-0 place-items-center rounded-full shadow-sm transition active:scale-90 disabled:opacity-40"
         >
-          <Plus className="size-5" strokeWidth={3} />
+          <Plus className="size-4" strokeWidth={3} />
         </button>
       </div>
     </div>

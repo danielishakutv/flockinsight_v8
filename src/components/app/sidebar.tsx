@@ -25,7 +25,7 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 flex-col border-r lg:flex">
+    <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 self-start border-r lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
       <div className="flex h-16 items-center px-5">
         <Wordmark />
       </div>
@@ -47,7 +47,7 @@ export function Sidebar({
         </Button>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {mainNav.map((item) => {
           const active = isActive(pathname, item.href);
           return (
