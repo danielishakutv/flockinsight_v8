@@ -69,6 +69,23 @@ After it's issued, `https://flockinsight.yourdomain.com` should load the app.
 Visit `https://flockinsight.yourdomain.com/signup` and create your church account.
 (That becomes the owner; no seed/demo data is loaded in production.)
 
+## 10. Make yourself platform superadmin
+After signing up, grant your account the platform admin role (for `/superadmin`):
+```bash
+sudo -u postgres psql -d flockinsight \
+  -c "UPDATE \"user\" SET is_super_admin = true WHERE email = 'you@yourdomain.com';"
+```
+Then visit `https://flockinsight.yourdomain.com/superadmin`.
+
+## 11. Backups (do this before inviting churches)
+Follow [`deploy/BACKUPS.md`](deploy/BACKUPS.md): create the key, add the cron job
+(every 6h), and configure an off-site remote.
+
+## 12. Email (password reset + verification)
+Set `SMTP_*` in `.env` (your Virtualmin Postfix or a provider), then
+`pnpm build && pm2 restart flockinsight`. Set `REQUIRE_EMAIL_VERIFICATION=true`
+once email delivery is confirmed working.
+
 ---
 
 ## Updating later (deploy a new version)
