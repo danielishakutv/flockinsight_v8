@@ -4,7 +4,8 @@ import { createAuthClient } from "better-auth/react";
 import { organizationClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+  // No baseURL → uses the current origin (works on localhost AND your
+  // phone via the LAN IP, instead of hardcoding localhost).
   plugins: [organizationClient()],
 });
 

@@ -1,3 +1,4 @@
+import os from "node:os";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
@@ -14,7 +15,28 @@ import {
   invitation,
 } from "@/db/schema";
 
+// Trust localhost + every local LAN IPv4 of this machine (so you can log in
+// from a phone on the same Wi-Fi). Auto-adapts when you switch networks.
+function devTrustedOrigins(port = 3000): string[] {
+  const origins = new Set([
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+  ]);
+  if (process.env.NODE_ENV !== "production") {
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const ni of ifaces ?? []) {
+        if (ni.family === "IPv4" && !ni.internal) {
+          origins.add(`http://${ni.address}:${port}`);
+        }
+      }
+    }
+  }
+  if (process.env.BETTER_AUTH_URL) origins.add(process.env.BETTER_AUTH_URL);
+  return [...origins];
+}
+
 export const auth = betterAuth({
+  trustedOrigins: devTrustedOrigins(3000),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
