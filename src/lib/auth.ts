@@ -4,6 +4,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
+import { sendEmail, emailLayout } from "./mailer";
 import { db } from "@/db";
 import {
   user,
@@ -53,14 +54,50 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    // For now we don't gate on email verification (can enable later).
-    requireEmailVerification: false,
+    // Enable in prod by setting REQUIRE_EMAIL_VERIFICATION=true (needs SMTP).
+    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
     minPasswordLength: 8,
+    sendResetPassword: async ({ user: u, url }) => {
+      await sendEmail({
+        to: u.email,
+        subject: "Reset your FlockInsight password",
+        html: emailLayout(
+          "Reset your password",
+          "<p>We received a request to reset your FlockInsight password. This link expires in 1 hour.</p>",
+          { label: "Reset password", url },
+        ),
+        text: `Reset your FlockInsight password: ${url}`,
+      });
+    },
+  },
+
+  emailVerification: {
+    sendOnSignUp: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user: u, url }) => {
+      await sendEmail({
+        to: u.email,
+        subject: "Verify your FlockInsight email",
+        html: emailLayout(
+          "Confirm your email",
+          "<p>Welcome to FlockInsight! Please confirm your email address to finish setting up your church.</p>",
+          { label: "Verify email", url },
+        ),
+        text: `Verify your FlockInsight email: ${url}`,
+      });
+    },
   },
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
+  },
+
+  // Brute-force / abuse protection on auth endpoints.
+  rateLimit: {
+    enabled: true,
+    window: 60, // seconds
+    max: 60, // requests/window/IP (auth routes get stricter built-in limits)
   },
 
   databaseHooks: {

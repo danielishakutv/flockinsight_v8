@@ -130,6 +130,17 @@ export default function SignupPage() {
             {loading && <Loader2 className="animate-spin" />}
             Create free account
           </Button>
+          <p className="text-muted-foreground text-center text-xs">
+            By creating an account you agree to our{" "}
+            <Link href="/terms" className="hover:text-primary underline">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="hover:text-primary underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </form>
 
         <p className="text-muted-foreground mt-6 text-center text-sm">
