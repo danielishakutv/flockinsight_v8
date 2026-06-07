@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { signIn } from "@/lib/auth-client";
+import { signIn, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 
 function LoginForm() {
@@ -22,6 +23,8 @@ function LoginForm() {
   const params = useSearchParams();
   const redirectTo = params.get("redirect") || "/dashboard";
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,16 +33,39 @@ function LoginForm() {
     const password = String(form.get("password"));
 
     setLoading(true);
+    setUnverifiedEmail(null);
     const { error } = await signIn.email({ email, password });
     setLoading(false);
 
     if (error) {
+      // Email not verified → offer to resend the verification link, since the
+      // original email can fail to deliver (e.g. provider/domain limits).
+      if (error.status === 403 || error.code === "EMAIL_NOT_VERIFIED") {
+        setUnverifiedEmail(email);
+        toast.error("Please verify your email before logging in.");
+        return;
+      }
       toast.error(error.message || "Could not sign in. Check your details.");
       return;
     }
     toast.success("Welcome back!");
     router.push(redirectTo);
     router.refresh();
+  }
+
+  async function resendVerification() {
+    if (!unverifiedEmail) return;
+    setResending(true);
+    const { error } = await authClient.sendVerificationEmail({
+      email: unverifiedEmail,
+      callbackURL: redirectTo,
+    });
+    setResending(false);
+    if (error) {
+      toast.error(error.message || "Could not send the email. Try again shortly.");
+      return;
+    }
+    toast.success(`Verification email sent to ${unverifiedEmail}.`);
   }
 
   return (
@@ -49,6 +75,23 @@ function LoginForm() {
         <CardDescription>Log in to your FlockInsight dashboard</CardDescription>
       </CardHeader>
       <CardContent>
+        {unverifiedEmail && (
+          <div className="border-primary/30 bg-primary/5 mb-4 rounded-lg border p-3 text-sm">
+            <p className="text-muted-foreground">
+              Your email isn&apos;t verified yet. Didn&apos;t get the link?
+            </p>
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto p-0 font-semibold"
+              onClick={resendVerification}
+              disabled={resending}
+            >
+              {resending && <Loader2 className="animate-spin" />}
+              Resend verification email
+            </Button>
+          </div>
+        )}
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -71,10 +114,9 @@ function LoginForm() {
                 Forgot?
               </Link>
             </div>
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="current-password"
               placeholder="••••••••"
               required

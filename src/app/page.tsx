@@ -10,8 +10,8 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { getSession } from "@/lib/session";
 import { Wordmark } from "@/components/brand";
+import { LandingHeaderAuth } from "@/components/landing-header-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -100,10 +100,7 @@ const testimonials = [
   },
 ];
 
-export default async function LandingPage() {
-  const session = await getSession();
-  const loggedIn = !!session?.user;
-
+export default function LandingPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Header */}
@@ -117,22 +114,7 @@ export default async function LandingPage() {
             <a href="#pricing" className="hover:text-primary">Pricing</a>
           </nav>
           <div className="flex items-center gap-2">
-            {loggedIn ? (
-              <Button asChild>
-                <Link href="/dashboard">
-                  Dashboard <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-            ) : (
-              <>
-                <Button asChild variant="ghost" className="max-sm:hidden">
-                  <Link href="/login">Login</Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/signup">Get Started</Link>
-                </Button>
-              </>
-            )}
+            <LandingHeaderAuth />
           </div>
         </div>
       </header>
