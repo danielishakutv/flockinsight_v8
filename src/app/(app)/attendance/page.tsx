@@ -1,13 +1,26 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
-import { ChevronRight, ClipboardList, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  ClipboardList,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Plus,
+} from "lucide-react";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const metadata = { title: "Attendance" };
 
@@ -46,12 +59,38 @@ export default async function AttendancePage() {
         title="Attendance"
         description={`${rows.length} recorded ${rows.length === 1 ? "service" : "services"}`}
         action={
-          <Button asChild size="lg">
-            <Link href="/attendance/record">
-              <Plus className="size-5" />
-              Record
-            </Link>
-          </Button>
+          <>
+            {rows.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="lg">
+                    <Download className="size-5" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href="/reports/attendance" target="_blank">
+                      <FileText className="size-4" />
+                      PDF report
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href="/attendance/export" download>
+                      <FileSpreadsheet className="size-4" />
+                      Download CSV
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button asChild size="lg">
+              <Link href="/attendance/record">
+                <Plus className="size-5" />
+                Record
+              </Link>
+            </Button>
+          </>
         }
       />
 
