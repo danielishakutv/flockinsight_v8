@@ -1,0 +1,90 @@
+/**
+ * Public product changelog. Append a new entry at the TOP for each release.
+ * Keep items short and user-facing — this page is public.
+ *
+ * Categories use a fixed set so they render with consistent colors/order.
+ */
+export type ChangeCategory =
+  | "Added"
+  | "Improved"
+  | "Fixed"
+  | "Changed"
+  | "Security";
+
+export type Release = {
+  version: string; // e.g. "0.4.0"
+  date: string; // YYYY-MM-DD
+  summary?: string;
+  changes: Partial<Record<ChangeCategory, string[]>>;
+};
+
+/** Render order for categories within a release. */
+export const CATEGORY_ORDER: ChangeCategory[] = [
+  "Added",
+  "Improved",
+  "Fixed",
+  "Changed",
+  "Security",
+];
+
+export const releases: Release[] = [
+  {
+    version: "0.4.0",
+    date: "2026-06-07",
+    summary: "Data export and church management.",
+    changes: {
+      Added: [
+        "Export attendance to CSV — opens straight in Excel or Google Sheets.",
+        "Printable, church-branded attendance PDF report with totals and a service-by-service breakdown.",
+        "Superadmin: permanently delete a church, behind a type-the-name confirmation.",
+      ],
+    },
+  },
+  {
+    version: "0.3.0",
+    date: "2026-06-07",
+    summary: "Sign-up reliability and polish.",
+    changes: {
+      Fixed: [
+        "Creating a church account no longer fails when email verification is required.",
+      ],
+      Added: [
+        "“Resend verification email” option on the login screen.",
+        "Show/hide toggle on every password field.",
+      ],
+      Improved: [
+        "Faster landing page — now served as static content.",
+        "Branded browser-tab icon (favicon).",
+      ],
+    },
+  },
+  {
+    version: "0.2.0",
+    date: "2026-06-06",
+    summary: "Built for production.",
+    changes: {
+      Added: [
+        "Platform superadmin dashboard: manage churches and accounts, suspend or reactivate, and view metrics.",
+        "Downloadable encrypted database backups.",
+        "Terms of Service and Privacy Policy pages.",
+        "Transactional email for password resets and verification.",
+      ],
+      Security: ["Rate limiting on authentication endpoints."],
+      Improved: ["Log in from any device on your local network."],
+    },
+  },
+  {
+    version: "0.1.0",
+    date: "2026-06-05",
+    summary: "First release.",
+    changes: {
+      Added: [
+        "Church accounts with secure email and password sign-in.",
+        "Member directory.",
+        "Attendance recording with gender, children, first-timer, and new-convert counts.",
+        "Dashboard and analytics with weekly trends and growth.",
+        "Church settings, services, and team management.",
+      ],
+    },
+  },
+];

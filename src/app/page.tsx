@@ -318,6 +318,7 @@ export default function LandingPage() {
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
               <li><a href="#features" className="hover:text-primary">Features</a></li>
               <li><a href="#pricing" className="hover:text-primary">Pricing</a></li>
+              <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
               <li><Link href="/signup" className="hover:text-primary">Get Started</Link></li>
             </ul>
           </div>
