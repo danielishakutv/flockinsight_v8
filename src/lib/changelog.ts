@@ -29,6 +29,17 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.4.1",
+    date: "2026-06-07",
+    summary: "Faster attendance export.",
+    changes: {
+      Added: [
+        "One-click PDF download for attendance — no more print dialog.",
+        "Email the attendance report as a PDF attachment to any address.",
+      ],
+    },
+  },
+  {
     version: "0.4.0",
     date: "2026-06-07",
     summary: "Data export and church management.",

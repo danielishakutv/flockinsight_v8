@@ -35,11 +35,18 @@ export function isEmailConfigured() {
   return !!(process.env.RESEND_API_KEY || process.env.SMTP_HOST);
 }
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }): Promise<boolean> {
   const from =
     process.env.EMAIL_FROM ?? "FlockInsight <no-reply@flockinsight.com>";
@@ -53,6 +60,15 @@ export async function sendEmail(opts: {
       subject: opts.subject,
       html: opts.html,
       ...(opts.text ? { text: opts.text } : {}),
+      ...(opts.attachments?.length
+        ? {
+            attachments: opts.attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              ...(a.contentType ? { contentType: a.contentType } : {}),
+            })),
+          }
+        : {}),
     });
     if (error) {
       console.error(`[mailer] Resend error for "${opts.subject}":`, error);
@@ -69,7 +85,22 @@ export async function sendEmail(opts: {
     );
     return false;
   }
-  await t.sendMail({ from, ...opts });
+  await t.sendMail({
+    from,
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+    ...(opts.text ? { text: opts.text } : {}),
+    ...(opts.attachments?.length
+      ? {
+          attachments: opts.attachments.map((a) => ({
+            filename: a.filename,
+            content: a.content,
+            contentType: a.contentType,
+          })),
+        }
+      : {}),
+  });
   return true;
 }
 
