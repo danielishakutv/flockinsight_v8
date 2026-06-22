@@ -14,28 +14,37 @@ export type ActionResult =
 const emptyToNull = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? null : v;
 
+const optText = (max: number) =>
+  z.preprocess(emptyToNull, z.string().trim().max(max).nullable());
+
+const optDate = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
+    .nullable(),
+);
+
 const memberSchema = z.object({
   id: z.string().uuid().optional(),
   firstName: z.string().trim().min(1, "First name is required").max(80),
-  lastName: z.preprocess(emptyToNull, z.string().trim().max(80).nullable()),
-  gender: z.preprocess(
-    emptyToNull,
-    z.enum(["male", "female"]).nullable(),
-  ),
-  phone: z.preprocess(emptyToNull, z.string().trim().max(40).nullable()),
+  middleName: optText(80),
+  lastName: optText(80),
+  gender: z.preprocess(emptyToNull, z.enum(["male", "female"]).nullable()),
+  phone: optText(40),
   email: z.preprocess(
     emptyToNull,
     z.string().trim().email("Invalid email").max(160).nullable(),
   ),
   status: z.enum(["active", "inactive", "visitor", "new_convert"]),
-  dateOfBirth: z.preprocess(
-    emptyToNull,
-    z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
-      .nullable(),
-  ),
-  notes: z.preprocess(emptyToNull, z.string().trim().max(1000).nullable()),
+  dateOfBirth: optDate,
+  joinedAt: optDate,
+  house: optText(120),
+  street: optText(160),
+  city: optText(120),
+  state: optText(120),
+  country: optText(120),
+  notes: optText(1000),
 });
 
 export type MemberInput = z.input<typeof memberSchema>;
@@ -48,41 +57,41 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
   const d = parsed.data;
   const { church, user } = await requireChurch();
 
+  // Fields shared by insert and update.
+  const fields = {
+    firstName: d.firstName,
+    middleName: d.middleName,
+    lastName: d.lastName,
+    gender: d.gender,
+    phone: d.phone,
+    email: d.email,
+    status: d.status,
+    dateOfBirth: d.dateOfBirth,
+    joinedAt: d.joinedAt,
+    house: d.house,
+    street: d.street,
+    city: d.city,
+    state: d.state,
+    country: d.country,
+    notes: d.notes,
+  };
+
   try {
     if (d.id) {
       const [row] = await db
         .update(member)
-        .set({
-          firstName: d.firstName,
-          lastName: d.lastName,
-          gender: d.gender,
-          phone: d.phone,
-          email: d.email,
-          status: d.status,
-          dateOfBirth: d.dateOfBirth,
-          notes: d.notes,
-        })
+        .set(fields)
         .where(and(eq(member.id, d.id), eq(member.churchId, church.id)))
         .returning({ id: member.id });
       if (!row) return { ok: false, error: "Member not found." };
       revalidatePath("/members");
+      revalidatePath(`/members/${row.id}`);
       return { ok: true, id: row.id };
     }
 
     const [row] = await db
       .insert(member)
-      .values({
-        churchId: church.id,
-        firstName: d.firstName,
-        lastName: d.lastName,
-        gender: d.gender,
-        phone: d.phone,
-        email: d.email,
-        status: d.status,
-        dateOfBirth: d.dateOfBirth,
-        notes: d.notes,
-        createdBy: user.id,
-      })
+      .values({ churchId: church.id, ...fields, createdBy: user.id })
       .returning({ id: member.id });
 
     revalidatePath("/members");

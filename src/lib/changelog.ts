@@ -29,6 +29,17 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.4.2",
+    date: "2026-06-07",
+    summary: "Richer member profiles.",
+    changes: {
+      Added: [
+        "Middle name and a structured address (house, street, city, state, country) for members.",
+        "A full member profile page to complete or edit every detail any time after a quick add.",
+      ],
+    },
+  },
+  {
     version: "0.4.1",
     date: "2026-06-07",
     summary: "Faster attendance export.",

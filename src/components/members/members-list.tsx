@@ -1,17 +1,29 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import {
+  ChevronRight,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { saveMember, deleteMember } from "@/app/(app)/members/actions";
+import {
+  MemberFormFields,
+  EMPTY_MEMBER,
+  memberFormToInput,
+  type MemberFormState,
+} from "@/components/members/member-form-fields";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export type MemberRow = {
   id: string;
@@ -55,44 +60,22 @@ const STATUS_VARIANT: Record<
   inactive: "outline",
 };
 
-const NONE = "none";
-
 function fullName(m: MemberRow) {
   return [m.firstName, m.lastName].filter(Boolean).join(" ");
 }
 function initials(m: MemberRow) {
-  return [m.firstName?.[0], m.lastName?.[0]].filter(Boolean).join("").toUpperCase();
+  return [m.firstName?.[0], m.lastName?.[0]]
+    .filter(Boolean)
+    .join("")
+    .toUpperCase();
 }
-
-type FormState = {
-  id?: string;
-  firstName: string;
-  lastName: string;
-  gender: string;
-  phone: string;
-  email: string;
-  status: MemberRow["status"];
-  dateOfBirth: string;
-  notes: string;
-};
-
-const empty: FormState = {
-  firstName: "",
-  lastName: "",
-  gender: NONE,
-  phone: "",
-  email: "",
-  status: "active",
-  dateOfBirth: "",
-  notes: "",
-};
 
 export function MembersList({ members }: { members: MemberRow[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(empty);
+  const [form, setForm] = useState<MemberFormState>(EMPTY_MEMBER);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -106,43 +89,20 @@ export function MembersList({ members }: { members: MemberRow[] }) {
   }, [members, query]);
 
   function openAdd() {
-    setForm(empty);
-    setOpen(true);
-  }
-  function openEdit(m: MemberRow) {
-    setForm({
-      id: m.id,
-      firstName: m.firstName,
-      lastName: m.lastName ?? "",
-      gender: m.gender ?? NONE,
-      phone: m.phone ?? "",
-      email: m.email ?? "",
-      status: m.status,
-      dateOfBirth: m.dateOfBirth ?? "",
-      notes: m.notes ?? "",
-    });
+    setForm(EMPTY_MEMBER);
     setOpen(true);
   }
 
   function save() {
     startTransition(async () => {
-      const res = await saveMember({
-        id: form.id,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        gender: form.gender === NONE ? null : (form.gender as "male" | "female"),
-        phone: form.phone,
-        email: form.email,
-        status: form.status,
-        dateOfBirth: form.dateOfBirth,
-        notes: form.notes,
-      });
+      const res = await saveMember(memberFormToInput(form));
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(form.id ? "Member updated" : "Member added");
+      toast.success("Member added");
       setOpen(false);
+      setForm(EMPTY_MEMBER);
       router.refresh();
     });
   }
@@ -199,30 +159,27 @@ export function MembersList({ members }: { members: MemberRow[] }) {
           {filtered.map((m) => (
             <div
               key={m.id}
-              className="bg-card flex items-center gap-3 rounded-2xl border p-3 shadow-sm"
+              className="bg-card hover:border-primary/40 flex items-center gap-3 rounded-2xl border p-3 shadow-sm transition-colors"
             >
-              <Avatar className="size-11">
-                <AvatarFallback className="bg-primary/15 text-primary font-bold">
-                  {initials(m) || "?"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-bold">{fullName(m)}</p>
-                <p className="text-muted-foreground truncate text-xs">
-                  {m.phone || m.email || "No contact"}
-                </p>
-              </div>
+              <Link
+                href={`/members/${m.id}`}
+                className="flex min-w-0 flex-1 items-center gap-3"
+              >
+                <Avatar className="size-11">
+                  <AvatarFallback className="bg-primary/15 text-primary font-bold">
+                    {initials(m) || "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold">{fullName(m)}</p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {m.phone || m.email || "No contact"}
+                  </p>
+                </div>
+              </Link>
               <Badge variant={STATUS_VARIANT[m.status]}>
                 {STATUS_LABEL[m.status]}
               </Badge>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Edit"
-                onClick={() => openEdit(m)}
-              >
-                <Pencil className="size-4" />
-              </Button>
               {confirmId === m.id ? (
                 <Button
                   variant="destructive"
@@ -242,118 +199,28 @@ export function MembersList({ members }: { members: MemberRow[] }) {
                   <Trash2 className="size-4" />
                 </Button>
               )}
+              <Link
+                href={`/members/${m.id}`}
+                aria-label={`Open ${fullName(m)}`}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className="size-5" />
+              </Link>
             </div>
           ))}
         </div>
       )}
 
-      {/* Add / edit dialog */}
+      {/* Quick add dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{form.id ? "Edit member" : "Add member"}</DialogTitle>
+            <DialogTitle>Add member</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="fn">First name</Label>
-                <Input
-                  id="fn"
-                  value={form.firstName}
-                  onChange={(e) =>
-                    setForm({ ...form, firstName: e.target.value })
-                  }
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ln">Last name</Label>
-                <Input
-                  id="ln"
-                  value={form.lastName}
-                  onChange={(e) =>
-                    setForm({ ...form, lastName: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="gender">Gender</Label>
-                <Select
-                  value={form.gender}
-                  onValueChange={(v) => setForm({ ...form, gender: v })}
-                >
-                  <SelectTrigger id="gender" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>—</SelectItem>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) =>
-                    setForm({ ...form, status: v as MemberRow["status"] })
-                  }
-                >
-                  <SelectTrigger id="status" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="visitor">Visitor</SelectItem>
-                    <SelectItem value="new_convert">New convert</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dob">Date of birth</Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={form.dateOfBirth}
-                  onChange={(e) =>
-                    setForm({ ...form, dateOfBirth: e.target.value })
-                  }
-                  className="h-11"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
-          </div>
+          <MemberFormFields
+            form={form}
+            set={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          />
           <DialogFooter>
             <Button
               variant="ghost"
@@ -362,12 +229,9 @@ export function MembersList({ members }: { members: MemberRow[] }) {
             >
               Cancel
             </Button>
-            <Button
-              onClick={save}
-              disabled={pending || !form.firstName.trim()}
-            >
+            <Button onClick={save} disabled={pending || !form.firstName.trim()}>
               {pending && <Loader2 className="animate-spin" />}
-              {form.id ? "Save" : "Add member"}
+              Add member
             </Button>
           </DialogFooter>
         </DialogContent>

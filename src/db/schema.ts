@@ -152,6 +152,7 @@ export const member = pgTable(
       .notNull()
       .references(() => church.id, { onDelete: "cascade" }),
     firstName: text().notNull(),
+    middleName: text(),
     lastName: text(),
     gender: genderEnum(),
     phone: text(),
@@ -160,7 +161,13 @@ export const member = pgTable(
     status: memberStatusEnum().notNull().default("active"),
     joinedAt: date(),
     photoUrl: text(),
+    // Legacy free-form address (kept for back-compat); structured parts below.
     address: text(),
+    house: text(),
+    street: text(),
+    city: text(),
+    state: text(),
+    country: text(),
     notes: text(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

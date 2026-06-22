@@ -15,6 +15,13 @@
       "when": 1780757890128,
       "tag": "0001_superadmin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782161960073,
+      "tag": "0002_fuzzy_korvac",
+      "breakpoints": true
     }
   ]
 }
