@@ -29,6 +29,19 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.5.0",
+    date: "2026-06-07",
+    summary: "Follow-up module for the care team.",
+    changes: {
+      Added: [
+        "New Follow-up section: track visitors and new converts through stages — New, Contacted, In progress, Joined.",
+        "Log visits, calls, and notes against each person, with a full interaction history.",
+        "Send SMS to a member from the app (via Kudisms); sent messages are saved to their history.",
+        "Assign follow-up to a team member, and add any member to follow-up manually.",
+      ],
+    },
+  },
+  {
     version: "0.4.5",
     date: "2026-06-07",
     summary: "Member profile view.",

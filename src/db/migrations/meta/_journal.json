@@ -29,6 +29,13 @@
       "when": 1782200443886,
       "tag": "0003_friendly_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782246597967,
+      "tag": "0004_even_lester",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import {
   ClipboardCheck,
   BarChart3,
   Users,
+  HeartHandshake,
   Settings,
   PlusCircle,
   type LucideIcon,
@@ -20,6 +21,7 @@ export const mainNav: NavItem[] = [
   { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Members", href: "/members", icon: Users },
+  { label: "Follow-up", href: "/follow-up", icon: HeartHandshake },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

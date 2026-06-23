@@ -138,6 +138,29 @@ export const attendanceStatusEnum = pgEnum("attendance_status", [
   "absent",
 ]);
 
+// Follow-up module (visitor tracking + interactions).
+export const followUpStatusEnum = pgEnum("follow_up_status", [
+  "new",
+  "contacted",
+  "in_progress",
+  "joined",
+  "not_interested",
+]);
+export const interactionTypeEnum = pgEnum("interaction_type", [
+  "visit",
+  "call",
+  "sms",
+  "whatsapp",
+  "email",
+  "note",
+]);
+export const interactionOutcomeEnum = pgEnum("interaction_outcome", [
+  "reached",
+  "no_response",
+  "scheduled",
+  "not_interested",
+]);
+
 /* ============================================================
  * FlockInsight domain — congregation
  * `member` = a person in the congregation (not necessarily a login).
@@ -170,6 +193,13 @@ export const member = pgTable(
     state: text(),
     country: text(),
     notes: text(),
+    // ----- Follow-up module -----
+    // Visitors/new converts are followed up automatically (by status);
+    // `inFollowUp` lets the team add any other member manually.
+    inFollowUp: boolean().notNull().default(false),
+    followUpStatus: followUpStatusEnum(),
+    assignedToId: text().references(() => user.id, { onDelete: "set null" }),
+    lastContactedAt: timestamp({ withTimezone: true }),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true })
@@ -258,6 +288,35 @@ export const attendanceRecord = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — follow-up interactions
+ * A log of contact the follow-up team makes with a member
+ * (visits, calls, SMS, etc.).
+ * ========================================================== */
+
+export const followUpInteraction = pgTable(
+  "follow_up_interaction",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    type: interactionTypeEnum().notNull(),
+    outcome: interactionOutcomeEnum(),
+    notes: text(),
+    occurredAt: date().notNull(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("follow_up_member_idx").on(t.memberId),
+    index("follow_up_church_idx").on(t.churchId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -270,3 +329,5 @@ export type NewAttendanceSession = typeof attendanceSession.$inferInsert;
 export type AttendanceRecord = typeof attendanceRecord.$inferSelect;
 export type Church = typeof church.$inferSelect;
 export type Staff = typeof staff.$inferSelect;
+export type FollowUpInteraction = typeof followUpInteraction.$inferSelect;
+export type NewFollowUpInteraction = typeof followUpInteraction.$inferInsert;
