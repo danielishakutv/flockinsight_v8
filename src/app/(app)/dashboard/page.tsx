@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
   CalendarDays,
   ChevronRight,
+  HandCoins,
   Plus,
   Sparkles,
   TrendingUp,
@@ -11,7 +12,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { db } from "@/db";
-import { attendanceSession, member, service } from "@/db/schema";
+import { attendanceSession, giving, member, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import {
   getLastSession,
@@ -19,6 +20,7 @@ import {
   growthPct,
   weeklyAverage,
 } from "@/lib/attendance-metrics";
+import { formatMoney } from "@/lib/money";
 import { PageContainer } from "@/components/app/page-header";
 import { StatCard } from "@/components/app/stat-card";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
@@ -36,31 +38,58 @@ export const metadata = { title: "Dashboard" };
 export default async function DashboardPage() {
   const { user, church } = await requireChurch();
 
-  const [series, last, [{ memberCount }], recent] = await Promise.all([
-    getWeeklySeries(church.id, 12),
-    getLastSession(church.id),
-    db
-      .select({ memberCount: count() })
-      .from(member)
-      .where(eq(member.churchId, church.id)),
-    db
-      .select({
-        id: attendanceSession.id,
-        date: attendanceSession.date,
-        title: attendanceSession.title,
-        serviceName: service.name,
-        total: attendanceSession.totalCount,
-      })
-      .from(attendanceSession)
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
-      .where(eq(attendanceSession.churchId, church.id))
-      .orderBy(desc(attendanceSession.date), desc(attendanceSession.createdAt))
-      .limit(5),
-  ]);
+  const now = new Date();
+  const fmtMonthStart = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  const startOfMonth = fmtMonthStart(new Date(now.getFullYear(), now.getMonth(), 1));
+  const startOfPrevMonth = fmtMonthStart(
+    new Date(now.getFullYear(), now.getMonth() - 1, 1),
+  );
+  const sumAmount = sql<number>`coalesce(sum(${giving.amount}), 0)`;
+
+  const [series, last, [{ memberCount }], recent, [givingAgg]] =
+    await Promise.all([
+      getWeeklySeries(church.id, 12),
+      getLastSession(church.id),
+      db
+        .select({ memberCount: count() })
+        .from(member)
+        .where(eq(member.churchId, church.id)),
+      db
+        .select({
+          id: attendanceSession.id,
+          date: attendanceSession.date,
+          title: attendanceSession.title,
+          serviceName: service.name,
+          total: attendanceSession.totalCount,
+        })
+        .from(attendanceSession)
+        .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+        .where(eq(attendanceSession.churchId, church.id))
+        .orderBy(desc(attendanceSession.date), desc(attendanceSession.createdAt))
+        .limit(5),
+      db
+        .select({
+          month: sql<number>`coalesce(sum(${giving.amount}) filter (where ${giving.date} >= ${startOfMonth}), 0)`,
+          prev: sql<number>`coalesce(sum(${giving.amount}) filter (where ${giving.date} >= ${startOfPrevMonth} and ${giving.date} < ${startOfMonth}), 0)`,
+          total: sumAmount,
+        })
+        .from(giving)
+        .where(eq(giving.churchId, church.id)),
+    ]);
 
   const avg = weeklyAverage(series, 8);
   const growth = growthPct(series, 4);
   const firstTimers4w = series.slice(-4).reduce((a, w) => a + w.firstTimers, 0);
+
+  // Giving tile (only shown once a church has recorded any giving).
+  const givingMonth = Number(givingAgg?.month ?? 0);
+  const givingPrev = Number(givingAgg?.prev ?? 0);
+  const hasGiving = Number(givingAgg?.total ?? 0) > 0;
+  const givingDelta =
+    givingPrev > 0
+      ? Math.round(((givingMonth - givingPrev) / givingPrev) * 100)
+      : null;
 
   return (
     <PageContainer>
@@ -132,6 +161,22 @@ export default async function DashboardPage() {
               icon={Sparkles}
             />
           </div>
+
+          {/* Giving this month */}
+          {hasGiving && (
+            <Link
+              href="/giving"
+              className="mt-3 block transition-transform hover:-translate-y-0.5 lg:mt-4"
+            >
+              <StatCard
+                label="Giving this month"
+                value={formatMoney(givingMonth, church.currency)}
+                sub={`${format(now, "MMMM yyyy")} · tap to view giving`}
+                icon={HandCoins}
+                delta={givingDelta}
+              />
+            </Link>
+          )}
 
           {/* Trend chart */}
           <Card className="mt-4">
