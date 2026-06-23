@@ -29,7 +29,7 @@ export async function requireUser() {
  * Redirects to /login if not signed in, or /onboarding if the user
  * has no active church selected yet.
  */
-export async function requireChurch() {
+export const requireChurch = cache(async () => {
   const data = await getSession();
   if (!data?.user) redirect("/login");
 
@@ -46,7 +46,7 @@ export async function requireChurch() {
   if (activeChurch.status === "suspended") redirect("/suspended");
 
   return { user: data.user, session: data.session, church: activeChurch };
-}
+});
 
 /**
  * True if the signed-in user is a platform superadmin (FlockInsight operator).

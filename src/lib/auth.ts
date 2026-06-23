@@ -91,6 +91,13 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh daily
+    // Cache the session in a short-lived signed cookie so every protected
+    // navigation doesn't hit the DB to validate. Cuts a round-trip per click.
+    // Trade-off: revocation/role changes take up to maxAge to propagate.
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutes
+    },
   },
 
   // Brute-force / abuse protection on auth endpoints.
