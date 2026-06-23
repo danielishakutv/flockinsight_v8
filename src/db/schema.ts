@@ -4,6 +4,7 @@ import {
   timestamp,
   boolean,
   integer,
+  numeric,
   date,
   uuid,
   pgEnum,
@@ -93,6 +94,7 @@ export const church = pgTable("church", {
   metadata: text(),
   // ----- FlockInsight additional fields -----
   timezone: text().notNull().default("Africa/Lagos"),
+  currency: text().notNull().default("NGN"),
   status: churchStatusEnum().notNull().default("active"),
 });
 
@@ -170,6 +172,16 @@ export const groupTypeEnum = pgEnum("group_type", [
   "cell",
   "committee",
   "class",
+]);
+
+// How a gift was given. Optional on each giving record.
+export const givingMethodEnum = pgEnum("giving_method", [
+  "cash",
+  "transfer",
+  "card",
+  "cheque",
+  "online",
+  "other",
 ]);
 
 /* ============================================================
@@ -380,6 +392,61 @@ export const groupMembership = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — giving (offerings, tithe, donations, projects...)
+ * Categories are church-defined (like services); each `giving` row is one
+ * recorded gift, optionally tied to a member.
+ * ========================================================== */
+
+export const givingCategory = pgTable(
+  "giving_category",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    description: text(),
+    isActive: boolean().notNull().default(true),
+    sortOrder: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("giving_category_church_idx").on(t.churchId)],
+);
+
+export const giving = pgTable(
+  "giving",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    // Keep the record if its category is deleted (set null, show "Uncategorised").
+    categoryId: uuid().references(() => givingCategory.id, {
+      onDelete: "set null",
+    }),
+    // Optional registered giver. Set null on member delete; giverName preserves
+    // a label for non-members or after a member is removed.
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    giverName: text(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    method: givingMethodEnum(),
+    date: date().notNull(),
+    note: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("giving_church_idx").on(t.churchId),
+    index("giving_date_idx").on(t.date),
+    index("giving_category_idx").on(t.categoryId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -398,3 +465,7 @@ export type Group = typeof group.$inferSelect;
 export type NewGroup = typeof group.$inferInsert;
 export type GroupMembership = typeof groupMembership.$inferSelect;
 export type NewGroupMembership = typeof groupMembership.$inferInsert;
+export type GivingCategory = typeof givingCategory.$inferSelect;
+export type NewGivingCategory = typeof givingCategory.$inferInsert;
+export type Giving = typeof giving.$inferSelect;
+export type NewGiving = typeof giving.$inferInsert;

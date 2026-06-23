@@ -5,6 +5,7 @@ import {
   Users,
   UsersRound,
   HeartHandshake,
+  HandCoins,
   Settings,
   PlusCircle,
   type LucideIcon,
@@ -23,6 +24,7 @@ export const mainNav: NavItem[] = [
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Members", href: "/members", icon: Users },
   { label: "Groups", href: "/groups", icon: UsersRound },
+  { label: "Giving", href: "/giving", icon: HandCoins },
   { label: "Follow-up", href: "/follow-up", icon: HeartHandshake },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

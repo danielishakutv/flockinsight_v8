@@ -10,7 +10,7 @@ export default function SettingsLayout({
     <PageContainer className="max-w-3xl">
       <PageHeader
         title="Settings"
-        description="Manage your church profile, services and team."
+        description="Manage your church profile, services, giving and team."
       />
       <SettingsNav />
       {children}

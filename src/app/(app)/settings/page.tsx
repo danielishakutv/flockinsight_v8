@@ -9,6 +9,7 @@ export default async function GeneralSettingsPage() {
     <ProfileForm
       initialName={church.name}
       initialTimezone={church.timezone}
+      initialCurrency={church.currency}
     />
   );
 }
