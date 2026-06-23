@@ -19,6 +19,7 @@ import {
   memberFormToInput,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
+import { MembersDataMenu } from "@/components/members/members-data-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,7 @@ export function MembersList({ members }: { members: MemberRow[] }) {
             className="pl-9"
           />
         </div>
+        <MembersDataMenu />
         <Button onClick={openAdd} size="lg">
           <Plus className="size-5" />
           Add member

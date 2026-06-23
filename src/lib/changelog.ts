@@ -29,6 +29,17 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.4.4",
+    date: "2026-06-07",
+    summary: "Member CSV import & export.",
+    changes: {
+      Added: [
+        "Export your full member list to CSV.",
+        "Import members from a CSV — with a downloadable template and a per-row report of anything skipped.",
+      ],
+    },
+  },
+  {
     version: "0.4.3",
     date: "2026-06-07",
     summary: "Faster address entry.",
