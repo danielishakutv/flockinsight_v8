@@ -166,6 +166,40 @@ export async function createGivingCategory(input: {
   return { ok: true };
 }
 
+/** Create several giving categories at once (used by the giving setup flow). */
+export async function createGivingCategories(
+  names: string[],
+): Promise<ActionResult> {
+  const clean = [
+    ...new Set(
+      (names ?? [])
+        .map((n) => (typeof n === "string" ? n.trim() : ""))
+        .filter(Boolean)
+        .map((n) => n.slice(0, 120)),
+    ),
+  ].slice(0, 20);
+  if (clean.length === 0)
+    return { ok: false, error: "Add at least one category." };
+
+  const { church: c } = await requireChurch();
+  const existing = await db
+    .select({ id: givingCategory.id })
+    .from(givingCategory)
+    .where(eq(givingCategory.churchId, c.id));
+
+  await db.insert(givingCategory).values(
+    clean.map((name, i) => ({
+      churchId: c.id,
+      name,
+      sortOrder: existing.length + i,
+    })),
+  );
+
+  revalidatePath("/settings/giving");
+  revalidatePath("/giving");
+  return { ok: true };
+}
+
 export async function updateGivingCategory(input: {
   id: string;
   name: string;

@@ -4,15 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
-  CalendarDays,
+  Check,
   Coins,
   HandCoins,
   Loader2,
   Pencil,
   Plus,
-  TrendingUp,
+  Sparkles,
   Trash2,
-  Wallet,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -20,8 +20,8 @@ import {
   deleteGiving,
   type GivingInput,
 } from "@/app/(app)/giving/actions";
+import { createGivingCategories } from "@/app/(app)/settings/actions";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
-import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,6 +122,7 @@ export function GivingClient({
   const [pending, startTransition] = useTransition();
   const [filter, setFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   function emptyForm(): FormState {
@@ -205,25 +206,22 @@ export function GivingClient({
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
-        <StatCard
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <SummaryCard
           label="This month"
           value={formatMoneyCompact(monthTotal, currency)}
-          sub={format(parseISO(today), "MMMM yyyy")}
-          icon={Wallet}
+          sub={format(parseISO(today), "MMM yyyy")}
           accent
         />
-        <StatCard
+        <SummaryCard
           label="This year"
           value={formatMoneyCompact(yearTotal, currency)}
           sub={String(year)}
-          icon={CalendarDays}
         />
-        <StatCard
+        <SummaryCard
           label="All time"
           value={formatMoneyCompact(allTimeTotal, currency)}
-          sub="Total recorded"
-          icon={TrendingUp}
+          sub="Total"
         />
       </div>
 
@@ -231,10 +229,17 @@ export function GivingClient({
         <p className="text-muted-foreground text-sm">
           {records.length} record{records.length === 1 ? "" : "s"}
         </p>
-        <Button onClick={openAdd} size="lg">
-          <Plus className="size-5" />
-          Record giving
-        </Button>
+        {noCategories ? (
+          <Button onClick={() => setSetupOpen(true)} size="lg">
+            <Sparkles className="size-5" />
+            Set up giving
+          </Button>
+        ) : (
+          <Button onClick={openAdd} size="lg">
+            <Plus className="size-5" />
+            Record giving
+          </Button>
+        )}
       </div>
 
       {/* Breakdown by category (this year) */}
@@ -299,14 +304,21 @@ export function GivingClient({
             </div>
             <p className="text-muted-foreground">
               {records.length === 0
-                ? "No giving recorded yet."
+                ? noCategories
+                  ? "Set up your giving categories to start recording."
+                  : "No giving recorded yet."
                 : "No records in this category."}
             </p>
-            {records.length === 0 && (
-              <Button onClick={openAdd}>
-                <Plus className="size-5" /> Record your first gift
-              </Button>
-            )}
+            {records.length === 0 &&
+              (noCategories ? (
+                <Button onClick={() => setSetupOpen(true)}>
+                  <Sparkles className="size-5" /> Add giving categories
+                </Button>
+              ) : (
+                <Button onClick={openAdd}>
+                  <Plus className="size-5" /> Record your first gift
+                </Button>
+              ))}
           </CardContent>
         </Card>
       ) : (
@@ -385,7 +397,7 @@ export function GivingClient({
             </p>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount</Label>
                   <Input
@@ -418,7 +430,7 @@ export function GivingClient({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="date">Date</Label>
                   <Input
@@ -509,7 +521,225 @@ export function GivingClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CategorySetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={
+        "min-w-0 rounded-2xl border p-3 shadow-sm sm:p-5 " +
+        (accent
+          ? "from-primary border-transparent bg-gradient-to-br to-violet-500 text-white"
+          : "bg-card")
+      }
+    >
+      <p
+        className={
+          "truncate text-xs font-semibold sm:text-sm " +
+          (accent ? "text-white/80" : "text-muted-foreground")
+        }
+      >
+        {label}
+      </p>
+      <p className="mt-1 truncate text-lg leading-tight font-extrabold tabular-nums sm:text-2xl lg:text-3xl">
+        {value}
+      </p>
+      <p
+        className={
+          "mt-0.5 truncate text-[10px] sm:text-xs " +
+          (accent ? "text-white/70" : "text-muted-foreground")
+        }
+      >
+        {sub}
+      </p>
+    </div>
+  );
+}
+
+const SUGGESTED_CATEGORIES = [
+  "Tithe",
+  "Offering",
+  "Thanksgiving",
+  "Building Project",
+];
+
+function CategorySetupDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(SUGGESTED_CATEGORIES),
+  );
+  const [custom, setCustom] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+
+  // Reset to the defaults each time the dialog opens.
+  const [seen, setSeen] = useState(false);
+  if (open && !seen) {
+    setSelected(new Set(SUGGESTED_CATEGORIES));
+    setCustom([]);
+    setDraft("");
+    setSeen(true);
+  }
+  if (!open && seen) setSeen(false);
+
+  const all = [...SUGGESTED_CATEGORIES, ...custom];
+
+  function toggle(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function addCustom() {
+    const name = draft.trim();
+    if (!name) return;
+    if (all.some((a) => a.toLowerCase() === name.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+    setCustom((c) => [...c, name]);
+    setSelected((prev) => new Set(prev).add(name));
+    setDraft("");
+  }
+
+  function removeCustom(name: string) {
+    setCustom((c) => c.filter((x) => x !== name));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(name);
+      return next;
+    });
+  }
+
+  function confirm() {
+    const names = [...selected];
+    if (names.length === 0) return;
+    startTransition(async () => {
+      const res = await createGivingCategories(names);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(
+        `Added ${names.length} categor${names.length === 1 ? "y" : "ies"}`,
+      );
+      onOpenChange(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Set up giving categories</DialogTitle>
+        </DialogHeader>
+
+        <p className="text-muted-foreground text-sm">
+          Pick the types of giving your church receives, or add your own. You
+          can change these anytime in Settings → Giving.
+        </p>
+
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {all.map((name) => {
+              const on = selected.has(name);
+              const isCustom = custom.includes(name);
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => toggle(name)}
+                  className={
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors " +
+                    (on
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-accent")
+                  }
+                >
+                  {on ? <Check className="size-4" /> : <Plus className="size-4" />}
+                  {name}
+                  {isCustom && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Remove ${name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeCustom(name);
+                      }}
+                      className="ml-0.5 opacity-70 hover:opacity-100"
+                    >
+                      <X className="size-3.5" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add your own (e.g. Seed, First Fruit)"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustom();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addCustom}
+              disabled={!draft.trim()}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button onClick={confirm} disabled={pending || selected.size === 0}>
+            {pending && <Loader2 className="animate-spin" />}
+            Add {selected.size > 0 ? selected.size : ""} categor
+            {selected.size === 1 ? "y" : "ies"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
