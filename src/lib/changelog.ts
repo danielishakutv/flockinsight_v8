@@ -29,6 +29,18 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.4.3",
+    date: "2026-06-07",
+    summary: "Faster address entry.",
+    changes: {
+      Added: [
+        "Country and State are now dropdowns, defaulting to Nigeria and Adamawa.",
+        "Local Government dropdown that loads automatically for the selected Nigerian state.",
+      ],
+      Improved: ["New members default their join date to today."],
+    },
+  },
+  {
     version: "0.4.2",
     date: "2026-06-07",
     summary: "Richer member profiles.",

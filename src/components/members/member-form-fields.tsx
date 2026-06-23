@@ -1,6 +1,13 @@
 "use client";
 
 import type { MemberInput } from "@/app/(app)/members/actions";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  DEFAULT_STATE,
+  NIGERIAN_STATES,
+  lgasForState,
+} from "@/lib/geo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +35,7 @@ export type MemberFormState = {
   house: string;
   street: string;
   city: string;
+  lga: string;
   state: string;
   country: string;
   notes: string;
@@ -35,23 +43,38 @@ export type MemberFormState = {
 
 export const GENDER_NONE = "none";
 
-export const EMPTY_MEMBER: MemberFormState = {
-  firstName: "",
-  middleName: "",
-  lastName: "",
-  gender: GENDER_NONE,
-  status: "active",
-  phone: "",
-  email: "",
-  dateOfBirth: "",
-  joinedAt: "",
-  house: "",
-  street: "",
-  city: "",
-  state: "",
-  country: "",
-  notes: "",
-};
+/** Today as YYYY-MM-DD in the browser's local time. */
+function todayLocal(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * Fresh defaults for a NEW member: Nigeria / Adamawa, joined today. A function
+ * (not a constant) so "today" is evaluated each time the Add form opens.
+ */
+export function emptyMember(): MemberFormState {
+  return {
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    gender: GENDER_NONE,
+    status: "active",
+    phone: "",
+    email: "",
+    dateOfBirth: "",
+    joinedAt: todayLocal(),
+    house: "",
+    street: "",
+    city: "",
+    lga: "",
+    state: DEFAULT_STATE,
+    country: DEFAULT_COUNTRY,
+    notes: "",
+  };
+}
 
 /** Build a form state from a saved member record (nulls → empty strings). */
 export function memberToForm(m: {
@@ -68,6 +91,7 @@ export function memberToForm(m: {
   house: string | null;
   street: string | null;
   city: string | null;
+  lga: string | null;
   state: string | null;
   country: string | null;
   notes: string | null;
@@ -86,6 +110,7 @@ export function memberToForm(m: {
     house: m.house ?? "",
     street: m.street ?? "",
     city: m.city ?? "",
+    lga: m.lga ?? "",
     state: m.state ?? "",
     country: m.country ?? "",
     notes: m.notes ?? "",
@@ -108,6 +133,7 @@ export function memberFormToInput(form: MemberFormState): MemberInput {
     house: form.house,
     street: form.street,
     city: form.city,
+    lga: form.lga,
     state: form.state,
     country: form.country,
     notes: form.notes,
@@ -121,6 +147,9 @@ export function MemberFormFields({
   form: MemberFormState;
   set: (patch: Partial<MemberFormState>) => void;
 }) {
+  const isNigeria = form.country === DEFAULT_COUNTRY;
+  const lgaOptions = isNigeria ? lgasForState(form.state) : [];
+
   return (
     <div className="space-y-4">
       {/* Names */}
@@ -237,15 +266,102 @@ export function MemberFormFields({
         <p className="text-muted-foreground text-xs font-bold uppercase tracking-wide">
           Address
         </p>
+
+        {/* Country + State (cascade top-down) */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="house">House / No.</Label>
+            <Label htmlFor="country">Country</Label>
+            <Select
+              value={form.country || undefined}
+              onValueChange={(v) => set({ country: v })}
+            >
+              <SelectTrigger id="country" className="w-full">
+                <SelectValue placeholder="Select country" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="state">State</Label>
+            {isNigeria ? (
+              <Select
+                value={form.state || undefined}
+                onValueChange={(v) => set({ state: v, lga: "" })}
+              >
+                <SelectTrigger id="state" className="w-full">
+                  <SelectValue placeholder="Select state" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {NIGERIAN_STATES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="state"
+                value={form.state}
+                onChange={(e) => set({ state: e.target.value })}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* LGA + City */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="lga">
+              {isNigeria ? "Local Government" : "LGA / District"}
+            </Label>
+            {isNigeria ? (
+              <Select
+                value={form.lga || undefined}
+                onValueChange={(v) => set({ lga: v })}
+                disabled={lgaOptions.length === 0}
+              >
+                <SelectTrigger id="lga" className="w-full">
+                  <SelectValue
+                    placeholder={
+                      lgaOptions.length ? "Select LGA" : "Select a state first"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {lgaOptions.map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="lga"
+                value={form.lga}
+                onChange={(e) => set({ lga: e.target.value })}
+              />
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="city">City / Town</Label>
             <Input
-              id="house"
-              value={form.house}
-              onChange={(e) => set({ house: e.target.value })}
+              id="city"
+              value={form.city}
+              onChange={(e) => set({ city: e.target.value })}
             />
           </div>
+        </div>
+
+        {/* Street + House */}
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="street">Street</Label>
             <Input
@@ -254,32 +370,14 @@ export function MemberFormFields({
               onChange={(e) => set({ street: e.target.value })}
             />
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="city">City</Label>
+            <Label htmlFor="house">House / No.</Label>
             <Input
-              id="city"
-              value={form.city}
-              onChange={(e) => set({ city: e.target.value })}
+              id="house"
+              value={form.house}
+              onChange={(e) => set({ house: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="state">State</Label>
-            <Input
-              id="state"
-              value={form.state}
-              onChange={(e) => set({ state: e.target.value })}
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="country">Country</Label>
-          <Input
-            id="country"
-            value={form.country}
-            onChange={(e) => set({ country: e.target.value })}
-          />
         </div>
       </div>
 

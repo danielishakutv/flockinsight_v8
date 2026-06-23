@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { saveMember, deleteMember } from "@/app/(app)/members/actions";
 import {
   MemberFormFields,
-  EMPTY_MEMBER,
+  emptyMember,
   memberFormToInput,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
@@ -75,7 +75,7 @@ export function MembersList({ members }: { members: MemberRow[] }) {
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<MemberFormState>(EMPTY_MEMBER);
+  const [form, setForm] = useState<MemberFormState>(emptyMember);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -89,7 +89,7 @@ export function MembersList({ members }: { members: MemberRow[] }) {
   }, [members, query]);
 
   function openAdd() {
-    setForm(EMPTY_MEMBER);
+    setForm(emptyMember());
     setOpen(true);
   }
 
@@ -102,7 +102,7 @@ export function MembersList({ members }: { members: MemberRow[] }) {
       }
       toast.success("Member added");
       setOpen(false);
-      setForm(EMPTY_MEMBER);
+      setForm(emptyMember());
       router.refresh();
     });
   }

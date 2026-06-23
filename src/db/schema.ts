@@ -166,6 +166,7 @@ export const member = pgTable(
     house: text(),
     street: text(),
     city: text(),
+    lga: text(),
     state: text(),
     country: text(),
     notes: text(),

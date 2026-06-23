@@ -37,6 +37,7 @@ export default async function MemberDetailPage({
       house: member.house,
       street: member.street,
       city: member.city,
+      lga: member.lga,
       state: member.state,
       country: member.country,
       notes: member.notes,
