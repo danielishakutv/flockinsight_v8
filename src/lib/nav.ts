@@ -3,6 +3,7 @@ import {
   ClipboardCheck,
   BarChart3,
   Users,
+  UsersRound,
   HeartHandshake,
   Settings,
   PlusCircle,
@@ -21,6 +22,7 @@ export const mainNav: NavItem[] = [
   { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Members", href: "/members", icon: Users },
+  { label: "Groups", href: "/groups", icon: UsersRound },
   { label: "Follow-up", href: "/follow-up", icon: HeartHandshake },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

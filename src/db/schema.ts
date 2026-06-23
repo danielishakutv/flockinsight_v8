@@ -161,6 +161,17 @@ export const interactionOutcomeEnum = pgEnum("interaction_outcome", [
   "not_interested",
 ]);
 
+// Ministries & groups module. A single model with a `type` so a church can
+// organise people as ministries, departments, home cells, committees, etc.
+export const groupTypeEnum = pgEnum("group_type", [
+  "ministry",
+  "department",
+  "group",
+  "cell",
+  "committee",
+  "class",
+]);
+
 /* ============================================================
  * FlockInsight domain — congregation
  * `member` = a person in the congregation (not necessarily a login).
@@ -317,6 +328,58 @@ export const followUpInteraction = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — ministries & groups
+ * A group is any organised body within a church (ministry, department,
+ * home cell, committee...). Members join via `group_membership`.
+ * ========================================================== */
+
+export const group = pgTable(
+  "church_group",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    type: groupTypeEnum().notNull().default("ministry"),
+    description: text(),
+    meetingDay: integer(), // 0=Sun .. 6=Sat; null = no fixed day
+    meetingTime: text(), // "18:00"
+    isActive: boolean().notNull().default(true),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("group_church_idx").on(t.churchId)],
+);
+
+export const groupMembership = pgTable(
+  "group_membership",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    groupId: uuid()
+      .notNull()
+      .references(() => group.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    // A leader/head of this group. A group can have many.
+    isLeader: boolean().notNull().default(false),
+    // Free-form title within the group (e.g. "Ministry Head", "Treasurer").
+    role: text(),
+    joinedAt: date(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("group_membership_unique").on(t.groupId, t.memberId),
+    index("group_membership_member_idx").on(t.memberId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -331,3 +394,7 @@ export type Church = typeof church.$inferSelect;
 export type Staff = typeof staff.$inferSelect;
 export type FollowUpInteraction = typeof followUpInteraction.$inferSelect;
 export type NewFollowUpInteraction = typeof followUpInteraction.$inferInsert;
+export type Group = typeof group.$inferSelect;
+export type NewGroup = typeof group.$inferInsert;
+export type GroupMembership = typeof groupMembership.$inferSelect;
+export type NewGroupMembership = typeof groupMembership.$inferInsert;
