@@ -29,6 +29,16 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.4.5",
+    date: "2026-06-07",
+    summary: "Member profile view.",
+    changes: {
+      Improved: [
+        "Opening a member now shows a read-only profile with an Edit button, instead of jumping straight into edit mode.",
+      ],
+    },
+  },
+  {
     version: "0.4.4",
     date: "2026-06-07",
     summary: "Member CSV import & export.",

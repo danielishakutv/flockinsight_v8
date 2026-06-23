@@ -8,7 +8,7 @@ import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
-import { MemberEditForm } from "@/components/members/member-edit-form";
+import { MemberProfile } from "@/components/members/member-profile";
 
 export const metadata = { title: "Member" };
 
@@ -61,10 +61,8 @@ export default async function MemberDetailPage({
         </Link>
       </Button>
       <h1 className="text-3xl font-extrabold tracking-tight">{name}</h1>
-      <p className="text-muted-foreground mb-6 mt-1">
-        Complete this member&apos;s profile.
-      </p>
-      <MemberEditForm member={m} />
+      <p className="text-muted-foreground mb-6 mt-1">Member profile</p>
+      <MemberProfile member={m} />
     </PageContainer>
   );
 }

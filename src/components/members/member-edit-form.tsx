@@ -16,7 +16,13 @@ import { Card, CardContent } from "@/components/ui/card";
 
 type MemberRecord = Parameters<typeof memberToForm>[0];
 
-export function MemberEditForm({ member }: { member: MemberRecord }) {
+export function MemberEditForm({
+  member,
+  onDone,
+}: {
+  member: MemberRecord;
+  onDone?: () => void;
+}) {
   const router = useRouter();
   const [form, setForm] = useState<MemberFormState>(() => memberToForm(member));
   const [saving, startSave] = useTransition();
@@ -32,6 +38,7 @@ export function MemberEditForm({ member }: { member: MemberRecord }) {
       }
       toast.success("Member saved");
       router.refresh();
+      onDone?.();
     });
   }
 
@@ -91,10 +98,17 @@ export function MemberEditForm({ member }: { member: MemberRecord }) {
             </Button>
           )}
 
-          <Button onClick={save} disabled={saving || !form.firstName.trim()}>
-            {saving && <Loader2 className="animate-spin" />}
-            Save changes
-          </Button>
+          <div className="flex items-center gap-2">
+            {onDone && (
+              <Button variant="outline" onClick={onDone} disabled={saving}>
+                Cancel
+              </Button>
+            )}
+            <Button onClick={save} disabled={saving || !form.firstName.trim()}>
+              {saving && <Loader2 className="animate-spin" />}
+              Save changes
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
