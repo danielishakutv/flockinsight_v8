@@ -4,6 +4,7 @@ import { giving, givingCategory, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
+import { GivingDataMenu } from "@/components/giving/giving-data-menu";
 
 export const metadata = { title: "Giving" };
 
@@ -126,6 +127,7 @@ export default async function GivingPage() {
       <PageHeader
         title="Giving"
         description="Record offerings, tithes, donations and project gifts."
+        action={<GivingDataMenu hasData={rows.length > 0} />}
       />
       <GivingClient
         currency={church.currency}

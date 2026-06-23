@@ -48,9 +48,10 @@ export default async function AttendancePage() {
         description={`${rows.length} recorded ${rows.length === 1 ? "service" : "services"}`}
         action={
           <>
-            {rows.length > 0 && (
-              <AttendanceExportMenu userEmail={user.email} />
-            )}
+            <AttendanceExportMenu
+              userEmail={user.email}
+              hasData={rows.length > 0}
+            />
             <Button asChild size="lg">
               <Link href="/attendance/record">
                 <Plus className="size-5" />

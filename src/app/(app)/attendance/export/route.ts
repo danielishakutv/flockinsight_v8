@@ -1,5 +1,9 @@
 import { requireChurch } from "@/lib/session";
 import { getAttendanceRows } from "@/lib/attendance-export";
+import {
+  ATTENDANCE_CSV_HEADERS,
+  ATTENDANCE_CSV_SAMPLE,
+} from "@/lib/attendance-data";
 
 /** Quote a CSV cell only when it contains a comma, quote, or newline. */
 function csvCell(value: string | number | null): string {
@@ -7,44 +11,38 @@ function csvCell(value: string | number | null): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// GET /attendance/export → downloads all recorded attendance as CSV.
-export async function GET() {
+// GET /attendance/export            → all recorded attendance as CSV
+// GET /attendance/export?template=1 → header row + one example row
+export async function GET(request: Request) {
   const { church } = await requireChurch();
-  const rows = await getAttendanceRows(church.id);
+  const isTemplate = new URL(request.url).searchParams.get("template") === "1";
 
-  const header = [
-    "Date",
-    "Service / Event",
-    "Total",
-    "Male",
-    "Female",
-    "Children",
-    "First-timers",
-    "New converts",
-    "Notes",
-  ];
-  const lines = [
-    header,
-    ...rows.map((r) => [
-      r.date,
-      r.name,
-      r.total,
-      r.male,
-      r.female,
-      r.children,
-      r.firstTimers,
-      r.newConverts,
-      r.notes ?? "",
-    ]),
-  ];
+  const header = [...ATTENDANCE_CSV_HEADERS];
+  const body = isTemplate
+    ? [ATTENDANCE_CSV_SAMPLE]
+    : (await getAttendanceRows(church.id)).map((r) => [
+        r.date,
+        r.name,
+        r.total,
+        r.male,
+        r.female,
+        r.children,
+        r.firstTimers,
+        r.newConverts,
+        r.notes ?? "",
+      ]);
 
-  const body = lines.map((line) => line.map(csvCell).join(",")).join("\r\n");
+  const lines = [header, ...body];
+
+  const out = lines.map((line) => line.map(csvCell).join(",")).join("\r\n");
   // Leading BOM (U+FEFF) so Excel opens UTF-8 correctly; CRLF line endings.
   const BOM = String.fromCharCode(0xfeff);
-  const csv = BOM + body;
+  const csv = BOM + out;
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `${church.slug}-attendance-${stamp}.csv`;
+  const filename = isTemplate
+    ? "attendance-import-template.csv"
+    : `${church.slug}-attendance-${stamp}.csv`;
 
   return new Response(csv, {
     headers: {
