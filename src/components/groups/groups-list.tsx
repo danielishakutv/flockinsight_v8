@@ -44,9 +44,11 @@ type Candidate = { id: string; name: string };
 export function GroupsList({
   groups,
   candidates,
+  canManage = true,
 }: {
   groups: GroupRow[];
   candidates: Candidate[];
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -97,10 +99,12 @@ export function GroupsList({
             className="pl-9"
           />
         </div>
-        <Button onClick={() => setAddOpen(true)} size="lg">
-          <Plus className="size-5" />
-          New group
-        </Button>
+        {canManage && (
+          <Button onClick={() => setAddOpen(true)} size="lg">
+            <Plus className="size-5" />
+            New group
+          </Button>
+        )}
       </div>
 
       {presentTypes.length > 1 && (
@@ -132,7 +136,7 @@ export function GroupsList({
                 ? "No groups or ministries yet. Create one to start organising your members."
                 : "No groups match your search."}
             </p>
-            {groups.length === 0 && (
+            {groups.length === 0 && canManage && (
               <Button onClick={() => setAddOpen(true)}>
                 <Plus className="size-5" /> Create your first group
               </Button>
@@ -190,29 +194,30 @@ export function GroupsList({
                     <span />
                   )}
                   <div className="flex items-center gap-1">
-                    {confirmId === g.id ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => remove(g.id)}
-                        disabled={pending}
-                      >
-                        {pending ? (
-                          <Loader2 className="animate-spin" />
-                        ) : (
-                          "Confirm delete"
-                        )}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Delete group"
-                        onClick={() => setConfirmId(g.id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    )}
+                    {canManage &&
+                      (confirmId === g.id ? (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => remove(g.id)}
+                          disabled={pending}
+                        >
+                          {pending ? (
+                            <Loader2 className="animate-spin" />
+                          ) : (
+                            "Confirm delete"
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Delete group"
+                          onClick={() => setConfirmId(g.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ))}
                     <Link
                       href={`/groups/${g.id}`}
                       aria-label={`Open ${g.name}`}

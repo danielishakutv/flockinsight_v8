@@ -86,10 +86,12 @@ export function GroupDetail({
   group,
   members,
   candidates,
+  canManage = true,
 }: {
   group: GroupInfo;
   members: GroupMemberRow[];
   candidates: Candidate[];
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -185,10 +187,12 @@ export function GroupDetail({
                 )}
               </div>
             </div>
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-4" />
-              Edit
-            </Button>
+            {canManage && (
+              <Button variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+            )}
           </div>
 
           {/* Communication helpers */}
@@ -217,10 +221,12 @@ export function GroupDetail({
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-lg">Members</CardTitle>
-          <Button onClick={() => setAddOpen(true)} size="sm">
-            <Plus className="size-4" />
-            Add members
-          </Button>
+          {canManage && (
+            <Button onClick={() => setAddOpen(true)} size="sm">
+              <Plus className="size-4" />
+              Add members
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
@@ -240,6 +246,7 @@ export function GroupDetail({
                   groupId={group.id}
                   member={m}
                   busy={pending}
+                  canManage={canManage}
                   onRemove={() => remove(m.id)}
                 />
               ))}
@@ -270,11 +277,13 @@ function MemberRow({
   groupId,
   member,
   busy,
+  canManage,
   onRemove,
 }: {
   groupId: string;
   member: GroupMemberRow;
   busy: boolean;
+  canManage: boolean;
   onRemove: () => void;
 }) {
   const router = useRouter();
@@ -351,28 +360,39 @@ function MemberRow({
         </div>
       </Link>
 
-      {/* Leader / head toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={
-          "size-8 " + (member.isLeader ? "text-primary" : "text-muted-foreground")
-        }
-        onClick={toggleLeader}
-        disabled={leaderPending}
-        aria-label={member.isLeader ? "Remove as leader" : "Make leader"}
-        title={member.isLeader ? "Remove as leader" : "Make leader / head"}
-      >
-        {leaderPending ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : member.isLeader ? (
-          <ShieldCheck className="size-4" />
-        ) : (
-          <Shield className="size-4" />
-        )}
-      </Button>
+      {/* Read-only view for members without manage permission. */}
+      {!canManage ? (
+        member.role ? (
+          <Badge variant="secondary" className="gap-1">
+            <Tag className="size-3" />
+            {member.role}
+          </Badge>
+        ) : null
+      ) : (
+        <>
+          {/* Leader / head toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={
+              "size-8 " +
+              (member.isLeader ? "text-primary" : "text-muted-foreground")
+            }
+            onClick={toggleLeader}
+            disabled={leaderPending}
+            aria-label={member.isLeader ? "Remove as leader" : "Make leader"}
+            title={member.isLeader ? "Remove as leader" : "Make leader / head"}
+          >
+            {leaderPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : member.isLeader ? (
+              <ShieldCheck className="size-4" />
+            ) : (
+              <Shield className="size-4" />
+            )}
+          </Button>
 
-      {editing ? (
+          {editing ? (
         <div className="flex items-center gap-1">
           <Input
             value={draft}
@@ -449,6 +469,8 @@ function MemberRow({
         >
           <Trash2 className="size-4" />
         </Button>
+      )}
+        </>
       )}
     </div>
   );

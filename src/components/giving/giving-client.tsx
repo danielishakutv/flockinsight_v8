@@ -101,6 +101,7 @@ type FormState = {
 };
 
 export function GivingClient({
+  canManage,
   currency,
   categories,
   members,
@@ -112,6 +113,7 @@ export function GivingClient({
   breakdown,
   year,
 }: {
+  canManage: boolean;
   currency: string;
   categories: Option[];
   members: Option[];
@@ -242,17 +244,18 @@ export function GivingClient({
         <p className="text-muted-foreground text-sm">
           {records.length} record{records.length === 1 ? "" : "s"}
         </p>
-        {noCategories ? (
-          <Button onClick={() => setSetupOpen(true)} size="lg">
-            <Sparkles className="size-5" />
-            Set up giving
-          </Button>
-        ) : (
-          <Button onClick={openAdd} size="lg">
-            <Plus className="size-5" />
-            Record giving
-          </Button>
-        )}
+        {canManage &&
+          (noCategories ? (
+            <Button onClick={() => setSetupOpen(true)} size="lg">
+              <Sparkles className="size-5" />
+              Set up giving
+            </Button>
+          ) : (
+            <Button onClick={openAdd} size="lg">
+              <Plus className="size-5" />
+              Record giving
+            </Button>
+          ))}
       </div>
 
       {/* Breakdown by category (this year) */}
@@ -322,7 +325,8 @@ export function GivingClient({
                   : "No giving recorded yet."
                 : "No records in this category."}
             </p>
-            {records.length === 0 &&
+            {canManage &&
+              records.length === 0 &&
               (noCategories ? (
                 <Button onClick={() => setSetupOpen(true)}>
                   <Sparkles className="size-5" /> Add giving categories
@@ -362,32 +366,40 @@ export function GivingClient({
                   {r.note ? ` · ${r.note}` : ""}
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Edit"
-                onClick={() => openEdit(r)}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              {confirmId === r.id ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => remove(r.id)}
-                  disabled={pending}
-                >
-                  {pending ? <Loader2 className="animate-spin" /> : "Confirm"}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Delete"
-                  onClick={() => setConfirmId(r.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+              {canManage && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Edit"
+                    onClick={() => openEdit(r)}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  {confirmId === r.id ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => remove(r.id)}
+                      disabled={pending}
+                    >
+                      {pending ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        "Confirm"
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete"
+                      onClick={() => setConfirmId(r.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           ))}

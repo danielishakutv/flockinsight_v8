@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,8 @@ export default async function GroupDetailPage({
   if (!z.string().uuid().safeParse(id).success) notFound();
 
   const { church } = await requireChurch();
+  await requireCan("groups.view");
+  const canManage = await can("groups.manage");
 
   const [g] = await db
     .select()
@@ -100,6 +103,7 @@ export default async function GroupDetailPage({
         }}
         members={members}
         candidates={candidates}
+        canManage={canManage}
       />
     </PageContainer>
   );

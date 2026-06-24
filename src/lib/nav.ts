@@ -15,34 +15,65 @@ export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Permission(s) needed to see this. Undefined = always visible. */
+  perm?: string | string[];
 };
+
+/** Is a nav item visible given the user's permissions? */
+export function navAllowed(
+  perm: string | string[] | undefined,
+  perms: string[],
+  isOwner: boolean,
+): boolean {
+  if (isOwner || !perm) return true;
+  const list = Array.isArray(perm) ? perm : [perm];
+  return list.some((p) => perms.includes(p));
+}
+
+const SETTINGS_PERMS = ["settings.manage", "team.manage"];
 
 /** Full navigation (desktop sidebar). */
 export const mainNav: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
-  { label: "Members", href: "/members", icon: Users },
-  { label: "Groups", href: "/groups", icon: UsersRound },
-  { label: "Giving", href: "/giving", icon: HandCoins },
-  { label: "Follow-up", href: "/follow-up", icon: HeartHandshake },
-  { label: "Settings", href: "/settings", icon: Settings },
+  {
+    label: "Attendance",
+    href: "/attendance",
+    icon: ClipboardCheck,
+    perm: "attendance.view",
+  },
+  { label: "Analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view" },
+  { label: "Members", href: "/members", icon: Users, perm: "members.view" },
+  { label: "Groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
+  { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
+  {
+    label: "Follow-up",
+    href: "/follow-up",
+    icon: HeartHandshake,
+    perm: "followup.view",
+  },
+  { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
-/** The primary fast action. */
+/** The primary fast action — needs permission to record attendance. */
 export const recordAction: NavItem = {
   label: "Record",
   href: "/attendance/record",
   icon: PlusCircle,
+  perm: "attendance.manage",
 };
 
 /** Bottom nav on mobile: 2 left, [Record], then Members + a "More" sheet. */
 export const mobileNavLeft: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
+  {
+    label: "Attendance",
+    href: "/attendance",
+    icon: ClipboardCheck,
+    perm: "attendance.view",
+  },
 ];
 export const mobileNavRight: NavItem[] = [
-  { label: "Members", href: "/members", icon: Users },
+  { label: "Members", href: "/members", icon: Users, perm: "members.view" },
 ];
 
 /**
@@ -80,6 +111,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: ClipboardCheck,
         description: "Headcounts & history",
         tile: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+        perm: "attendance.view",
       },
       {
         label: "Giving",
@@ -87,6 +119,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: HandCoins,
         description: "Offerings, tithes & donations",
         tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+        perm: "giving.view",
       },
     ],
   },
@@ -99,6 +132,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: Users,
         description: "Your congregation",
         tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        perm: "members.view",
       },
       {
         label: "Groups",
@@ -106,6 +140,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: UsersRound,
         description: "Ministries & groups",
         tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+        perm: "groups.view",
       },
       {
         label: "Follow-up",
@@ -113,6 +148,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: HeartHandshake,
         description: "Visitor care",
         tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+        perm: "followup.view",
       },
     ],
   },
@@ -125,6 +161,7 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: Settings,
         description: "Profile, services & team",
         tile: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
+        perm: SETTINGS_PERMS,
       },
     ],
   },

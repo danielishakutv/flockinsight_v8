@@ -29,7 +29,11 @@ import {
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
 
-export function MembersDataMenu() {
+export function MembersDataMenu({
+  canManage = true,
+}: {
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -86,22 +90,26 @@ export function MembersDataMenu() {
               Export CSV
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              openImport();
-            }}
-          >
-            <FileUp className="size-4" />
-            Import CSV
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <a href="/members/export?template=1" download>
-              <Download className="size-4" />
-              Download template
-            </a>
-          </DropdownMenuItem>
+          {canManage && (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openImport();
+                }}
+              >
+                <FileUp className="size-4" />
+                Import CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a href="/members/export?template=1" download>
+                  <Download className="size-4" />
+                  Download template
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

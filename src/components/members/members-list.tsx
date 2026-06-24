@@ -71,7 +71,13 @@ function initials(m: MemberRow) {
     .toUpperCase();
 }
 
-export function MembersList({ members }: { members: MemberRow[] }) {
+export function MembersList({
+  members,
+  canManage = true,
+}: {
+  members: MemberRow[];
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -133,11 +139,13 @@ export function MembersList({ members }: { members: MemberRow[] }) {
             className="pl-9"
           />
         </div>
-        <MembersDataMenu />
-        <Button onClick={openAdd} size="lg">
-          <Plus className="size-5" />
-          Add member
-        </Button>
+        <MembersDataMenu canManage={canManage} />
+        {canManage && (
+          <Button onClick={openAdd} size="lg">
+            <Plus className="size-5" />
+            Add member
+          </Button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -149,7 +157,7 @@ export function MembersList({ members }: { members: MemberRow[] }) {
             <p className="text-muted-foreground">
               {query ? "No members match your search." : "No members yet."}
             </p>
-            {!query && (
+            {!query && canManage && (
               <Button onClick={openAdd}>
                 <Plus className="size-5" /> Add your first member
               </Button>
@@ -182,25 +190,26 @@ export function MembersList({ members }: { members: MemberRow[] }) {
               <Badge variant={STATUS_VARIANT[m.status]}>
                 {STATUS_LABEL[m.status]}
               </Badge>
-              {confirmId === m.id ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => remove(m.id)}
-                  disabled={pending}
-                >
-                  {pending ? <Loader2 className="animate-spin" /> : "Confirm"}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Delete"
-                  onClick={() => setConfirmId(m.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
+              {canManage &&
+                (confirmId === m.id ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => remove(m.id)}
+                    disabled={pending}
+                  >
+                    {pending ? <Loader2 className="animate-spin" /> : "Confirm"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Delete"
+                    onClick={() => setConfirmId(m.id)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                ))}
               <Link
                 href={`/members/${m.id}`}
                 aria-label={`Open ${fullName(m)}`}

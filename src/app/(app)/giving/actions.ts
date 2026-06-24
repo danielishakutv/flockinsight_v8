@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { giving, givingCategory, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -49,6 +50,8 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
   }
   const d = parsed.data;
   const { church, user } = await requireChurch();
+  if (!(await can("giving.manage")))
+    return { ok: false, error: "You don't have permission to manage giving." };
 
   // Category, if given, must belong to this church.
   if (d.categoryId) {
@@ -115,6 +118,8 @@ export async function deleteGiving(id: string): Promise<ActionResult> {
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();
+  if (!(await can("giving.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
   try {
     const [row] = await db
       .delete(giving)

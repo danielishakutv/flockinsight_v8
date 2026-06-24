@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Church } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mainNav, recordAction } from "@/lib/nav";
+import { mainNav, navAllowed, recordAction } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/app/user-menu";
@@ -18,13 +18,19 @@ export function Sidebar({
   userName,
   userEmail,
   isSuperAdmin = false,
+  perms = [],
+  isOwner = false,
 }: {
   churchName: string;
   userName: string;
   userEmail: string;
   isSuperAdmin?: boolean;
+  perms?: string[];
+  isOwner?: boolean;
 }) {
   const pathname = usePathname();
+  const items = mainNav.filter((i) => navAllowed(i.perm, perms, isOwner));
+  const canRecord = navAllowed(recordAction.perm, perms, isOwner);
 
   return (
     <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 self-start border-r lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
@@ -40,17 +46,19 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="px-3 pt-4">
-        <Button asChild size="lg" className="w-full justify-start gap-3">
-          <Link href={recordAction.href}>
-            <recordAction.icon className="size-5" />
-            Record Attendance
-          </Link>
-        </Button>
-      </div>
+      {canRecord && (
+        <div className="px-3 pt-4">
+          <Button asChild size="lg" className="w-full justify-start gap-3">
+            <Link href={recordAction.href}>
+              <recordAction.icon className="size-5" />
+              Record Attendance
+            </Link>
+          </Button>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {mainNav.map((item) => {
+        {items.map((item) => {
           const active = isActive(pathname, item.href);
           return (
             <Link

@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { followUpInteraction, member, staff, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { isSmsConfigured } from "@/lib/sms";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ export default async function FollowUpDetailPage({
   if (!z.string().uuid().safeParse(id).success) notFound();
 
   const { church } = await requireChurch();
+  await requireCan("followup.view");
+  const canManage = await can("followup.manage");
 
   const [m] = await db
     .select({
@@ -95,6 +98,7 @@ export default async function FollowUpDetailPage({
         interactions={interactions as FollowUpInteractionRow[]}
         team={team}
         smsEnabled={isSmsConfigured()}
+        canManage={canManage}
       />
     </PageContainer>
   );

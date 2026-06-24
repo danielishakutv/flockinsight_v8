@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
 
@@ -9,6 +10,7 @@ export const metadata = { title: "Record Attendance" };
 
 export default async function RecordPage() {
   const { church } = await requireChurch();
+  await requireCan("attendance.manage");
 
   const services = await db
     .select({ id: service.id, name: service.name })

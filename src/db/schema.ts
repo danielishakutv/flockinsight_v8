@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -106,9 +107,42 @@ export const staff = pgTable("staff", {
   userId: text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
+  // Better Auth org role ("owner"/"admin"/"member"). Owner = church creator,
+  // always full access. `roleId` (below) is the church-defined feature role.
   role: text().notNull().default("member"),
+  roleId: uuid().references(() => role.id, { onDelete: "set null" }),
   createdAt: timestamp().notNull().defaultNow(),
 });
+
+/* ============================================================
+ * FlockInsight domain — roles & permissions (church-defined RBAC)
+ * Each church creates roles and grants them permission keys
+ * (see src/lib/permissions.ts for the catalog). Owner is locked.
+ * ========================================================== */
+
+export const role = pgTable(
+  "role",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    description: text(),
+    // Array of permission keys, e.g. {"giving.view","giving.manage"}.
+    permissions: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    // Locked, full-access role (the church creator). Can't be edited/deleted.
+    isSystem: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("role_church_idx").on(t.churchId),
+    uniqueIndex("role_church_name_idx").on(t.churchId, t.name),
+  ],
+);
 
 export const invitation = pgTable("invitation", {
   id: text().primaryKey(),
@@ -469,3 +503,5 @@ export type GivingCategory = typeof givingCategory.$inferSelect;
 export type NewGivingCategory = typeof givingCategory.$inferInsert;
 export type Giving = typeof giving.$inferSelect;
 export type NewGiving = typeof giving.$inferInsert;
+export type Role = typeof role.$inferSelect;
+export type NewRole = typeof role.$inferInsert;

@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -76,6 +77,8 @@ export async function saveGroup(input: GroupInput): Promise<ActionResult> {
   }
   const d = parsed.data;
   const { church, user } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
 
   // A leader, if given, must be a member of this church.
   if (d.leaderId) {
@@ -137,6 +140,8 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
   try {
     const [row] = await db
       .delete(group)
@@ -163,6 +168,8 @@ export async function addMembersToGroup(
   if (ids.length === 0) return { ok: false, error: "No members selected." };
 
   const { church } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
   const gid = await groupInChurch(groupId, church.id);
   if (!gid) return { ok: false, error: "Group not found." };
 
@@ -197,6 +204,8 @@ export async function removeMemberFromGroup(
     return { ok: false, error: "Invalid id" };
 
   const { church } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
   const gid = await groupInChurch(groupId, church.id);
   if (!gid) return { ok: false, error: "Group not found." };
 
@@ -230,6 +239,8 @@ export async function setMembershipLeader(
     return { ok: false, error: "Invalid id" };
 
   const { church } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
   const gid = await groupInChurch(groupId, church.id);
   if (!gid) return { ok: false, error: "Group not found." };
 
@@ -267,6 +278,8 @@ export async function setMembershipRole(
     typeof role === "string" && role.trim() ? role.trim().slice(0, 80) : null;
 
   const { church } = await requireChurch();
+  if (!(await can("groups.manage")))
+    return { ok: false, error: "You don't have permission to manage groups." };
   const gid = await groupInChurch(groupId, church.id);
   if (!gid) return { ok: false, error: "Group not found." };
 

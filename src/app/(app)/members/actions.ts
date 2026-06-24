@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -57,6 +58,8 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
   }
   const d = parsed.data;
   const { church, user } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to manage members." };
 
   // Fields shared by insert and update.
   const fields = {
@@ -109,6 +112,8 @@ export async function deleteMember(id: string): Promise<ActionResult> {
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
   try {
     const [row] = await db
       .delete(member)

@@ -5,6 +5,7 @@ import { ChevronRight, ClipboardList, Plus } from "lucide-react";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,8 @@ export const metadata = { title: "Attendance" };
 
 export default async function AttendancePage() {
   const { church, user } = await requireChurch();
+  await requireCan("attendance.view");
+  const canManage = await can("attendance.manage");
 
   const rows = await db
     .select({
@@ -51,13 +54,16 @@ export default async function AttendancePage() {
             <AttendanceExportMenu
               userEmail={user.email}
               hasData={rows.length > 0}
+              canManage={canManage}
             />
-            <Button asChild size="lg">
-              <Link href="/attendance/record">
-                <Plus className="size-5" />
-                Record
-              </Link>
-            </Button>
+            {canManage && (
+              <Button asChild size="lg">
+                <Link href="/attendance/record">
+                  <Plus className="size-5" />
+                  Record
+                </Link>
+              </Button>
+            )}
           </>
         }
       />
@@ -73,12 +79,14 @@ export default async function AttendancePage() {
               Record your first service to see it here.
             </p>
           </div>
-          <Button asChild size="lg">
-            <Link href="/attendance/record">
-              <Plus className="size-5" />
-              Record attendance
-            </Link>
-          </Button>
+          {canManage && (
+            <Button asChild size="lg">
+              <Link href="/attendance/record">
+                <Plus className="size-5" />
+                Record attendance
+              </Link>
+            </Button>
+          )}
         </div>
       ) : (
         <div className="space-y-6">

@@ -2,6 +2,7 @@ import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { GroupsList, type GroupRow } from "@/components/groups/groups-list";
 
@@ -9,6 +10,8 @@ export const metadata = { title: "Groups & Ministries" };
 
 export default async function GroupsPage() {
   const { church } = await requireChurch();
+  await requireCan("groups.view");
+  const canManage = await can("groups.manage");
 
   const [rows, leaderRows, members] = await Promise.all([
     db
@@ -80,7 +83,11 @@ export default async function GroupsPage() {
         title="Groups & Ministries"
         description={`${groups.length} total · ${ministries} ${ministries === 1 ? "ministry" : "ministries"}`}
       />
-      <GroupsList groups={groups} candidates={candidates} />
+      <GroupsList
+        groups={groups}
+        candidates={candidates}
+        canManage={canManage}
+      />
     </PageContainer>
   );
 }

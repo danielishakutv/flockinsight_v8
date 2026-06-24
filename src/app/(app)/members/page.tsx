@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { MembersList, type MemberRow } from "@/components/members/members-list";
 
@@ -9,6 +10,8 @@ export const metadata = { title: "Members" };
 
 export default async function MembersPage() {
   const { church } = await requireChurch();
+  await requireCan("members.view");
+  const canManage = await can("members.manage");
 
   const rows: MemberRow[] = await db
     .select({
@@ -35,7 +38,7 @@ export default async function MembersPage() {
         title="Members"
         description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}`}
       />
-      <MembersList members={rows} />
+      <MembersList members={rows} canManage={canManage} />
     </PageContainer>
   );
 }

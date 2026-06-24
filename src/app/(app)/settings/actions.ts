@@ -6,10 +6,20 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, givingCategory, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, canAny } from "@/lib/permissions";
 
 export type ActionResult =
   | { ok: true }
   | { ok: false; error: string };
+
+const NO_SETTINGS = {
+  ok: false as const,
+  error: "You don't have permission to manage church settings.",
+};
+const NO_GIVING = {
+  ok: false as const,
+  error: "You don't have permission to manage giving.",
+};
 
 /* ----------------------------- Church profile ----------------------------- */
 
@@ -29,6 +39,7 @@ export async function updateChurchProfile(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { church: c } = await requireChurch();
+  if (!(await can("settings.manage"))) return NO_SETTINGS;
   await db
     .update(church)
     .set({
@@ -65,6 +76,7 @@ export async function createService(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { church: c } = await requireChurch();
+  if (!(await can("settings.manage"))) return NO_SETTINGS;
   const existing = await db
     .select({ id: service.id })
     .from(service)
@@ -97,6 +109,7 @@ export async function updateService(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { church: c } = await requireChurch();
+  if (!(await can("settings.manage"))) return NO_SETTINGS;
   const [row] = await db
     .update(service)
     .set({
@@ -119,6 +132,7 @@ export async function deleteService(id: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid id" };
 
   const { church: c } = await requireChurch();
+  if (!(await can("settings.manage"))) return NO_SETTINGS;
   const [row] = await db
     .delete(service)
     .where(and(eq(service.id, id), eq(service.churchId, c.id)))
@@ -149,6 +163,7 @@ export async function createGivingCategory(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
   const existing = await db
     .select({ id: givingCategory.id })
     .from(givingCategory)
@@ -182,6 +197,7 @@ export async function createGivingCategories(
     return { ok: false, error: "Add at least one category." };
 
   const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
   const existing = await db
     .select({ id: givingCategory.id })
     .from(givingCategory)
@@ -213,6 +229,7 @@ export async function updateGivingCategory(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
   const [row] = await db
     .update(givingCategory)
     .set({
@@ -239,6 +256,7 @@ export async function deleteGivingCategory(id: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid id" };
 
   const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
   const [row] = await db
     .delete(givingCategory)
     .where(and(eq(givingCategory.id, id), eq(givingCategory.churchId, c.id)))

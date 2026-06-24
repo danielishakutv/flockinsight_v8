@@ -66,9 +66,11 @@ function initials(name: string) {
 export function FollowUpList({
   people,
   candidates,
+  canManage = true,
 }: {
   people: FollowUpPerson[];
   candidates: Candidate[];
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<FollowUpStatus | "all">("all");
@@ -124,12 +126,14 @@ export function FollowUpList({
             label={`${STATUS_LABEL[s]} (${counts.get(s) ?? 0})`}
           />
         ))}
-        <div className="ml-auto">
-          <Button onClick={() => setAddOpen(true)} size="lg">
-            <Plus className="size-5" />
-            Add to follow-up
-          </Button>
-        </div>
+        {canManage && (
+          <div className="ml-auto">
+            <Button onClick={() => setAddOpen(true)} size="lg">
+              <Plus className="size-5" />
+              Add to follow-up
+            </Button>
+          </div>
+        )}
       </div>
 
       {filtered.length === 0 ? (

@@ -39,9 +39,11 @@ type ImportResult = { imported: number; skipped: number; errors: string[] };
 export function AttendanceExportMenu({
   userEmail,
   hasData = true,
+  canManage = true,
 }: {
   userEmail: string;
   hasData?: boolean;
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -102,6 +104,9 @@ export function AttendanceExportMenu({
     }
   }
 
+  // A view-only user with no data has nothing to export or import.
+  if (!hasData && !canManage) return null;
+
   return (
     <>
       <DropdownMenu>
@@ -140,21 +145,25 @@ export function AttendanceExportMenu({
               <DropdownMenuSeparator />
             </>
           )}
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              openImport();
-            }}
-          >
-            <FileUp className="size-4" />
-            Import CSV
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a href="/attendance/export?template=1" download>
-              <Download className="size-4" />
-              Download template
-            </a>
-          </DropdownMenuItem>
+          {canManage && (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openImport();
+                }}
+              >
+                <FileUp className="size-4" />
+                Import CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href="/attendance/export?template=1" download>
+                  <Download className="size-4" />
+                  Download template
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
           {hasData && (
             <>
               <DropdownMenuSeparator />

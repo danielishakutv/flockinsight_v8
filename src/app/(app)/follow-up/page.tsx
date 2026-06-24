@@ -2,6 +2,7 @@ import { and, count, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { followUpInteraction, member, staff, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FollowUpList, type FollowUpPerson } from "@/components/follow-up/follow-up-list";
 
@@ -9,6 +10,8 @@ export const metadata = { title: "Follow-up" };
 
 export default async function FollowUpPage() {
   const { church } = await requireChurch();
+  await requireCan("followup.view");
+  const canManage = await can("followup.manage");
 
   const [people, counts, candidates] = await Promise.all([
     db
@@ -80,6 +83,7 @@ export default async function FollowUpPage() {
         description={`${rows.length} ${rows.length === 1 ? "person" : "people"} to follow up`}
       />
       <FollowUpList
+        canManage={canManage}
         people={rows}
         candidates={candidates.map((c) => ({
           id: c.id,

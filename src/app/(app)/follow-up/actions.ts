@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { followUpInteraction, member, staff } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -57,6 +58,8 @@ export async function logInteraction(
   }
   const d = parsed.data;
   const { church, user } = await requireChurch();
+  if (!(await can("followup.manage")))
+    return { ok: false, error: "You don't have permission to manage follow-up." };
 
   const m = await memberInChurch(d.memberId, church.id);
   if (!m) return { ok: false, error: "Member not found." };
@@ -104,6 +107,8 @@ export async function sendSmsToMember(
   }
   const { memberId, message } = parsed.data;
   const { church, user } = await requireChurch();
+  if (!(await can("followup.manage")))
+    return { ok: false, error: "You don't have permission to manage follow-up." };
 
   if (!isSmsConfigured()) {
     return { ok: false, error: "SMS isn't set up on this server yet." };
@@ -155,6 +160,8 @@ export async function setFollowUpStatus(
   if (!STATUSES.includes(status))
     return { ok: false, error: "Invalid status" };
   const { church } = await requireChurch();
+  if (!(await can("followup.manage")))
+    return { ok: false, error: "You don't have permission to manage follow-up." };
 
   await db
     .update(member)
@@ -172,6 +179,8 @@ export async function assignFollowUp(
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();
+  if (!(await can("followup.manage")))
+    return { ok: false, error: "You don't have permission to manage follow-up." };
 
   if (userId) {
     // Only allow assigning to someone on the church team.
@@ -199,6 +208,8 @@ export async function setInFollowUp(
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();
+  if (!(await can("followup.manage")))
+    return { ok: false, error: "You don't have permission to manage follow-up." };
 
   const m = await memberInChurch(memberId, church.id);
   if (!m) return { ok: false, error: "Member not found." };

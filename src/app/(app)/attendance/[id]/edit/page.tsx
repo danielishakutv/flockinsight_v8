@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
 import { DeleteSessionButton } from "@/components/attendance/delete-session-button";
@@ -16,6 +17,7 @@ export default async function EditAttendancePage({
 }) {
   const { id } = await params;
   const { church } = await requireChurch();
+  await requireCan("attendance.manage");
 
   const [row] = await db
     .select()

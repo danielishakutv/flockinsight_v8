@@ -6,6 +6,7 @@ import { ArrowLeft, UsersRound } from "lucide-react";
 import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ export default async function MemberDetailPage({
   if (!z.string().uuid().safeParse(id).success) notFound();
 
   const { church } = await requireChurch();
+  await requireCan("members.view");
+  const canManage = await can("members.manage");
 
   const [m] = await db
     .select({
@@ -81,7 +84,7 @@ export default async function MemberDetailPage({
       </Button>
       <h1 className="text-3xl font-extrabold tracking-tight">{name}</h1>
       <p className="text-muted-foreground mb-6 mt-1">Member profile</p>
-      <MemberProfile member={m} />
+      <MemberProfile member={m} canManage={canManage} />
 
       <Card className="mt-4">
         <CardHeader>

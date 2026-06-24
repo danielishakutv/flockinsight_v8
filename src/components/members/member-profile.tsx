@@ -65,9 +65,11 @@ function Section({
 function MemberView({
   member,
   onEdit,
+  canManage,
 }: {
   member: MemberRecord;
   onEdit: () => void;
+  canManage: boolean;
 }) {
   const addressParts = [
     [member.house, member.street].filter(Boolean).join(" "),
@@ -88,10 +90,12 @@ function MemberView({
           <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
             {STATUS_LABEL[member.status] ?? member.status}
           </Badge>
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="size-4" />
-            Edit
-          </Button>
+          {canManage && (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Pencil className="size-4" />
+              Edit
+            </Button>
+          )}
         </div>
 
         <Section title="Contact">
@@ -119,11 +123,21 @@ function MemberView({
   );
 }
 
-export function MemberProfile({ member }: { member: MemberRecord }) {
+export function MemberProfile({
+  member,
+  canManage = true,
+}: {
+  member: MemberRecord;
+  canManage?: boolean;
+}) {
   const [mode, setMode] = useState<"view" | "edit">("view");
 
-  return mode === "view" ? (
-    <MemberView member={member} onEdit={() => setMode("edit")} />
+  return mode === "view" || !canManage ? (
+    <MemberView
+      member={member}
+      canManage={canManage}
+      onEdit={() => setMode("edit")}
+    />
   ) : (
     <MemberEditForm member={member} onDone={() => setMode("view")} />
   );

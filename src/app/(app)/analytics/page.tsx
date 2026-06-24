@@ -4,6 +4,7 @@ import { CalendarDays, Sparkles, TrendingUp, UserPlus } from "lucide-react";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { requireCan } from "@/lib/permissions";
 import {
   getWeeklySeries,
   growthPct,
@@ -35,6 +36,7 @@ function isoDaysAgo(days: number) {
 
 export default async function AnalyticsPage() {
   const { church } = await requireChurch();
+  await requireCan("analytics.view");
 
   const sinceStr = isoDaysAgo(7 * 12);
 

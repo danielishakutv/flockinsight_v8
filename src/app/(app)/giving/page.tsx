@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { giving, givingCategory, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
 import { GivingDataMenu } from "@/components/giving/giving-data-menu";
@@ -10,6 +11,8 @@ export const metadata = { title: "Giving" };
 
 export default async function GivingPage() {
   const { church } = await requireChurch();
+  await requireCan("giving.view");
+  const canManage = await can("giving.manage");
 
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -127,9 +130,12 @@ export default async function GivingPage() {
       <PageHeader
         title="Giving"
         description="Record offerings, tithes, donations and project gifts."
-        action={<GivingDataMenu hasData={rows.length > 0} />}
+        action={
+          <GivingDataMenu hasData={rows.length > 0} canManage={canManage} />
+        }
       />
       <GivingClient
+        canManage={canManage}
         currency={church.currency}
         categories={categories}
         members={memberOptions}

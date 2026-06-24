@@ -2,12 +2,14 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { requireCan } from "@/lib/permissions";
 import { ServicesManager } from "@/components/settings/services-manager";
 
 export const metadata = { title: "Services · Settings" };
 
 export default async function ServicesSettingsPage() {
   const { church } = await requireChurch();
+  await requireCan("settings.manage");
   const services = await db
     .select({
       id: service.id,

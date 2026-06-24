@@ -9,6 +9,7 @@ import {
   mobileMenuSections,
   mobileNavLeft,
   mobileNavRight,
+  navAllowed,
   recordAction,
   type NavItem,
 } from "@/lib/nav";
@@ -33,13 +34,33 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-export function MobileNav() {
+export function MobileNav({
+  perms = [],
+  isOwner = false,
+}: {
+  perms?: string[];
+  isOwner?: boolean;
+}) {
   const pathname = usePathname();
   const recordActive = isActive(pathname, recordAction.href);
   const [moreOpen, setMoreOpen] = useState(false);
 
+  const leftItems = mobileNavLeft.filter((i) =>
+    navAllowed(i.perm, perms, isOwner),
+  );
+  const rightItems = mobileNavRight.filter((i) =>
+    navAllowed(i.perm, perms, isOwner),
+  );
+  const canRecord = navAllowed(recordAction.perm, perms, isOwner);
+  const sections = mobileMenuSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => navAllowed(i.perm, perms, isOwner)),
+    }))
+    .filter((s) => s.items.length > 0);
+
   // The "More" tab is active when on a route that isn't one of the quick tabs.
-  const quickHrefs = [...mobileNavLeft, ...mobileNavRight, recordAction].map(
+  const quickHrefs = [...leftItems, ...rightItems, recordAction].map(
     (i) => i.href,
   );
   const moreActive = !quickHrefs.some((href) => isActive(pathname, href));
@@ -51,29 +72,31 @@ export function MobileNav() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex flex-1 items-stretch">
-          {mobileNavLeft.map((item) => (
+          {leftItems.map((item) => (
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
         </div>
 
         {/* Center Record button */}
-        <div className="flex w-20 shrink-0 justify-center">
-          <Link
-            href={recordAction.href}
-            aria-label="Record attendance"
-            className={cn(
-              "border-background -mt-6 grid size-16 place-items-center rounded-full border-4 shadow-lg transition-transform active:scale-95",
-              recordActive
-                ? "bg-primary text-primary-foreground"
-                : "bg-primary text-primary-foreground",
-            )}
-          >
-            <recordAction.icon className="size-7" strokeWidth={2.5} />
-          </Link>
-        </div>
+        {canRecord && (
+          <div className="flex w-20 shrink-0 justify-center">
+            <Link
+              href={recordAction.href}
+              aria-label="Record attendance"
+              className={cn(
+                "border-background -mt-6 grid size-16 place-items-center rounded-full border-4 shadow-lg transition-transform active:scale-95",
+                recordActive
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-primary text-primary-foreground",
+              )}
+            >
+              <recordAction.icon className="size-7" strokeWidth={2.5} />
+            </Link>
+          </div>
+        )}
 
         <div className="flex flex-1 items-stretch">
-          {mobileNavRight.map((item) => (
+          {rightItems.map((item) => (
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
           <button
@@ -130,7 +153,7 @@ export function MobileNav() {
                 paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)",
               }}
             >
-              {mobileMenuSections.map((section) => (
+              {sections.map((section) => (
                 <div key={section.title}>
                   <p className="text-muted-foreground mb-1.5 px-2 text-[11px] font-bold tracking-wider uppercase">
                     {section.title}

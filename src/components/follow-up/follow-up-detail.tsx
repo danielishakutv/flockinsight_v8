@@ -104,11 +104,13 @@ export function FollowUpDetail({
   interactions,
   team,
   smsEnabled,
+  canManage = true,
 }: {
   member: MemberInfo;
   interactions: FollowUpInteractionRow[];
   team: { userId: string; name: string }[];
   smsEnabled: boolean;
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<FollowUpStatus>(
@@ -227,6 +229,8 @@ export function FollowUpDetail({
             </Badge>
           </div>
 
+          {canManage && (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Status</Label>
@@ -282,6 +286,8 @@ export function FollowUpDetail({
             <p className="text-muted-foreground text-xs">
               SMS isn&apos;t configured on the server yet.
             </p>
+          )}
+          </>
           )}
         </CardContent>
       </Card>

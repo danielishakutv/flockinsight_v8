@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceSession } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 
 const count = z.number().int().min(0).max(1_000_000);
 
@@ -38,6 +39,8 @@ export async function recordAttendance(
   const d = parsed.data;
 
   const { church, user } = await requireChurch();
+  if (!(await can("attendance.manage")))
+    return { ok: false, error: "You don't have permission to record attendance." };
 
   if (!d.serviceId && !d.title) {
     return { ok: false, error: "Pick a service or name the event." };
@@ -113,6 +116,8 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid id" };
   }
   const { church } = await requireChurch();
+  if (!(await can("attendance.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
   try {
     const [row] = await db
       .delete(attendanceSession)

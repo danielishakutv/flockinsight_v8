@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { parseCsv } from "@/lib/csv";
 import { normalizeDate } from "@/lib/members-data";
 import {
@@ -23,6 +24,8 @@ function json(data: unknown, status = 200) {
 // POST /attendance/import  (multipart form-data with a "file" field)
 export async function POST(request: Request) {
   const { church, user } = await requireChurch();
+  if (!(await can("attendance.manage")))
+    return json({ ok: false, error: "You don't have permission to import attendance." }, 403);
 
   let file: File | null = null;
   try {

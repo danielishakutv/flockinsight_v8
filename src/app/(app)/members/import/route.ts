@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { parseCsv } from "@/lib/csv";
 import {
   headerToField,
@@ -30,6 +31,8 @@ function json(data: unknown, status = 200) {
 // POST /members/import  (multipart form-data with a "file" field)
 export async function POST(request: Request) {
   const { church, user } = await requireChurch();
+  if (!(await can("members.manage")))
+    return json({ ok: false, error: "You don't have permission to import members." }, 403);
 
   let file: File | null = null;
   try {

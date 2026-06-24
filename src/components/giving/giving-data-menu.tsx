@@ -29,7 +29,13 @@ import {
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
 
-export function GivingDataMenu({ hasData = true }: { hasData?: boolean }) {
+export function GivingDataMenu({
+  hasData = true,
+  canManage = true,
+}: {
+  hasData?: boolean;
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -70,6 +76,9 @@ export function GivingDataMenu({ hasData = true }: { hasData?: boolean }) {
     }
   }
 
+  // Nothing to offer a view-only user with no data yet.
+  if (!hasData && !canManage) return null;
+
   return (
     <>
       <DropdownMenu>
@@ -91,21 +100,25 @@ export function GivingDataMenu({ hasData = true }: { hasData?: boolean }) {
               <DropdownMenuSeparator />
             </>
           )}
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              openImport();
-            }}
-          >
-            <FileUp className="size-4" />
-            Import CSV
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a href="/giving/export?template=1" download>
-              <Download className="size-4" />
-              Download template
-            </a>
-          </DropdownMenuItem>
+          {canManage && (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openImport();
+                }}
+              >
+                <FileUp className="size-4" />
+                Import CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href="/giving/export?template=1" download>
+                  <Download className="size-4" />
+                  Download template
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
