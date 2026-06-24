@@ -162,8 +162,8 @@ export function TeamManager({
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              After they accept, give them a specific role below. Use “Copy
-              link” to share an invitation (email delivery can be set up later).
+              We email them an invitation link — or use “Copy link” below to
+              share it directly. After they accept, give them a specific role.
             </p>
           </form>
         </CardContent>

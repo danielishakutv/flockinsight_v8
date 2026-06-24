@@ -16,6 +16,15 @@ import {
   invitation,
 } from "@/db/schema";
 
+// Minimal HTML escaping for values interpolated into invitation emails.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // Trust localhost + every local LAN IPv4 of this machine (so you can log in
 // from a phone on the same Wi-Fi). Auto-adapts when you switch networks.
 function devTrustedOrigins(port = 3000): string[] {
@@ -145,6 +154,33 @@ export const auth = betterAuth({
             },
           },
         },
+      },
+      // Email the invitee an accept link. Failure here must NOT block the
+      // invitation being created (the "Copy link" fallback still works).
+      sendInvitationEmail: async (data) => {
+        try {
+          const base =
+            process.env.BETTER_AUTH_URL?.replace(/\/$/, "") ||
+            "https://flockinsight.com";
+          const url = `${base}/accept-invitation/${data.id}`;
+          const orgName = escapeHtml(data.organization?.name ?? "a church");
+          const inviterName = escapeHtml(
+            data.inviter?.user?.name ?? "A church administrator",
+          );
+          await sendEmail({
+            to: data.email,
+            subject: `You're invited to join ${data.organization?.name ?? "a church"} on FlockInsight`,
+            html: emailLayout(
+              "You're invited",
+              `<p><strong>${inviterName}</strong> has invited you to join <strong>${orgName}</strong> on FlockInsight.</p>` +
+                `<p>Click the button below to accept. If you don't have an account yet, create one using this email address (<strong>${escapeHtml(data.email)}</strong>).</p>`,
+              { label: "Accept invitation", url },
+            ),
+            text: `${data.inviter?.user?.name ?? "A church administrator"} invited you to join ${data.organization?.name ?? "a church"} on FlockInsight. Accept your invitation: ${url}`,
+          });
+        } catch (e) {
+          console.error("sendInvitationEmail failed", e);
+        }
       },
     }),
     // Keep this LAST so Set-Cookie headers work in server actions / RSC.
