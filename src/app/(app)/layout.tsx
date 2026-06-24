@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 
 export default async function AppLayout({
   children,
@@ -48,6 +49,7 @@ export default async function AppLayout({
 
       <MobileNav perms={perms} isOwner={access.isOwner} />
       <InstallPrompt />
+      <OfflineIndicator />
     </div>
   );
 }
