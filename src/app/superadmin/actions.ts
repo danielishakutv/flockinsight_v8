@@ -9,6 +9,23 @@ import { requireSuperAdmin } from "@/lib/session";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
+
+export async function setChurchPlan(
+  id: string,
+  plan: (typeof PLANS)[number],
+): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+  if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
+
+  await db.update(church).set({ plan }).where(eq(church.id, id));
+  revalidatePath("/superadmin/churches");
+  revalidatePath(`/superadmin/churches/${id}`);
+  return { ok: true };
+}
+
 export async function setChurchStatus(
   id: string,
   status: "active" | "suspended",

@@ -27,6 +27,8 @@ import {
   user,
 } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
+import { planName } from "@/lib/plans";
+import { PlanSelect } from "@/components/superadmin/plan-select";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -166,12 +168,18 @@ export default async function SuperadminChurchPage({
             >
               {c.status}
             </Badge>
+            <Badge variant="secondary">{planName(c.plan)}</Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
-            /{c.slug} · {c.currency} · {c.timezone} · created{" "}
+            /{c.slug} · {c.currency} · {c.country}
+            {c.state ? `, ${c.state}` : ""} · {c.timezone} · created{" "}
             {format(c.createdAt, "MMM d, yyyy")}
             {ownerEmail ? ` · owner ${ownerEmail}` : ""}
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground text-sm font-medium">Plan</span>
+          <PlanSelect churchId={c.id} plan={c.plan} />
         </div>
       </div>
 

@@ -64,6 +64,13 @@
       "when": 1782321870562,
       "tag": "0008_plain_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782343260218,
+      "tag": "0009_early_patriot",
+      "breakpoints": true
     }
   ]
 }

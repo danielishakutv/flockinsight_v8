@@ -1,5 +1,6 @@
 import { getIsSuperAdmin, requireChurch } from "@/lib/session";
 import { getAccess } from "@/lib/permissions";
+import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
@@ -10,9 +11,15 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const { user, church } = await requireChurch();
-  const [isSuperAdmin, access] = await Promise.all([
+  const [isSuperAdmin, access, unread] = await Promise.all([
     getIsSuperAdmin(),
     getAccess(),
+    unreadCount({
+      churchId: church.id,
+      plan: church.plan,
+      country: church.country,
+      userId: user.id,
+    }),
   ]);
   const perms = [...access.perms];
 
@@ -25,6 +32,7 @@ export default async function AppLayout({
         isSuperAdmin={isSuperAdmin}
         perms={perms}
         isOwner={access.isOwner}
+        unread={unread}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -32,6 +40,7 @@ export default async function AppLayout({
           userName={user.name}
           userEmail={user.email}
           isSuperAdmin={isSuperAdmin}
+          unread={unread}
         />
         <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">{children}</main>
       </div>

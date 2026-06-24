@@ -8,6 +8,7 @@ import { mainNav, navAllowed, recordAction } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/app/user-menu";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -20,6 +21,7 @@ export function Sidebar({
   isSuperAdmin = false,
   perms = [],
   isOwner = false,
+  unread = 0,
 }: {
   churchName: string;
   userName: string;
@@ -27,6 +29,7 @@ export function Sidebar({
   isSuperAdmin?: boolean;
   perms?: string[];
   isOwner?: boolean;
+  unread?: number;
 }) {
   const pathname = usePathname();
   const items = mainNav.filter((i) => navAllowed(i.perm, perms, isOwner));
@@ -34,8 +37,9 @@ export function Sidebar({
 
   return (
     <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 self-start border-r lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
-      <div className="flex h-16 items-center px-5">
+      <div className="flex h-16 items-center justify-between px-5">
         <Wordmark />
+        <NotificationBell unread={unread} className="-mr-1.5" />
       </div>
 
       {/* church badge */}

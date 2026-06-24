@@ -11,7 +11,18 @@ import {
   pgEnum,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
+
+/* ============================================================
+ * Subscription plans (3 tiers + Enterprise/custom).
+ * ========================================================== */
+export const planEnum = pgEnum("plan", [
+  "starter",
+  "growth",
+  "pro",
+  "enterprise",
+]);
 
 /* ============================================================
  * Better Auth — core tables
@@ -96,6 +107,9 @@ export const church = pgTable("church", {
   // ----- FlockInsight additional fields -----
   timezone: text().notNull().default("Africa/Lagos"),
   currency: text().notNull().default("NGN"),
+  country: text().notNull().default("Nigeria"),
+  state: text(),
+  plan: planEnum().notNull().default("starter"),
   status: churchStatusEnum().notNull().default("active"),
 });
 
@@ -483,6 +497,92 @@ export const giving = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight platform — notifications & web push
+ * Platform admins broadcast notifications to all churches, a plan tier,
+ * a country, or a hand-picked set of churches. Read state is per-user.
+ * ========================================================== */
+
+export const notificationCategoryEnum = pgEnum("notification_category", [
+  "system",
+  "general",
+]);
+export const notificationAudienceEnum = pgEnum("notification_audience", [
+  "all",
+  "plan",
+  "country",
+  "churches",
+]);
+
+export const notification = pgTable(
+  "notification",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    title: text().notNull(),
+    body: text().notNull(),
+    category: notificationCategoryEnum().notNull().default("general"),
+    audience: notificationAudienceEnum().notNull().default("all"),
+    targetPlan: planEnum(), // when audience = "plan"
+    targetCountry: text(), // when audience = "country"
+    linkUrl: text(), // optional call-to-action link
+    pushSent: integer().notNull().default(0), // count of web-push messages sent
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notification_created_idx").on(t.createdAt)],
+);
+
+// Hand-picked recipient churches (when audience = "churches").
+export const notificationTarget = pgTable(
+  "notification_target",
+  {
+    notificationId: uuid()
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.notificationId, t.churchId] })],
+);
+
+// Per-user read state for the in-app notification centre.
+export const notificationRead = pgTable(
+  "notification_read",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    notificationId: uuid()
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    readAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("notification_read_unique").on(t.notificationId, t.userId),
+  ],
+);
+
+// Browser web-push subscriptions (one per device/browser per user).
+export const pushSubscription = pgTable(
+  "push_subscription",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpoint: text().notNull(),
+    p256dh: text().notNull(),
+    auth: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("push_sub_endpoint_idx").on(t.endpoint),
+    index("push_sub_user_idx").on(t.userId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -507,3 +607,6 @@ export type Giving = typeof giving.$inferSelect;
 export type NewGiving = typeof giving.$inferInsert;
 export type Role = typeof role.$inferSelect;
 export type NewRole = typeof role.$inferInsert;
+export type Notification = typeof notification.$inferSelect;
+export type NewNotification = typeof notification.$inferInsert;
+export type PushSubscription = typeof pushSubscription.$inferSelect;
