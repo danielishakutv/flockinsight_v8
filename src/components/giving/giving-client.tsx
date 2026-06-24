@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
+  CalendarDays,
   Check,
   Coins,
   HandCoins,
@@ -12,7 +13,10 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  TrendingUp,
+  Wallet,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -21,7 +25,8 @@ import {
   type GivingInput,
 } from "@/app/(app)/giving/actions";
 import { createGivingCategories } from "@/app/(app)/settings/actions";
-import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -205,23 +210,31 @@ export function GivingClient({
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      {/* Summary — on phones: a full-width hero for the month + two below.
+          On larger screens: three equal cards. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <SummaryCard
           label="This month"
-          value={formatMoneyCompact(monthTotal, currency)}
-          sub={format(parseISO(today), "MMM yyyy")}
+          value={formatMoney(monthTotal, currency)}
+          sub={format(parseISO(today), "MMMM yyyy")}
+          icon={Wallet}
           accent
+          className="col-span-2 sm:col-span-1"
+          valueClassName="text-3xl sm:text-2xl lg:text-3xl"
         />
         <SummaryCard
           label="This year"
-          value={formatMoneyCompact(yearTotal, currency)}
+          value={formatMoney(yearTotal, currency)}
           sub={String(year)}
+          icon={CalendarDays}
+          valueClassName="text-xl sm:text-2xl lg:text-3xl"
         />
         <SummaryCard
           label="All time"
-          value={formatMoneyCompact(allTimeTotal, currency)}
-          sub="Total"
+          value={formatMoney(allTimeTotal, currency)}
+          sub="Total recorded"
+          icon={TrendingUp}
+          valueClassName="text-xl sm:text-2xl lg:text-3xl"
         />
       </div>
 
@@ -531,38 +544,60 @@ function SummaryCard({
   label,
   value,
   sub,
+  icon: Icon,
   accent,
+  className,
+  valueClassName,
 }: {
   label: string;
   value: string;
   sub: string;
+  icon: LucideIcon;
   accent?: boolean;
+  className?: string;
+  valueClassName?: string;
 }) {
   return (
     <div
-      className={
-        "min-w-0 rounded-2xl border p-3 shadow-sm sm:p-5 " +
-        (accent
+      className={cn(
+        "flex min-w-0 flex-col rounded-2xl border p-4 shadow-sm",
+        accent
           ? "from-primary border-transparent bg-gradient-to-br to-violet-500 text-white"
-          : "bg-card")
-      }
+          : "bg-card",
+        className,
+      )}
     >
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={cn(
+            "text-xs font-semibold sm:text-sm",
+            accent ? "text-white/80" : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </span>
+        <span
+          className={cn(
+            "grid size-8 shrink-0 place-items-center rounded-lg",
+            accent ? "bg-white/20 text-white" : "bg-primary/10 text-primary",
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+      </div>
       <p
-        className={
-          "truncate text-xs font-semibold sm:text-sm " +
-          (accent ? "text-white/80" : "text-muted-foreground")
-        }
+        className={cn(
+          "mt-2 leading-tight font-extrabold tabular-nums break-words",
+          valueClassName,
+        )}
       >
-        {label}
-      </p>
-      <p className="mt-1 truncate text-lg leading-tight font-extrabold tabular-nums sm:text-2xl lg:text-3xl">
         {value}
       </p>
       <p
-        className={
-          "mt-0.5 truncate text-[10px] sm:text-xs " +
-          (accent ? "text-white/70" : "text-muted-foreground")
-        }
+        className={cn(
+          "mt-0.5 text-[11px] sm:text-xs",
+          accent ? "text-white/70" : "text-muted-foreground",
+        )}
       >
         {sub}
       </p>
