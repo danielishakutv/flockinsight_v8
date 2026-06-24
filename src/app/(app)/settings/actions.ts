@@ -23,16 +23,23 @@ const NO_GIVING = {
 
 /* ----------------------------- Church profile ----------------------------- */
 
+const emptyToNullStr = (v: unknown) =>
+  typeof v === "string" && v.trim() === "" ? null : v;
+
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   timezone: z.string().trim().min(1).max(64),
   currency: z.string().trim().min(1).max(8),
+  country: z.string().trim().min(1).max(80),
+  state: z.preprocess(emptyToNullStr, z.string().trim().max(80).nullable()),
 });
 
 export async function updateChurchProfile(input: {
   name: string;
   timezone: string;
   currency: string;
+  country: string;
+  state: string | null;
 }): Promise<ActionResult> {
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success)
@@ -46,6 +53,8 @@ export async function updateChurchProfile(input: {
       name: parsed.data.name,
       timezone: parsed.data.timezone,
       currency: parsed.data.currency,
+      country: parsed.data.country,
+      state: parsed.data.state,
     })
     .where(eq(church.id, c.id));
 

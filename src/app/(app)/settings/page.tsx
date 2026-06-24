@@ -16,6 +16,9 @@ export default async function GeneralSettingsPage() {
       initialName={church.name}
       initialTimezone={church.timezone}
       initialCurrency={church.currency}
+      initialCountry={church.country}
+      initialState={church.state}
+      plan={church.plan}
     />
   );
 }

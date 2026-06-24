@@ -4,8 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import { updateChurchProfile } from "@/app/(app)/settings/actions";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/money";
+import { COUNTRIES, NIGERIAN_STATES } from "@/lib/geo";
+import { planName, planPriceLabel, PLAN_BY_ID, type PlanId } from "@/lib/plans";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,10 +39,16 @@ export function ProfileForm({
   initialName,
   initialTimezone,
   initialCurrency,
+  initialCountry,
+  initialState,
+  plan,
 }: {
   initialName: string;
   initialTimezone: string;
   initialCurrency: string;
+  initialCountry: string;
+  initialState: string | null;
+  plan: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -51,11 +61,21 @@ export function ProfileForm({
       ? initialCurrency
       : DEFAULT_CURRENCY,
   );
+  const [country, setCountry] = useState(initialCountry || "Nigeria");
+  const [state, setState] = useState(initialState ?? "");
+
+  const planMeta = PLAN_BY_ID[plan as PlanId];
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await updateChurchProfile({ name, timezone, currency });
+      const res = await updateChurchProfile({
+        name,
+        timezone,
+        currency,
+        country,
+        state: state || null,
+      });
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -93,28 +113,88 @@ export function ProfileForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="currency">Currency</Label>
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger id="currency" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">
-              Used across the giving module.
-            </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="currency">Currency</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger id="currency" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Used across the giving module.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <Select
+                value={country}
+                onValueChange={(v) => {
+                  setCountry(v);
+                  if (v !== "Nigeria") setState("");
+                }}
+              >
+                <SelectTrigger id="country" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {country === "Nigeria" && (
+            <div className="space-y-2">
+              <Label htmlFor="state">State / Region</Label>
+              <Select value={state} onValueChange={setState}>
+                <SelectTrigger id="state" className="w-full">
+                  <SelectValue placeholder="Select a state" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {NIGERIAN_STATES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <Button type="submit" size="lg" disabled={pending}>
             {pending && <Loader2 className="animate-spin" />}
             Save changes
           </Button>
+
+          {/* Current plan */}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Your plan</span>
+              <Badge variant="secondary">{planName(plan)}</Badge>
+              {planMeta && (
+                <span className="text-muted-foreground text-xs">
+                  {planPriceLabel(planMeta)}
+                </span>
+              )}
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/pricing" target="_blank">
+                View plans
+              </Link>
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
