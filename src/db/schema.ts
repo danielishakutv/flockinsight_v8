@@ -153,6 +153,8 @@ export const invitation = pgTable("invitation", {
   role: text(),
   status: text().notNull().default("pending"),
   expiresAt: timestamp().notNull(),
+  // Better Auth (org plugin) requires this on the invitation model.
+  createdAt: timestamp().notNull().defaultNow(),
   inviterId: text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
