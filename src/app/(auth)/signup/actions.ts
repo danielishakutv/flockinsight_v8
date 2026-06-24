@@ -128,5 +128,20 @@ export async function createChurchAccount(input: {
     .where(eq(sessionTable.userId, userId))
     .returning({ id: sessionTable.id });
 
-  return { ok: true, signedIn: updated.length > 0 };
+  const signedIn = updated.length > 0;
+
+  // No session means email verification is required → send the link now
+  // (global auto-send is off; the login page also offers a resend fallback).
+  if (!signedIn) {
+    try {
+      await auth.api.sendVerificationEmail({
+        body: { email },
+        headers: await headers(),
+      });
+    } catch (e) {
+      console.error("sendVerificationEmail (signup) failed", e);
+    }
+  }
+
+  return { ok: true, signedIn };
 }

@@ -81,7 +81,10 @@ export const auth = betterAuth({
   },
 
   emailVerification: {
-    sendOnSignUp: process.env.REQUIRE_EMAIL_VERIFICATION === "true",
+    // We send verification explicitly per flow (church owners get it; invited
+    // users are pre-verified by clicking their emailed invite link), so the
+    // global auto-send is off to avoid a redundant email to invitees.
+    sendOnSignUp: false,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user: u, url }) => {
       await sendEmail({
