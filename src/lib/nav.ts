@@ -36,12 +36,11 @@ export const recordAction: NavItem = {
   icon: PlusCircle,
 };
 
-/** Bottom nav on mobile: 2 left, [Record], 2 right. */
+/** Bottom nav on mobile: 2 left, [Record], then Members + a "More" sheet. */
 export const mobileNavLeft: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
 ];
 export const mobileNavRight: NavItem[] = [
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Members", href: "/members", icon: Users },
 ];
