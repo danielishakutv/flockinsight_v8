@@ -85,29 +85,37 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
         description: description.trim() || null,
         permissions: [...perms],
       };
-      const res = editing
-        ? await updateRole({ id: editing.id, ...payload })
-        : await createRole(payload);
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
+      try {
+        const res = editing
+          ? await updateRole({ id: editing.id, ...payload })
+          : await createRole(payload);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(editing ? "Role updated" : "Role created");
+        setOpen(false);
+        router.refresh();
+      } catch {
+        toast.error("Couldn't reach the server. Check your connection and try again.");
       }
-      toast.success(editing ? "Role updated" : "Role created");
-      setOpen(false);
-      router.refresh();
     });
   }
 
   function remove(id: string) {
     startTransition(async () => {
-      const res = await deleteRole(id);
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
+      try {
+        const res = await deleteRole(id);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success("Role deleted");
+        setConfirmId(null);
+        router.refresh();
+      } catch {
+        toast.error("Couldn't reach the server. Check your connection and try again.");
       }
-      toast.success("Role deleted");
-      setConfirmId(null);
-      router.refresh();
     });
   }
 
