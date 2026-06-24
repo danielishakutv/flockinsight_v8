@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · FlockInsight</title>
+    <style>
+      :root { color-scheme: dark light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100dvh; display: grid; place-items: center;
+        background: #0f0b17; color: #ece9f5; padding: 24px;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      .card { text-align: center; max-width: 420px; }
+      .logo {
+        width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 18px;
+        display: grid; place-items: center;
+        background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+        box-shadow: 0 10px 30px rgba(109,40,217,.35);
+      }
+      h1 { font-size: 22px; margin: 0 0 8px; font-weight: 800; letter-spacing: -0.02em; }
+      p { margin: 0 0 22px; color: #a79fc4; line-height: 1.5; }
+      button {
+        appearance: none; border: 0; cursor: pointer; font-weight: 700; font-size: 15px;
+        color: #fff; padding: 12px 22px; border-radius: 12px;
+        background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff"
+          stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 9h4" /><path d="M12 7v5" />
+          <path d="M14 21v-3a2 2 0 0 0-4 0v3" />
+          <path d="m18 9 3.52 2.147a1 1 0 0 1 .48.854V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6.999a1 1 0 0 1 .48-.854L6 9" />
+          <path d="M6 21V7a1 1 0 0 1 .376-.782l5-3.999a1 1 0 0 1 1.249.001l5 4A1 1 0 0 1 18 7v14" />
+        </svg>
+      </div>
+      <h1>You&rsquo;re offline</h1>
+      <p>FlockInsight needs a connection for this page. Check your network and try again — recently viewed pages still work offline.</p>
+      <button onclick="location.reload()">Try again</button>
+    </div>
+  </body>
+</html>
