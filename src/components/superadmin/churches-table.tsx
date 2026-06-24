@@ -1,18 +1,23 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
+  ChevronRight,
+  HandCoins,
   Loader2,
   PauseCircle,
   PlayCircle,
   Search,
   Trash2,
   TriangleAlert,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteChurch, setChurchStatus } from "@/app/superadmin/actions";
+import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,10 +37,27 @@ export type ChurchRow = {
   name: string;
   slug: string;
   status: "active" | "suspended";
+  currency: string;
   createdAt: string;
+  ownerEmail: string | null;
   staffCount: number;
   memberCount: number;
+  groupCount: number;
+  sessionCount: number;
+  lastActivity: string | null;
+  totalGiving: number;
 };
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm font-bold tabular-nums leading-none">{value}</p>
+      <p className="text-muted-foreground mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
+        {label}
+      </p>
+    </div>
+  );
+}
 
 export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
   const router = useRouter();
@@ -122,48 +144,81 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
             return (
               <div
                 key={c.id}
-                className="bg-card flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-sm sm:p-4"
+                className="bg-card rounded-2xl border p-3 shadow-sm sm:p-4"
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate font-bold">{c.name}</p>
-                    <Badge
-                      variant={suspended ? "destructive" : "success"}
-                      className="capitalize"
+                <div className="flex flex-wrap items-start gap-3">
+                  <Link
+                    href={`/superadmin/churches/${c.id}`}
+                    className="group min-w-0 flex-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <p className="group-hover:text-primary truncate font-bold transition-colors">
+                        {c.name}
+                      </p>
+                      <Badge
+                        variant={suspended ? "destructive" : "success"}
+                        className="capitalize"
+                      >
+                        {c.status}
+                      </Badge>
+                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+                    </div>
+                    <p className="text-muted-foreground truncate text-xs">
+                      /{c.slug}
+                      {c.ownerEmail ? ` · ${c.ownerEmail}` : ""} · joined{" "}
+                      {format(parseISO(c.createdAt), "MMM d, yyyy")}
+                    </p>
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant={suspended ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => toggle(c)}
+                      disabled={busy}
                     >
-                      {c.status}
-                    </Badge>
+                      {busy ? (
+                        <Loader2 className="animate-spin" />
+                      ) : suspended ? (
+                        <PlayCircle className="size-4" />
+                      ) : (
+                        <PauseCircle className="size-4" />
+                      )}
+                      {suspended ? "Reactivate" : "Suspend"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openDelete(c)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      aria-label={`Delete ${c.name}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
-                  <p className="text-muted-foreground truncate text-xs">
-                    /{c.slug} · {c.staffCount} staff · {c.memberCount} members ·
-                    joined {format(parseISO(c.createdAt), "MMM d, yyyy")}
-                  </p>
                 </div>
-                <Button
-                  variant={suspended ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggle(c)}
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <Loader2 className="animate-spin" />
-                  ) : suspended ? (
-                    <PlayCircle className="size-4" />
-                  ) : (
-                    <PauseCircle className="size-4" />
-                  )}
-                  {suspended ? "Reactivate" : "Suspend"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openDelete(c)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  aria-label={`Delete ${c.name}`}
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
+
+                {/* Per-church numbers */}
+                <div className="mt-3 grid grid-cols-3 gap-3 border-t pt-3 sm:grid-cols-6">
+                  <Metric label="Members" value={c.memberCount} />
+                  <Metric label="Staff" value={c.staffCount} />
+                  <Metric label="Groups" value={c.groupCount} />
+                  <Metric label="Services" value={c.sessionCount} />
+                  <div className="col-span-2 min-w-0">
+                    <p className="inline-flex items-center gap-1 text-sm font-bold tabular-nums leading-none">
+                      <HandCoins className="text-muted-foreground size-3.5" />
+                      {formatMoney(c.totalGiving, c.currency)}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                      Total giving
+                    </p>
+                  </div>
+                </div>
+                <p className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs">
+                  <UsersRound className="size-3.5" />
+                  {c.lastActivity
+                    ? `Last activity ${format(parseISO(c.lastActivity), "MMM d, yyyy")}`
+                    : "No activity recorded yet"}
+                </p>
               </div>
             );
           })}
