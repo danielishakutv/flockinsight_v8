@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, X } from "lucide-react";
+import { ChevronRight, LayoutGrid, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  mainNav,
+  mobileMenuSections,
   mobileNavLeft,
   mobileNavRight,
   recordAction,
@@ -104,43 +104,79 @@ export function MobileNav() {
           />
           {/* Sheet */}
           <div
-            className="bg-background animate-in slide-in-from-bottom-6 fixed inset-x-0 bottom-0 z-50 rounded-t-3xl border-t shadow-2xl duration-200"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+            className="bg-background animate-in slide-in-from-bottom-6 fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-3xl border-t shadow-2xl duration-200"
           >
-            <div className="bg-muted mx-auto mt-3 h-1.5 w-12 rounded-full" />
-            <div className="flex items-center justify-between px-5 pt-3 pb-1">
-              <p className="text-lg font-extrabold tracking-tight">Menu</p>
+            <div className="bg-muted mx-auto mt-3 h-1.5 w-12 shrink-0 rounded-full" />
+            <div className="flex shrink-0 items-center justify-between px-5 pt-3 pb-2">
+              <div>
+                <p className="text-xl font-extrabold tracking-tight">Menu</p>
+                <p className="text-muted-foreground text-xs">
+                  Jump to any part of FlockInsight
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
                 aria-label="Close"
-                className="text-muted-foreground hover:text-foreground -mr-1 p-1"
+                className="bg-muted/60 text-muted-foreground hover:text-foreground grid size-9 place-items-center rounded-full"
               >
                 <X className="size-5" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2 p-4 pt-2">
-              {mainNav.map((item) => {
-                const active = isActive(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMoreOpen(false)}
-                    className={cn(
-                      "flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition-colors",
-                      active
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "bg-card text-foreground hover:bg-accent",
-                    )}
-                  >
-                    <item.icon className="size-6 shrink-0" />
-                    <span className="text-[11px] leading-tight font-semibold">
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
+
+            <div
+              className="space-y-5 overflow-y-auto px-4 pt-2"
+              style={{
+                paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)",
+              }}
+            >
+              {mobileMenuSections.map((section) => (
+                <div key={section.title}>
+                  <p className="text-muted-foreground mb-1.5 px-2 text-[11px] font-bold tracking-wider uppercase">
+                    {section.title}
+                  </p>
+                  <div className="bg-card overflow-hidden rounded-2xl border">
+                    {section.items.map((item, i) => {
+                      const active = isActive(pathname, item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMoreOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 p-2.5 transition-colors active:bg-accent",
+                            i > 0 && "border-t",
+                            active && "bg-primary/5",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-11 shrink-0 place-items-center rounded-xl",
+                              item.tile,
+                            )}
+                          >
+                            <item.icon className="size-5" strokeWidth={2.2} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={cn(
+                                "leading-tight font-semibold",
+                                active && "text-primary",
+                              )}
+                            >
+                              {item.label}
+                            </p>
+                            <p className="text-muted-foreground truncate text-xs">
+                              {item.description}
+                            </p>
+                          </div>
+                          <ChevronRight className="text-muted-foreground/60 size-4 shrink-0" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
