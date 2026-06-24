@@ -4,6 +4,7 @@ import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 export default async function AppLayout({
   children,
@@ -46,6 +47,7 @@ export default async function AppLayout({
       </div>
 
       <MobileNav perms={perms} isOwner={access.isOwner} />
+      <InstallPrompt />
     </div>
   );
 }

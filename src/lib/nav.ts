@@ -6,6 +6,7 @@ import {
   UsersRound,
   HeartHandshake,
   HandCoins,
+  Bell,
   Settings,
   PlusCircle,
   type LucideIcon,
@@ -155,6 +156,13 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
   {
     title: "Account",
     items: [
+      {
+        label: "Notifications",
+        href: "/notifications",
+        icon: Bell,
+        description: "Updates from FlockInsight",
+        tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
+      },
       {
         label: "Settings",
         href: "/settings",

@@ -20,9 +20,12 @@ import {
   growthPct,
   weeklyAverage,
 } from "@/lib/attendance-metrics";
+import { Suspense } from "react";
 import { formatMoney } from "@/lib/money";
 import { PageContainer } from "@/components/app/page-header";
 import { StatCard } from "@/components/app/stat-card";
+import { DashboardNotifications } from "@/components/dashboard/dashboard-notifications";
+import { UpcomingBirthdays } from "@/components/dashboard/upcoming-birthdays";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
 import { Button } from "@/components/ui/button";
 import {
@@ -238,6 +241,23 @@ export default async function DashboardPage() {
           </Card>
         </>
       )}
+
+      {/* Notifications + birthdays (stream in; hidden when empty) */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Suspense fallback={null}>
+          <DashboardNotifications
+            ctx={{
+              churchId: church.id,
+              plan: church.plan,
+              country: church.country,
+              userId: user.id,
+            }}
+          />
+        </Suspense>
+        <Suspense fallback={null}>
+          <UpcomingBirthdays churchId={church.id} />
+        </Suspense>
+      </div>
     </PageContainer>
   );
 }
