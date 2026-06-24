@@ -45,7 +45,9 @@ export default function AcceptInvitationPage({
     });
   }
 
-  const backHref = `/login?redirect=${encodeURIComponent(`/accept-invitation/${id}`)}`;
+  const acceptPath = `/accept-invitation/${id}`;
+  const loginHref = `/login?redirect=${encodeURIComponent(acceptPath)}`;
+  const signupHref = `/signup?redirect=${encodeURIComponent(acceptPath)}`;
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
@@ -82,10 +84,10 @@ export default function AcceptInvitationPage({
               </p>
               <div className="flex gap-2">
                 <Button asChild size="lg" className="flex-1">
-                  <Link href={backHref}>Log in</Link>
+                  <Link href={loginHref}>Log in</Link>
                 </Button>
                 <Button asChild variant="outline" size="lg" className="flex-1">
-                  <Link href="/signup">Sign up</Link>
+                  <Link href={signupHref}>Sign up</Link>
                 </Button>
               </div>
             </div>
