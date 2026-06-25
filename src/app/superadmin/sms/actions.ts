@@ -38,14 +38,17 @@ export async function reviewSenderId(
   return { ok: true };
 }
 
-export async function topUpSms(
+export async function adjustWallet(
   churchId: string,
   amount: number,
+  kind: "credit" | "debit",
   note?: string,
 ): Promise<ActionResult> {
   const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
+  if (kind !== "credit" && kind !== "debit")
+    return { ok: false, error: "Invalid adjustment" };
   if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000)
     return { ok: false, error: "Enter a positive amount." };
 
@@ -56,7 +59,16 @@ export async function topUpSms(
     .limit(1);
   if (!c) return { ok: false, error: "Church not found." };
 
-  const newBalance = +(c.balance + amount).toFixed(2);
+  if (kind === "debit" && amount > c.balance)
+    return {
+      ok: false,
+      error: `Can't deduct more than the current balance (${c.balance.toFixed(2)}).`,
+    };
+
+  const newBalance = +(
+    kind === "credit" ? c.balance + amount : c.balance - amount
+  ).toFixed(2);
+
   await db.transaction(async (tx) => {
     await tx
       .update(church)
@@ -64,10 +76,12 @@ export async function topUpSms(
       .where(eq(church.id, churchId));
     await tx.insert(smsWalletTxn).values({
       churchId,
-      kind: "credit",
+      kind,
       amount,
       balanceAfter: newBalance,
-      reason: (note || "Admin top-up").slice(0, 200),
+      reason: (
+        note || (kind === "credit" ? "Admin top-up" : "Admin deduction")
+      ).slice(0, 200),
       createdBy: admin.id,
     });
   });

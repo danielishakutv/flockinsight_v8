@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2, Search, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  adjustWallet,
   reviewSenderId,
   setSmsPrice,
-  topUpSms,
 } from "@/app/superadmin/sms/actions";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,7 @@ export function SmsAdmin({
   const [topUp, setTopUp] = useState<ChurchSms | null>(null);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [kind, setKind] = useState<"credit" | "debit">("credit");
 
   const applications = churches.filter((c) => c.status === "pending");
   const filtered = useMemo(() => {
@@ -89,12 +90,14 @@ export function SmsAdmin({
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("Enter an amount.");
     startTransition(async () => {
-      const res = await topUpSms(topUp.id, amt, note);
+      const res = await adjustWallet(topUp.id, amt, kind, note);
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Credited ${formatMoney(amt, topUp.currency)} to ${topUp.name}`);
+      toast.success(
+        `${kind === "credit" ? "Credited" : "Deducted"} ${formatMoney(amt, topUp.currency)} ${kind === "credit" ? "to" : "from"} ${topUp.name}`,
+      );
       setTopUp(null);
       setAmount("");
       setNote("");
@@ -224,9 +227,10 @@ export function SmsAdmin({
                   setTopUp(c);
                   setAmount("");
                   setNote("");
+                  setKind("credit");
                 }}
               >
-                <Wallet className="size-4" /> Top up
+                <Wallet className="size-4" /> Adjust
               </Button>
             </div>
           ))}
@@ -236,9 +240,40 @@ export function SmsAdmin({
       <Dialog open={topUp !== null} onOpenChange={(o) => !o && setTopUp(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Top up {topUp?.name}</DialogTitle>
+            <DialogTitle>Adjust {topUp?.name}&apos;s wallet</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="bg-muted grid grid-cols-2 gap-1 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setKind("credit")}
+                className={
+                  "rounded-md py-1.5 text-sm font-semibold transition-colors " +
+                  (kind === "credit"
+                    ? "bg-background shadow-sm"
+                    : "text-muted-foreground")
+                }
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind("debit")}
+                className={
+                  "rounded-md py-1.5 text-sm font-semibold transition-colors " +
+                  (kind === "debit"
+                    ? "bg-background shadow-sm"
+                    : "text-muted-foreground")
+                }
+              >
+                Deduct
+              </button>
+            </div>
+            {topUp && (
+              <p className="text-muted-foreground text-xs">
+                Current balance: {formatMoney(topUp.balance, topUp.currency)}
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="amt">Amount ({topUp?.currency})</Label>
               <Input
@@ -257,7 +292,9 @@ export function SmsAdmin({
                 id="amt-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. Paid via transfer"
+                placeholder={
+                  kind === "credit" ? "e.g. Paid via transfer" : "e.g. Refund / correction"
+                }
               />
             </div>
           </div>
@@ -265,9 +302,13 @@ export function SmsAdmin({
             <Button variant="ghost" onClick={() => setTopUp(null)} disabled={pending}>
               Cancel
             </Button>
-            <Button onClick={doTopUp} disabled={pending}>
+            <Button
+              onClick={doTopUp}
+              disabled={pending}
+              variant={kind === "debit" ? "destructive" : "default"}
+            >
               {pending && <Loader2 className="animate-spin" />}
-              Credit wallet
+              {kind === "credit" ? "Credit wallet" : "Deduct from wallet"}
             </Button>
           </DialogFooter>
         </DialogContent>
