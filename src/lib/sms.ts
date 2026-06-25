@@ -42,13 +42,21 @@ type KudismsResponse = {
   message?: string;
 };
 
-/** Send an SMS to one or more recipients. */
+/** Number of SMS "pages" a message occupies (160 chars each, GSM-7 assumed). */
+export function smsPages(message: string): number {
+  const len = message.trim().length;
+  if (len === 0) return 0;
+  return len <= 160 ? 1 : Math.ceil(len / 153);
+}
+
+/** Send an SMS to one or more recipients. `senderId` overrides the env one. */
 export async function sendSms(opts: {
   to: string | string[];
   message: string;
+  senderId?: string;
 }): Promise<SmsResult> {
   const token = process.env.KUDISMS_API_TOKEN;
-  const senderId = process.env.KUDISMS_SENDER_ID;
+  const senderId = opts.senderId || process.env.KUDISMS_SENDER_ID;
   if (!token || !senderId) {
     return { ok: false, error: "SMS is not configured on the server." };
   }

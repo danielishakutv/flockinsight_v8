@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { followUpInteraction, member, staff } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { sendSms, isSmsConfigured } from "@/lib/sms";
+import { sendChurchSms } from "@/lib/church-sms";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -110,15 +110,18 @@ export async function sendSmsToMember(
   if (!(await can("followup.manage")))
     return { ok: false, error: "You don't have permission to manage follow-up." };
 
-  if (!isSmsConfigured()) {
-    return { ok: false, error: "SMS isn't set up on this server yet." };
-  }
-
   const m = await memberInChurch(memberId, church.id);
   if (!m) return { ok: false, error: "Member not found." };
   if (!m.phone) return { ok: false, error: "This member has no phone number." };
 
-  const result = await sendSms({ to: m.phone, message });
+  // Uses the church's approved sender ID and deducts from its SMS wallet.
+  const result = await sendChurchSms({
+    churchId: church.id,
+    to: m.phone,
+    message,
+    userId: user.id,
+    reason: "Follow-up SMS",
+  });
   if (!result.ok) return result;
 
   // Log the successful SMS as an interaction.

@@ -8,6 +8,7 @@ const tabs = [
   { label: "Overview", href: "/superadmin" },
   { label: "Churches", href: "/superadmin/churches" },
   { label: "Notifications", href: "/superadmin/notifications" },
+  { label: "SMS", href: "/superadmin/sms" },
   { label: "Backups", href: "/superadmin/backups" },
 ];
 

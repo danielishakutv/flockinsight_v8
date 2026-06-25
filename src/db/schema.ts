@@ -24,6 +24,22 @@ export const planEnum = pgEnum("plan", [
   "enterprise",
 ]);
 
+// Per-church SMS sender ID approval state.
+export const smsSenderStatusEnum = pgEnum("sms_sender_status", [
+  "none",
+  "pending",
+  "approved",
+  "rejected",
+]);
+// SMS wallet ledger entry direction.
+export const smsTxnKindEnum = pgEnum("sms_txn_kind", ["credit", "debit"]);
+// Billing payment lifecycle.
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",
+  "success",
+  "failed",
+]);
+
 /* ============================================================
  * Better Auth — core tables
  * Property names are camelCase to match Better Auth field names;
@@ -111,6 +127,16 @@ export const church = pgTable("church", {
   state: text(),
   plan: planEnum().notNull().default("starter"),
   status: churchStatusEnum().notNull().default("active"),
+  // ----- Billing -----
+  planRenewsAt: timestamp({ withTimezone: true }),
+  planDiscountPct: integer().notNull().default(0), // admin-granted discount 0..100
+  // ----- SMS -----
+  smsSenderId: text(), // requested/approved sender ID (<=11 chars)
+  smsSenderStatus: smsSenderStatusEnum().notNull().default("none"),
+  smsSenderNote: text(), // application note / rejection reason
+  smsBalance: numeric({ precision: 14, scale: 2, mode: "number" })
+    .notNull()
+    .default(0),
 });
 
 export const staff = pgTable("staff", {
@@ -583,6 +609,58 @@ export const pushSubscription = pgTable(
 );
 
 /* ============================================================
+ * Platform settings (key/value, admin-configurable) + SMS wallet + billing
+ * ========================================================== */
+
+export const platformSetting = pgTable("platform_setting", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const smsWalletTxn = pgTable(
+  "sms_wallet_txn",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    kind: smsTxnKindEnum().notNull(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    balanceAfter: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    reason: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sms_txn_church_idx").on(t.churchId)],
+);
+
+export const payment = pgTable(
+  "payment",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    plan: planEnum().notNull(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull().default("NGN"),
+    gateway: text().notNull().default("paystack"),
+    reference: text().notNull().unique(),
+    status: paymentStatusEnum().notNull().default("pending"),
+    periodMonths: integer().notNull().default(1),
+    note: text(), // e.g. "Admin onboarding" / discount applied
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("payment_church_idx").on(t.churchId)],
+);
+
+/* ============================================================
  * Personal to-do (per user, syncs across devices)
  * ========================================================== */
 
@@ -628,3 +706,5 @@ export type NewRole = typeof role.$inferInsert;
 export type Notification = typeof notification.$inferSelect;
 export type NewNotification = typeof notification.$inferInsert;
 export type PushSubscription = typeof pushSubscription.$inferSelect;
+export type Payment = typeof payment.$inferSelect;
+export type SmsWalletTxn = typeof smsWalletTxn.$inferSelect;
