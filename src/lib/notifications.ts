@@ -8,6 +8,7 @@ import {
   notificationRead,
   notificationTarget,
   staff,
+  user,
 } from "@/db/schema";
 
 export type NotificationCtx = {
@@ -120,4 +121,27 @@ export async function resolveAudienceUserIds(input: {
     rows = await base.where(inArray(staff.organizationId, input.churchIds));
   }
   return rows.map((r) => r.userId);
+}
+
+/** Like resolveAudienceUserIds, but returns email/name for email delivery. */
+export async function resolveAudienceUsers(input: {
+  audience: "all" | "plan" | "country" | "churches";
+  targetPlan?: string | null;
+  targetCountry?: string | null;
+  churchIds?: string[];
+}): Promise<{ email: string; name: string }[]> {
+  const base = db
+    .selectDistinct({ email: user.email, name: user.name })
+    .from(staff)
+    .innerJoin(user, eq(user.id, staff.userId))
+    .innerJoin(church, eq(church.id, staff.organizationId));
+
+  if (input.audience === "all") return base;
+  if (input.audience === "plan" && input.targetPlan)
+    return base.where(eq(church.plan, input.targetPlan as "starter"));
+  if (input.audience === "country" && input.targetCountry)
+    return base.where(eq(church.country, input.targetCountry));
+  if (input.audience === "churches" && input.churchIds?.length)
+    return base.where(inArray(staff.organizationId, input.churchIds));
+  return [];
 }

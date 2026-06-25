@@ -52,6 +52,7 @@ export function NotificationComposer({
   const [body, setBody] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [sendPush, setSendPush] = useState(true);
+  const [sendEmail, setSendEmail] = useState(true);
 
   const filteredChurches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -91,13 +92,18 @@ export function NotificationComposer({
         churchIds: audience === "churches" ? [...picked] : [],
         linkUrl,
         sendPush,
+        sendEmail,
       });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
+      const extras = [
+        res.pushSent ? `${res.pushSent} push` : "",
+        res.emailSent ? `${res.emailSent} email` : "",
+      ].filter(Boolean);
       toast.success(
-        `Notification sent${res.pushSent ? ` · ${res.pushSent} push delivered` : ""}.`,
+        `Notification sent${extras.length ? ` · ${extras.join(", ")}` : ""}.`,
       );
       setTitle("");
       setBody("");
@@ -268,6 +274,16 @@ export function NotificationComposer({
             </p>
           </div>
           <Switch checked={sendPush} onCheckedChange={setSendPush} />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <div>
+            <p className="text-sm font-semibold">Also send email</p>
+            <p className="text-muted-foreground text-xs">
+              Emails every member of the targeted churches.
+            </p>
+          </div>
+          <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
         </div>
 
         <div className="flex items-center justify-between gap-3">

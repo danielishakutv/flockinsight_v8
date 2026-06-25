@@ -6,12 +6,25 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notification, notificationTarget } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
-import { resolveAudienceUserIds } from "@/lib/notifications";
+import {
+  resolveAudienceUserIds,
+  resolveAudienceUsers,
+} from "@/lib/notifications";
 import { sendPushToUsers } from "@/lib/push";
+import { sendEmail, emailLayout } from "@/lib/mailer";
 
 export type CreateResult =
-  | { ok: true; pushSent: number }
+  | { ok: true; pushSent: number; emailSent: number }
   | { ok: false; error: string };
+
+const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 const emptyToNull = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? null : v;
@@ -29,6 +42,7 @@ const schema = z.object({
   churchIds: z.array(z.string()).default([]),
   linkUrl: z.preprocess(emptyToNull, z.string().trim().max(300).nullable()),
   sendPush: z.boolean().default(true),
+  sendEmail: z.boolean().default(true),
 });
 
 export async function createNotification(
@@ -92,6 +106,34 @@ export async function createNotification(
     }
   }
 
+  let emailSent = 0;
+  if (d.sendEmail) {
+    const recipients = await resolveAudienceUsers({
+      audience: d.audience,
+      targetPlan: d.targetPlan,
+      targetCountry: d.targetCountry,
+      churchIds: d.churchIds,
+    });
+    const linkAbs = d.linkUrl
+      ? d.linkUrl.startsWith("http")
+        ? d.linkUrl
+        : `${BASE_URL}${d.linkUrl}`
+      : `${BASE_URL}/notifications`;
+    const html = emailLayout(
+      escapeHtml(d.title),
+      `<p>${escapeHtml(d.body).replace(/\n/g, "<br/>")}</p>`,
+      { label: "Open FlockInsight", url: linkAbs },
+    );
+    const results = await Promise.allSettled(
+      recipients.map((r) =>
+        sendEmail({ to: r.email, subject: d.title, html, text: d.body }),
+      ),
+    );
+    emailSent = results.filter(
+      (x) => x.status === "fulfilled" && x.value,
+    ).length;
+  }
+
   revalidatePath("/superadmin/notifications");
-  return { ok: true, pushSent };
+  return { ok: true, pushSent, emailSent };
 }
