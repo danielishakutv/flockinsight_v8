@@ -189,7 +189,7 @@ export function GivingCategoriesManager({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit category" : "Add giving category"}

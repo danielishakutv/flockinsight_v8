@@ -190,7 +190,7 @@ export function FollowUpList({
       )}
 
       <Dialog open={addOpen} onOpenChange={(o) => !pending && setAddOpen(o)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Add a member to follow-up</DialogTitle>
           </DialogHeader>

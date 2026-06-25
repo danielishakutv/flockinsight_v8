@@ -270,7 +270,7 @@ export function SmsSettings({
       )}
 
       <Dialog open={topupOpen} onOpenChange={(o) => !paying && setTopupOpen(o)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Top up SMS wallet</DialogTitle>
           </DialogHeader>

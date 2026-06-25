@@ -541,7 +541,10 @@ function AddMembersDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-lg">
+      <DialogContent
+        className="flex max-h-[85dvh] flex-col sm:max-w-lg"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Add members</DialogTitle>
         </DialogHeader>

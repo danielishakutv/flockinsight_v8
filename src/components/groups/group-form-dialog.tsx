@@ -107,7 +107,10 @@ export function GroupFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>{form.id ? "Edit group" : "New group"}</DialogTitle>
         </DialogHeader>

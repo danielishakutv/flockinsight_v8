@@ -408,7 +408,10 @@ export function GivingClient({
 
       {/* Record / edit dialog */}
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent
+          className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>
               {form.id ? "Edit giving" : "Record giving"}
@@ -700,7 +703,10 @@ function CategorySetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Set up giving categories</DialogTitle>
         </DialogHeader>

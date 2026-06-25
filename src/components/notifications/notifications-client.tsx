@@ -154,7 +154,10 @@ export function NotificationsClient({
                   <p className="text-muted-foreground mt-1 text-sm whitespace-pre-line">
                     {n.body}
                   </p>
-                  <p className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs">
+                  <p
+                    className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs"
+                    suppressHydrationWarning
+                  >
                     {formatDistanceToNow(parseISO(n.createdAt), {
                       addSuffix: true,
                     })}

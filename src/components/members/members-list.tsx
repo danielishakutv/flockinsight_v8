@@ -226,7 +226,10 @@ export function MembersList({
 
       {/* Quick add dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent
+          className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>Add member</DialogTitle>
           </DialogHeader>

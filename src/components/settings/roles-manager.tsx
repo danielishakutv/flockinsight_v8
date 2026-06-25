@@ -205,7 +205,10 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
       </div>
 
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogContent
+          className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>{editing ? "Edit role" : "New role"}</DialogTitle>
           </DialogHeader>

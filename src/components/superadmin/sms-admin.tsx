@@ -269,7 +269,7 @@ export function SmsAdmin({
       </Card>
 
       <Dialog open={topUp !== null} onOpenChange={(o) => !o && setTopUp(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Adjust {topUp?.name}&apos;s wallet</DialogTitle>
           </DialogHeader>

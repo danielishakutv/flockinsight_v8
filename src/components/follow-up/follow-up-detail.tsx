@@ -124,7 +124,10 @@ export function FollowUpDetail({
   // Log interaction dialog
   const [logOpen, setLogOpen] = useState(false);
   const [logType, setLogType] = useState<InteractionType>("call");
-  const [logDate, setLogDate] = useState(todayLocal());
+  // Initialise empty — `openLog()` fills today's date on the client when the
+  // dialog opens. Computing `new Date()` during render would diverge between
+  // the (UTC) server and the local browser, causing a hydration mismatch.
+  const [logDate, setLogDate] = useState("");
   const [logOutcome, setLogOutcome] = useState<string>(OUTCOME_NONE);
   const [logNotes, setLogNotes] = useState("");
   const [savingLog, startLog] = useTransition();
@@ -356,7 +359,7 @@ export function FollowUpDetail({
 
       {/* Log interaction dialog */}
       <Dialog open={logOpen} onOpenChange={(o) => !savingLog && setLogOpen(o)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Log an interaction</DialogTitle>
           </DialogHeader>
@@ -437,7 +440,7 @@ export function FollowUpDetail({
 
       {/* Send SMS dialog */}
       <Dialog open={smsOpen} onOpenChange={(o) => !sendingSms && setSmsOpen(o)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Send SMS</DialogTitle>
           </DialogHeader>

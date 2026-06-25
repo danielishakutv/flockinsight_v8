@@ -218,7 +218,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit service" : "Add service"}
