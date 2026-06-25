@@ -40,6 +40,13 @@ export const paymentStatusEnum = pgEnum("payment_status", [
   "failed",
 ]);
 
+// Communication module channels.
+export const communicationChannelEnum = pgEnum("communication_channel", [
+  "sms",
+  "email",
+  "notification",
+]);
+
 /* ============================================================
  * Better Auth — core tables
  * Property names are camelCase to match Better Auth field names;
@@ -676,6 +683,33 @@ export const payment = pgTable(
     paidAt: timestamp({ withTimezone: true }),
   },
   (t) => [index("payment_church_idx").on(t.churchId)],
+);
+
+/* ============================================================
+ * Communication module — bulk/group/single SMS, email, staff notices
+ * ========================================================== */
+
+export const communicationLog = pgTable(
+  "communication_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    channel: communicationChannelEnum().notNull(),
+    audience: text().notNull(), // human label, e.g. "All members", "Group: Choir"
+    subject: text(), // email only
+    body: text().notNull(),
+    recipients: integer().notNull().default(0),
+    sent: integer().notNull().default(0),
+    failed: integer().notNull().default(0),
+    cost: numeric({ precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("comm_log_church_idx").on(t.churchId)],
 );
 
 /* ============================================================

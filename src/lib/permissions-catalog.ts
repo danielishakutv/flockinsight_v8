@@ -57,6 +57,15 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "communication",
+    label: "Communication",
+    description: "Send SMS, email and staff notices.",
+    perms: [
+      { key: "communication.view", label: "View" },
+      { key: "communication.manage", label: "Send" },
+    ],
+  },
+  {
     key: "analytics",
     label: "Analytics",
     description: "Trends, breakdowns and reports.",
