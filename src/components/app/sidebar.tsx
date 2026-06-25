@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Church } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mainNav, navAllowed } from "@/lib/nav";
+import { mobileMenuSections, navAllowed } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
 
@@ -28,7 +28,12 @@ export function Sidebar({
   isOwner?: boolean;
 }) {
   const pathname = usePathname();
-  const items = mainNav.filter((i) => navAllowed(i.perm, perms, isOwner));
+  const sections = mobileMenuSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => navAllowed(i.perm, perms, isOwner)),
+    }))
+    .filter((s) => s.items.length > 0);
 
   return (
     <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 self-start border-r lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
@@ -44,25 +49,55 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3 pt-4">
-        {items.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-              )}
-            >
-              <item.icon className="size-5 shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-5 overflow-y-auto p-3 pt-4">
+        {sections.map((section) => (
+          <div key={section.title}>
+            <p className="text-sidebar-foreground/45 mb-1.5 px-2.5 text-[10px] font-bold tracking-wider uppercase">
+              {section.title}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-2.5 py-2 transition-colors",
+                      active
+                        ? "bg-primary/10"
+                        : "hover:bg-sidebar-accent",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-lg",
+                        active ? "bg-primary text-primary-foreground" : item.tile,
+                      )}
+                    >
+                      <item.icon className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "truncate text-sm leading-tight font-semibold",
+                          active
+                            ? "text-primary"
+                            : "text-sidebar-foreground/90",
+                        )}
+                      >
+                        {item.label}
+                      </p>
+                      <p className="text-sidebar-foreground/50 truncate text-[11px] leading-tight">
+                        {item.description}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="border-t p-3">
