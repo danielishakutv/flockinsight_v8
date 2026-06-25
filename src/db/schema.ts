@@ -638,6 +638,24 @@ export const smsWalletTxn = pgTable(
   (t) => [index("sms_txn_church_idx").on(t.churchId)],
 );
 
+// Church-initiated SMS wallet top-ups (paid via Paystack).
+export const smsTopup = pgTable(
+  "sms_topup",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    reference: text().notNull().unique(),
+    status: paymentStatusEnum().notNull().default("pending"),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("sms_topup_church_idx").on(t.churchId)],
+);
+
 export const payment = pgTable(
   "payment",
   {

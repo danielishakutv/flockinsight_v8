@@ -8,9 +8,14 @@ import { SmsSettings } from "@/components/settings/sms-settings";
 
 export const metadata = { title: "SMS · Settings" };
 
-export default async function SmsSettingsPage() {
+export default async function SmsSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   const { church: c } = await requireChurch();
   await requireCan("settings.manage");
+  const { status } = await searchParams;
 
   const [[row], txns, price] = await Promise.all([
     db
@@ -48,6 +53,7 @@ export default async function SmsSettingsPage() {
       balance={row.balance}
       currency={row.currency}
       price={price}
+      payStatus={status ?? null}
       txns={txns.map((t) => ({
         id: t.id,
         kind: t.kind,

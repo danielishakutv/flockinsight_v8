@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
@@ -8,11 +8,15 @@ import {
   Clock,
   Loader2,
   MessageSquare,
+  Plus,
   Wallet,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { applySenderId } from "@/app/(app)/settings/sms/actions";
+import {
+  applySenderId,
+  startSmsTopup,
+} from "@/app/(app)/settings/sms/actions";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +24,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Txn = {
   id: string;
@@ -30,6 +41,8 @@ type Txn = {
   createdAt: string;
 };
 
+const PRESETS = [500, 1000, 2000, 5000];
+
 export function SmsSettings({
   senderId,
   status,
@@ -37,6 +50,7 @@ export function SmsSettings({
   balance,
   currency,
   price,
+  payStatus,
   txns,
 }: {
   senderId: string | null;
@@ -45,12 +59,40 @@ export function SmsSettings({
   balance: number;
   currency: string;
   price: number;
+  payStatus: string | null;
   txns: Txn[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [sid, setSid] = useState(senderId ?? "");
   const [reason, setReason] = useState("");
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [amount, setAmount] = useState("1000");
+  const [paying, setPaying] = useState(false);
+  const toasted = useRef(false);
+
+  useEffect(() => {
+    if (toasted.current || !payStatus) return;
+    toasted.current = true;
+    if (payStatus === "success") toast.success("Wallet topped up!");
+    else if (payStatus === "failed") toast.error("Payment failed or cancelled.");
+    else if (payStatus === "error") toast.error("Something went wrong.");
+    router.replace("/settings/sms");
+  }, [payStatus, router]);
+
+  async function topUp() {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < 100)
+      return toast.error("Minimum top-up is ₦100.");
+    setPaying(true);
+    const res = await startSmsTopup(amt);
+    if (!res.ok) {
+      toast.error(res.error);
+      setPaying(false);
+      return;
+    }
+    window.location.href = res.url; // to Paystack
+  }
 
   function apply() {
     startTransition(async () => {
@@ -82,12 +124,15 @@ export function SmsSettings({
               <p className="text-2xl font-extrabold tabular-nums">
                 {formatMoney(balance, currency)}
               </p>
+              <p className="text-muted-foreground text-xs">
+                {formatMoney(price, currency)} per SMS page
+              </p>
             </div>
           </div>
-          <p className="text-muted-foreground text-xs">
-            {formatMoney(price, currency)} per SMS page · top-ups managed by the
-            FlockInsight team.
-          </p>
+          <Button size="lg" onClick={() => setTopupOpen(true)}>
+            <Plus className="size-5" />
+            Top up wallet
+          </Button>
         </CardContent>
       </Card>
 
@@ -223,6 +268,61 @@ export function SmsSettings({
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={topupOpen} onOpenChange={(o) => !paying && setTopupOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Top up SMS wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setAmount(String(p))}
+                  className={
+                    "rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors " +
+                    (Number(amount) === p
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "hover:bg-accent")
+                  }
+                >
+                  ₦{p.toLocaleString()}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="topup-amt">Amount (₦)</Label>
+              <Input
+                id="topup-amt"
+                type="number"
+                min={100}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                ≈ {Math.floor(Number(amount) / (price || 1)).toLocaleString()} SMS
+                pages at {formatMoney(price, currency)} each. Paid securely via
+                Paystack.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setTopupOpen(false)}
+              disabled={paying}
+            >
+              Cancel
+            </Button>
+            <Button onClick={topUp} disabled={paying}>
+              {paying && <Loader2 className="animate-spin" />}
+              Pay with Paystack
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
