@@ -3,6 +3,7 @@ import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
+import { DesktopTopbar } from "@/components/app/desktop-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
@@ -24,6 +25,7 @@ export default async function AppLayout({
     }),
   ]);
   const perms = [...access.perms];
+  const canRecord = access.isOwner || access.perms.has("attendance.manage");
 
   return (
     <div className="flex min-h-dvh">
@@ -34,7 +36,6 @@ export default async function AppLayout({
         isSuperAdmin={isSuperAdmin}
         perms={perms}
         isOwner={access.isOwner}
-        unread={unread}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -44,6 +45,7 @@ export default async function AppLayout({
           isSuperAdmin={isSuperAdmin}
           unread={unread}
         />
+        <DesktopTopbar unread={unread} canRecord={canRecord} />
         <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">{children}</main>
       </div>
 

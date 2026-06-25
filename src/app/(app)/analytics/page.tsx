@@ -11,6 +11,7 @@ import {
   weeklyAverage,
 } from "@/lib/attendance-metrics";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
+import { SetupNotices } from "@/components/dashboard/setup-notices";
 import { StatCard } from "@/components/app/stat-card";
 import { AttendanceBreakdown } from "@/components/charts/attendance-breakdown";
 import { CategoryDonut } from "@/components/charts/category-donut";
@@ -131,6 +132,8 @@ export default async function AnalyticsPage() {
         title="Analytics"
         description="Trends, breakdowns and growth · last 12 weeks"
       />
+
+      <SetupNotices />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
