@@ -4,6 +4,12 @@ Everything below is **committed and pushed to `main`** and **builds green**. You
 deploy and see it. Read the **"Deploy"** and **"Action required from you"** sections
 first — there are two env vars to set for push, and one migration to run.
 
+> **UPDATE — second batch (v0.15.0 → v0.18.0)** added: notification emails,
+> real‑time bell, **SMS sender IDs + wallets**, **billing with Paystack**, plan
+> limits, inactivity reminder emails, and backup retention. See
+> **"Batch 2"** at the bottom — including **new env vars** (`PAYSTACK_SECRET_KEY`,
+> `CRON_SECRET`), the **reminders cron**, and the **per‑church backup plan**.
+
 Versions shipped tonight: **v0.12.0 → v0.13.x** (PWA, tiers, notifications, push,
 pricing, currencies, dashboard cards, install prompt).
 
@@ -166,3 +172,111 @@ Every step was built (`pnpm build` green) and the church‑facing pages were smo
 `/icon-192` all returned 200 with no runtime errors).
 
 — Built overnight while you slept. Sleep well; review at your pace. 🌙
+
+---
+
+# Batch 2 (v0.15.0 → v0.18.0)
+
+## What shipped
+
+### Notifications — email + real-time
+- **Email on broadcast:** admin notifications now also email every targeted member
+  (toggle, on by default). Composer reports push + email counts.
+- **Live bell:** the unread badge polls `/api/notifications/unread` every 20s and on
+  focus — counts update **without a refresh**.
+
+### SMS — sender IDs + per-church wallets
+- Churches **apply for a sender ID** in **Settings → SMS**; admin **approves/rejects**
+  from **/superadmin/sms**.
+- Each church has an **SMS wallet** (`church.smsBalance`) with a ledger
+  (`sms_wallet_txn`). Admin sets the **per-page SMS price** and **tops up wallets**.
+- Sending requires an **approved sender ID + enough balance**; it deducts
+  `price × pages × recipients` and records the debit. Follow-up SMS now routes
+  through the wallet + the church's sender ID.
+
+### Billing — Paystack + plan limits
+- **Settings → Billing:** current plan, renewal date, discount, **upgrade/downgrade
+  with Paystack checkout**, and **payment history**. "Manage plan" on the profile
+  links here.
+- **Paystack** init + callback verify. Free / 100%-discount plans activate instantly
+  (no payment). Renewal extends from the later of now / current renewal (no lost time).
+- **Admin (church detail):** set plan, grant **discount up to 100%**, extend renewal
+  months, onboard, and see payments.
+- **Plan member limits** enforced on member add and capped on CSV import, with an
+  upgrade prompt. The limit **raises automatically when the plan changes** (upgrade or
+  renewal), so a church that was paused resumes.
+
+### Inactivity reminder emails
+- 3 templates (`src/lib/reminder-emails.ts`): no login ~3 days, no weekend record,
+  no activity ~1 week.
+- Secured daily cron **`/api/cron/reminders`** (auth via `CRON_SECRET`) sends at most
+  one per church using windowed conditions — fires once, no spam, no extra table.
+
+### Backups
+- **`scripts/backup.sh`**: whole-DB encrypted dump (so every new table is covered)
+  with **count-based retention keeping the newest 15** and pruning older; optional
+  rclone off-site copy.
+
+## Deploy (batch 2)
+```bash
+cd /home/flockinsight/app && git pull && pnpm install --prod=false && pnpm db:migrate && \
+mv .next .next.bak.$(date +%s) && pnpm build && pm2 restart flockinsight
+```
+Migrations **0010** (todo) and **0011** (SMS + billing) are applied by `db:migrate`.
+
+## New env vars (add to `/home/flockinsight/app/.env`)
+```
+PAYSTACK_SECRET_KEY=sk_live_xxx       # from your Paystack dashboard
+CRON_SECRET=<a long random string>    # protects the reminders cron
+```
+- Without `PAYSTACK_SECRET_KEY`, the billing page works but paid upgrades show
+  "payment isn't set up"; free/100%-discount activations still work.
+- Set the **Paystack callback** to `https://flockinsight.com/settings/billing/callback`
+  (the code passes it per-transaction, so no dashboard config strictly needed).
+
+## Cron jobs to add on the VPS
+```bash
+crontab -e
+# Daily reminder emails (09:00)
+0 9 * * * curl -fsS "https://flockinsight.com/api/cron/reminders?key=YOUR_CRON_SECRET" >/dev/null 2>&1
+# Daily DB backup (02:00), keeping newest 15
+0 2 * * * DATABASE_URL='postgresql://...' BACKUP_KEEP=15 /home/flockinsight/app/scripts/backup.sh >> /var/log/flockinsight-backup.log 2>&1
+```
+> Your current backup already dumps the whole database, so the new billing/SMS/
+> notification tables are **already being captured** — installing `scripts/backup.sh`
+> just standardises it and enforces the 15-backup retention you asked for.
+
+## Decisions (batch 2)
+| Decision | Why |
+|---|---|
+| SMS wallet is **money** (not unit count), price set by admin | Matches "admin sets the SMS charge"; one balance works across price changes. |
+| Admin tops up wallets (no church self-recharge yet) | You said "wallet management by admins". Church self-recharge via Paystack is a clean follow-on (same Paystack code). |
+| Billing charges in **NGN** via Paystack | Plan prices are in Naira; Paystack NGN is the simplest reliable path. Multi-currency/multi-gateway is structured to add later. |
+| Plan limits **enforced on create, not retroactive** | Never lock a church out of data it already has; only pause *new* adds when over limit. Raises on upgrade/renewal. |
+| Reminder cron uses **windowed conditions** (e.g. 3–4 days) | Fires each reminder once without needing a "last sent" table — simpler and safe for a daily cron. |
+| Retention **deletes** backups beyond 15 | You explicitly asked to delete older than 15; the script only ever removes files matching the strict backup name inside the backup dir. |
+
+## Rough plan — per-church backup / restore / reset / access (NOT built yet)
+This needs care (FK ordering, irreversibility) so I planned rather than rushed it:
+
+1. **Per-church export (backup):** an admin action that selects every church-scoped row
+   (church, staff, members, services, attendance sessions+records, groups+memberships,
+   giving+categories, follow-up interactions, roles, payments, sms_wallet_txn,
+   notification_target) into a single JSON bundle, downloadable + optionally stored in
+   `BACKUP_DIR/church_<id>_<ts>.json.enc`. ~1 day.
+2. **Restore to an earlier state:** import a bundle. Safest model = restore into a
+   **fresh church** (new id) to avoid clobbering live data, then let you switch the
+   owner over; or an in-place restore that, in one transaction, clears current
+   church-scoped rows and re-inserts the bundle in FK order. In-place is riskier —
+   recommend "restore as new church" first. ~1–2 days.
+3. **Reset a church:** a guarded admin action that deletes domain data (members,
+   attendance, giving, groups, follow-up) but keeps the church + owner + plan. Requires
+   typing the church name to confirm (like delete). ~half day.
+4. **Gain access (impersonate):** admin action that adds the superadmin as an
+   `admin`-role staff member of the church (with an audit row) so they can enter and
+   help, plus a "leave church" action to remove themselves. Avoids password sharing.
+   ~half day.
+
+Tell me which of these to build first and I'll take it on. Recommended order: **export → reset → access → restore**.
+
+— Batch 2 built non-stop; all green, all pushed.
