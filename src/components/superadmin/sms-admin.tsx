@@ -2,11 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Search, Wallet, X } from "lucide-react";
+import { Check, Loader2, Pencil, Search, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
   reviewSenderId,
+  setSenderId,
   setSmsPrice,
 } from "@/app/superadmin/sms/actions";
 import { formatMoney } from "@/lib/money";
@@ -66,6 +67,20 @@ export function SmsAdmin({
         return;
       }
       toast.success("SMS price updated");
+      router.refresh();
+    });
+  }
+
+  function editId(c: ChurchSms) {
+    const next = prompt(`Sender ID for ${c.name} (3–11 letters/numbers)`, c.senderId ?? "");
+    if (next === null) return;
+    startTransition(async () => {
+      const res = await setSenderId(c.id, next);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Sender ID updated");
       router.refresh();
     });
   }
@@ -168,6 +183,14 @@ export function SmsAdmin({
                     </p>
                   )}
                 </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => editId(c)}
+                  disabled={pending}
+                >
+                  <Pencil className="size-4" /> Edit ID
+                </Button>
                 <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
                   <Check className="size-4" /> Approve
                 </Button>
@@ -220,6 +243,14 @@ export function SmsAdmin({
               <p className="font-bold tabular-nums">
                 {formatMoney(c.balance, c.currency)}
               </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => editId(c)}
+                aria-label="Edit sender ID"
+              >
+                <Pencil className="size-4" /> ID
+              </Button>
               <Button
                 size="sm"
                 variant="outline"

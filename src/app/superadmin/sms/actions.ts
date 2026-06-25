@@ -19,6 +19,27 @@ export async function setSmsPrice(price: number): Promise<ActionResult> {
   return { ok: true };
 }
 
+export async function setSenderId(
+  churchId: string,
+  senderId: string,
+): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(churchId).success)
+    return { ok: false, error: "Invalid id" };
+  const id = (senderId || "").trim();
+  if (!/^[A-Za-z0-9 ]{3,11}$/.test(id))
+    return {
+      ok: false,
+      error: "Sender ID must be 3–11 letters or numbers.",
+    };
+  await db
+    .update(church)
+    .set({ smsSenderId: id })
+    .where(eq(church.id, churchId));
+  revalidatePath("/superadmin/sms");
+  return { ok: true };
+}
+
 export async function reviewSenderId(
   churchId: string,
   approve: boolean,

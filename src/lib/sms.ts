@@ -72,26 +72,34 @@ export async function sendSms(opts: {
     return { ok: false, error: "Message is empty." };
   }
 
-  const params = new URLSearchParams({
+  // Kudisms reads parameters from the POST body (form-encoded), and the
+  // recipient field is `recipients` (plural).
+  const body = new URLSearchParams({
     token,
     senderID: senderId,
-    gateway,
+    recipients: recipients.join(","),
     message: opts.message,
-    recipient: recipients.join(","),
+    gateway,
   });
 
   try {
-    const res = await fetch(`${KUDISMS_URL}?${params.toString()}`, {
+    const res = await fetch(KUDISMS_URL, {
       method: "POST",
-      headers: { Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body,
     });
     const data = (await res.json().catch(() => null)) as KudismsResponse | null;
 
-    if (data?.status === "success" && String(data.error_code) === "000") {
+    if (String(data?.error_code) === "000" || data?.status === "success") {
       return { ok: true };
     }
     const reason =
-      data?.msg || data?.message || `gateway error ${data?.error_code ?? res.status}`;
+      data?.msg ||
+      data?.message ||
+      `gateway error ${data?.error_code ?? res.status}`;
     return { ok: false, error: `SMS not sent: ${reason}` };
   } catch (e) {
     console.error("[sms] Kudisms send failed:", e);
