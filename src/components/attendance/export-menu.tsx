@@ -111,9 +111,9 @@ export function AttendanceExportMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg">
+          <Button variant="outline" size="lg" aria-label="Import or export">
             <ArrowDownUp className="size-5" />
-            Import / Export
+            <span className="hidden sm:inline">Import / Export</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

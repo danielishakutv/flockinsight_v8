@@ -89,7 +89,7 @@ export function GroupsList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1">
           <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
@@ -100,7 +100,11 @@ export function GroupsList({
           />
         </div>
         {canManage && (
-          <Button onClick={() => setAddOpen(true)} size="lg">
+          <Button
+            onClick={() => setAddOpen(true)}
+            size="lg"
+            className="w-full shrink-0 sm:w-auto"
+          >
             <Plus className="size-5" />
             New group
           </Button>

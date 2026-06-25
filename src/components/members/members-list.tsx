@@ -129,7 +129,7 @@ export function MembersList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1">
           <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
@@ -139,13 +139,15 @@ export function MembersList({
             className="pl-9"
           />
         </div>
-        <MembersDataMenu canManage={canManage} />
-        {canManage && (
-          <Button onClick={openAdd} size="lg">
-            <Plus className="size-5" />
-            Add member
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <MembersDataMenu canManage={canManage} />
+          {canManage && (
+            <Button onClick={openAdd} size="lg" className="flex-1 sm:flex-none">
+              <Plus className="size-5" />
+              Add member
+            </Button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
