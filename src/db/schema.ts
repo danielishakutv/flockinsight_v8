@@ -583,6 +583,24 @@ export const pushSubscription = pgTable(
 );
 
 /* ============================================================
+ * Personal to-do (per user, syncs across devices)
+ * ========================================================== */
+
+export const todo = pgTable(
+  "todo",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    text: text().notNull(),
+    done: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("todo_user_idx").on(t.userId)],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 

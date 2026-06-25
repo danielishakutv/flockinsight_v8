@@ -71,6 +71,13 @@
       "when": 1782343260218,
       "tag": "0009_early_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782376292517,
+      "tag": "0010_zippy_chat",
+      "breakpoints": true
     }
   ]
 }

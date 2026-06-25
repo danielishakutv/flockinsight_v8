@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { asc, count, desc, eq, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
   CalendarDays,
@@ -20,6 +20,7 @@ import {
   member,
   service,
   staff,
+  todo,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -69,6 +70,7 @@ export default async function DashboardPage() {
     [{ servicesCount }],
     [{ givingCatCount }],
     [{ staffCount }],
+    todos,
     canSettings,
     canTeam,
   ] = await Promise.all([
@@ -102,6 +104,12 @@ export default async function DashboardPage() {
       .from(givingCategory)
       .where(eq(givingCategory.churchId, church.id)),
     db.select({ staffCount: count() }).from(staff).where(eq(staff.organizationId, church.id)),
+    db
+      .select({ id: todo.id, text: todo.text, done: todo.done })
+      .from(todo)
+      .where(eq(todo.userId, user.id))
+      .orderBy(asc(todo.done), desc(todo.createdAt))
+      .limit(50),
     can("settings.manage"),
     can("team.manage"),
   ]);
@@ -289,7 +297,7 @@ export default async function DashboardPage() {
 
         {/* Right column: personal to-do + upcoming birthdays */}
         <aside className="space-y-4">
-          <MiniTodo />
+          <MiniTodo initial={todos} />
           <Suspense fallback={null}>
             <UpcomingBirthdays churchId={church.id} />
           </Suspense>
