@@ -190,9 +190,7 @@ export function ProfileForm({
               )}
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link href="/pricing" target="_blank">
-                View plans
-              </Link>
+              <Link href="/settings/billing">Manage plan</Link>
             </Button>
           </div>
         </form>

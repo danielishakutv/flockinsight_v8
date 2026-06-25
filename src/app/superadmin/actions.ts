@@ -4,12 +4,58 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, session } from "@/db/schema";
+import { church, payment, session } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
+import { activatePlan } from "@/lib/billing";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
+
+/** Admin onboarding/billing: set plan + discount, optionally extend renewal. */
+export async function adminSetBilling(input: {
+  churchId: string;
+  plan: (typeof PLANS)[number];
+  discountPct: number;
+  months: number;
+  note?: string;
+}): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const { churchId, plan } = input;
+  if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
+  if (!z.string().min(1).safeParse(churchId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const disc = Math.min(100, Math.max(0, Math.round(input.discountPct || 0)));
+  const months = Math.min(36, Math.max(0, Math.round(input.months || 0)));
+
+  await db
+    .update(church)
+    .set({ planDiscountPct: disc })
+    .where(eq(church.id, churchId));
+  if (months > 0) await activatePlan(churchId, plan, months);
+  else await db.update(church).set({ plan }).where(eq(church.id, churchId));
+
+  await db.insert(payment).values({
+    churchId,
+    plan,
+    amount: 0,
+    currency: "NGN",
+    gateway: "admin",
+    reference: `ADMIN-${churchId.slice(0, 8)}-${Date.now()}`,
+    status: "success",
+    periodMonths: months || 1,
+    note:
+      (input.note && input.note.slice(0, 200)) ||
+      `Admin set ${plan}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
+    createdBy: admin.id,
+    paidAt: new Date(),
+  });
+
+  revalidatePath(`/superadmin/churches/${churchId}`);
+  revalidatePath("/superadmin/churches");
+  return { ok: true };
+}
 
 export async function setChurchPlan(
   id: string,

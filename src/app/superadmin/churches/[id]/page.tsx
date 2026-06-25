@@ -21,6 +21,7 @@ import {
   givingCategory,
   group,
   member,
+  payment,
   role,
   service,
   staff,
@@ -28,7 +29,7 @@ import {
 } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { planName } from "@/lib/plans";
-import { PlanSelect } from "@/components/superadmin/plan-select";
+import { AdminBilling } from "@/components/superadmin/admin-billing";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export default async function SuperadminChurchPage({
     [givingAgg],
     givingByCategory,
     team,
+    payments,
   ] = await Promise.all([
     db
       .select({ status: member.status, c: count() })
@@ -132,6 +134,22 @@ export default async function SuperadminChurchPage({
       .leftJoin(role, eq(role.id, staff.roleId))
       .where(eq(staff.organizationId, id))
       .orderBy(asc(staff.createdAt)),
+    db
+      .select({
+        id: payment.id,
+        plan: payment.plan,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        gateway: payment.gateway,
+        note: payment.note,
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+      })
+      .from(payment)
+      .where(eq(payment.churchId, id))
+      .orderBy(desc(payment.createdAt))
+      .limit(10),
   ]);
 
   const memberTotalN = Number(memberTotal);
@@ -177,10 +195,6 @@ export default async function SuperadminChurchPage({
             {ownerEmail ? ` · owner ${ownerEmail}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground text-sm font-medium">Plan</span>
-          <PlanSelect churchId={c.id} plan={c.plan} />
-        </div>
       </div>
 
       {/* Key numbers */}
@@ -213,6 +227,23 @@ export default async function SuperadminChurchPage({
           icon={Layers}
         />
       </div>
+
+      <AdminBilling
+        churchId={c.id}
+        plan={c.plan}
+        discount={c.planDiscountPct}
+        renewsAt={c.planRenewsAt ? c.planRenewsAt.toISOString() : null}
+        payments={payments.map((p) => ({
+          id: p.id,
+          plan: p.plan,
+          amount: Number(p.amount),
+          currency: p.currency,
+          status: p.status,
+          gateway: p.gateway,
+          note: p.note,
+          createdAt: (p.paidAt ?? p.createdAt).toISOString(),
+        }))}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Members by status */}

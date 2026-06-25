@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { memberLimitStatus } from "@/lib/plan-limits";
 import { parseCsv } from "@/lib/csv";
 import {
   headerToField,
@@ -114,6 +115,18 @@ export async function POST(request: Request) {
       notes: clip(get("notes"), 1000),
     });
   });
+
+  // Respect the plan member limit — import only up to the remaining headroom.
+  const limit = await memberLimitStatus(church.id);
+  if (limit.limit !== null) {
+    const remaining = Math.max(0, limit.limit - limit.used);
+    if (inserts.length > remaining) {
+      errors.push(
+        `Plan limit reached — only ${remaining} of ${inserts.length} new members were added. Upgrade your plan to add more.`,
+      );
+      inserts.length = remaining;
+    }
+  }
 
   let imported = 0;
   try {

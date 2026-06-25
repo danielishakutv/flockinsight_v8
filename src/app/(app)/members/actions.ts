@@ -7,6 +7,8 @@ import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { memberLimitStatus } from "@/lib/plan-limits";
+import { planName } from "@/lib/plans";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -92,6 +94,15 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
       revalidatePath("/members");
       revalidatePath(`/members/${row.id}`);
       return { ok: true, id: row.id };
+    }
+
+    // Plan member limit (pauses adds until upgraded/renewed to a bigger plan).
+    const limit = await memberLimitStatus(church.id);
+    if (limit.atLimit) {
+      return {
+        ok: false,
+        error: `You've reached the ${planName(limit.plan)} plan limit of ${limit.limit} members. Upgrade your plan to add more.`,
+      };
     }
 
     const [row] = await db
