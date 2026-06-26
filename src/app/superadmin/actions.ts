@@ -3,9 +3,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, payment, session } from "@/db/schema";
+import { church, payment, session, staff } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
@@ -37,6 +37,26 @@ export async function impersonateChurch(id: string): Promise<ActionResult> {
     .update(session)
     .set({ activeOrganizationId: target.id })
     .where(eq(session.userId, admin.id));
+
+  // Clear any stale temp membership from a previous session, then grant a
+  // temporary owner membership in THIS church so org-plugin operations work.
+  await db
+    .delete(staff)
+    .where(and(eq(staff.userId, admin.id), eq(staff.temp, true)));
+  const [existing] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(and(eq(staff.organizationId, target.id), eq(staff.userId, admin.id)))
+    .limit(1);
+  if (!existing) {
+    await db.insert(staff).values({
+      id: crypto.randomUUID(),
+      organizationId: target.id,
+      userId: admin.id,
+      role: "owner",
+      temp: true,
+    });
+  }
   redirect("/dashboard");
 }
 
@@ -48,6 +68,10 @@ export async function exitImpersonation(): Promise<void> {
     .update(session)
     .set({ activeOrganizationId: null })
     .where(eq(session.userId, admin.id));
+  // Remove the temporary owner membership granted during impersonation.
+  await db
+    .delete(staff)
+    .where(and(eq(staff.userId, admin.id), eq(staff.temp, true)));
   redirect("/superadmin");
 }
 

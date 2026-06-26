@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, member, celebrationRun, celebrationSetting } from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
@@ -264,9 +264,9 @@ export async function getCelebrationQueue(
       and(
         eq(member.churchId, churchId),
         or(
-          ne(sql`coalesce(${member.dateOfBirth}, '')`, sql`''`),
-          ne(sql`coalesce(${member.weddingDate}, '')`, sql`''`),
-          ne(sql`coalesce(${member.baptismDate}, '')`, sql`''`),
+          isNotNull(member.dateOfBirth),
+          isNotNull(member.weddingDate),
+          isNotNull(member.baptismDate),
           ne(sql`jsonb_array_length(${member.anniversaries})`, 0),
         ),
       ),

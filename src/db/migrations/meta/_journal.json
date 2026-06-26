@@ -169,6 +169,13 @@
       "when": 1782504587034,
       "tag": "0023_chilly_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782511935387,
+      "tag": "0024_breezy_speedball",
+      "breakpoints": true
     }
   ]
 }

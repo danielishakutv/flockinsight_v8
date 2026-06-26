@@ -238,6 +238,10 @@ export const staff = pgTable("staff", {
   // always full access. `roleId` (below) is the church-defined feature role.
   role: text().notNull().default("member"),
   roleId: uuid().references(() => role.id, { onDelete: "set null" }),
+  // Temporary membership created while a superadmin "acts as" this church, so
+  // org-plugin operations (invites etc.) work. Cleaned up on exit; hidden from
+  // the church's own team list.
+  temp: boolean().notNull().default(false),
   createdAt: timestamp().notNull().defaultNow(),
 });
 

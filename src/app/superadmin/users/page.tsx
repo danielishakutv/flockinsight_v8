@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { user, staff, church } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
@@ -18,7 +18,7 @@ export default async function SuperadminUsersPage() {
       churches: sql<string>`coalesce(string_agg(distinct ${church.name}, ', '), '')`,
     })
     .from(user)
-    .leftJoin(staff, eq(staff.userId, user.id))
+    .leftJoin(staff, and(eq(staff.userId, user.id), eq(staff.temp, false)))
     .leftJoin(church, eq(church.id, staff.organizationId))
     .groupBy(user.id)
     .orderBy(desc(user.createdAt))

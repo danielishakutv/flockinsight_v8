@@ -23,7 +23,8 @@ export default async function TeamSettingsPage() {
     })
     .from(staff)
     .innerJoin(user, eq(user.id, staff.userId))
-    .where(eq(staff.organizationId, church.id));
+    // Hide temporary memberships created while a superadmin is acting as us.
+    .where(and(eq(staff.organizationId, church.id), eq(staff.temp, false)));
 
   const invites = await db
     .select({

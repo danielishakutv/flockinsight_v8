@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { church, staff, user } from "@/db/schema";
@@ -39,7 +39,7 @@ export default async function SuperadminUserPage({
       })
       .from(staff)
       .innerJoin(church, eq(church.id, staff.organizationId))
-      .where(eq(staff.userId, id))
+      .where(and(eq(staff.userId, id), eq(staff.temp, false)))
       .orderBy(asc(church.name)),
     db
       .select({ id: church.id, name: church.name })
