@@ -1,4 +1,5 @@
-import { getIsSuperAdmin, requireChurch } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { getIsSuperAdmin, getMustChangePassword, requireChurch } from "@/lib/session";
 import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/app/sidebar";
@@ -14,6 +15,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  if (await getMustChangePassword()) redirect("/set-password");
   const { user, church, impersonating } = await requireChurch();
   const [isSuperAdmin, access, unread] = await Promise.all([
     getIsSuperAdmin(),

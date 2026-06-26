@@ -93,6 +93,21 @@ export const getIsSuperAdmin = cache(async () => {
 });
 
 /**
+ * True if the signed-in user must set a new password (after a support reset).
+ * Used to gate the app and force a password change.
+ */
+export const getMustChangePassword = cache(async (): Promise<boolean> => {
+  const data = await getSession();
+  if (!data?.user) return false;
+  const [row] = await db
+    .select({ flag: user.mustChangePassword })
+    .from(user)
+    .where(eq(user.id, data.user.id))
+    .limit(1);
+  return !!row?.flag;
+});
+
+/**
  * Require a platform superadmin. Redirects non-admins away.
  */
 export async function requireSuperAdmin() {

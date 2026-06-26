@@ -155,6 +155,13 @@
       "when": 1782503225592,
       "tag": "0021_white_shooting_star",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1782503880147,
+      "tag": "0022_lying_ulik",
+      "breakpoints": true
     }
   ]
 }

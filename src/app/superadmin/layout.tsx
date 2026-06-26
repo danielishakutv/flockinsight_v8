@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowUpRight, Shield } from "lucide-react";
-import { requireSuperAdmin } from "@/lib/session";
+import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
 import { Logo } from "@/components/brand";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import { SuperadminNav } from "@/components/superadmin/superadmin-nav";
@@ -13,6 +14,7 @@ export default async function SuperadminLayout({
   children: React.ReactNode;
 }) {
   await requireSuperAdmin();
+  if (await getMustChangePassword()) redirect("/set-password");
 
   return (
     <div className="min-h-dvh">

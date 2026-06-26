@@ -72,6 +72,8 @@ export const user = pgTable("user", {
   // Platform-level superadmin (FlockInsight operator), distinct from
   // per-church roles. Bootstrap manually in the DB for your account.
   isSuperAdmin: boolean().notNull().default(false),
+  // Set when support resets a password — forces a new password on next login.
+  mustChangePassword: boolean().notNull().default(false),
   createdAt: timestamp().notNull().defaultNow(),
   updatedAt: timestamp().notNull().defaultNow(),
 });
