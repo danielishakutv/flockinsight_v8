@@ -103,7 +103,11 @@ export function SmsSettings({
         toast.error(res.error);
         return;
       }
-      toast.success("Sender ID submitted to Termii for review.");
+      if (res.outcome === "approved")
+        toast.success("That sender ID is already approved — you can send SMS now!");
+      else if (res.outcome === "pending")
+        toast.message("That sender ID is already awaiting approval.");
+      else toast.success("Sender ID submitted to Termii for review.");
       router.refresh();
     });
   }

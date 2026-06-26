@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, smsTopup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -10,11 +10,16 @@ import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { isSmsConfigured } from "@/lib/sms";
 import {
   requestSenderId,
+  fetchSenderIdInfo,
   fetchSenderIdStatus,
   type SenderIdStatus,
 } from "@/lib/termii-sender";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+export type ApplyResult =
+  | { ok: true; outcome: "approved" | "pending" | "requested" }
+  | { ok: false; error: string };
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 const MIN_TOPUP = 100;
@@ -53,7 +58,7 @@ export async function startSmsTopup(amount: number): Promise<TopupResult> {
 export async function applySenderId(
   senderId: string,
   note: string,
-): Promise<ActionResult> {
+): Promise<ApplyResult> {
   const id = (senderId || "").trim();
   if (!/^[A-Za-z0-9 -]{3,11}$/.test(id))
     return {
@@ -68,7 +73,54 @@ export async function applySenderId(
   if (!isSmsConfigured())
     return { ok: false, error: "SMS isn't enabled on the platform yet." };
 
-  // Register the sender ID with Termii for review.
+  const cleanNote = (note || "").trim().slice(0, 500) || null;
+
+  // Don't let two churches claim the same sender ID.
+  const [taken] = await db
+    .select({ id: church.id })
+    .from(church)
+    .where(
+      and(
+        ne(church.id, c.id),
+        inArray(church.smsSenderStatus, ["approved", "pending"]),
+        sql`lower(${church.smsSenderId}) = ${id.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
+  if (taken)
+    return {
+      ok: false,
+      error: "That sender ID is already in use by another church. Please choose a different one.",
+    };
+
+  // Check Termii FIRST so we never submit a duplicate request for an ID that
+  // already exists (active or pending) on the account.
+  const info = await fetchSenderIdInfo(id);
+  if (info.found) {
+    if (info.status === "approved") {
+      await db
+        .update(church)
+        .set({ smsSenderId: id, smsSenderStatus: "approved", smsSenderNote: null })
+        .where(eq(church.id, c.id));
+      revalidatePath("/settings/sms");
+      return { ok: true, outcome: "approved" };
+    }
+    if (info.status === "pending") {
+      await db
+        .update(church)
+        .set({ smsSenderId: id, smsSenderStatus: "pending", smsSenderNote: cleanNote })
+        .where(eq(church.id, c.id));
+      revalidatePath("/settings/sms");
+      return { ok: true, outcome: "pending" };
+    }
+    // Blocked/rejected on Termii — re-requesting the same ID won't help.
+    return {
+      ok: false,
+      error: "That sender ID was blocked or rejected by the network. Please choose a different one.",
+    };
+  }
+
+  // Brand-new ID → submit a request to Termii for review.
   const reg = await requestSenderId({
     senderId: id,
     usecase: (note || "").trim() || "Church service alerts and member updates",
@@ -81,12 +133,12 @@ export async function applySenderId(
     .set({
       smsSenderId: id,
       smsSenderStatus: "pending",
-      smsSenderNote: (note || "").trim().slice(0, 500) || null,
+      smsSenderNote: cleanNote,
     })
     .where(eq(church.id, c.id));
 
   revalidatePath("/settings/sms");
-  return { ok: true };
+  return { ok: true, outcome: "requested" };
 }
 
 export type StatusResult =

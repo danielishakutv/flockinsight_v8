@@ -66,12 +66,23 @@ export async function requestSenderId(opts: {
 
 type SenderIdRow = { sender_id?: string; status?: string };
 
-/** Look up the approval status of a sender ID from Termii (paginates). */
-export async function fetchSenderIdStatus(
-  senderId: string,
-): Promise<SenderIdStatus> {
+export type SenderIdInfo = { found: boolean; status: SenderIdStatus };
+
+function mapStatus(raw: string | undefined): SenderIdStatus {
+  const st = (raw || "").toLowerCase();
+  if (/(active|approve|verified|published|success|ok)/.test(st)) return "approved";
+  if (/(reject|declin|block|denied|fail)/.test(st)) return "rejected";
+  return "pending";
+}
+
+/**
+ * Look up a sender ID in Termii's list (paginates). `found` distinguishes
+ * "not registered yet" from "registered but pending", which matters when
+ * deciding whether to submit a brand-new request.
+ */
+export async function fetchSenderIdInfo(senderId: string): Promise<SenderIdInfo> {
   const apiKey = process.env.TERMII_API_KEY;
-  if (!apiKey) return "unknown";
+  if (!apiKey) return { found: false, status: "unknown" };
   const target = norm(senderId);
 
   try {
@@ -80,7 +91,7 @@ export async function fetchSenderIdStatus(
         `${termiiBase()}/api/sender-id?api_key=${encodeURIComponent(apiKey)}&page=${page}`,
         { headers: { Accept: "application/json" } },
       );
-      if (!res.ok) return "unknown";
+      if (!res.ok) return { found: false, status: "unknown" };
       const data = (await res.json().catch(() => null)) as
         | {
             data?: SenderIdRow[];
@@ -93,21 +104,23 @@ export async function fetchSenderIdStatus(
       const rows = data?.data ?? [];
 
       const match = rows.find((r) => r.sender_id && norm(r.sender_id) === target);
-      if (match) {
-        const st = (match.status || "").toLowerCase();
-        if (/(active|approve|verified|published|success|ok)/.test(st)) return "approved";
-        if (/(reject|declin|block|denied|fail)/.test(st)) return "rejected";
-        return "pending";
-      }
+      if (match) return { found: true, status: mapStatus(match.status) };
 
       const last = data?.last_page ?? data?.total_pages ?? page;
       const hasNext = data?.next_page_url ?? (data?.current_page ?? page) < last;
       if (!hasNext || rows.length === 0) break;
     }
-    // Not in the list yet → still under review.
-    return "pending";
+    return { found: false, status: "unknown" };
   } catch (e) {
-    console.error("[termii] fetchSenderIdStatus failed:", e);
-    return "unknown";
+    console.error("[termii] fetchSenderIdInfo failed:", e);
+    return { found: false, status: "unknown" };
   }
+}
+
+/** Approval status of a sender ID (not-found → treated as still pending). */
+export async function fetchSenderIdStatus(
+  senderId: string,
+): Promise<SenderIdStatus> {
+  const info = await fetchSenderIdInfo(senderId);
+  return info.found ? info.status : "pending";
 }
