@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
     // Heavy Node-side PDF renderer (fonts, fontkit) — let Node resolve it.
     "@react-pdf/renderer",
   ],
+  // Smaller client bundles on slow networks: pull only the icons/helpers
+  // actually used from these barrel packages instead of the whole library.
+  experimental: {
+    optimizePackageImports: ["lucide-react", "date-fns", "recharts"],
+  },
 };
 
 export default nextConfig;
