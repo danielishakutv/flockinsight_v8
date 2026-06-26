@@ -55,6 +55,10 @@ export const requireChurch = cache(async () => {
 
   // A superadmin "acting as" a church overrides their own active tenant.
   const actAsId = await getActAsChurchId();
+  // Superadmins operate from /superadmin, never a church — unless they're
+  // explicitly acting as one. This keeps the platform operator out of any
+  // single church's context (and stops actions leaking to a default church).
+  if (!actAsId && (await getIsSuperAdmin())) redirect("/superadmin");
   const activeChurchId = actAsId ?? data.session.activeOrganizationId;
   if (!activeChurchId) redirect("/onboarding");
 

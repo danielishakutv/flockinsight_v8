@@ -19,7 +19,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * they exit. Returns an error result only on failure (otherwise it redirects).
  */
 export async function impersonateChurch(id: string): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
@@ -31,14 +31,24 @@ export async function impersonateChurch(id: string): Promise<ActionResult> {
   if (!target) return { ok: false, error: "Church not found." };
 
   await writeActAsCookie(target.id);
+  // Point the actual session at this church too, so org-plugin operations
+  // (e.g. team invites) target the impersonated church — never a default one.
+  await db
+    .update(session)
+    .set({ activeOrganizationId: target.id })
+    .where(eq(session.userId, admin.id));
   redirect("/dashboard");
 }
 
 /** Stop acting as a church and return to the admin panel. */
 export async function exitImpersonation(): Promise<void> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   await clearActAsCookie();
-  redirect("/superadmin/churches");
+  await db
+    .update(session)
+    .set({ activeOrganizationId: null })
+    .where(eq(session.userId, admin.id));
+  redirect("/superadmin");
 }
 
 const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
