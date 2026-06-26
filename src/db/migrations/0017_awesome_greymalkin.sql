@@ -1,0 +1,1 @@
+ALTER TYPE "public"."sms_sender_status" ADD VALUE 'revoked';

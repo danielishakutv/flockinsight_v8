@@ -43,14 +43,33 @@ export async function setSenderId(
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   const id = (senderId || "").trim();
-  if (!/^[A-Za-z0-9 ]{3,11}$/.test(id))
+  if (!/^[A-Za-z0-9 -]{3,11}$/.test(id))
     return {
       ok: false,
-      error: "Sender ID must be 3–11 letters or numbers.",
+      error: "Sender ID must be 3–11 characters: letters, numbers, spaces or hyphens.",
     };
   await db
     .update(church)
     .set({ smsSenderId: id })
+    .where(eq(church.id, churchId));
+  revalidatePath("/superadmin/sms");
+  return { ok: true };
+}
+
+/** Revoke a previously approved sender ID — the church sees it as revoked. */
+export async function revokeSenderId(
+  churchId: string,
+  reason?: string,
+): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(churchId).success)
+    return { ok: false, error: "Invalid id" };
+  await db
+    .update(church)
+    .set({
+      smsSenderStatus: "revoked",
+      smsSenderNote: (reason || "").slice(0, 500) || null,
+    })
     .where(eq(church.id, churchId));
   revalidatePath("/superadmin/sms");
   return { ok: true };

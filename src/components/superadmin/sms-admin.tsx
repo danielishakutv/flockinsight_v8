@@ -2,11 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Pencil, Search, Wallet, X } from "lucide-react";
+import { Ban, Check, Loader2, Pencil, Search, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
   reviewSenderId,
+  revokeSenderId,
   sendTestSms,
   setSenderId,
   setSmsPrice,
@@ -30,7 +31,7 @@ export type ChurchSms = {
   name: string;
   currency: string;
   senderId: string | null;
-  status: "none" | "pending" | "approved" | "rejected";
+  status: "none" | "pending" | "approved" | "rejected" | "revoked";
   note: string | null;
   balance: number;
 };
@@ -96,6 +97,22 @@ export function SmsAdmin({
         return;
       }
       toast.success("Sender ID updated");
+      router.refresh();
+    });
+  }
+
+  function revoke(c: ChurchSms) {
+    const reason =
+      prompt(`Revoke "${c.senderId}" for ${c.name}? Reason (shown to them, optional):`) ??
+      null;
+    if (reason === null) return;
+    startTransition(async () => {
+      const res = await revokeSenderId(c.id, reason);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Sender ID revoked");
       router.refresh();
     });
   }
@@ -291,11 +308,25 @@ export function SmsAdmin({
                   {c.status === "rejected" && (
                     <Badge variant="destructive">Rejected</Badge>
                   )}
+                  {c.status === "revoked" && (
+                    <Badge variant="destructive">Revoked</Badge>
+                  )}
                 </div>
               </div>
               <p className="font-bold tabular-nums">
                 {formatMoney(c.balance, c.currency)}
               </p>
+              {c.status === "approved" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => revoke(c)}
+                  disabled={pending}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Ban className="size-4" /> Revoke
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

@@ -39,6 +39,7 @@ export const smsSenderStatusEnum = pgEnum("sms_sender_status", [
   "pending",
   "approved",
   "rejected",
+  "revoked",
 ]);
 // SMS wallet ledger entry direction.
 export const smsTxnKindEnum = pgEnum("sms_txn_kind", ["credit", "debit"]);

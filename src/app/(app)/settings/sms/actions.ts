@@ -55,10 +55,10 @@ export async function applySenderId(
   note: string,
 ): Promise<ActionResult> {
   const id = (senderId || "").trim();
-  if (!/^[A-Za-z0-9 ]{3,11}$/.test(id))
+  if (!/^[A-Za-z0-9 -]{3,11}$/.test(id))
     return {
       ok: false,
-      error: "Sender ID must be 3–11 letters or numbers (no symbols).",
+      error: "Sender ID must be 3–11 characters: letters, numbers, spaces or hyphens.",
     };
 
   const { church: c } = await requireChurch();

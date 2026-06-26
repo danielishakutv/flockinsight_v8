@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
+  Ban,
   CheckCircle2,
   Clock,
   Loader2,
@@ -55,7 +56,7 @@ export function SmsSettings({
   txns,
 }: {
   senderId: string | null;
-  status: "none" | "pending" | "approved" | "rejected";
+  status: "none" | "pending" | "approved" | "rejected" | "revoked";
   note: string | null;
   balance: number;
   currency: string;
@@ -121,7 +122,8 @@ export function SmsSettings({
     });
   }
 
-  const showForm = status === "none" || status === "rejected";
+  const showForm =
+    status === "none" || status === "rejected" || status === "revoked";
 
   return (
     <div className="space-y-4">
@@ -218,6 +220,25 @@ export function SmsSettings({
             </div>
           )}
 
+          {status === "revoked" && (
+            <div className="flex items-start gap-3 rounded-xl border p-3">
+              <Ban className="text-destructive mt-0.5 size-5 shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  “{senderId}” revoked{" "}
+                  <Badge variant="destructive">Revoked</Badge>
+                </p>
+                {note && (
+                  <p className="text-muted-foreground text-sm">Reason: {note}</p>
+                )}
+                <p className="text-muted-foreground text-sm">
+                  This sender ID can no longer send messages. You can request a
+                  new one below.
+                </p>
+              </div>
+            </div>
+          )}
+
           {showForm && (
             <>
               <div className="space-y-2">
@@ -230,8 +251,8 @@ export function SmsSettings({
                   maxLength={11}
                 />
                 <p className="text-muted-foreground text-xs">
-                  3–11 letters or numbers, no spaces or symbols. This is what
-                  recipients see as the sender.
+                  3–11 characters: letters, numbers, spaces or hyphens. This is
+                  what recipients see as the sender.
                 </p>
               </div>
               <div className="space-y-2">
