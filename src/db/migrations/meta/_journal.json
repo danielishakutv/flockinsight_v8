@@ -162,6 +162,13 @@
       "when": 1782503880147,
       "tag": "0022_lying_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782504587034,
+      "tag": "0023_chilly_fabian_cortez",
+      "breakpoints": true
     }
   ]
 }

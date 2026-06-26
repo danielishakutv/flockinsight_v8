@@ -34,6 +34,7 @@ export default async function SuperadminChurchesPage() {
         status: church.status,
         currency: church.currency,
         createdAt: church.createdAt,
+        featured: church.featured,
       })
       .from(church)
       .orderBy(desc(church.createdAt)),
@@ -95,6 +96,7 @@ export default async function SuperadminChurchesPage() {
       status: c.status,
       currency: c.currency,
       createdAt: c.createdAt.toISOString(),
+      featured: c.featured,
       ownerEmail: ownerMap.get(c.id) ?? null,
       staffCount: staffMap.get(c.id) ?? 0,
       memberCount: memberMap.get(c.id) ?? 0,

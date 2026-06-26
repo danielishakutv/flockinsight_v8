@@ -113,6 +113,20 @@ export async function setChurchPlan(
   return { ok: true };
 }
 
+/** Feature / unfeature a church in the public directory. */
+export async function setChurchFeatured(
+  id: string,
+  featured: boolean,
+): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+  await db.update(church).set({ featured }).where(eq(church.id, id));
+  revalidatePath("/superadmin/churches");
+  revalidatePath("/churches");
+  return { ok: true };
+}
+
 export async function setChurchStatus(
   id: string,
   status: "active" | "suspended",

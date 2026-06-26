@@ -185,6 +185,23 @@ export const church = pgTable("church", {
     .$type<Record<string, string>>()
     .notNull()
     .default(sql`'{}'::jsonb`),
+  // Highlighted in the public directory by the platform.
+  featured: boolean().notNull().default(false),
+});
+
+/* ============================================================
+ * FlockInsight domain — promo banners / ad slots (platform-managed)
+ * ========================================================== */
+export const banner = pgTable("banner", {
+  id: uuid().primaryKey().defaultRandom(),
+  title: text().notNull(),
+  imageUrl: text(),
+  linkUrl: text(),
+  // Where it shows: 'directory' | 'events' | 'both'.
+  placement: text().notNull().default("both"),
+  active: boolean().notNull().default(true),
+  sortOrder: integer().notNull().default(0),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
 /* ============================================================

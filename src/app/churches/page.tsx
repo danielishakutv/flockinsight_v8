@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { and, asc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
-import { MapPin } from "lucide-react";
+import { and, asc, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
+import { MapPin, Star } from "lucide-react";
 import { db } from "@/db";
 import { church } from "@/db/schema";
 import { COUNTRIES } from "@/lib/geo";
 import { DirectorySearch } from "@/components/public/directory-search";
+import { BannerSlot } from "@/components/public/banner-slot";
 
 export const metadata: Metadata = {
   title: "Find a church · FlockInsight",
@@ -83,6 +84,8 @@ export default async function ChurchDirectoryPage({
       denomination: church.denomination,
       tagline: church.tagline,
       logo: church.logo,
+      coverUrl: church.coverUrl,
+      featured: church.featured,
       city: church.city,
       state: church.state,
       country: church.country,
@@ -95,7 +98,7 @@ export default async function ChurchDirectoryPage({
 
   const rows = await (distExpr
     ? baseQuery.orderBy(sql`${distExpr} asc nulls last`)
-    : baseQuery.orderBy(asc(church.name)));
+    : baseQuery.orderBy(desc(church.featured), asc(church.name)));
 
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-slate-950">
@@ -123,6 +126,10 @@ export default async function ChurchDirectoryPage({
             initialDenom={denom}
             near={!!near}
           />
+        </div>
+
+        <div className="mt-5">
+          <BannerSlot placement="directory" />
         </div>
 
         <p className="text-muted-foreground mt-5 text-sm">
@@ -156,8 +163,11 @@ export default async function ChurchDirectoryPage({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold group-hover:text-violet-600">
+                  <p className="flex items-center gap-1.5 truncate font-bold group-hover:text-violet-600">
                     {c.name}
+                    {c.featured && (
+                      <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />
+                    )}
                   </p>
                   {c.denomination && (
                     <p className="text-muted-foreground truncate text-xs font-semibold">

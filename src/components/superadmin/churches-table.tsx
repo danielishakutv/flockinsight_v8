@@ -12,6 +12,7 @@ import {
   PauseCircle,
   PlayCircle,
   Search,
+  Star,
   Trash2,
   TriangleAlert,
   UsersRound,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import {
   deleteChurch,
   impersonateChurch,
+  setChurchFeatured,
   setChurchStatus,
 } from "@/app/superadmin/actions";
 import { formatMoney } from "@/lib/money";
@@ -44,6 +46,7 @@ export type ChurchRow = {
   status: "active" | "suspended";
   currency: string;
   createdAt: string;
+  featured: boolean;
   ownerEmail: string | null;
   staffCount: number;
   memberCount: number;
@@ -91,6 +94,15 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
       const res = await impersonateChurch(c.id);
       setEnteringId(null);
       if (res && !res.ok) toast.error(res.error);
+    });
+  }
+
+  function toggleFeatured(c: ChurchRow) {
+    startTransition(async () => {
+      const res = await setChurchFeatured(c.id, !c.featured);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(c.featured ? "Removed from featured" : "Featured");
+      router.refresh();
     });
   }
 
@@ -186,6 +198,15 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                     </p>
                   </Link>
                   <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleFeatured(c)}
+                      title={c.featured ? "Unfeature" : "Feature in directory"}
+                      className={c.featured ? "text-amber-500" : "text-muted-foreground"}
+                    >
+                      <Star className={c.featured ? "size-4 fill-current" : "size-4"} />
+                    </Button>
                     <Button
                       variant="secondary"
                       size="sm"

@@ -6,6 +6,7 @@ import { CalendarDays, Clock, MapPin } from "lucide-react";
 import { db } from "@/db";
 import { church, event } from "@/db/schema";
 import { EventsSearch } from "@/components/public/events-search";
+import { BannerSlot } from "@/components/public/banner-slot";
 
 export const metadata: Metadata = {
   title: "Church events near you · FlockInsight",
@@ -113,6 +114,10 @@ export default async function EventsDirectoryPage({
       <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="-mt-12 rounded-2xl border bg-white p-4 shadow-lg dark:bg-slate-900">
           <EventsSearch initialQ={q} near={!!near} />
+        </div>
+
+        <div className="mt-5">
+          <BannerSlot placement="events" />
         </div>
 
         <p className="text-muted-foreground mt-5 text-sm">

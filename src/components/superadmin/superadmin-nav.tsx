@@ -12,6 +12,7 @@ const tabs = [
   { label: "SMS", href: "/superadmin/sms" },
   { label: "Pricing", href: "/superadmin/pricing" },
   { label: "Support", href: "/superadmin/support" },
+  { label: "Banners", href: "/superadmin/banners" },
   { label: "Backups", href: "/superadmin/backups" },
 ];
 
