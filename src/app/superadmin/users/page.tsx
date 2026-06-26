@@ -7,7 +7,7 @@ import { UsersAdmin, type UserRow } from "@/components/superadmin/users-admin";
 export const metadata = { title: "Users · Admin" };
 
 export default async function SuperadminUsersPage() {
-  const admin = await requireSuperAdmin();
+  await requireSuperAdmin();
 
   const rows = await db
     .select({
@@ -41,7 +41,7 @@ export default async function SuperadminUsersPage() {
           for locked-out users or manage admins.
         </p>
       </div>
-      <UsersAdmin users={users} currentAdminId={admin.id} />
+      <UsersAdmin users={users} />
     </div>
   );
 }

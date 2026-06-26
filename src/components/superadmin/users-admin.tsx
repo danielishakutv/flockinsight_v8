@@ -2,12 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, KeyRound, Loader2, Search, Shield, ShieldOff } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Copy, KeyRound, Loader2, Search, Shield } from "lucide-react";
 import { toast } from "sonner";
-import {
-  resetUserPasswordAction,
-  setSuperAdmin,
-} from "@/app/superadmin/users/actions";
+import { resetUserPasswordAction } from "@/app/superadmin/users/actions";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,16 +28,11 @@ export type UserRow = {
   churches: string;
 };
 
-export function UsersAdmin({
-  users,
-  currentAdminId,
-}: {
-  users: UserRow[];
-  currentAdminId: string;
-}) {
+export function UsersAdmin({ users }: { users: UserRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "admins" | "nochurch">("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resetFor, setResetFor] = useState<UserRow | null>(null);
   const [tempPw, setTempPw] = useState("");
@@ -46,11 +40,20 @@ export function UsersAdmin({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) =>
-      [u.name, u.email, u.churches].some((v) => v.toLowerCase().includes(q)),
-    );
-  }, [users, query]);
+    return users.filter((u) => {
+      if (filter === "admins" && !u.isSuperAdmin) return false;
+      if (filter === "nochurch" && u.churches) return false;
+      if (q && ![u.name, u.email, u.churches].some((v) => v.toLowerCase().includes(q)))
+        return false;
+      return true;
+    });
+  }, [users, query, filter]);
+
+  const FILTERS = [
+    { key: "all", label: "All" },
+    { key: "admins", label: "Superadmins" },
+    { key: "nochurch", label: "No church" },
+  ] as const;
 
   function reset(u: UserRow) {
     if (!confirm(`Reset the password for ${u.email}? They'll get a temporary one by email.`))
@@ -67,30 +70,35 @@ export function UsersAdmin({
     });
   }
 
-  function toggleAdmin(u: UserRow) {
-    const make = !u.isSuperAdmin;
-    if (!confirm(make ? `Make ${u.email} a superadmin?` : `Remove superadmin from ${u.email}?`))
-      return;
-    setBusyId(u.id);
-    start(async () => {
-      const res = await setSuperAdmin(u.id, make);
-      setBusyId(null);
-      if (!res.ok) return void toast.error(res.error);
-      toast.success(make ? "Superadmin granted" : "Superadmin removed");
-      router.refresh();
-    });
-  }
-
   return (
     <div className="space-y-4">
-      <div className="relative max-w-md">
-        <Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, email or church"
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-md flex-1">
+          <Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, email or church"
+            className="pl-9"
+          />
+        </div>
+        <div className="bg-muted flex gap-1 rounded-lg p-1">
+          {FILTERS.map((ftr) => (
+            <button
+              key={ftr.key}
+              type="button"
+              onClick={() => setFilter(ftr.key)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
+                filter === ftr.key
+                  ? "bg-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {ftr.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -115,16 +123,12 @@ export function UsersAdmin({
                 </div>
                 <Button size="sm" variant="outline" onClick={() => reset(u)} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-                  Reset password
+                  Reset
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => toggleAdmin(u)}
-                  disabled={busy || (u.isSuperAdmin && u.id === currentAdminId)}
-                  title={u.isSuperAdmin ? "Remove superadmin" : "Make superadmin"}
-                >
-                  {u.isSuperAdmin ? <ShieldOff className="size-4" /> : <Shield className="size-4" />}
+                <Button asChild size="sm">
+                  <Link href={`/superadmin/users/${u.id}`}>
+                    Manage <ChevronRight className="size-4" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
