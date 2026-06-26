@@ -42,6 +42,19 @@ const memberSchema = z.object({
   status: z.enum(["active", "inactive", "visitor", "new_convert"]),
   dateOfBirth: optDate,
   joinedAt: optDate,
+  weddingDate: optDate,
+  baptized: z.preprocess((v) => v === true || v === "true", z.boolean()),
+  baptismDate: optDate,
+  anniversaries: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(60),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+      }),
+    )
+    .max(12)
+    .optional()
+    .default([]),
   house: optText(120),
   street: optText(160),
   city: optText(120),
@@ -74,6 +87,10 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     status: d.status,
     dateOfBirth: d.dateOfBirth,
     joinedAt: d.joinedAt,
+    weddingDate: d.weddingDate,
+    baptized: d.baptized,
+    baptismDate: d.baptized ? d.baptismDate : null,
+    anniversaries: d.anniversaries,
     house: d.house,
     street: d.street,
     city: d.city,

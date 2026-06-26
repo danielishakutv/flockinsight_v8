@@ -109,6 +109,29 @@ function MemberView({
           <Row label="Date joined" value={fmtDate(member.joinedAt)} />
         </Section>
 
+        {(member.weddingDate ||
+          member.baptized ||
+          (member.anniversaries?.length ?? 0) > 0) && (
+          <Section title="Milestones">
+            {member.weddingDate && (
+              <Row label="Wedding" value={fmtDate(member.weddingDate)} />
+            )}
+            <Row
+              label="Baptized"
+              value={
+                member.baptized
+                  ? member.baptismDate
+                    ? `Yes · ${fmtDate(member.baptismDate)}`
+                    : "Yes"
+                  : "No"
+              }
+            />
+            {member.anniversaries?.map((a, i) => (
+              <Row key={i} label={a.label} value={fmtDate(a.date)} />
+            ))}
+          </Section>
+        )}
+
         <Section title="Address">
           <Row label="Address" value={address} />
         </Section>

@@ -8,6 +8,7 @@ import {
   numeric,
   date,
   uuid,
+  jsonb,
   pgEnum,
   index,
   uniqueIndex,
@@ -290,6 +291,15 @@ export const member = pgTable(
     status: memberStatusEnum().notNull().default("active"),
     joinedAt: date(),
     photoUrl: text(),
+    // ----- Milestones / anniversaries -----
+    weddingDate: date(),
+    baptized: boolean().notNull().default(false),
+    baptismDate: date(),
+    // Free-form extra anniversaries: [{ label, date: "YYYY-MM-DD" }].
+    anniversaries: jsonb()
+      .$type<{ label: string; date: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     // Legacy free-form address (kept for back-compat); structured parts below.
     address: text(),
     house: text(),

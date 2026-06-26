@@ -37,6 +37,7 @@ import { StatCard } from "@/components/app/stat-card";
 import { SetupNotices, type Notice } from "@/components/dashboard/setup-notices";
 import { MiniTodo } from "@/components/dashboard/mini-todo";
 import { UpcomingBirthdays } from "@/components/dashboard/upcoming-birthdays";
+import { UpcomingAnniversaries } from "@/components/dashboard/upcoming-anniversaries";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
 import { Button } from "@/components/ui/button";
 import {
@@ -295,11 +296,14 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Right column: personal to-do + upcoming birthdays */}
+        {/* Right column: personal to-do + birthdays + anniversaries */}
         <aside className="space-y-4">
           <MiniTodo initial={todos} />
           <Suspense fallback={null}>
             <UpcomingBirthdays churchId={church.id} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <UpcomingAnniversaries churchId={church.id} />
           </Suspense>
         </aside>
       </div>

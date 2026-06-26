@@ -32,6 +32,10 @@ export type MemberFormState = {
   email: string;
   dateOfBirth: string;
   joinedAt: string;
+  weddingDate: string;
+  baptized: boolean;
+  baptismDate: string;
+  anniversaries: { label: string; date: string }[];
   house: string;
   street: string;
   city: string;
@@ -66,6 +70,10 @@ export function emptyMember(): MemberFormState {
     email: "",
     dateOfBirth: "",
     joinedAt: todayLocal(),
+    weddingDate: "",
+    baptized: false,
+    baptismDate: "",
+    anniversaries: [],
     house: "",
     street: "",
     city: "",
@@ -88,6 +96,10 @@ export function memberToForm(m: {
   email: string | null;
   dateOfBirth: string | null;
   joinedAt: string | null;
+  weddingDate: string | null;
+  baptized: boolean | null;
+  baptismDate: string | null;
+  anniversaries: { label: string; date: string }[] | null;
   house: string | null;
   street: string | null;
   city: string | null;
@@ -107,6 +119,10 @@ export function memberToForm(m: {
     email: m.email ?? "",
     dateOfBirth: m.dateOfBirth ?? "",
     joinedAt: m.joinedAt ?? "",
+    weddingDate: m.weddingDate ?? "",
+    baptized: m.baptized ?? false,
+    baptismDate: m.baptismDate ?? "",
+    anniversaries: m.anniversaries ?? [],
     house: m.house ?? "",
     street: m.street ?? "",
     city: m.city ?? "",
@@ -130,6 +146,10 @@ export function memberFormToInput(form: MemberFormState): MemberInput {
     email: form.email,
     dateOfBirth: form.dateOfBirth,
     joinedAt: form.joinedAt,
+    weddingDate: form.weddingDate,
+    baptized: form.baptized,
+    baptismDate: form.baptismDate,
+    anniversaries: form.anniversaries.filter((a) => a.label.trim() && a.date),
     house: form.house,
     street: form.street,
     city: form.city,
@@ -258,6 +278,115 @@ export function MemberFormFields({
             onChange={(e) => set({ joinedAt: e.target.value })}
             className="h-11"
           />
+        </div>
+      </div>
+
+      {/* Milestones / anniversaries */}
+      <div className="space-y-3 rounded-xl border p-3">
+        <p className="text-muted-foreground text-xs font-bold uppercase tracking-wide">
+          Milestones
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="wedding">Wedding anniversary</Label>
+            <Input
+              id="wedding"
+              type="date"
+              value={form.weddingDate}
+              onChange={(e) => set({ weddingDate: e.target.value })}
+              className="h-11"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="baptized">Baptized?</Label>
+            <Select
+              value={form.baptized ? "yes" : "no"}
+              onValueChange={(v) =>
+                set({
+                  baptized: v === "yes",
+                  baptismDate: v === "yes" ? form.baptismDate : "",
+                })
+              }
+            >
+              <SelectTrigger id="baptized" className="h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no">No</SelectItem>
+                <SelectItem value="yes">Yes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {form.baptized && (
+          <div className="space-y-2">
+            <Label htmlFor="baptismDate">Baptism date</Label>
+            <Input
+              id="baptismDate"
+              type="date"
+              value={form.baptismDate}
+              onChange={(e) => set({ baptismDate: e.target.value })}
+              className="h-11"
+            />
+          </div>
+        )}
+
+        {/* Custom anniversaries */}
+        <div className="space-y-2">
+          <Label>Other anniversaries</Label>
+          {form.anniversaries.map((a, i) => (
+            <div key={i} className="flex gap-2">
+              <Input
+                value={a.label}
+                placeholder="e.g. Dedication"
+                onChange={(e) => {
+                  const next = [...form.anniversaries];
+                  next[i] = { ...next[i], label: e.target.value };
+                  set({ anniversaries: next });
+                }}
+              />
+              <Input
+                type="date"
+                value={a.date}
+                className="h-11 w-44"
+                onChange={(e) => {
+                  const next = [...form.anniversaries];
+                  next[i] = { ...next[i], date: e.target.value };
+                  set({ anniversaries: next });
+                }}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  set({
+                    anniversaries: form.anniversaries.filter((_, j) => j !== i),
+                  })
+                }
+                className="text-muted-foreground hover:text-destructive shrink-0 px-2 text-lg"
+                aria-label="Remove anniversary"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {form.anniversaries.length < 12 && (
+            <button
+              type="button"
+              onClick={() =>
+                set({
+                  anniversaries: [
+                    ...form.anniversaries,
+                    { label: "", date: "" },
+                  ],
+                })
+              }
+              className="text-primary text-sm font-semibold hover:underline"
+            >
+              + Add anniversary
+            </button>
+          )}
         </div>
       </div>
 
