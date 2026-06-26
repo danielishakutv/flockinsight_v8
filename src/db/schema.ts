@@ -979,6 +979,35 @@ export const celebrationRun = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — events (with optional public listing)
+ * ========================================================== */
+export const event = pgTable(
+  "event",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    description: text(),
+    flyerUrl: text(),
+    date: date().notNull(),
+    startTime: text(), // "HH:MM"
+    endTime: text(),
+    venue: text(),
+    address: text(),
+    // Show in the public events directory & on the church's public page.
+    isPublic: boolean().notNull().default(true),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_church_idx").on(t.churchId),
+    index("event_date_idx").on(t.date),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 

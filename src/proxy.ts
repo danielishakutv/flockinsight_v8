@@ -23,6 +23,7 @@ export const config = {
     "/members/:path*",
     "/settings/:path*",
     "/help/:path*",
+    "/my-events/:path*",
     "/onboarding/:path*",
     "/suspended",
     "/superadmin/:path*",

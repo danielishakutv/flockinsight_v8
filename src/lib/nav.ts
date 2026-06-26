@@ -10,6 +10,7 @@ import {
   Bell,
   Settings,
   LifeBuoy,
+  CalendarDays,
   PlusCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -123,6 +124,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Offerings, tithes & donations",
         tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         perm: "giving.view",
+      },
+      {
+        label: "Events",
+        href: "/my-events",
+        icon: CalendarDays,
+        description: "Programs, flyers & public listings",
+        tile: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+        perm: "settings.manage",
       },
     ],
   },

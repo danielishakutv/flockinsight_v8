@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gte } from "drizzle-orm";
 import {
   Globe,
   Link2,
@@ -11,8 +11,9 @@ import {
   Phone,
   type LucideIcon,
 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { db } from "@/db";
-import { church, service } from "@/db/schema";
+import { church, service, event } from "@/db/schema";
 import { siteUrl, churchUrl } from "@/lib/site";
 import { ShareButton } from "@/components/public/share-button";
 
@@ -95,15 +96,37 @@ export default async function ChurchPublicPage({
   const c = await getChurch(handle);
   if (!c) notFound();
 
-  const services = await db
-    .select({
-      name: service.name,
-      dayOfWeek: service.dayOfWeek,
-      startTime: service.startTime,
-    })
-    .from(service)
-    .where(and(eq(service.churchId, c.id), eq(service.isActive, true)))
-    .orderBy(asc(service.sortOrder));
+  const today = new Date().toISOString().slice(0, 10);
+  const [services, events] = await Promise.all([
+    db
+      .select({
+        name: service.name,
+        dayOfWeek: service.dayOfWeek,
+        startTime: service.startTime,
+      })
+      .from(service)
+      .where(and(eq(service.churchId, c.id), eq(service.isActive, true)))
+      .orderBy(asc(service.sortOrder)),
+    db
+      .select({
+        id: event.id,
+        title: event.title,
+        flyerUrl: event.flyerUrl,
+        date: event.date,
+        startTime: event.startTime,
+        venue: event.venue,
+      })
+      .from(event)
+      .where(
+        and(
+          eq(event.churchId, c.id),
+          eq(event.isPublic, true),
+          gte(event.date, today),
+        ),
+      )
+      .orderBy(asc(event.date))
+      .limit(6),
+  ]);
 
   const url = churchUrl(handle);
   const locationLine = [c.addressText, c.city, c.state, c.country]
@@ -198,6 +221,50 @@ export default async function ChurchPublicPage({
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {/* Upcoming events */}
+        {events.length > 0 && (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Upcoming events</h2>
+              <Link href="/events" className="text-primary text-sm font-semibold hover:underline">
+                See all
+              </Link>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {events.map((ev) => (
+                <Link
+                  key={ev.id}
+                  href={`/events/${ev.id}`}
+                  className="group flex gap-3 rounded-xl border p-2 transition hover:shadow-sm"
+                >
+                  <div className="bg-primary/10 grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg">
+                    {ev.flyerUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={ev.flyerUrl} alt="" loading="lazy" className="size-full object-cover" />
+                    ) : (
+                      <span className="text-primary text-xs font-bold">
+                        {format(parseISO(ev.date), "MMM d")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-primary text-xs font-bold uppercase">
+                      {format(parseISO(ev.date), "EEE, MMM d")}
+                      {ev.startTime ? ` · ${ev.startTime}` : ""}
+                    </p>
+                    <p className="truncate text-sm font-semibold group-hover:text-violet-600">
+                      {ev.title}
+                    </p>
+                    {ev.venue && (
+                      <p className="text-muted-foreground truncate text-xs">{ev.venue}</p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
           </section>
         )}
 
