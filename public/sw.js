@@ -1,6 +1,6 @@
 /* FlockInsight service worker — offline support, fast caching, web push.
  * Bump CACHE_VERSION to invalidate old caches on deploy. */
-const CACHE_VERSION = "fi-v3";
+const CACHE_VERSION = "fi-v4";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 const OFFLINE_URL = "/offline.html";
@@ -47,14 +47,27 @@ self.addEventListener("fetch", (event) => {
   // Never intercept auth / API / server-action traffic.
   if (url.pathname.startsWith("/api/")) return;
 
+  // Never cache build assets/manifests through the SW — they change every
+  // deploy and a cached error response would poison the page. Let the browser
+  // fetch them straight from the network.
+  if (
+    url.pathname.startsWith("/_next/") ||
+    url.pathname === "/sw.js" ||
+    url.pathname === "/manifest.webmanifest"
+  ) {
+    return;
+  }
+
   // Page navigations: network-first, fall back to cache, then offline page.
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
         try {
           const fresh = await fetch(request);
-          const cache = await caches.open(PAGE_CACHE);
-          cache.put(request, fresh.clone());
+          if (fresh && fresh.ok) {
+            const cache = await caches.open(PAGE_CACHE);
+            cache.put(request, fresh.clone());
+          }
           return fresh;
         } catch {
           const cached = await caches.match(request);
@@ -65,7 +78,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Hashed static assets are immutable: cache-first.
+  // Other same-origin static assets (icons, fonts, images): cache-first, but
+  // only ever cache successful responses.
   if (isStaticAsset(url)) {
     event.respondWith(
       (async () => {
@@ -73,8 +87,10 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         try {
           const fresh = await fetch(request);
-          const cache = await caches.open(STATIC_CACHE);
-          cache.put(request, fresh.clone());
+          if (fresh && fresh.ok) {
+            const cache = await caches.open(STATIC_CACHE);
+            cache.put(request, fresh.clone());
+          }
           return fresh;
         } catch {
           return cached || Response.error();
