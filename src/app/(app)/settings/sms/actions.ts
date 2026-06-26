@@ -7,6 +7,12 @@ import { church, smsTopup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
+import { isSmsConfigured } from "@/lib/sms";
+import {
+  requestSenderId,
+  fetchSenderIdStatus,
+  type SenderIdStatus,
+} from "@/lib/termii-sender";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -59,6 +65,17 @@ export async function applySenderId(
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to do that." };
 
+  if (!isSmsConfigured())
+    return { ok: false, error: "SMS isn't enabled on the platform yet." };
+
+  // Register the sender ID with Termii for review.
+  const reg = await requestSenderId({
+    senderId: id,
+    usecase: (note || "").trim() || "Church service alerts and member updates",
+    company: c.name,
+  });
+  if (!reg.ok) return { ok: false, error: reg.error };
+
   await db
     .update(church)
     .set({
@@ -70,4 +87,29 @@ export async function applySenderId(
 
   revalidatePath("/settings/sms");
   return { ok: true };
+}
+
+export type StatusResult =
+  | { ok: true; status: SenderIdStatus }
+  | { ok: false; error: string };
+
+/** Ask Termii whether the church's requested sender ID is approved yet. */
+export async function checkSenderIdStatus(): Promise<StatusResult> {
+  const { church: c } = await requireChurch();
+  if (!(await can("settings.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+  if (!c.smsSenderId)
+    return { ok: false, error: "You haven't requested a sender ID yet." };
+
+  const status = await fetchSenderIdStatus(c.smsSenderId);
+
+  // Persist a definite verdict so sending/UI reflect it.
+  if (status === "approved" || status === "rejected") {
+    await db
+      .update(church)
+      .set({ smsSenderStatus: status })
+      .where(eq(church.id, c.id));
+    revalidatePath("/settings/sms");
+  }
+  return { ok: true, status };
 }

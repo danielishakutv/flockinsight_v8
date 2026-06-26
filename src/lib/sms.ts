@@ -1,24 +1,28 @@
 import "server-only";
 
 /**
- * SMS sending via Kudisms (https://my.kudisms.net).
+ * SMS via Termii (https://developers.termii.com/messaging).
  *
- * Configure with env vars:
- *   KUDISMS_API_TOKEN  – your API token
- *   KUDISMS_SENDER_ID  – approved sender ID (max 11 chars)
- *   KUDISMS_GATEWAY    – route/gateway id (optional; defaults to "2")
+ * Env vars:
+ *   TERMII_API_KEY    – your Termii API key (required)
+ *   TERMII_SENDER_ID  – platform default approved sender ID, e.g. "TEDxYola"
+ *   TERMII_BASE_URL   – API base (optional; default https://v3.api.termii.com)
+ *   TERMII_CHANNEL    – "generic" | "dnd" | "whatsapp" (optional; default generic)
+ *                       Set to "dnd" to reach numbers on the DND list.
  */
 
-const KUDISMS_URL = "https://my.kudisms.net/api/sms";
+export function termiiBase(): string {
+  return (process.env.TERMII_BASE_URL || "https://v3.api.termii.com").replace(/\/$/, "");
+}
 
 export type SmsResult = { ok: true } | { ok: false; error: string };
 
 export function isSmsConfigured(): boolean {
-  return !!(process.env.KUDISMS_API_TOKEN && process.env.KUDISMS_SENDER_ID);
+  return !!(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID);
 }
 
 /**
- * Normalize a (mostly Nigerian) phone number to Kudisms' expected
+ * Normalize a (mostly Nigerian) phone number to Termii's expected
  * international format without the leading "+": e.g. 0803… → 234803…,
  * +234803… → 234803…. Returns null if it can't be made sensible.
  */
@@ -35,11 +39,12 @@ export function normalizePhone(input: string): string | null {
   return digits.length >= 10 ? digits : null;
 }
 
-type KudismsResponse = {
-  status?: string;
-  error_code?: string | number;
-  msg?: string;
+type TermiiSendResponse = {
+  message_id?: string;
+  message_id_list?: string[];
+  code?: string;
   message?: string;
+  balance?: number;
 };
 
 /** Number of SMS "pages" a message occupies (160 chars each, GSM-7 assumed). */
@@ -55,12 +60,12 @@ export async function sendSms(opts: {
   message: string;
   senderId?: string;
 }): Promise<SmsResult> {
-  const token = process.env.KUDISMS_API_TOKEN;
-  const senderId = opts.senderId || process.env.KUDISMS_SENDER_ID;
-  if (!token || !senderId) {
+  const apiKey = process.env.TERMII_API_KEY;
+  const from = opts.senderId || process.env.TERMII_SENDER_ID;
+  if (!apiKey || !from) {
     return { ok: false, error: "SMS is not configured on the server." };
   }
-  const gateway = process.env.KUDISMS_GATEWAY || "2";
+  const channel = process.env.TERMII_CHANNEL || "generic";
 
   const recipients = (Array.isArray(opts.to) ? opts.to : [opts.to])
     .map(normalizePhone)
@@ -72,37 +77,40 @@ export async function sendSms(opts: {
     return { ok: false, error: "Message is empty." };
   }
 
-  // Kudisms reads parameters from the POST body (form-encoded), and the
-  // recipient field is `recipients` (plural).
-  const body = new URLSearchParams({
-    token,
-    senderID: senderId,
-    recipients: recipients.join(","),
-    message: opts.message,
-    gateway,
-  });
+  // Single recipient → /sms/send ; multiple → /sms/send/bulk (array `to`).
+  const bulk = recipients.length > 1;
+  const url = `${termiiBase()}/api/sms/send${bulk ? "/bulk" : ""}`;
+  const body = {
+    to: bulk ? recipients : recipients[0],
+    from,
+    sms: opts.message,
+    type: "plain",
+    channel,
+    api_key: apiKey,
+  };
 
   try {
-    const res = await fetch(KUDISMS_URL, {
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body,
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => null)) as KudismsResponse | null;
+    const data = (await res.json().catch(() => null)) as TermiiSendResponse | null;
 
-    if (String(data?.error_code) === "000" || data?.status === "success") {
-      return { ok: true };
-    }
-    const reason =
-      data?.msg ||
-      data?.message ||
-      `gateway error ${data?.error_code ?? res.status}`;
-    return { ok: false, error: `SMS not sent: ${reason}` };
+    const success =
+      !!data &&
+      (!!data.message_id ||
+        (Array.isArray(data.message_id_list) && data.message_id_list.length > 0) ||
+        data.code === "ok" ||
+        /success/i.test(String(data.message ?? "")));
+    if (res.ok && success) return { ok: true };
+
+    return {
+      ok: false,
+      error: `SMS not sent: ${data?.message || `gateway error ${res.status}`}`,
+    };
   } catch (e) {
-    console.error("[sms] Kudisms send failed:", e);
+    console.error("[sms] Termii send failed:", e);
     return { ok: false, error: "Could not reach the SMS gateway." };
   }
 }

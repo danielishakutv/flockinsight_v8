@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import {
   applySenderId,
+  checkSenderIdStatus,
   startSmsTopup,
 } from "@/app/(app)/settings/sms/actions";
 import { formatMoney } from "@/lib/money";
@@ -101,7 +102,21 @@ export function SmsSettings({
         toast.error(res.error);
         return;
       }
-      toast.success("Sender ID submitted for review.");
+      toast.success("Sender ID submitted to Termii for review.");
+      router.refresh();
+    });
+  }
+
+  function checkStatus() {
+    startTransition(async () => {
+      const res = await checkSenderIdStatus();
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.status === "approved") toast.success("Approved! You can send SMS now.");
+      else if (res.status === "rejected") toast.error("This sender ID was rejected.");
+      else toast.message("Still under review — please check again later.");
       router.refresh();
     });
   }
@@ -147,14 +162,25 @@ export function SmsSettings({
           {status === "pending" && (
             <div className="flex items-start gap-3 rounded-xl border p-3">
               <Clock className="mt-0.5 size-5 shrink-0 text-amber-500" />
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold">
                   “{senderId}” is under review{" "}
                   <Badge variant="secondary">Pending</Badge>
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  We&apos;ll approve it shortly. You can send SMS once approved.
+                  Termii is reviewing your sender ID. Approval usually takes a few
+                  hours. Check the latest status below.
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={checkStatus}
+                  disabled={pending}
+                >
+                  {pending && <Loader2 className="animate-spin" />}
+                  Check approval status
+                </Button>
               </div>
             </div>
           )}

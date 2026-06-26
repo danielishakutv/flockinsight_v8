@@ -7,8 +7,24 @@ import { db } from "@/db";
 import { church, smsWalletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
+import { sendSms, isSmsConfigured } from "@/lib/sms";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/** Send a test SMS via the platform's default Termii sender ID (TEDxYola). */
+export async function sendTestSms(
+  to: string,
+  message: string,
+): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!isSmsConfigured())
+    return {
+      ok: false,
+      error: "Set TERMII_API_KEY and TERMII_SENDER_ID in .env first.",
+    };
+  const msg = (message || "").trim() || "FlockInsight test SMS — it works!";
+  return await sendSms({ to, message: msg });
+}
 
 export async function setSmsPrice(price: number): Promise<ActionResult> {
   await requireSuperAdmin();

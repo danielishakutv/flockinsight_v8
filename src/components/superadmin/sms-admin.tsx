@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   adjustWallet,
   reviewSenderId,
+  sendTestSms,
   setSenderId,
   setSmsPrice,
 } from "@/app/superadmin/sms/actions";
@@ -51,6 +52,20 @@ export function SmsAdmin({
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [kind, setKind] = useState<"credit" | "debit">("credit");
+  const [testTo, setTestTo] = useState("");
+  const [testMsg, setTestMsg] = useState("");
+
+  function sendTest() {
+    if (!testTo.trim()) return toast.error("Enter a phone number.");
+    startTransition(async () => {
+      const res = await sendTestSms(testTo.trim(), testMsg);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Test SMS sent!");
+    });
+  }
 
   const applications = churches.filter((c) => c.status === "pending");
   const filtered = useMemo(() => {
@@ -124,10 +139,48 @@ export function SmsAdmin({
     <div className="space-y-6">
       {!gatewayReady && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          The SMS gateway isn&apos;t configured yet (set <code>KUDISMS_API_TOKEN</code>).
-          Churches can apply for sender IDs, but sending won&apos;t work until it&apos;s set.
+          The SMS gateway isn&apos;t configured yet (set <code>TERMII_API_KEY</code>{" "}
+          and <code>TERMII_SENDER_ID</code>). Churches can apply for sender IDs,
+          but sending won&apos;t work until it&apos;s set.
         </div>
       )}
+
+      {/* Send a test SMS via the platform sender ID (TEDxYola) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Send a test SMS</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="test-to">Phone number</Label>
+              <Input
+                id="test-to"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="08012345678"
+                className="w-48"
+              />
+            </div>
+            <div className="min-w-[12rem] flex-1 space-y-1">
+              <Label htmlFor="test-msg">Message (optional)</Label>
+              <Input
+                id="test-msg"
+                value={testMsg}
+                onChange={(e) => setTestMsg(e.target.value)}
+                placeholder="FlockInsight test SMS — it works!"
+              />
+            </div>
+            <Button onClick={sendTest} disabled={pending || !gatewayReady}>
+              {pending && <Loader2 className="animate-spin" />}
+              Send test
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Sends from your platform sender ID (<code>TERMII_SENDER_ID</code>).
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Price */}
       <Card>
