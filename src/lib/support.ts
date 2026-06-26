@@ -79,3 +79,55 @@ export async function notifyChurchReply(opts: {
     console.error("[support] notifyChurchReply failed", e);
   }
 }
+
+/** Confirm to the church that we received their new ticket. */
+export async function notifyTicketReceived(opts: {
+  to: string;
+  subject: string;
+  ticketId: string;
+}): Promise<void> {
+  const url = `${siteUrl()}/help/support/${opts.ticketId}`;
+  const body =
+    `<p>Thanks for reaching out — we’ve received your message <b>“${esc(opts.subject)}”</b> and our team will reply soon.</p>` +
+    `<p>You can view the conversation and add more details any time.</p>`;
+  try {
+    await sendEmail({
+      to: opts.to,
+      replyTo: SUPPORT_TO,
+      subject: `We got your message — ${opts.subject}`,
+      html: emailLayout("We’re on it", body, { label: "View ticket", url }),
+      text: `We received your message "${opts.subject}". View it: ${url}`,
+    });
+  } catch (e) {
+    console.error("[support] notifyTicketReceived failed", e);
+  }
+}
+
+/** Email the church when their ticket is closed or reopened. */
+export async function notifyTicketStatus(opts: {
+  to: string;
+  subject: string;
+  ticketId: string;
+  status: "closed" | "open";
+}): Promise<void> {
+  const url = `${siteUrl()}/help/support/${opts.ticketId}`;
+  const closed = opts.status === "closed";
+  const body = closed
+    ? `<p>Your support ticket <b>“${esc(opts.subject)}”</b> has been closed. If you still need help, just reply to reopen it or start a new one.</p>`
+    : `<p>Your support ticket <b>“${esc(opts.subject)}”</b> has been reopened — we’ll continue helping you.</p>`;
+  try {
+    await sendEmail({
+      to: opts.to,
+      replyTo: SUPPORT_TO,
+      subject: `${closed ? "Closed" : "Reopened"}: ${opts.subject} — FlockInsight Support`,
+      html: emailLayout(
+        closed ? "Ticket closed" : "Ticket reopened",
+        body,
+        { label: "View ticket", url },
+      ),
+      text: `Your ticket "${opts.subject}" was ${closed ? "closed" : "reopened"}. ${url}`,
+    });
+  } catch (e) {
+    console.error("[support] notifyTicketStatus failed", e);
+  }
+}

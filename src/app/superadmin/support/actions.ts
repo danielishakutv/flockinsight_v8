@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { supportTicket, supportMessage } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
-import { notifyChurchReply } from "@/lib/support";
+import { notifyChurchReply, notifyTicketStatus } from "@/lib/support";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -68,10 +68,29 @@ export async function setTicketStatus(
   if (!["open", "answered", "closed"].includes(status))
     return { ok: false, error: "Invalid status" };
 
+  const [t] = await db
+    .select({
+      subject: supportTicket.subject,
+      contactEmail: supportTicket.contactEmail,
+    })
+    .from(supportTicket)
+    .where(eq(supportTicket.id, ticketId))
+    .limit(1);
+
   await db
     .update(supportTicket)
     .set({ status })
     .where(eq(supportTicket.id, ticketId));
+
+  // Email the church on close / reopen (not on the implicit "answered").
+  if (t?.contactEmail && (status === "closed" || status === "open")) {
+    await notifyTicketStatus({
+      to: t.contactEmail,
+      subject: t.subject,
+      ticketId,
+      status,
+    });
+  }
 
   revalidatePath(`/superadmin/support/${ticketId}`);
   revalidatePath("/superadmin/support");

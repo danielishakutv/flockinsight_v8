@@ -6,7 +6,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { supportTicket, supportMessage } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { notifySupport, TICKET_CATEGORIES } from "@/lib/support";
+import {
+  notifySupport,
+  notifyTicketReceived,
+  TICKET_CATEGORIES,
+} from "@/lib/support";
 
 export type TicketResult =
   | { ok: true; id: string }
@@ -65,6 +69,11 @@ export async function createTicket(input: {
     message: d.message,
     contactName: user.name,
     contactEmail: user.email,
+  });
+  await notifyTicketReceived({
+    to: user.email,
+    subject: d.subject,
+    ticketId: ticket.id,
   });
 
   revalidatePath("/help/support");
