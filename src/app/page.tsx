@@ -2,12 +2,15 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
-  Calendar,
+  Bell,
+  CalendarDays,
   Check,
   CheckCircle2,
+  Globe,
   HandCoins,
+  HeartHandshake,
   MessageSquare,
-  ShieldCheck,
+  PartyPopper,
   Star,
   Users,
 } from "lucide-react";
@@ -20,9 +23,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "FlockInsight — Modern Church Management",
+  title: "FlockInsight — Church, Fellowship & Ministry Management",
   description:
-    "Streamline operations, engage your congregation, and grow your ministry with the all-in-one church management platform built for the modern church.",
+    "Attendance, members, giving, follow-up, bulk SMS & email, automatic reminders, birthdays, events and your own public page — the all-in-one platform for churches, fellowships and ministries. Built for Africa. Start free.",
 };
 
 const stats = [
@@ -32,37 +35,69 @@ const stats = [
   { value: "24/7", label: "Support" },
 ];
 
+const pains = [
+  "“I have no idea how many people actually came last Sunday — or last month.”",
+  "“Our members’ details are scattered across notebooks, phones and three different WhatsApp groups.”",
+  "“First-timers visit once and we never follow up — they just disappear.”",
+  "“Counting and tracking giving by hand takes hours and still doesn’t add up.”",
+  "“We forget members’ birthdays, and reminding everyone about service is a manual chore.”",
+  "“We have no simple, shareable page to invite people or be found online.”",
+];
+
 const features = [
   {
     icon: Users,
-    title: "Member Management",
-    body: "Keep track of your congregation with detailed member profiles, attendance tracking, and engagement insights.",
-  },
-  {
-    icon: Calendar,
-    title: "Event Planning",
-    body: "Schedule and manage church events, services, and programs with automated reminders and RSVP tracking.",
-  },
-  {
-    icon: HandCoins,
-    title: "Donation Tracking",
-    body: "Streamline tithes, offerings, and special contributions with secure payment processing and transparent reporting.",
-  },
-  {
-    icon: MessageSquare,
-    title: "Communication Tools",
-    body: "Send announcements, newsletters, and prayer updates via SMS, email, or in-app notifications.",
+    title: "Members & groups",
+    body: "One clean directory for your whole congregation — profiles, families, ministries, departments and cells. Import from a spreadsheet in minutes.",
   },
   {
     icon: BarChart3,
-    title: "Analytics & Reports",
-    body: "Make data-driven decisions with comprehensive dashboards and customizable reports on all church activities.",
+    title: "Attendance & analytics",
+    body: "Take fast headcounts in seconds and instantly see growth trends, averages and breakdowns. Know exactly how you’re doing.",
   },
   {
-    icon: ShieldCheck,
-    title: "Secure & Reliable",
-    body: "Enterprise-grade security with data encryption, regular backups, and 99.9% uptime guarantee.",
+    icon: HandCoins,
+    title: "Giving tracking",
+    body: "Record tithes, offerings and donations by category. Clear totals and reports — no more guesswork or messy spreadsheets.",
   },
+  {
+    icon: HeartHandshake,
+    title: "Visitor follow-up",
+    body: "Never lose a first-timer again. Track visitors through stages, log every call and visit, and assign care to your team.",
+  },
+  {
+    icon: MessageSquare,
+    title: "Bulk SMS & email",
+    body: "Reach everyone — or a single group — with your own SMS sender ID and free email. Templates make it effortless.",
+  },
+  {
+    icon: Bell,
+    title: "Automatic service reminders",
+    body: "Set it once and members get reminded about every service by SMS or email, automatically, in your timezone.",
+  },
+  {
+    icon: PartyPopper,
+    title: "Birthday & anniversary wishes",
+    body: "Make members feel loved — automatic birthday and anniversary messages with your own words. They’ll never forget your church.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Events with flyers",
+    body: "Publish programs with flyers, dates and venues, and let people discover what’s on near them.",
+  },
+  {
+    icon: Globe,
+    title: "Your own public page",
+    body: "A beautiful, shareable page (flockinsight.com/c/yourchurch) so members invite people and seekers find you in the directory.",
+  },
+];
+
+const audiences = [
+  "Local churches",
+  "Campus & student fellowships",
+  "House fellowships & cell groups",
+  "Ministries & outreaches",
+  "Multi-branch denominations",
 ];
 
 const steps = [
@@ -134,16 +169,17 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-4xl px-4 py-20 text-center lg:py-28">
             <span className="bg-primary/10 text-primary inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold">
               <Star className="size-4 fill-current" />
-              Trusted by 5,000+ Churches Worldwide
+              For churches, fellowships & ministries
             </span>
             <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-              Empower Your Church with{" "}
-              <span className="text-primary">Modern Management</span>
+              Everything your ministry needs,{" "}
+              <span className="text-primary">in one simple app</span>
             </h1>
             <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg text-balance">
-              Streamline operations, engage your congregation, and grow your
-              ministry with the all-in-one church management platform built for
-              the modern church.
+              Stop juggling notebooks, spreadsheets and WhatsApp groups. Track
+              attendance, members, giving and follow-up, send SMS & email,
+              automate reminders and birthdays, publish events, and get your own
+              shareable page — all in one place, built for Africa.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="xl">
@@ -175,6 +211,37 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        {/* Pain points */}
+        <section className="py-16 lg:py-24">
+          <div className="mx-auto max-w-5xl px-4 lg:px-8">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-primary text-sm font-bold uppercase tracking-wider">
+                Sound familiar?
+              </p>
+              <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
+                The daily headaches of running a ministry
+              </h2>
+              <p className="text-muted-foreground mt-4 text-lg">
+                If any of these feel like you, you&apos;re not alone — and you
+                don&apos;t have to keep doing it the hard way.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {pains.map((p) => (
+                <div
+                  key={p}
+                  className="bg-card rounded-2xl border border-dashed p-5 text-pretty"
+                >
+                  <p className="text-muted-foreground italic">{p}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-8 text-center text-lg font-semibold">
+              FlockInsight fixes all of this — in one place. 👇
+            </p>
+          </div>
+        </section>
+
         {/* Features */}
         <section id="features" className="bg-muted/30 border-y py-20 lg:py-28">
           <div className="mx-auto max-w-6xl px-4 lg:px-8">
@@ -183,12 +250,22 @@ export default async function LandingPage() {
                 Features
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Everything You Need to Manage Your Church
+                Everything you need to grow your ministry
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
-                Powerful features designed to simplify church administration and
-                strengthen your community.
+                One affordable platform that replaces a dozen tools — simple
+                enough for any volunteer to use.
               </p>
+            </div>
+            <div className="mx-auto mb-10 mt-6 flex max-w-3xl flex-wrap justify-center gap-2">
+              {audiences.map((a) => (
+                <span
+                  key={a}
+                  className="bg-background rounded-full border px-3 py-1 text-sm font-semibold"
+                >
+                  {a}
+                </span>
+              ))}
             </div>
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((f) => (
