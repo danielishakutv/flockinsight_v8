@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "./auth";
+import { readActAsCookie } from "./impersonation";
 import { db } from "@/db";
 import { church, user } from "@/db/schema";
 
@@ -25,15 +26,36 @@ export async function requireUser() {
 }
 
 /**
+ * The church a superadmin is currently "acting as" (operating on behalf of),
+ * or null. Honoured ONLY for superadmins, and only when the target church
+ * still exists — so a forged cookie from a normal user is worthless.
+ */
+export const getActAsChurchId = cache(async (): Promise<string | null> => {
+  const churchId = await readActAsCookie();
+  if (!churchId) return null;
+  if (!(await getIsSuperAdmin())) return null;
+  const [row] = await db
+    .select({ id: church.id })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  return row?.id ?? null;
+});
+
+/**
  * Require an authenticated user AND an active church (tenant).
  * Redirects to /login if not signed in, or /onboarding if the user
  * has no active church selected yet.
+ *
+ * Returns `impersonating: true` when a superadmin is acting as this church.
  */
 export const requireChurch = cache(async () => {
   const data = await getSession();
   if (!data?.user) redirect("/login");
 
-  const activeChurchId = data.session.activeOrganizationId;
+  // A superadmin "acting as" a church overrides their own active tenant.
+  const actAsId = await getActAsChurchId();
+  const activeChurchId = actAsId ?? data.session.activeOrganizationId;
   if (!activeChurchId) redirect("/onboarding");
 
   const [activeChurch] = await db
@@ -43,9 +65,16 @@ export const requireChurch = cache(async () => {
     .limit(1);
 
   if (!activeChurch) redirect("/onboarding");
-  if (activeChurch.status === "suspended") redirect("/suspended");
+  // Don't bounce an acting-as superadmin out of a suspended church — they may
+  // be entering precisely to investigate or fix it.
+  if (activeChurch.status === "suspended" && !actAsId) redirect("/suspended");
 
-  return { user: data.user, session: data.session, church: activeChurch };
+  return {
+    user: data.user,
+    session: data.session,
+    church: activeChurch,
+    impersonating: !!actAsId,
+  };
 });
 
 /**

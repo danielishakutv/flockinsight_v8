@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { role, staff } from "@/db/schema";
-import { getSession } from "@/lib/session";
+import { getSession, getActAsChurchId } from "@/lib/session";
 import {
   ALL_PERMISSIONS,
   MEMBER_DEFAULT_PERMISSIONS,
@@ -33,6 +33,14 @@ const EMPTY: Access = { isOwner: false, perms: new Set(), staffRole: null };
 export const getAccess = cache(async (): Promise<Access> => {
   const data = await getSession();
   if (!data?.user) return EMPTY;
+
+  // A superadmin acting as a church operates it with full owner powers so they
+  // can actually resolve issues. (getActAsChurchId already verified superadmin.)
+  const actAsId = await getActAsChurchId();
+  if (actAsId) {
+    return { isOwner: true, perms: new Set(ALL_PERMISSIONS), staffRole: "owner" };
+  }
+
   const churchId = data.session.activeOrganizationId;
   if (!churchId) return EMPTY;
 

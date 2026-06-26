@@ -8,6 +8,7 @@ import {
   ChevronRight,
   HandCoins,
   Loader2,
+  LogIn,
   PauseCircle,
   PlayCircle,
   Search,
@@ -16,7 +17,11 @@ import {
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteChurch, setChurchStatus } from "@/app/superadmin/actions";
+import {
+  deleteChurch,
+  impersonateChurch,
+  setChurchStatus,
+} from "@/app/superadmin/actions";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +82,17 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
       [c.name, c.slug].some((v) => v.toLowerCase().includes(q)),
     );
   }, [churches, query]);
+
+  const [enteringId, setEnteringId] = useState<string | null>(null);
+  function enter(c: ChurchRow) {
+    setEnteringId(c.id);
+    startTransition(async () => {
+      // On success this redirects into the church, so we only get here on error.
+      const res = await impersonateChurch(c.id);
+      setEnteringId(null);
+      if (res && !res.ok) toast.error(res.error);
+    });
+  }
 
   function toggle(c: ChurchRow) {
     const next = c.status === "active" ? "suspended" : "active";
@@ -170,6 +186,20 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                     </p>
                   </Link>
                   <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => enter(c)}
+                      disabled={pending && enteringId === c.id}
+                      title={`Open ${c.name}'s workspace as super admin`}
+                    >
+                      {pending && enteringId === c.id ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <LogIn className="size-4" />
+                      )}
+                      Log in
+                    </Button>
                     <Button
                       variant={suspended ? "default" : "outline"}
                       size="sm"

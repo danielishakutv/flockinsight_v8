@@ -2,13 +2,44 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment, session } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
+import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Enter a church's workspace as a superadmin ("log in as church"). Sets the
+ * act-as cookie and lands on the church's dashboard. The superadmin keeps
+ * their own identity; they simply gain owner-level access to this church until
+ * they exit. Returns an error result only on failure (otherwise it redirects).
+ */
+export async function impersonateChurch(id: string): Promise<ActionResult> {
+  await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [target] = await db
+    .select({ id: church.id })
+    .from(church)
+    .where(eq(church.id, id))
+    .limit(1);
+  if (!target) return { ok: false, error: "Church not found." };
+
+  await writeActAsCookie(target.id);
+  redirect("/dashboard");
+}
+
+/** Stop acting as a church and return to the admin panel. */
+export async function exitImpersonation(): Promise<void> {
+  await requireSuperAdmin();
+  await clearActAsCookie();
+  redirect("/superadmin/churches");
+}
 
 const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
 

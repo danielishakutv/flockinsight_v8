@@ -9,10 +9,12 @@ import {
   Coins,
   HandCoins,
   Layers,
+  LogIn,
   UserCog,
   Users,
   UsersRound,
 } from "lucide-react";
+import { impersonateChurch } from "@/app/superadmin/actions";
 import { db } from "@/db";
 import {
   attendanceSession,
@@ -164,6 +166,11 @@ export default async function SuperadminChurchPage({
     membersByStatus.map((m) => [m.status, Number(m.c)]),
   );
 
+  async function enterChurch() {
+    "use server";
+    await impersonateChurch(id);
+  }
+
   return (
     <div className="space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
@@ -195,6 +202,12 @@ export default async function SuperadminChurchPage({
             {ownerEmail ? ` · owner ${ownerEmail}` : ""}
           </p>
         </div>
+        <form action={enterChurch}>
+          <Button type="submit">
+            <LogIn className="size-4" />
+            Log in as church
+          </Button>
+        </form>
       </div>
 
       {/* Key numbers */}
