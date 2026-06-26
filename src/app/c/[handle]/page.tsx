@@ -292,6 +292,10 @@ export default async function ChurchPublicPage({
             className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-6 py-3 text-sm font-bold text-white shadow transition hover:bg-violet-700"
           />
           <p className="mt-4 text-xs text-slate-400">
+            <Link href="/churches" className="font-semibold hover:underline">
+              Find more churches
+            </Link>
+            {" · "}
             <Link href="/" className="font-semibold hover:underline">
               Powered by FlockInsight
             </Link>
