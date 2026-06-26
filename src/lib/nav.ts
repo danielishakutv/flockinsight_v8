@@ -9,6 +9,7 @@ import {
   MessagesSquare,
   Bell,
   Settings,
+  LifeBuoy,
   PlusCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -179,6 +180,13 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Profile, services & team",
         tile: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
         perm: SETTINGS_PERMS,
+      },
+      {
+        label: "Help & Support",
+        href: "/help",
+        icon: LifeBuoy,
+        description: "Guides, tutorials & contact us",
+        tile: "bg-green-500/15 text-green-600 dark:text-green-400",
       },
     ],
   },

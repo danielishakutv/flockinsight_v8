@@ -127,6 +127,13 @@
       "when": 1782466838035,
       "tag": "0017_awesome_greymalkin",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782480278881,
+      "tag": "0018_chunky_mandrill",
+      "breakpoints": true
     }
   ]
 }

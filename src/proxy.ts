@@ -22,6 +22,7 @@ export const config = {
     "/analytics/:path*",
     "/members/:path*",
     "/settings/:path*",
+    "/help/:path*",
     "/onboarding/:path*",
     "/suspended",
     "/superadmin/:path*",

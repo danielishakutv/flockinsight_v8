@@ -855,6 +855,55 @@ export const reminderRun = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — support tickets (church ↔ platform)
+ * ========================================================== */
+
+export const supportTicketStatusEnum = pgEnum("support_ticket_status", [
+  "open", // awaiting a reply from support
+  "answered", // support replied, awaiting the church
+  "closed",
+]);
+export const supportAuthorEnum = pgEnum("support_author", ["church", "support"]);
+
+export const supportTicket = pgTable(
+  "support_ticket",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    subject: text().notNull(),
+    category: text().notNull().default("general"),
+    status: supportTicketStatusEnum().notNull().default("open"),
+    contactName: text(),
+    contactEmail: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastReplyAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("support_ticket_church_idx").on(t.churchId),
+    index("support_ticket_status_idx").on(t.status),
+  ],
+);
+
+export const supportMessage = pgTable(
+  "support_message",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    ticketId: uuid()
+      .notNull()
+      .references(() => supportTicket.id, { onDelete: "cascade" }),
+    authorType: supportAuthorEnum().notNull(),
+    authorUserId: text().references(() => user.id, { onDelete: "set null" }),
+    authorName: text(),
+    body: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("support_message_ticket_idx").on(t.ticketId)],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 

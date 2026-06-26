@@ -1,0 +1,43 @@
+import {
+  BarChart3,
+  BookOpen,
+  CreditCard,
+  HandCoins,
+  HeartHandshake,
+  LifeBuoy,
+  MessagesSquare,
+  MessageSquare,
+  Bell,
+  Sparkles,
+  Users,
+  UsersRound,
+  ClipboardCheck,
+  CalendarDays,
+  Globe,
+  UserCog,
+  type LucideIcon,
+} from "lucide-react";
+
+/** Maps a guide's icon key to a Lucide icon. */
+export const HELP_ICONS: Record<string, LucideIcon> = {
+  sparkles: Sparkles,
+  members: Users,
+  groups: UsersRound,
+  followup: HeartHandshake,
+  services: CalendarDays,
+  attendance: ClipboardCheck,
+  giving: HandCoins,
+  comms: MessagesSquare,
+  sms: MessageSquare,
+  reminders: Bell,
+  public: Globe,
+  billing: CreditCard,
+  team: UserCog,
+  help: LifeBuoy,
+  analytics: BarChart3,
+  default: BookOpen,
+};
+
+export function helpIcon(key: string): LucideIcon {
+  return HELP_ICONS[key] ?? HELP_ICONS.default;
+}

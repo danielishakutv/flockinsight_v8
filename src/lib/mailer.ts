@@ -46,6 +46,8 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
   text?: string;
+  cc?: string | string[];
+  replyTo?: string;
   attachments?: EmailAttachment[];
 }): Promise<boolean> {
   const from =
@@ -60,6 +62,8 @@ export async function sendEmail(opts: {
       subject: opts.subject,
       html: opts.html,
       ...(opts.text ? { text: opts.text } : {}),
+      ...(opts.cc ? { cc: opts.cc } : {}),
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       ...(opts.attachments?.length
         ? {
             attachments: opts.attachments.map((a) => ({
@@ -91,6 +95,8 @@ export async function sendEmail(opts: {
     subject: opts.subject,
     html: opts.html,
     ...(opts.text ? { text: opts.text } : {}),
+    ...(opts.cc ? { cc: opts.cc } : {}),
+    ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
     ...(opts.attachments?.length
       ? {
           attachments: opts.attachments.map((a) => ({
