@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BarChart3,
   Calendar,
+  Check,
   CheckCircle2,
   HandCoins,
   MessageSquare,
@@ -12,8 +13,11 @@ import {
 } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { LandingHeaderAuth } from "@/components/landing-header-auth";
+import { getPlans } from "@/lib/pricing";
+import { planPriceLabel } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "FlockInsight — Modern Church Management",
@@ -100,7 +104,8 @@ const testimonials = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const plans = await getPlans();
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Header */}
@@ -110,8 +115,8 @@ export default function LandingPage() {
           <nav className="hidden items-center gap-8 text-sm font-semibold md:flex">
             <a href="#features" className="hover:text-primary">Features</a>
             <a href="#how" className="hover:text-primary">How It Works</a>
-            <a href="#testimonials" className="hover:text-primary">Testimonials</a>
             <a href="#pricing" className="hover:text-primary">Pricing</a>
+            <Link href="/churches" className="hover:text-primary">Find a church</Link>
           </nav>
           <div className="flex items-center gap-2">
             <LandingHeaderAuth />
@@ -270,8 +275,75 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing / CTA */}
-        <section id="pricing" className="py-20 lg:py-28">
+        {/* Pricing */}
+        <section id="pricing" className="bg-muted/30 border-y py-20 lg:py-28">
+          <div className="mx-auto max-w-6xl px-4 lg:px-8">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-primary text-sm font-bold uppercase tracking-wider">
+                Pricing
+              </p>
+              <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
+                Simple pricing for every church
+              </h2>
+              <p className="text-muted-foreground mt-4 text-lg">
+                Start free and grow as your congregation grows. Prices in Naira,
+                no card required to begin.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-5 lg:grid-cols-4">
+              {plans.map((p) => (
+                <div
+                  key={p.id}
+                  className={cn(
+                    "bg-card relative flex flex-col rounded-3xl border p-6 shadow-sm",
+                    p.highlight && "border-primary ring-primary/30 ring-2",
+                  )}
+                >
+                  {p.highlight && (
+                    <span className="bg-primary text-primary-foreground absolute -top-3 left-6 rounded-full px-3 py-1 text-xs font-bold">
+                      Most popular
+                    </span>
+                  )}
+                  <h3 className="text-xl font-extrabold">{p.name}</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {p.tagline}
+                  </p>
+                  <p className="mt-4 text-3xl font-extrabold tracking-tight">
+                    {planPriceLabel(p)}
+                  </p>
+                  <ul className="mt-5 flex-1 space-y-2.5">
+                    {p.features.slice(0, 5).map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm">
+                        <Check className="text-primary mt-0.5 size-4 shrink-0" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    asChild
+                    className="mt-6 w-full"
+                    variant={p.highlight ? "default" : "outline"}
+                    size="lg"
+                  >
+                    <Link href="/signup">
+                      {p.priceMonthly === null ? "Contact us" : "Get started"}
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-muted-foreground mt-8 text-center text-sm">
+              See full plan details on the{" "}
+              <Link href="/pricing" className="text-primary font-semibold underline">
+                pricing page
+              </Link>
+              .
+            </p>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="py-20 lg:py-28">
           <div className="mx-auto max-w-4xl px-4 lg:px-8">
             <Card className="from-primary overflow-hidden bg-gradient-to-br to-violet-600 text-center text-white">
               <CardContent className="px-6 py-14">
@@ -318,6 +390,7 @@ export default function LandingPage() {
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
               <li><a href="#features" className="hover:text-primary">Features</a></li>
               <li><a href="#pricing" className="hover:text-primary">Pricing</a></li>
+              <li><Link href="/churches" className="hover:text-primary">Find a church</Link></li>
               <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
               <li><Link href="/signup" className="hover:text-primary">Get Started</Link></li>
             </ul>

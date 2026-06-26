@@ -2,17 +2,19 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church } from "@/db/schema";
-import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
+import { type PlanId } from "@/lib/plans";
+import { applyDiscount, getPlanPrice } from "@/lib/pricing";
 
-/** Monthly price after an admin-granted discount. null = custom (Enterprise). */
-export function effectivePrice(
+/**
+ * Monthly price after an admin-granted discount, using the admin-managed base
+ * price. null = custom (Enterprise). Async because the base price is resolved
+ * from platform settings.
+ */
+export async function effectivePrice(
   plan: string,
   discountPct: number,
-): number | null {
-  const base = PLAN_BY_ID[plan as PlanId]?.priceMonthly;
-  if (base === undefined || base === null) return null;
-  const pct = Math.min(100, Math.max(0, discountPct || 0));
-  return Math.max(0, Math.round(base * (1 - pct / 100)));
+): Promise<number | null> {
+  return applyDiscount(await getPlanPrice(plan), discountPct);
 }
 
 /**

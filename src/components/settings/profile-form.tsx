@@ -8,7 +8,7 @@ import Link from "next/link";
 import { updateChurchProfile } from "@/app/(app)/settings/actions";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/money";
 import { COUNTRIES, NIGERIAN_STATES } from "@/lib/geo";
-import { planName, planPriceLabel, PLAN_BY_ID, type PlanId } from "@/lib/plans";
+import { planName } from "@/lib/plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,6 +42,7 @@ export function ProfileForm({
   initialCountry,
   initialState,
   plan,
+  planPriceLabel,
 }: {
   initialName: string;
   initialTimezone: string;
@@ -49,6 +50,7 @@ export function ProfileForm({
   initialCountry: string;
   initialState: string | null;
   plan: string;
+  planPriceLabel: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -63,8 +65,6 @@ export function ProfileForm({
   );
   const [country, setCountry] = useState(initialCountry || "Nigeria");
   const [state, setState] = useState(initialState ?? "");
-
-  const planMeta = PLAN_BY_ID[plan as PlanId];
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -183,11 +183,9 @@ export function ProfileForm({
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Your plan</span>
               <Badge variant="secondary">{planName(plan)}</Badge>
-              {planMeta && (
-                <span className="text-muted-foreground text-xs">
-                  {planPriceLabel(planMeta)}
-                </span>
-              )}
+              <span className="text-muted-foreground text-xs">
+                {planPriceLabel}
+              </span>
             </div>
             <Button asChild variant="outline" size="sm">
               <Link href="/settings/billing">Manage plan</Link>

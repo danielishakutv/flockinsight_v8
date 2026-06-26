@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
-import { effectivePrice } from "@/lib/billing";
+import { applyDiscount, getPlanPrices } from "@/lib/pricing";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { PlanBilling } from "@/components/settings/plan-billing";
 
@@ -47,8 +47,9 @@ export default async function BillingPage({
       .limit(20),
   ]);
 
+  const basePrices = await getPlanPrices();
   const prices = Object.fromEntries(
-    PLANS.map((p) => [p.id, effectivePrice(p.id, row.discount)]),
+    PLANS.map((p) => [p.id, applyDiscount(basePrices[p.id], row.discount)]),
   ) as Record<PlanId, number | null>;
 
   return (
@@ -57,6 +58,7 @@ export default async function BillingPage({
       renewsAt={row.renewsAt ? row.renewsAt.toISOString() : null}
       discount={row.discount}
       prices={prices}
+      basePrices={basePrices}
       payments={payments.map((p) => ({
         id: p.id,
         plan: p.plan,

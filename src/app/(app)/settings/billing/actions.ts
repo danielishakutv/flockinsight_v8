@@ -23,7 +23,7 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to manage billing." };
 
-  const price = effectivePrice(plan, c.planDiscountPct);
+  const price = await effectivePrice(plan, c.planDiscountPct);
   if (price === null)
     return { ok: false, error: "That plan is custom — please contact us." };
 

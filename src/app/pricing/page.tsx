@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { PLANS, planPriceLabel } from "@/lib/plans";
+import { planPriceLabel } from "@/lib/plans";
+import { getPlans } from "@/lib/pricing";
 import { Wordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,8 @@ export const metadata = {
     "Simple, affordable plans for churches of every size — built for Nigeria and Africa. Start free.",
 };
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const plans = await getPlans();
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 lg:px-8">
@@ -19,6 +21,9 @@ export default function PricingPage() {
           <Wordmark />
         </Link>
         <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/churches">Find a church</Link>
+          </Button>
           <Button asChild variant="ghost" size="sm">
             <Link href="/login">Log in</Link>
           </Button>
@@ -40,7 +45,7 @@ export default function PricingPage() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-4">
-          {PLANS.map((p) => (
+          {plans.map((p) => (
             <div
               key={p.id}
               className={cn(

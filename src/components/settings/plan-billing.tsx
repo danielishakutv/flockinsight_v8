@@ -35,6 +35,7 @@ export function PlanBilling({
   renewsAt,
   discount,
   prices,
+  basePrices,
   payments,
   status,
 }: {
@@ -42,6 +43,7 @@ export function PlanBilling({
   renewsAt: string | null;
   discount: number;
   prices: Record<PlanId, number | null>;
+  basePrices: Record<PlanId, number | null>;
   payments: PaymentRow[];
   status: string | null;
 }) {
@@ -136,7 +138,7 @@ export function PlanBilling({
                 {priceLabel}
                 {price !== null && price > 0 && discount > 0 && (
                   <span className="text-muted-foreground ml-1 text-xs font-normal line-through">
-                    ₦{p.priceMonthly?.toLocaleString()}
+                    ₦{basePrices[p.id]?.toLocaleString()}
                   </span>
                 )}
               </p>
