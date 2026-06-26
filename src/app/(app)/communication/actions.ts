@@ -18,6 +18,7 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
+import { recordUsage } from "@/lib/usage";
 import { sendPushToUsers } from "@/lib/push";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
@@ -170,6 +171,7 @@ export async function sendCommunication(
     }),
   );
   const sent = results.filter((x) => x.status === "fulfilled" && x.value).length;
+  if (sent > 0) await recordUsage("email", c.id, sent);
 
   await db.insert(communicationLog).values({
     churchId: c.id,

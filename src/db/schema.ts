@@ -904,6 +904,27 @@ export const supportMessage = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — usage stats (emails/SMS sent, per church per day)
+ * Daily rollups so platform analytics stay cheap to query.
+ * ========================================================== */
+export const usageStat = pgTable(
+  "usage_stat",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    metric: text().notNull(), // 'email' | 'sms'
+    day: date().notNull(),
+    count: integer().notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("usage_stat_unique").on(t.churchId, t.metric, t.day),
+    index("usage_stat_metric_idx").on(t.metric),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 

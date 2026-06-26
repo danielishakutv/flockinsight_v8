@@ -134,6 +134,13 @@
       "when": 1782480278881,
       "tag": "0018_chunky_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782502409022,
+      "tag": "0019_fresh_tyrannus",
+      "breakpoints": true
     }
   ]
 }

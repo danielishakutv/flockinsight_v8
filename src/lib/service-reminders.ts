@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { church, member, reminderRun, reminderSetting, service } from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
+import { recordUsage } from "@/lib/usage";
 
 const DAYS = [
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
@@ -197,6 +198,7 @@ export async function runServiceReminders(): Promise<ReminderSummary> {
         .update(reminderRun)
         .set({ sentSms, sentEmail })
         .where(eq(reminderRun.id, run.id));
+      if (sentEmail > 0) await recordUsage("email", c.churchId, sentEmail);
       summary.sms += sentSms;
       summary.emails += sentEmail;
     }

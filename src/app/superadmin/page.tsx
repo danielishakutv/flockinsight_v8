@@ -5,6 +5,8 @@ import {
   Building2,
   ClipboardCheck,
   HandCoins,
+  Mail,
+  MessageSquare,
   PauseCircle,
   Sparkles,
   UserCog,
@@ -12,6 +14,7 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
+import { metricTotal, topChurchesByMetric } from "@/lib/usage";
 import { db } from "@/db";
 import {
   church,
@@ -135,6 +138,9 @@ export default async function SuperadminOverviewPage() {
         />
       </div>
 
+      {/* Messaging activity */}
+      <MessagingStats startOfMonth={startOfMonth} />
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Largest churches */}
         <Card>
@@ -209,5 +215,74 @@ export default async function SuperadminOverviewPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+async function MessagingStats({ startOfMonth }: { startOfMonth: string }) {
+  const [emailTotal, emailMonth, smsTotal, smsMonth, topEmail, topSms] =
+    await Promise.all([
+      metricTotal("email"),
+      metricTotal("email", startOfMonth),
+      metricTotal("sms"),
+      metricTotal("sms", startOfMonth),
+      topChurchesByMetric("email", 5),
+      topChurchesByMetric("sms", 5),
+    ]);
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold">Messaging activity</h2>
+      <div className="grid grid-cols-2 gap-3 lg:gap-4">
+        <StatCard
+          label="Emails sent"
+          value={emailTotal.toLocaleString()}
+          sub={`${emailMonth.toLocaleString()} this month`}
+          icon={Mail}
+          accent
+        />
+        <StatCard
+          label="SMS sent"
+          value={smsTotal.toLocaleString()}
+          sub={`${smsMonth.toLocaleString()} this month`}
+          icon={MessageSquare}
+        />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TopUsageList title="Top churches — Email" icon={Mail} rows={topEmail} />
+        <TopUsageList title="Top churches — SMS" icon={MessageSquare} rows={topSms} />
+      </div>
+    </div>
+  );
+}
+
+function TopUsageList({
+  title,
+  icon: Icon,
+  rows,
+}: {
+  title: string;
+  icon: typeof Mail;
+  rows: { name: string; total: number }[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Icon className="text-primary size-5" /> {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No activity yet.</p>
+        ) : (
+          rows.map((r, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate font-medium">{r.name}</span>
+              <span className="font-bold tabular-nums">{r.total.toLocaleString()}</span>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }

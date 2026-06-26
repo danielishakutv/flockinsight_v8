@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { church, smsWalletTxn } from "@/db/schema";
 import { sendSms, smsPages, normalizePhone, isSmsConfigured } from "@/lib/sms";
 import { getSmsPrice } from "@/lib/platform-settings";
+import { recordUsage } from "@/lib/usage";
 
 export type ChurchSmsResult =
   | { ok: true; cost: number; balance: number }
@@ -81,6 +82,7 @@ export async function sendChurchSms(opts: {
     });
   });
 
+  await recordUsage("sms", opts.churchId, recipients.length);
   return { ok: true, cost, balance: newBalance };
 }
 
@@ -176,5 +178,6 @@ export async function sendChurchSmsBatch(opts: {
     });
   }
 
+  if (sent > 0) await recordUsage("sms", opts.churchId, sent);
   return { ok: true, sent, failed, cost: spent, balance: newBalance };
 }
