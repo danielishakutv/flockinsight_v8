@@ -31,6 +31,7 @@ import {
   weeklyAverage,
 } from "@/lib/attendance-metrics";
 import { formatMoney } from "@/lib/money";
+import { siteUrl, churchPath } from "@/lib/site";
 import { PageContainer } from "@/components/app/page-header";
 import { DateTime } from "@/components/app/date-time";
 import { StatCard } from "@/components/app/stat-card";
@@ -38,6 +39,7 @@ import { SetupNotices, type Notice } from "@/components/dashboard/setup-notices"
 import { MiniTodo } from "@/components/dashboard/mini-todo";
 import { UpcomingBirthdays } from "@/components/dashboard/upcoming-birthdays";
 import { UpcomingAnniversaries } from "@/components/dashboard/upcoming-anniversaries";
+import { InviteCard } from "@/components/dashboard/invite-card";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
 import { Button } from "@/components/ui/button";
 import {
@@ -298,6 +300,12 @@ export default async function DashboardPage() {
 
         {/* Right column: personal to-do + birthdays + anniversaries */}
         <aside className="space-y-4">
+          {church.publicEnabled && church.handle && (
+            <InviteCard
+              url={`${siteUrl()}${churchPath(church.handle)}`}
+              churchName={church.name}
+            />
+          )}
           <MiniTodo initial={todos} />
           <Suspense fallback={null}>
             <UpcomingBirthdays churchId={church.id} />

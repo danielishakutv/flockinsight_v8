@@ -95,7 +95,10 @@ export async function createChurchAccount(input: {
   for (let attempt = 0; ; attempt++) {
     try {
       await db.transaction(async (tx) => {
-        await tx.insert(church).values({ id: churchId, name: churchName, slug });
+        // `handle` (public URL) defaults to the slug; the church can change it.
+        await tx
+          .insert(church)
+          .values({ id: churchId, name: churchName, slug, handle: slug });
         await tx.insert(staff).values({
           id: crypto.randomUUID(),
           organizationId: churchId,

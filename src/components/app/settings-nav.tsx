@@ -8,6 +8,7 @@ type Tab = { label: string; href: string; need: "settings" | "team" };
 
 const allTabs: Tab[] = [
   { label: "General", href: "/settings", need: "settings" },
+  { label: "Public page", href: "/settings/public", need: "settings" },
   { label: "Services", href: "/settings/services", need: "settings" },
   { label: "Giving", href: "/settings/giving", need: "settings" },
   { label: "SMS", href: "/settings/sms", need: "settings" },

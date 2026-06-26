@@ -13,7 +13,15 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  customType,
 } from "drizzle-orm/pg-core";
+
+/** Raw binary column (Postgres bytea) — used to store uploaded media bytes. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 /* ============================================================
  * Subscription plans (3 tiers + Enterprise/custom).
@@ -145,7 +153,58 @@ export const church = pgTable("church", {
   smsBalance: numeric({ precision: 14, scale: 2, mode: "number" })
     .notNull()
     .default(0),
+  // ----- Public profile / directory -----
+  // Public URL username (e.g. /c/grace-chapel). Defaults to `slug` on create,
+  // editable by the church. Unique so links are stable & unambiguous.
+  handle: text().unique(),
+  // Whether the church is listed in the public directory & its page is live.
+  publicEnabled: boolean().notNull().default(true),
+  denomination: text(),
+  tagline: text(),
+  about: text(),
+  coverUrl: text(),
+  // Gallery: [{ url, caption? }].
+  photos: jsonb()
+    .$type<{ url: string; caption?: string }[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  addressText: text(),
+  landmarks: text(),
+  city: text(),
+  // Coordinates for "nearest to me" sorting in the directory (optional).
+  lat: numeric({ precision: 9, scale: 6, mode: "number" }),
+  lng: numeric({ precision: 9, scale: 6, mode: "number" }),
+  publicPhone: text(),
+  publicEmail: text(),
+  website: text(),
+  // { facebook, instagram, youtube, tiktok, x, whatsapp }.
+  socials: jsonb()
+    .$type<Record<string, string>>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
 });
+
+/* ============================================================
+ * FlockInsight domain — uploaded media (logos, covers, photos)
+ * Stored in Postgres (bytea) so it's covered by DB backups and needs no
+ * external object store. Served immutably via /media/[id] (random id).
+ * Images are compressed in the browser before upload (small payloads).
+ * ========================================================== */
+export const media = pgTable(
+  "media",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    kind: text().notNull().default("photo"), // logo | cover | photo
+    mime: text().notNull(),
+    size: integer().notNull().default(0),
+    data: bytea().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("media_church_idx").on(t.churchId)],
+);
 
 export const staff = pgTable("staff", {
   id: text().primaryKey(),
