@@ -800,6 +800,60 @@ export const todo = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — automatic service reminders to members
+ * One settings row per church + a run log to make the cron idempotent.
+ * ========================================================== */
+
+export const reminderSetting = pgTable("reminder_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  sms: boolean().notNull().default(false),
+  email: boolean().notNull().default(true),
+  // Send the day before the service (vs the same day).
+  dayBefore: boolean().notNull().default(false),
+  // Local church time to send, "HH:MM" (24h).
+  sendTime: text().notNull().default("07:00"),
+  // active | all (which members to remind).
+  audience: text().notNull().default("active"),
+  smsTemplate: text()
+    .notNull()
+    .default(
+      "Hi {name}, reminder: {service} holds {day} {time} at {church}. We can't wait to see you!",
+    ),
+  emailSubject: text()
+    .notNull()
+    .default("See you at {church} for {service}"),
+  emailTemplate: text()
+    .notNull()
+    .default(
+      "Hi {name},\n\nThis is a friendly reminder that {service} holds {day} at {time}.\n\nWe look forward to worshipping with you at {church}!",
+    ),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const reminderRun = pgTable(
+  "reminder_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    serviceId: uuid().references(() => service.id, { onDelete: "cascade" }),
+    serviceDate: date().notNull(),
+    sentSms: integer().notNull().default(0),
+    sentEmail: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  // One reminder per service occurrence — makes a re-run a no-op.
+  (t) => [uniqueIndex("reminder_run_unique").on(t.serviceId, t.serviceDate)],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
