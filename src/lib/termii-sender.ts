@@ -41,7 +41,7 @@ export async function requestSenderId(opts: {
       body: JSON.stringify({
         api_key: apiKey,
         sender_id: opts.senderId,
-        usecase,
+        use_case: usecase,
         company: opts.company,
       }),
     });
