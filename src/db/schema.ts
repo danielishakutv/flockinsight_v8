@@ -925,6 +925,60 @@ export const usageStat = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — birthday & anniversary auto-messages
+ * ========================================================== */
+export const celebrationSetting = pgTable("celebration_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  sms: boolean().notNull().default(false),
+  email: boolean().notNull().default(true),
+  sendTime: text().notNull().default("08:00"), // local church time HH:MM
+  birthdaySms: text()
+    .notNull()
+    .default(
+      "Happy birthday, {name}! 🎉 Everyone at {church} celebrates you today. Have a blessed year!",
+    ),
+  birthdayEmailSubject: text().notNull().default("Happy Birthday, {name}! 🎉"),
+  birthdayEmailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nHappy birthday! On behalf of the entire {church} family, we celebrate the gift of your life today. May this new year be filled with God's blessings, joy and good health.\n\nWe love and appreciate you!",
+    ),
+  anniversarySms: text()
+    .notNull()
+    .default(
+      "Happy {occasion}, {name}! 🎊 {church} celebrates with you today. God bless you!",
+    ),
+  anniversaryEmailSubject: text().notNull().default("Happy {occasion}, {name}!"),
+  anniversaryEmailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nCongratulations on your {occasion}! The {church} family rejoices with you and prays God's continued blessing over you.\n\nWith love,\n{church}",
+    ),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const celebrationRun = pgTable(
+  "celebration_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    memberId: uuid().references(() => member.id, { onDelete: "cascade" }),
+    kind: text().notNull(), // 'birthday' | 'wedding' | 'baptism' | custom label
+    onDate: date().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("celebration_run_unique").on(t.memberId, t.kind, t.onDate)],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
