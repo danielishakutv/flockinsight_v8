@@ -78,6 +78,18 @@ export const auth = betterAuth({
         text: `Reset your FlockInsight password: ${url}`,
       });
     },
+    // A successful self-service reset satisfies any admin-forced password
+    // change, so clear the flag (otherwise they'd be sent to /set-password).
+    onPasswordReset: async ({ user: u }) => {
+      try {
+        await db
+          .update(user)
+          .set({ mustChangePassword: false })
+          .where(eq(user.id, u.id));
+      } catch (e) {
+        console.error("[auth] onPasswordReset flag clear failed", e);
+      }
+    },
   },
 
   emailVerification: {
