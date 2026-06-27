@@ -341,6 +341,7 @@ export function MemberFormFields({
               <Input
                 value={a.label}
                 placeholder="e.g. Dedication"
+                className="min-w-0 flex-1"
                 onChange={(e) => {
                   const next = [...form.anniversaries];
                   next[i] = { ...next[i], label: e.target.value };
@@ -350,7 +351,7 @@ export function MemberFormFields({
               <Input
                 type="date"
                 value={a.date}
-                className="h-11 w-44"
+                className="h-11 w-36 shrink-0"
                 onChange={(e) => {
                   const next = [...form.anniversaries];
                   next[i] = { ...next[i], date: e.target.value };

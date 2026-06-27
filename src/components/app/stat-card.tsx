@@ -27,10 +27,10 @@ export function StatCard({
         accent && "from-primary to-violet-500 bg-gradient-to-br text-white",
       )}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span
           className={cn(
-            "text-sm font-semibold",
+            "min-w-0 truncate text-sm font-semibold",
             accent ? "text-white/80" : "text-muted-foreground",
           )}
         >
@@ -38,7 +38,7 @@ export function StatCard({
         </span>
         <span
           className={cn(
-            "grid size-9 place-items-center rounded-lg",
+            "grid size-9 shrink-0 place-items-center rounded-lg",
             accent ? "bg-white/20" : "bg-primary/10 text-primary",
           )}
         >
@@ -46,8 +46,8 @@ export function StatCard({
         </span>
       </div>
 
-      <div className="mt-3 flex items-end gap-2">
-        <span className="text-4xl font-extrabold tabular-nums leading-none lg:text-5xl">
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <span className="text-3xl font-extrabold tabular-nums leading-none break-all sm:text-4xl sm:break-normal lg:text-5xl">
           {value}
         </span>
         {hasDelta && (

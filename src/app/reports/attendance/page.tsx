@@ -139,8 +139,8 @@ export default async function AttendanceReportPage() {
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
                 Service-by-service
               </h2>
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full border-collapse text-sm">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[36rem] border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
                       <th className="px-3 py-2.5 font-semibold">Date</th>
