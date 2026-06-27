@@ -176,6 +176,13 @@
       "when": 1782511935387,
       "tag": "0024_breezy_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782556751721,
+      "tag": "0025_nosy_invisible_woman",
+      "breakpoints": true
     }
   ]
 }

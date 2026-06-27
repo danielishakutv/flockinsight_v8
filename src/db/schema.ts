@@ -637,6 +637,7 @@ export const notificationAudienceEnum = pgEnum("notification_audience", [
   "plan",
   "country",
   "churches",
+  "user", // a single staff member (e.g. follow-up assignment)
 ]);
 
 export const notification = pgTable(
@@ -649,6 +650,7 @@ export const notification = pgTable(
     audience: notificationAudienceEnum().notNull().default("all"),
     targetPlan: planEnum(), // when audience = "plan"
     targetCountry: text(), // when audience = "country"
+    targetUserId: text().references(() => user.id, { onDelete: "cascade" }), // when audience = "user"
     linkUrl: text(), // optional call-to-action link
     pushSent: integer().notNull().default(0), // count of web-push messages sent
     createdBy: text().references(() => user.id, { onDelete: "set null" }),

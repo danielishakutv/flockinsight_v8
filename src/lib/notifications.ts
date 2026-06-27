@@ -39,7 +39,42 @@ function audienceFilter(ctx: NotificationCtx): SQL {
       eq(notification.targetCountry, ctx.country),
     ),
     and(eq(notification.audience, "churches"), targeted),
+    // Personal notifications addressed to this user (e.g. follow-up assigned).
+    and(eq(notification.audience, "user"), eq(notification.targetUserId, ctx.userId)),
   ) as SQL;
+}
+
+/**
+ * Create an in-app notification addressed to a single user, and push it to
+ * their devices. Used for per-user app events (e.g. follow-up assignment).
+ * Never throws — notifications must not break the triggering action.
+ */
+export async function notifyUser(opts: {
+  userId: string;
+  title: string;
+  body: string;
+  linkUrl?: string | null;
+  category?: "system" | "general";
+}): Promise<void> {
+  try {
+    await db.insert(notification).values({
+      title: opts.title,
+      body: opts.body,
+      category: opts.category ?? "general",
+      audience: "user",
+      targetUserId: opts.userId,
+      linkUrl: opts.linkUrl ?? null,
+    });
+    const { sendPushToUsers } = await import("@/lib/push");
+    await sendPushToUsers([opts.userId], {
+      title: opts.title,
+      body: opts.body,
+      url: opts.linkUrl ?? "/notifications",
+      tag: "fi-personal",
+    });
+  } catch (e) {
+    console.error("[notify] notifyUser failed", e);
+  }
 }
 
 export async function listNotifications(

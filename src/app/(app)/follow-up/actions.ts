@@ -4,12 +4,23 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { followUpInteraction, member, staff } from "@/db/schema";
+import { followUpInteraction, member, staff, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendChurchSms } from "@/lib/church-sms";
+import { notifyUser } from "@/lib/notifications";
+import { sendEmail, emailLayout } from "@/lib/mailer";
+import { siteUrl } from "@/lib/site";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 const INTERACTION_TYPES = [
   "visit",
@@ -181,7 +192,7 @@ export async function assignFollowUp(
 ): Promise<ActionResult> {
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
-  const { church } = await requireChurch();
+  const { church, user: me } = await requireChurch();
   if (!(await can("followup.manage")))
     return { ok: false, error: "You don't have permission to manage follow-up." };
 
@@ -195,12 +206,63 @@ export async function assignFollowUp(
     if (!isStaff) return { ok: false, error: "That person isn't on your team." };
   }
 
+  // Load the member (name + current assignee) to detect a real change.
+  const [m] = await db
+    .select({
+      firstName: member.firstName,
+      lastName: member.lastName,
+      assignedToId: member.assignedToId,
+    })
+    .from(member)
+    .where(and(eq(member.id, memberId), eq(member.churchId, church.id)))
+    .limit(1);
+  if (!m) return { ok: false, error: "Member not found." };
+
   await db
     .update(member)
     .set({ assignedToId: userId })
     .where(and(eq(member.id, memberId), eq(member.churchId, church.id)));
   revalidatePath("/follow-up");
   revalidatePath(`/follow-up/${memberId}`);
+
+  // Alert the newly assigned person (skip if unchanged, or self-assigned).
+  if (userId && userId !== m.assignedToId && userId !== me.id) {
+    const [assignee] = await db
+      .select({ email: user.email, name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (assignee) {
+      const memberName =
+        [m.firstName, m.lastName].filter(Boolean).join(" ") || "a member";
+      const link = `/follow-up/${memberId}`;
+
+      await notifyUser({
+        userId,
+        title: "New follow-up assignment",
+        body: `${me.name} assigned you to follow up with ${memberName} at ${church.name}.`,
+        linkUrl: link,
+      });
+
+      try {
+        await sendEmail({
+          to: assignee.email,
+          subject: `You've been assigned to follow up with ${memberName}`,
+          html: emailLayout(
+            "New follow-up assignment",
+            `<p>Hi ${escapeHtml(assignee.name?.split(" ")[0] || "there")},</p>` +
+              `<p><strong>${escapeHtml(me.name)}</strong> assigned you to follow up with <strong>${escapeHtml(memberName)}</strong> at <strong>${escapeHtml(church.name)}</strong>.</p>` +
+              `<p>Open their profile to see the history and log your visits, calls and notes.</p>`,
+            { label: "Open follow-up", url: `${siteUrl()}${link}` },
+          ),
+          text: `${me.name} assigned you to follow up with ${memberName} at ${church.name}. ${siteUrl()}${link}`,
+        });
+      } catch (e) {
+        console.error("[follow-up] assignment email failed", e);
+      }
+    }
+  }
+
   return { ok: true };
 }
 
