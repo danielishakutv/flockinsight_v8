@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Pencil } from "lucide-react";
+import { Pencil, ShieldCheck } from "lucide-react";
 import { memberToForm } from "@/components/members/member-form-fields";
 import { MemberEditForm } from "@/components/members/member-edit-form";
 import { Badge } from "@/components/ui/badge";
@@ -66,10 +66,12 @@ function MemberView({
   member,
   onEdit,
   canManage,
+  isTeamMember,
 }: {
   member: MemberRecord;
   onEdit: () => void;
   canManage: boolean;
+  isTeamMember?: boolean;
 }) {
   const addressParts = [
     [member.house, member.street].filter(Boolean).join(" "),
@@ -87,9 +89,16 @@ function MemberView({
     <Card>
       <CardContent className="space-y-6 py-6">
         <div className="flex items-start justify-between gap-3">
-          <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
-            {STATUS_LABEL[member.status] ?? member.status}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
+              {STATUS_LABEL[member.status] ?? member.status}
+            </Badge>
+            {isTeamMember && (
+              <Badge variant="default" className="gap-1">
+                <ShieldCheck className="size-3" /> Team member
+              </Badge>
+            )}
+          </div>
           {canManage && (
             <Button variant="outline" size="sm" onClick={onEdit}>
               <Pencil className="size-4" />
@@ -149,9 +158,11 @@ function MemberView({
 export function MemberProfile({
   member,
   canManage = true,
+  isTeamMember,
 }: {
   member: MemberRecord;
   canManage?: boolean;
+  isTeamMember?: boolean;
 }) {
   const [mode, setMode] = useState<"view" | "edit">("view");
 
@@ -159,6 +170,7 @@ export function MemberProfile({
     <MemberView
       member={member}
       canManage={canManage}
+      isTeamMember={isTeamMember}
       onEdit={() => setMode("edit")}
     />
   ) : (

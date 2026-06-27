@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { church, staff, session as sessionTable, user } from "@/db/schema";
 import { slugify, randomSuffix } from "@/lib/slug";
+import { ensureMemberForUser } from "@/lib/member-link";
 
 export type SignUpResult =
   | { ok: true; signedIn: boolean }
@@ -120,6 +121,10 @@ export async function createChurchAccount(input: {
       };
     }
   }
+
+  // The owner is also a person in the congregation — create their member
+  // profile so they aren't duplicated later.
+  await ensureMemberForUser(churchId, userId);
 
   // 3) If sign-up created a session (verification disabled → auto sign-in),
   //    point it at the new church so the user lands in-context. When

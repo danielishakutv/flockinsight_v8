@@ -370,6 +370,9 @@ export const member = pgTable(
     gender: genderEnum(),
     phone: text(),
     email: text(),
+    // Link to a login account, when this person is also a staff/team member.
+    // One person = one member profile (avoids duplicates). Null for most members.
+    userId: text().references(() => user.id, { onDelete: "set null" }),
     dateOfBirth: date(),
     status: memberStatusEnum().notNull().default("active"),
     joinedAt: date(),
@@ -406,7 +409,11 @@ export const member = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index("member_church_idx").on(t.churchId)],
+  (t) => [
+    index("member_church_idx").on(t.churchId),
+    // A login links to at most one member per church.
+    uniqueIndex("member_church_user_idx").on(t.churchId, t.userId),
+  ],
 );
 
 /* ============================================================

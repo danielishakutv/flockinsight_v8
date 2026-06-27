@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church, invitation, staff, user } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { notifyChurchManagers } from "@/lib/notifications";
+import { ensureMemberForUser } from "@/lib/member-link";
 
 type LoadedInvitation = {
   id: string;
@@ -65,6 +66,9 @@ async function joinChurch(inv: LoadedInvitation, userId: string) {
     .update(invitation)
     .set({ status: "accepted" })
     .where(eq(invitation.id, inv.id));
+
+  // Link (or create) this person's member profile so we don't duplicate them.
+  if (!wasMember) await ensureMemberForUser(inv.organizationId, userId);
 
   // Notify the church's managers that someone joined (in-app only).
   if (!wasMember) {

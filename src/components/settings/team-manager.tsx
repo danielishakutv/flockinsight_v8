@@ -48,11 +48,13 @@ export function TeamManager({
   invites,
   roles,
   currentUserId,
+  invitableMembers = [],
 }: {
   members: Member[];
   invites: Invite[];
   roles: Role[];
   currentUserId: string;
+  invitableMembers?: { id: string; name: string; email: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -128,6 +130,33 @@ export function TeamManager({
       <Card>
         <CardContent>
           <form onSubmit={invite} className="space-y-4">
+            {invitableMembers.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="invite-member">
+                  Invite an existing member{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional — avoids a duplicate profile)
+                  </span>
+                </Label>
+                <Select
+                  onValueChange={(v) => {
+                    const m = invitableMembers.find((x) => x.id === v);
+                    if (m) setEmail(m.email);
+                  }}
+                >
+                  <SelectTrigger id="invite-member" className="w-full">
+                    <SelectValue placeholder="Pick a member to fill in their email" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {invitableMembers.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name} · {m.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
               <div className="space-y-2">
                 <Label htmlFor="invite-email">Invite by email</Label>

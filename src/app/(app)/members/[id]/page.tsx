@@ -51,6 +51,7 @@ export default async function MemberDetailPage({
       state: member.state,
       country: member.country,
       notes: member.notes,
+      userId: member.userId,
     })
     .from(member)
     .where(and(eq(member.id, id), eq(member.churchId, church.id)))
@@ -88,7 +89,11 @@ export default async function MemberDetailPage({
       </Button>
       <h1 className="text-3xl font-extrabold tracking-tight">{name}</h1>
       <p className="text-muted-foreground mb-6 mt-1">Member profile</p>
-      <MemberProfile member={m} canManage={canManage} />
+      <MemberProfile
+        member={m}
+        canManage={canManage}
+        isTeamMember={!!m.userId}
+      />
 
       <Card className="mt-4">
         <CardHeader>

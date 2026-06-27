@@ -1,6 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { staff, user, invitation, role } from "@/db/schema";
+import { staff, user, invitation, role, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { ensureDefaultRoles, requireCan } from "@/lib/permissions";
 import { TeamManager } from "@/components/settings/team-manager";
@@ -51,12 +51,40 @@ export default async function TeamSettingsPage() {
     .filter((r) => !r.isSystem)
     .map((r) => ({ id: r.id, name: r.name }));
 
+  // Members who have an email and aren't yet linked to a login — these can be
+  // invited as staff without creating a duplicate person.
+  const invitableRows = await db
+    .select({
+      id: member.id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      email: member.email,
+    })
+    .from(member)
+    .where(
+      and(
+        eq(member.churchId, church.id),
+        isNull(member.userId),
+        isNotNull(member.email),
+        ne(sql`trim(${member.email})`, sql`''`),
+      ),
+    )
+    .orderBy(asc(member.firstName))
+    .limit(500);
+
+  const invitableMembers = invitableRows.map((m) => ({
+    id: m.id,
+    name: [m.firstName, m.lastName].filter(Boolean).join(" "),
+    email: m.email as string,
+  }));
+
   return (
     <TeamManager
       members={members}
       invites={invites}
       roles={assignableRoles}
       currentUserId={me.id}
+      invitableMembers={invitableMembers}
     />
   );
 }
