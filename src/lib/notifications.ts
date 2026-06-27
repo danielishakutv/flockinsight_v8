@@ -77,6 +77,46 @@ export async function notifyUser(opts: {
   }
 }
 
+/**
+ * In-app notification to a church's managers (owner + admins). Use for team /
+ * account changes the church should know about. Never throws.
+ */
+export async function notifyChurchManagers(opts: {
+  churchId: string;
+  title: string;
+  body: string;
+  linkUrl?: string | null;
+  excludeUserId?: string;
+}): Promise<void> {
+  try {
+    const rows = await db
+      .select({ userId: staff.userId })
+      .from(staff)
+      .where(
+        and(
+          eq(staff.organizationId, opts.churchId),
+          inArray(staff.role, ["owner", "admin"]),
+          eq(staff.temp, false),
+        ),
+      );
+    const ids = [...new Set(rows.map((r) => r.userId))].filter(
+      (id) => id !== opts.excludeUserId,
+    );
+    await Promise.all(
+      ids.map((id) =>
+        notifyUser({
+          userId: id,
+          title: opts.title,
+          body: opts.body,
+          linkUrl: opts.linkUrl,
+        }),
+      ),
+    );
+  } catch (e) {
+    console.error("[notify] notifyChurchManagers failed", e);
+  }
+}
+
 export async function listNotifications(
   ctx: NotificationCtx,
   opts?: { category?: "system" | "general"; limit?: number },

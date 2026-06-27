@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { church, invitation, staff, user } from "@/db/schema";
 import { getSession } from "@/lib/session";
+import { notifyChurchManagers } from "@/lib/notifications";
 
 type LoadedInvitation = {
   id: string;
@@ -51,7 +52,8 @@ async function isMember(organizationId: string, userId: string) {
 }
 
 async function joinChurch(inv: LoadedInvitation, userId: string) {
-  if (!(await isMember(inv.organizationId, userId))) {
+  const wasMember = await isMember(inv.organizationId, userId);
+  if (!wasMember) {
     await db.insert(staff).values({
       id: crypto.randomUUID(),
       organizationId: inv.organizationId,
@@ -63,6 +65,22 @@ async function joinChurch(inv: LoadedInvitation, userId: string) {
     .update(invitation)
     .set({ status: "accepted" })
     .where(eq(invitation.id, inv.id));
+
+  // Notify the church's managers that someone joined (in-app only).
+  if (!wasMember) {
+    const [u] = await db
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    await notifyChurchManagers({
+      churchId: inv.organizationId,
+      title: "New team member joined",
+      body: `${u?.name ?? "Someone"} accepted the invitation and joined ${inv.churchName ?? "your church"}.`,
+      linkUrl: "/settings/team",
+      excludeUserId: userId,
+    });
+  }
 }
 
 export type AcceptResult =

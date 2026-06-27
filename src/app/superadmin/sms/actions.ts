@@ -8,6 +8,8 @@ import { church, smsWalletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
+import { notifyChurchManagers } from "@/lib/notifications";
+import { formatMoney } from "@/lib/money";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -71,6 +73,12 @@ export async function revokeSenderId(
       smsSenderNote: (reason || "").slice(0, 500) || null,
     })
     .where(eq(church.id, churchId));
+  await notifyChurchManagers({
+    churchId,
+    title: "SMS sender ID revoked",
+    body: `Your SMS sender ID was revoked${reason ? `: ${reason}` : "."} You can request a new one in Settings → SMS.`,
+    linkUrl: "/settings/sms",
+  });
   revalidatePath("/superadmin/sms");
   return { ok: true };
 }
@@ -90,6 +98,14 @@ export async function reviewSenderId(
       smsSenderNote: approve ? null : (reason || "").slice(0, 500) || null,
     })
     .where(eq(church.id, churchId));
+  await notifyChurchManagers({
+    churchId,
+    title: approve ? "SMS sender ID approved" : "SMS sender ID rejected",
+    body: approve
+      ? "Your SMS sender ID was approved — you can now send SMS to your members."
+      : `Your SMS sender ID application was rejected${reason ? `: ${reason}` : "."} You can apply again in Settings → SMS.`,
+    linkUrl: "/settings/sms",
+  });
   revalidatePath("/superadmin/sms");
   return { ok: true };
 }
@@ -109,7 +125,7 @@ export async function adjustWallet(
     return { ok: false, error: "Enter a positive amount." };
 
   const [c] = await db
-    .select({ balance: church.smsBalance })
+    .select({ balance: church.smsBalance, currency: church.currency })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
@@ -140,6 +156,15 @@ export async function adjustWallet(
       ).slice(0, 200),
       createdBy: admin.id,
     });
+  });
+  await notifyChurchManagers({
+    churchId,
+    title: kind === "credit" ? "SMS wallet credited" : "SMS wallet adjusted",
+    body:
+      kind === "credit"
+        ? `Your SMS wallet was credited with ${formatMoney(amount, c.currency)}. New balance: ${formatMoney(newBalance, c.currency)}.`
+        : `${formatMoney(amount, c.currency)} was deducted from your SMS wallet. New balance: ${formatMoney(newBalance, c.currency)}.`,
+    linkUrl: "/settings/sms",
   });
   revalidatePath("/superadmin/sms");
   return { ok: true };

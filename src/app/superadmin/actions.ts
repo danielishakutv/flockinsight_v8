@@ -9,6 +9,8 @@ import { church, payment, session, staff } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
+import { notifyChurchManagers } from "@/lib/notifications";
+import { planName } from "@/lib/plans";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -117,6 +119,12 @@ export async function adminSetBilling(input: {
     paidAt: new Date(),
   });
 
+  await notifyChurchManagers({
+    churchId,
+    title: "Plan updated",
+    body: `Your plan was set to ${planName(plan)}${disc ? ` (${disc}% off)` : ""} by FlockInsight.`,
+    linkUrl: "/settings/billing",
+  });
   revalidatePath(`/superadmin/churches/${churchId}`);
   revalidatePath("/superadmin/churches");
   return { ok: true };
@@ -162,6 +170,16 @@ export async function setChurchStatus(
     return { ok: false, error: "Invalid status" };
 
   await db.update(church).set({ status }).where(eq(church.id, id));
+  // Only the reactivation is worth notifying — a suspended church can't see
+  // in-app notifications anyway.
+  if (status === "active") {
+    await notifyChurchManagers({
+      churchId: id,
+      title: "Church reactivated",
+      body: "Your church account has been reactivated. Welcome back!",
+      linkUrl: "/dashboard",
+    });
+  }
   revalidatePath("/superadmin/churches");
   revalidatePath("/superadmin");
   return { ok: true };

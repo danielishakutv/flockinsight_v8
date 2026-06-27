@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { supportTicket, supportMessage } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { notifyChurchReply, notifyTicketStatus } from "@/lib/support";
+import { notifyUser } from "@/lib/notifications";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -26,6 +27,7 @@ export async function respondTicket(
       id: supportTicket.id,
       subject: supportTicket.subject,
       contactEmail: supportTicket.contactEmail,
+      createdBy: supportTicket.createdBy,
     })
     .from(supportTicket)
     .where(eq(supportTicket.id, ticketId))
@@ -50,6 +52,14 @@ export async function respondTicket(
       subject: t.subject,
       message: body,
       ticketId: t.id,
+    });
+  }
+  if (t.createdBy) {
+    await notifyUser({
+      userId: t.createdBy,
+      title: "Support replied to your ticket",
+      body: `Re: "${t.subject}" — ${body.slice(0, 120)}`,
+      linkUrl: `/help/support/${t.id}`,
     });
   }
 
