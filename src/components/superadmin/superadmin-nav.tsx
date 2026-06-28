@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   MessageSquare,
+  ScrollText,
   Tag,
   Users,
   type LucideIcon,
@@ -25,6 +26,7 @@ const tabs: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Pricing", href: "/superadmin/pricing", icon: Tag },
   { label: "Support", href: "/superadmin/support", icon: LifeBuoy },
   { label: "Banners", href: "/superadmin/banners", icon: ImageIcon },
+  { label: "Audit", href: "/superadmin/audit", icon: ScrollText },
   { label: "Backups", href: "/superadmin/backups", icon: Database },
 ];
 

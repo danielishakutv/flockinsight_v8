@@ -1,10 +1,11 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { format } from "date-fns";
 import { Cog, Megaphone } from "lucide-react";
 import { db } from "@/db";
-import { church, notification, user } from "@/db/schema";
+import { church, notification, broadcast, user } from "@/db/schema";
 import { planName } from "@/lib/plans";
 import { NotificationComposer } from "@/components/superadmin/notification-composer";
+import { ScheduledBroadcasts } from "@/components/superadmin/scheduled-broadcasts";
 import {
   Card,
   CardContent,
@@ -27,7 +28,7 @@ function audienceLabel(n: {
 }
 
 export default async function SuperadminNotificationsPage() {
-  const [churches, countryRows, history] = await Promise.all([
+  const [churches, countryRows, history, scheduled] = await Promise.all([
     db
       .select({
         id: church.id,
@@ -58,9 +59,34 @@ export default async function SuperadminNotificationsPage() {
       .leftJoin(user, eq(user.id, notification.createdBy))
       .orderBy(desc(notification.createdAt))
       .limit(40),
+    db
+      .select({
+        id: broadcast.id,
+        title: broadcast.title,
+        audience: broadcast.audience,
+        targetPlan: broadcast.targetPlan,
+        targetCountry: broadcast.targetCountry,
+        inApp: broadcast.inApp,
+        email: broadcast.email,
+        scheduledAt: broadcast.scheduledAt,
+      })
+      .from(broadcast)
+      .where(eq(broadcast.status, "scheduled"))
+      .orderBy(asc(broadcast.scheduledAt))
+      .limit(50),
   ]);
 
   const countries = countryRows.map((c) => c.country).filter(Boolean);
+
+  const scheduledItems = scheduled.map((b) => ({
+    id: b.id,
+    title: b.title,
+    audienceLabel: audienceLabel(b),
+    channels: [b.inApp ? "In-app" : "", b.email ? "Email" : ""]
+      .filter(Boolean)
+      .join(" · "),
+    scheduledAt: b.scheduledAt.toISOString(),
+  }));
 
   return (
     <div className="space-y-6">
@@ -74,6 +100,8 @@ export default async function SuperadminNotificationsPage() {
       </div>
 
       <NotificationComposer churches={churches} countries={countries} />
+
+      <ScheduledBroadcasts items={scheduledItems} />
 
       <Card>
         <CardHeader>

@@ -10,6 +10,7 @@ import { adminResetPassword, setUserPassword } from "@/lib/admin-users";
 import { auth } from "@/lib/auth";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import { recordAudit } from "@/lib/audit";
 
 export type ResetResult =
   | { ok: true; tempPassword: string; emailed: boolean }
@@ -56,7 +57,20 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid id" };
   if (userId === admin.id)
     return { ok: false, error: "You can't delete your own account." };
+  const [u] = await db
+    .select({ email: user.email })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
   await db.delete(user).where(eq(user.id, userId));
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "delete_user",
+    summary: `Deleted user ${u?.email ?? userId}`,
+    targetType: "user",
+    targetId: userId,
+  });
   revalidatePath("/superadmin/users");
   return { ok: true };
 }
@@ -121,7 +135,7 @@ export async function removeUserFromChurch(
 export async function resetUserPasswordAction(
   userId: string,
 ): Promise<ResetResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
 
@@ -154,6 +168,14 @@ export async function resetUserPasswordAction(
     emailed = false;
   }
 
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "reset_password",
+    summary: `Reset password for ${u.email} (temporary password)`,
+    targetType: "user",
+    targetId: userId,
+  });
   revalidatePath("/superadmin/users");
   return { ok: true, tempPassword: res.tempPassword, emailed };
 }
@@ -164,7 +186,7 @@ export async function setUserPasswordAction(
   password: string,
   forceChange: boolean,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
   if ((password || "").length < 8)
@@ -178,6 +200,14 @@ export async function setUserPasswordAction(
     .update(user)
     .set({ mustChangePassword: forceChange, emailVerified: true, updatedAt: new Date() })
     .where(eq(user.id, userId));
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_password",
+    summary: `Set a new password${forceChange ? " (must change on next login)" : ""}`,
+    targetType: "user",
+    targetId: userId,
+  });
   revalidatePath(`/superadmin/users/${userId}`);
   return { ok: true };
 }
@@ -217,6 +247,14 @@ export async function setSuperAdmin(
     .update(user)
     .set({ isSuperAdmin: makeAdmin, updatedAt: new Date() })
     .where(eq(user.id, userId));
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: makeAdmin ? "grant_superadmin" : "revoke_superadmin",
+    summary: `${makeAdmin ? "Granted" : "Revoked"} superadmin access`,
+    targetType: "user",
+    targetId: userId,
+  });
   revalidatePath("/superadmin/users");
   return { ok: true };
 }

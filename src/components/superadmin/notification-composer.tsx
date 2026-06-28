@@ -51,8 +51,10 @@ export function NotificationComposer({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-  const [sendPush, setSendPush] = useState(true);
-  const [sendEmail, setSendEmail] = useState(true);
+  const [inApp, setInApp] = useState(true);
+  const [email, setEmail] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
 
   const filteredChurches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -81,6 +83,10 @@ export function NotificationComposer({
   function submit() {
     if (!title.trim() || !body.trim())
       return toast.error("Add a title and message.");
+    if (!inApp && !email)
+      return toast.error("Pick at least one channel (in-app or email).");
+    if (scheduleMode && !scheduledAt)
+      return toast.error("Pick a date and time to schedule.");
     startTransition(async () => {
       const res = await createNotification({
         title,
@@ -91,24 +97,31 @@ export function NotificationComposer({
         targetCountry: audience === "country" ? targetCountry : "",
         churchIds: audience === "churches" ? [...picked] : [],
         linkUrl,
-        sendPush,
-        sendEmail,
+        inApp,
+        email,
+        scheduledAt: scheduleMode && scheduledAt ? new Date(scheduledAt).toISOString() : null,
       });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      const extras = [
-        res.pushSent ? `${res.pushSent} push` : "",
-        res.emailSent ? `${res.emailSent} email` : "",
-      ].filter(Boolean);
-      toast.success(
-        `Notification sent${extras.length ? ` · ${extras.join(", ")}` : ""}.`,
-      );
+      if (res.scheduled) {
+        toast.success("Broadcast scheduled.");
+      } else {
+        const extras = [
+          res.pushSent ? `${res.pushSent} push` : "",
+          res.emailSent ? `${res.emailSent} email` : "",
+        ].filter(Boolean);
+        toast.success(
+          `Broadcast sent${extras.length ? ` · ${extras.join(", ")}` : ""}.`,
+        );
+      }
       setTitle("");
       setBody("");
       setLinkUrl("");
       setPicked(new Set());
+      setScheduleMode(false);
+      setScheduledAt("");
       router.refresh();
     });
   }
@@ -266,24 +279,50 @@ export function NotificationComposer({
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <div>
-            <p className="text-sm font-semibold">Also send push notification</p>
-            <p className="text-muted-foreground text-xs">
-              Delivers to devices that enabled push.
-            </p>
+        {/* Channels */}
+        <div className="space-y-2">
+          <Label>Channels</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-semibold">In-app + push</p>
+                <p className="text-muted-foreground text-xs">
+                  Notification centre + device push.
+                </p>
+              </div>
+              <Switch checked={inApp} onCheckedChange={setInApp} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-semibold">Email</p>
+                <p className="text-muted-foreground text-xs">
+                  Emails members of targeted churches.
+                </p>
+              </div>
+              <Switch checked={email} onCheckedChange={setEmail} />
+            </div>
           </div>
-          <Switch checked={sendPush} onCheckedChange={setSendPush} />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <div>
-            <p className="text-sm font-semibold">Also send email</p>
-            <p className="text-muted-foreground text-xs">
-              Emails every member of the targeted churches.
-            </p>
+        {/* Schedule */}
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Schedule for later</p>
+              <p className="text-muted-foreground text-xs">
+                Off = send now. On = pick a date & time.
+              </p>
+            </div>
+            <Switch checked={scheduleMode} onCheckedChange={setScheduleMode} />
           </div>
-          <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+          {scheduleMode && (
+            <Input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              className="h-11"
+            />
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3">
@@ -294,7 +333,7 @@ export function NotificationComposer({
           </p>
           <Button onClick={submit} disabled={pending} size="lg">
             {pending ? <Loader2 className="animate-spin" /> : <Send className="size-4" />}
-            Send notification
+            {scheduleMode ? "Schedule" : "Send now"}
           </Button>
         </div>
       </CardContent>

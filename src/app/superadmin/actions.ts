@@ -11,6 +11,7 @@ import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { planName } from "@/lib/plans";
+import { recordAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -59,6 +60,14 @@ export async function impersonateChurch(id: string): Promise<ActionResult> {
       temp: true,
     });
   }
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "impersonate",
+    summary: `Logged in as a church to assist`,
+    targetType: "church",
+    targetId: target.id,
+  });
   redirect("/dashboard");
 }
 
@@ -74,6 +83,12 @@ export async function exitImpersonation(): Promise<void> {
   await db
     .delete(staff)
     .where(and(eq(staff.userId, admin.id), eq(staff.temp, true)));
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "exit_impersonation",
+    summary: "Stopped acting as a church",
+  });
   redirect("/superadmin");
 }
 
@@ -125,6 +140,14 @@ export async function adminSetBilling(input: {
     body: `Your plan was set to ${planName(plan)}${disc ? ` (${disc}% off)` : ""} by FlockInsight.`,
     linkUrl: "/settings/billing",
   });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_billing",
+    summary: `Set plan to ${planName(plan)}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
+    targetType: "church",
+    targetId: churchId,
+  });
   revalidatePath(`/superadmin/churches/${churchId}`);
   revalidatePath("/superadmin/churches");
   return { ok: true };
@@ -163,7 +186,7 @@ export async function setChurchStatus(
   id: string,
   status: "active" | "suspended",
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   if (status !== "active" && status !== "suspended")
@@ -180,6 +203,14 @@ export async function setChurchStatus(
       linkUrl: "/dashboard",
     });
   }
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: status === "suspended" ? "suspend_church" : "reactivate_church",
+    summary: `${status === "suspended" ? "Suspended" : "Reactivated"} a church`,
+    targetType: "church",
+    targetId: id,
+  });
   revalidatePath("/superadmin/churches");
   revalidatePath("/superadmin");
   return { ok: true };
@@ -198,7 +229,7 @@ export async function deleteChurch(
   id: string,
   confirmName: string,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
@@ -224,6 +255,14 @@ export async function deleteChurch(
     await tx.delete(church).where(eq(church.id, id));
   });
 
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "delete_church",
+    summary: `Permanently deleted church "${target.name}"`,
+    targetType: "church",
+    targetId: id,
+  });
   revalidatePath("/superadmin/churches");
   revalidatePath("/superadmin");
   return { ok: true };

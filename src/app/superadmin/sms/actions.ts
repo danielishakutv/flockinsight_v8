@@ -10,6 +10,7 @@ import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
+import { recordAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -63,7 +64,7 @@ export async function revokeSenderId(
   churchId: string,
   reason?: string,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   await db
@@ -79,6 +80,14 @@ export async function revokeSenderId(
     body: `Your SMS sender ID was revoked${reason ? `: ${reason}` : "."} You can request a new one in Settings → SMS.`,
     linkUrl: "/settings/sms",
   });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "revoke_sender_id",
+    summary: `Revoked a church's SMS sender ID${reason ? `: ${reason}` : ""}`,
+    targetType: "church",
+    targetId: churchId,
+  });
   revalidatePath("/superadmin/sms");
   return { ok: true };
 }
@@ -88,7 +97,7 @@ export async function reviewSenderId(
   approve: boolean,
   reason?: string,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   await db
@@ -105,6 +114,14 @@ export async function reviewSenderId(
       ? "Your SMS sender ID was approved — you can now send SMS to your members."
       : `Your SMS sender ID application was rejected${reason ? `: ${reason}` : "."} You can apply again in Settings → SMS.`,
     linkUrl: "/settings/sms",
+  });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: approve ? "approve_sender_id" : "reject_sender_id",
+    summary: `${approve ? "Approved" : "Rejected"} a church's SMS sender ID`,
+    targetType: "church",
+    targetId: churchId,
   });
   revalidatePath("/superadmin/sms");
   return { ok: true };
@@ -165,6 +182,14 @@ export async function adjustWallet(
         ? `Your SMS wallet was credited with ${formatMoney(amount, c.currency)}. New balance: ${formatMoney(newBalance, c.currency)}.`
         : `${formatMoney(amount, c.currency)} was deducted from your SMS wallet. New balance: ${formatMoney(newBalance, c.currency)}.`,
     linkUrl: "/settings/sms",
+  });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: kind === "credit" ? "credit_wallet" : "debit_wallet",
+    summary: `${kind === "credit" ? "Credited" : "Deducted"} ${formatMoney(amount, c.currency)} ${kind === "credit" ? "to" : "from"} a church's SMS wallet`,
+    targetType: "church",
+    targetId: churchId,
   });
   revalidatePath("/superadmin/sms");
   return { ok: true };

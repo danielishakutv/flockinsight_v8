@@ -698,6 +698,58 @@ export const notificationRead = pgTable(
   ],
 );
 
+/* ============================================================
+ * Platform admin — audit log + scheduled broadcasts
+ * ========================================================== */
+
+// Record of superadmin actions, for accountability.
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    actorUserId: text().references(() => user.id, { onDelete: "set null" }),
+    actorName: text(),
+    action: text().notNull(), // e.g. "impersonate", "reset_password", "set_plan"
+    summary: text().notNull(),
+    targetType: text(), // "church" | "user" | "broadcast" | ...
+    targetId: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audit_created_idx").on(t.createdAt)],
+);
+
+export const broadcastStatusEnum = pgEnum("broadcast_status", [
+  "scheduled",
+  "sent",
+  "cancelled",
+]);
+
+// Scheduled broadcast (in-app and/or email) to an audience, sent by a cron.
+export const broadcast = pgTable(
+  "broadcast",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    title: text().notNull(),
+    body: text().notNull(),
+    category: notificationCategoryEnum().notNull().default("general"),
+    audience: notificationAudienceEnum().notNull().default("all"),
+    targetPlan: planEnum(),
+    targetCountry: text(),
+    churchIds: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    linkUrl: text(),
+    inApp: boolean().notNull().default(true), // in-app notification + web push
+    email: boolean().notNull().default(false),
+    scheduledAt: timestamp({ withTimezone: true }).notNull(),
+    status: broadcastStatusEnum().notNull().default("scheduled"),
+    sentAt: timestamp({ withTimezone: true }),
+    pushSent: integer().notNull().default(0),
+    emailSent: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("broadcast_status_idx").on(t.status, t.scheduledAt)],
+);
+
 // Browser web-push subscriptions (one per device/browser per user).
 export const pushSubscription = pgTable(
   "push_subscription",

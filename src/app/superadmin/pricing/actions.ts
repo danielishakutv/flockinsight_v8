@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/session";
 import { setPlanPrice } from "@/lib/pricing";
+import { recordAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -16,7 +17,7 @@ const schema = z.object({
 export type PlanPriceInput = z.infer<typeof schema>;
 
 export async function setPlanPrices(input: PlanPriceInput): Promise<ActionResult> {
-  await requireSuperAdmin();
+  const admin = await requireSuperAdmin();
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid price" };
@@ -27,6 +28,13 @@ export async function setPlanPrices(input: PlanPriceInput): Promise<ActionResult
     setPlanPrice("growth", d.growth),
     setPlanPrice("pro", d.pro),
   ]);
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_pricing",
+    summary: `Updated plan prices — Starter ₦${d.starter}, Growth ₦${d.growth}, Pro ₦${d.pro}`,
+  });
 
   // Refresh the public surfaces that show prices.
   revalidatePath("/");

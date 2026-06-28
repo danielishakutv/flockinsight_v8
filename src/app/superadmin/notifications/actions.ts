@@ -4,27 +4,15 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { notification, notificationTarget } from "@/db/schema";
+import { broadcast } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
-import {
-  resolveAudienceUserIds,
-  resolveAudienceUsers,
-} from "@/lib/notifications";
-import { sendPushToUsers } from "@/lib/push";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { deliverBroadcast } from "@/lib/broadcasts";
+import { recordAudit } from "@/lib/audit";
 
 export type CreateResult =
-  | { ok: true; pushSent: number; emailSent: number }
+  | { ok: true; pushSent: number; emailSent: number; scheduled?: boolean }
   | { ok: false; error: string };
-
-const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const emptyToNull = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? null : v;
@@ -41,99 +29,106 @@ const schema = z.object({
   targetCountry: z.preprocess(emptyToNull, z.string().trim().max(80).nullable()),
   churchIds: z.array(z.string()).default([]),
   linkUrl: z.preprocess(emptyToNull, z.string().trim().max(300).nullable()),
-  sendPush: z.boolean().default(true),
-  sendEmail: z.boolean().default(true),
+  inApp: z.boolean().default(true),
+  email: z.boolean().default(false),
+  // ISO datetime; when present & in the future the broadcast is scheduled.
+  scheduledAt: z.preprocess(emptyToNull, z.string().nullable()).optional(),
 });
+
+type Parsed = z.infer<typeof schema>;
+
+function validate(d: Parsed): string | null {
+  if (!d.inApp && !d.email) return "Pick at least one channel (in-app or email).";
+  if (d.audience === "plan" && !d.targetPlan) return "Choose a plan to target.";
+  if (d.audience === "country" && !d.targetCountry) return "Choose a country to target.";
+  if (d.audience === "churches" && d.churchIds.length === 0)
+    return "Pick at least one church.";
+  return null;
+}
 
 export async function createNotification(
   input: z.input<typeof schema>,
 ): Promise<CreateResult> {
+  const admin = await requireSuperAdmin();
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
   const d = parsed.data;
+  const err = validate(d);
+  if (err) return { ok: false, error: err };
 
-  // Validate targeting completeness.
-  if (d.audience === "plan" && !d.targetPlan)
-    return { ok: false, error: "Choose a plan to target." };
-  if (d.audience === "country" && !d.targetCountry)
-    return { ok: false, error: "Choose a country to target." };
-  if (d.audience === "churches" && d.churchIds.length === 0)
-    return { ok: false, error: "Pick at least one church." };
-
-  const admin = await requireSuperAdmin();
-
-  const [row] = await db
-    .insert(notification)
-    .values({
+  // Scheduled for later?
+  const when = d.scheduledAt ? new Date(d.scheduledAt) : null;
+  if (when && !Number.isNaN(when.getTime()) && when.getTime() > Date.now() + 30_000) {
+    await db.insert(broadcast).values({
       title: d.title,
       body: d.body,
       category: d.category,
       audience: d.audience,
       targetPlan: d.audience === "plan" ? d.targetPlan : null,
       targetCountry: d.audience === "country" ? d.targetCountry : null,
+      churchIds: d.audience === "churches" ? d.churchIds : [],
       linkUrl: d.linkUrl,
+      inApp: d.inApp,
+      email: d.email,
+      scheduledAt: when,
       createdBy: admin.id,
-    })
-    .returning({ id: notification.id });
-
-  if (d.audience === "churches" && d.churchIds.length > 0) {
-    await db
-      .insert(notificationTarget)
-      .values(d.churchIds.map((churchId) => ({ notificationId: row.id, churchId })))
-      .onConflictDoNothing();
+    });
+    await recordAudit({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: "schedule_broadcast",
+      summary: `Scheduled broadcast "${d.title}" for ${when.toISOString()}`,
+      targetType: "broadcast",
+    });
+    revalidatePath("/superadmin/notifications");
+    return { ok: true, pushSent: 0, emailSent: 0, scheduled: true };
   }
 
-  let pushSent = 0;
-  if (d.sendPush) {
-    const userIds = await resolveAudienceUserIds({
-      audience: d.audience,
-      targetPlan: d.targetPlan,
-      targetCountry: d.targetCountry,
-      churchIds: d.churchIds,
-    });
-    pushSent = await sendPushToUsers(userIds, {
-      title: d.title,
-      body: d.body,
-      url: d.linkUrl || "/notifications",
-      tag: row.id,
-    });
-    if (pushSent > 0) {
-      await db
-        .update(notification)
-        .set({ pushSent })
-        .where(eq(notification.id, row.id));
-    }
-  }
-
-  let emailSent = 0;
-  if (d.sendEmail) {
-    const recipients = await resolveAudienceUsers({
-      audience: d.audience,
-      targetPlan: d.targetPlan,
-      targetCountry: d.targetCountry,
-      churchIds: d.churchIds,
-    });
-    const linkAbs = d.linkUrl
-      ? d.linkUrl.startsWith("http")
-        ? d.linkUrl
-        : `${BASE_URL}${d.linkUrl}`
-      : `${BASE_URL}/notifications`;
-    const html = emailLayout(
-      escapeHtml(d.title),
-      `<p>${escapeHtml(d.body).replace(/\n/g, "<br/>")}</p>`,
-      { label: "Open FlockInsight", url: linkAbs },
-    );
-    const results = await Promise.allSettled(
-      recipients.map((r) =>
-        sendEmail({ to: r.email, subject: d.title, html, text: d.body }),
-      ),
-    );
-    emailSent = results.filter(
-      (x) => x.status === "fulfilled" && x.value,
-    ).length;
-  }
-
+  // Send now.
+  const { pushSent, emailSent } = await deliverBroadcast({
+    title: d.title,
+    body: d.body,
+    category: d.category,
+    audience: d.audience,
+    targetPlan: d.targetPlan,
+    targetCountry: d.targetCountry,
+    churchIds: d.churchIds,
+    linkUrl: d.linkUrl,
+    inApp: d.inApp,
+    email: d.email,
+    createdBy: admin.id,
+  });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "send_broadcast",
+    summary: `Sent broadcast "${d.title}" (${d.audience}) · ${emailSent} emails, ${pushSent} push`,
+    targetType: "broadcast",
+  });
   revalidatePath("/superadmin/notifications");
   return { ok: true, pushSent, emailSent };
+}
+
+export async function cancelBroadcast(id: string): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  if (!z.string().uuid().safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+  const [b] = await db
+    .update(broadcast)
+    .set({ status: "cancelled" })
+    .where(eq(broadcast.id, id))
+    .returning({ title: broadcast.title });
+  if (b) {
+    await recordAudit({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: "cancel_broadcast",
+      summary: `Cancelled scheduled broadcast "${b.title}"`,
+      targetType: "broadcast",
+      targetId: id,
+    });
+  }
+  revalidatePath("/superadmin/notifications");
+  return { ok: true };
 }
