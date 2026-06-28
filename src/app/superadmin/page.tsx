@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import {
   Activity,
@@ -8,6 +8,7 @@ import {
   Banknote,
   Bell,
   Building2,
+  CalendarClock,
   CheckCircle2,
   CreditCard,
   Image as ImageIcon,
@@ -31,6 +32,7 @@ import {
   payment,
   supportTicket,
   attendanceSession,
+  broadcast,
 } from "@/db/schema";
 import { metricTotal, topChurchesByMetric } from "@/lib/usage";
 import { getPlanPrices } from "@/lib/pricing";
@@ -77,6 +79,8 @@ export default async function SuperadminOverviewPage() {
     [{ revenueMonth }],
     [{ pendingSenders }],
     [{ openTickets }],
+    [{ scheduledCount }],
+    nextScheduled,
     planRows,
     recent,
     largest,
@@ -99,6 +103,21 @@ export default async function SuperadminOverviewPage() {
       .where(and(eq(payment.status, "success"), gte(payment.createdAt, startOfMonthTs))),
     db.select({ pendingSenders: count() }).from(church).where(eq(church.smsSenderStatus, "pending")),
     db.select({ openTickets: count() }).from(supportTicket).where(eq(supportTicket.status, "open")),
+    db.select({ scheduledCount: count() }).from(broadcast).where(eq(broadcast.status, "scheduled")),
+    db
+      .select({
+        title: broadcast.title,
+        audience: broadcast.audience,
+        targetPlan: broadcast.targetPlan,
+        targetCountry: broadcast.targetCountry,
+        inApp: broadcast.inApp,
+        email: broadcast.email,
+        scheduledAt: broadcast.scheduledAt,
+      })
+      .from(broadcast)
+      .where(eq(broadcast.status, "scheduled"))
+      .orderBy(asc(broadcast.scheduledAt))
+      .limit(1),
     db
       .select({ plan: church.plan, total: count() })
       .from(church)
@@ -170,6 +189,22 @@ export default async function SuperadminOverviewPage() {
     },
   ].filter(Boolean) as { label: string; href: string; icon: LucideIcon }[];
 
+  const next = nextScheduled[0] ?? null;
+  const nextAudience = !next
+    ? ""
+    : next.audience === "all"
+      ? "All churches"
+      : next.audience === "plan"
+        ? `Plan: ${planName(next.targetPlan ?? "")}`
+        : next.audience === "country"
+          ? `Country: ${next.targetCountry}`
+          : "Specific churches";
+  const nextChannels = next
+    ? [next.inApp ? "In-app" : "", next.email ? "Email" : ""]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
   const systemStatus = [
     { label: "Email", ok: isEmailConfigured() },
     { label: "SMS (Termii)", ok: isSmsConfigured() },
@@ -205,6 +240,32 @@ export default async function SuperadminOverviewPage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {/* Next scheduled broadcast */}
+      {next && (
+        <Link
+          href="/superadmin/notifications"
+          className="bg-card group flex items-center gap-3 rounded-2xl border p-4 shadow-sm transition hover:shadow-md"
+        >
+          <div className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl">
+            <CalendarClock className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-muted-foreground text-[11px] font-bold uppercase tracking-wide">
+              Next scheduled broadcast
+              {Number(scheduledCount) > 1 ? ` · ${scheduledCount} queued` : ""}
+            </p>
+            <p className="group-hover:text-primary truncate font-bold">
+              {next.title}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
+              {nextAudience} · {nextChannels} ·{" "}
+              {format(next.scheduledAt, "EEE, MMM d · h:mm a")}
+            </p>
+          </div>
+          <ArrowRight className="text-muted-foreground size-4 shrink-0 transition group-hover:translate-x-0.5" />
+        </Link>
       )}
 
       {/* Key metrics */}
