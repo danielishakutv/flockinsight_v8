@@ -89,15 +89,25 @@ function MemberView({
     <Card>
       <CardContent className="space-y-6 py-6">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
-              {STATUS_LABEL[member.status] ?? member.status}
-            </Badge>
-            {isTeamMember && (
-              <Badge variant="default" className="gap-1">
-                <ShieldCheck className="size-3" /> Team member
+          <div className="flex items-center gap-3">
+            {member.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={member.photoUrl}
+                alt=""
+                className="size-16 shrink-0 rounded-full border object-cover"
+              />
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
+                {STATUS_LABEL[member.status] ?? member.status}
               </Badge>
-            )}
+              {isTeamMember && (
+                <Badge variant="default" className="gap-1">
+                  <ShieldCheck className="size-3" /> Team member
+                </Badge>
+              )}
+            </div>
           </div>
           {canManage && (
             <Button variant="outline" size="sm" onClick={onEdit}>

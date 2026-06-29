@@ -18,7 +18,7 @@ export default async function SuperadminSmsPage() {
         senderId: church.smsSenderId,
         status: church.smsSenderStatus,
         note: church.smsSenderNote,
-        balance: church.smsBalance,
+        balance: church.walletBalance,
       })
       .from(church)
       .orderBy(asc(church.name)),

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * Resize + re-encode an image to WebP in the browser before upload. This keeps
  * uploads tiny on slow connections and standardises the stored format.
  */
-async function compress(
+export async function compress(
   file: File,
   maxDim: number,
   quality = 0.82,
@@ -37,23 +37,27 @@ async function compress(
   );
 }
 
-/** Compress (client) then upload to /api/media. Returns the stored URL. */
+/**
+ * Compress (client) then upload to Cloudinary via /api/media/upload. Cloudinary
+ * further optimises/resizes the stored asset, and the upload counts toward the
+ * church's storage quota. Returns the URL to render.
+ */
 export async function uploadImage(
   file: File,
-  kind: "logo" | "cover" | "photo",
+  kind: "logo" | "cover" | "photo" | "member" | "event",
   maxDim: number,
 ): Promise<string> {
   const blob = await compress(file, maxDim);
   const fd = new FormData();
-  fd.append("file", blob, "image.webp");
+  fd.append("file", blob, (file.name?.replace(/\.[^.]+$/, "") || "image") + ".webp");
   fd.append("kind", kind);
-  const res = await fetch("/api/media", { method: "POST", body: fd });
+  const res = await fetch("/api/media/upload", { method: "POST", body: fd });
   const data = (await res.json().catch(() => null)) as
-    | { ok: true; url: string }
+    | { ok: true; url: string; link: string }
     | { ok: false; error: string }
     | null;
   if (!data || !data.ok) throw new Error(data?.error || "Upload failed");
-  return data.url;
+  return data.url || data.link;
 }
 
 export function ImageUpload({
@@ -66,7 +70,7 @@ export function ImageUpload({
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
-  kind: "logo" | "cover";
+  kind: "logo" | "cover" | "member" | "event";
   maxDim: number;
   label: string;
   aspect?: "square" | "wide";

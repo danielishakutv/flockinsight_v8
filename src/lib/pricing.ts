@@ -1,6 +1,10 @@
 import "server-only";
 import { PLANS, PLAN_BY_ID, type Plan, type PlanId } from "@/lib/plans";
 import { getSetting, setSetting } from "@/lib/platform-settings";
+import {
+  DEFAULT_STORAGE_BUNDLES,
+  type StorageBundle,
+} from "@/lib/storage-bytes";
 
 /**
  * Plan pricing is admin-managed: the monthly price for each paid plan can be
@@ -57,4 +61,37 @@ export function applyDiscount(base: number | null, discountPct: number): number 
   if (base === null) return null;
   const pct = Math.min(100, Math.max(0, discountPct || 0));
   return Math.max(0, Math.round(base * (1 - pct / 100)));
+}
+
+/* ----- Storage add-on bundles (admin-managed) ----- */
+
+export const STORAGE_BUNDLES_KEY = "storage_bundles";
+
+/** Resolved storage bundles (admin overrides → placeholder defaults). */
+export async function getStorageBundles(): Promise<StorageBundle[]> {
+  const raw = await getSetting(STORAGE_BUNDLES_KEY, "");
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const clean = parsed
+          .map((b) => ({ gb: Number((b as StorageBundle).gb), price: Number((b as StorageBundle).price) }))
+          .filter((b) => Number.isFinite(b.gb) && b.gb > 0 && Number.isFinite(b.price) && b.price >= 0)
+          .sort((a, b) => a.gb - b.gb);
+        if (clean.length) return clean;
+      }
+    } catch {
+      /* fall through to defaults */
+    }
+  }
+  return DEFAULT_STORAGE_BUNDLES;
+}
+
+/** Persist storage bundles (admin only — caller must authorize). */
+export async function setStorageBundles(bundles: StorageBundle[]): Promise<void> {
+  const clean = bundles
+    .map((b) => ({ gb: Math.max(1, Math.round(b.gb)), price: Math.max(0, Math.round(b.price)) }))
+    .filter((b) => Number.isFinite(b.gb))
+    .sort((a, b) => a.gb - b.gb);
+  await setSetting(STORAGE_BUNDLES_KEY, JSON.stringify(clean));
 }

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, smsWalletTxn } from "@/db/schema";
+import { church, walletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
@@ -142,7 +142,7 @@ export async function adjustWallet(
     return { ok: false, error: "Enter a positive amount." };
 
   const [c] = await db
-    .select({ balance: church.smsBalance, currency: church.currency })
+    .select({ balance: church.walletBalance, currency: church.currency })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
@@ -161,11 +161,12 @@ export async function adjustWallet(
   await db.transaction(async (tx) => {
     await tx
       .update(church)
-      .set({ smsBalance: newBalance })
+      .set({ walletBalance: newBalance })
       .where(eq(church.id, churchId));
-    await tx.insert(smsWalletTxn).values({
+    await tx.insert(walletTxn).values({
       churchId,
       kind,
+      category: "adjustment",
       amount,
       balanceAfter: newBalance,
       reason: (
@@ -176,12 +177,12 @@ export async function adjustWallet(
   });
   await notifyChurchManagers({
     churchId,
-    title: kind === "credit" ? "SMS wallet credited" : "SMS wallet adjusted",
+    title: kind === "credit" ? "Wallet credited" : "Wallet adjusted",
     body:
       kind === "credit"
-        ? `Your SMS wallet was credited with ${formatMoney(amount, c.currency)}. New balance: ${formatMoney(newBalance, c.currency)}.`
-        : `${formatMoney(amount, c.currency)} was deducted from your SMS wallet. New balance: ${formatMoney(newBalance, c.currency)}.`,
-    linkUrl: "/settings/sms",
+        ? `Your wallet was credited with ${formatMoney(amount, c.currency)}. New balance: ${formatMoney(newBalance, c.currency)}.`
+        : `${formatMoney(amount, c.currency)} was deducted from your wallet. New balance: ${formatMoney(newBalance, c.currency)}.`,
+    linkUrl: "/settings/wallet",
   });
   await recordAudit({
     actorUserId: admin.id,

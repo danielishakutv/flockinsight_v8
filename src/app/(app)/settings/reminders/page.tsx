@@ -44,7 +44,7 @@ export default async function RemindersSettingsPage() {
       serviceCount={services.length}
       timezone={church.timezone}
       smsApproved={church.smsSenderStatus === "approved"}
-      smsBalance={church.smsBalance}
+      smsBalance={church.walletBalance}
     />
   );
 }

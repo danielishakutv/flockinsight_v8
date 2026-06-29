@@ -140,7 +140,7 @@ export function SmsSettings({
             </div>
             <div>
               <p className="text-muted-foreground text-xs font-semibold uppercase">
-                SMS balance
+                Wallet balance
               </p>
               <p className="text-2xl font-extrabold tabular-nums">
                 {formatMoney(balance, currency)}
@@ -323,7 +323,7 @@ export function SmsSettings({
       <Dialog open={topupOpen} onOpenChange={(o) => !paying && setTopupOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Top up SMS wallet</DialogTitle>
+            <DialogTitle>Top up wallet</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">

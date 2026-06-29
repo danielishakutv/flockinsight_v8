@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, smsWalletTxn } from "@/db/schema";
+import { church, walletTxn } from "@/db/schema";
 import { sendSms, smsPages, normalizePhone, isSmsConfigured } from "@/lib/sms";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { recordUsage } from "@/lib/usage";
@@ -30,7 +30,7 @@ export async function sendChurchSms(opts: {
     .select({
       senderId: church.smsSenderId,
       status: church.smsSenderStatus,
-      balance: church.smsBalance,
+      balance: church.walletBalance,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
@@ -70,11 +70,12 @@ export async function sendChurchSms(opts: {
   await db.transaction(async (tx) => {
     await tx
       .update(church)
-      .set({ smsBalance: newBalance })
+      .set({ walletBalance: newBalance })
       .where(eq(church.id, opts.churchId));
-    await tx.insert(smsWalletTxn).values({
+    await tx.insert(walletTxn).values({
       churchId: opts.churchId,
       kind: "debit",
+      category: "sms",
       amount: cost,
       balanceAfter: newBalance,
       reason: opts.reason ?? `SMS to ${recipients.length} recipient(s)`,
@@ -108,7 +109,7 @@ export async function sendChurchSmsBatch(opts: {
     .select({
       senderId: church.smsSenderId,
       status: church.smsSenderStatus,
-      balance: church.smsBalance,
+      balance: church.walletBalance,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
@@ -165,11 +166,12 @@ export async function sendChurchSmsBatch(opts: {
     await db.transaction(async (tx) => {
       await tx
         .update(church)
-        .set({ smsBalance: newBalance })
+        .set({ walletBalance: newBalance })
         .where(eq(church.id, opts.churchId));
-      await tx.insert(smsWalletTxn).values({
+      await tx.insert(walletTxn).values({
         churchId: opts.churchId,
         kind: "debit",
+        category: "sms",
         amount: spent,
         balanceAfter: newBalance,
         reason: opts.label ?? `Bulk SMS to ${sent} recipient(s)`,

@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, smsWalletTxn } from "@/db/schema";
+import { church, walletTxn } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
@@ -23,7 +23,7 @@ export default async function SmsSettingsPage({
         senderId: church.smsSenderId,
         status: church.smsSenderStatus,
         note: church.smsSenderNote,
-        balance: church.smsBalance,
+        balance: church.walletBalance,
         currency: church.currency,
       })
       .from(church)
@@ -31,16 +31,16 @@ export default async function SmsSettingsPage({
       .limit(1),
     db
       .select({
-        id: smsWalletTxn.id,
-        kind: smsWalletTxn.kind,
-        amount: smsWalletTxn.amount,
-        balanceAfter: smsWalletTxn.balanceAfter,
-        reason: smsWalletTxn.reason,
-        createdAt: smsWalletTxn.createdAt,
+        id: walletTxn.id,
+        kind: walletTxn.kind,
+        amount: walletTxn.amount,
+        balanceAfter: walletTxn.balanceAfter,
+        reason: walletTxn.reason,
+        createdAt: walletTxn.createdAt,
       })
-      .from(smsWalletTxn)
-      .where(eq(smsWalletTxn.churchId, c.id))
-      .orderBy(desc(smsWalletTxn.createdAt))
+      .from(walletTxn)
+      .where(eq(walletTxn.churchId, c.id))
+      .orderBy(desc(walletTxn.createdAt))
       .limit(15),
     getSmsPrice(),
   ]);

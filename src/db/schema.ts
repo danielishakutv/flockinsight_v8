@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   integer,
+  bigint,
   numeric,
   date,
   uuid,
@@ -43,6 +44,16 @@ export const smsSenderStatusEnum = pgEnum("sms_sender_status", [
 ]);
 // SMS wallet ledger entry direction.
 export const smsTxnKindEnum = pgEnum("sms_txn_kind", ["credit", "debit"]);
+// Unified wallet ledger entry direction.
+export const walletTxnKindEnum = pgEnum("wallet_txn_kind", ["credit", "debit"]);
+// What a wallet movement was for.
+export const walletTxnCategoryEnum = pgEnum("wallet_txn_category", [
+  "topup", // money in (Paystack)
+  "sms", // SMS send
+  "storage", // storage add-on subscription
+  "adjustment", // admin credit/debit
+  "refund",
+]);
 // Billing payment lifecycle.
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -153,9 +164,25 @@ export const church = pgTable("church", {
   smsSenderId: text(), // requested/approved sender ID (<=11 chars)
   smsSenderStatus: smsSenderStatusEnum().notNull().default("none"),
   smsSenderNote: text(), // application note / rejection reason
+  // Legacy SMS-only balance. Superseded by the unified `walletBalance` below
+  // (migration 0028 copies this value across). Kept for history; not written to.
   smsBalance: numeric({ precision: 14, scale: 2, mode: "number" })
     .notNull()
     .default(0),
+  // ----- Unified wallet (funds SMS sends, storage add-ons & future features) -----
+  walletBalance: numeric({ precision: 14, scale: 2, mode: "number" })
+    .notNull()
+    .default(0),
+  // ----- Storage -----
+  // Purchased extra storage beyond the free base (BASE_STORAGE_BYTES). The
+  // effective limit = base + storageExtraBytes.
+  storageExtraBytes: bigint({ mode: "number" }).notNull().default(0),
+  // Active monthly storage add-on: cost (deducted from the wallet each renewal)
+  // and when it next renews. Zero cost / null date = on the free base only.
+  storageMonthlyCost: numeric({ precision: 14, scale: 2, mode: "number" })
+    .notNull()
+    .default(0),
+  storageRenewsAt: timestamp({ withTimezone: true }),
   // ----- Public profile / directory -----
   // Public URL username (e.g. /c/grace-chapel). Defaults to `slug` on create,
   // editable by the church. Unique so links are stable & unambiguous.
@@ -205,10 +232,18 @@ export const banner = pgTable("banner", {
 });
 
 /* ============================================================
- * FlockInsight domain — uploaded media (logos, covers, photos)
- * Stored in Postgres (bytea) so it's covered by DB backups and needs no
- * external object store. Served immutably via /media/[id] (random id).
- * Images are compressed in the browser before upload (small payloads).
+ * FlockInsight domain — uploaded media (logos, covers, photos, sermons, files)
+ *
+ * Two storage backends, recorded by `provider`:
+ *  - "db":         legacy rows whose bytes live in Postgres (`data`), served by
+ *                  /media/[id]. Kept working for back-compat.
+ *  - "cloudinary": new rows uploaded to Cloudinary (optimised/resized to keep
+ *                  them light). `publicId`/`url`/`resourceType` describe the
+ *                  remote asset; `data` is null. /media/[id] redirects to it.
+ *
+ * Every row records `bytes` so a church's storage usage (and 200MB quota) can
+ * be summed cheaply. `kind` doubles as the category:
+ *   logo | cover | photo | member | event | sermon | file
  * ========================================================== */
 export const media = pgTable(
   "media",
@@ -217,13 +252,32 @@ export const media = pgTable(
     churchId: text()
       .notNull()
       .references(() => church.id, { onDelete: "cascade" }),
-    kind: text().notNull().default("photo"), // logo | cover | photo
+    kind: text().notNull().default("photo"),
     mime: text().notNull(),
+    // Authoritative stored size, in bytes (after optimisation). `size` is kept
+    // for legacy db-backed rows; new code reads/sums `bytes`.
     size: integer().notNull().default(0),
-    data: bytea().notNull(),
+    bytes: bigint({ mode: "number" }).notNull().default(0),
+    data: bytea(), // null for Cloudinary-backed rows
+    // ----- Cloudinary backend -----
+    provider: text().notNull().default("db"), // db | cloudinary
+    publicId: text(), // Cloudinary public_id (for delete/transform)
+    resourceType: text(), // image | video | raw
+    url: text(), // Cloudinary secure_url
+    format: text(), // jpg | webp | mp4 | mp3 | pdf | ...
+    width: integer(),
+    height: integer(),
+    durationSec: numeric({ precision: 10, scale: 2, mode: "number" }), // audio/video
+    // ----- Display / library -----
+    title: text(), // human label (e.g. sermon title); falls back to originalName
+    originalName: text(),
+    uploadedBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("media_church_idx").on(t.churchId)],
+  (t) => [
+    index("media_church_idx").on(t.churchId),
+    index("media_church_kind_idx").on(t.churchId, t.kind),
+  ],
 );
 
 export const staff = pgTable("staff", {
@@ -799,6 +853,44 @@ export const smsWalletTxn = pgTable(
   (t) => [index("sms_txn_church_idx").on(t.churchId)],
 );
 
+/* ----- Unified wallet ledger + top-ups (supersede the SMS-specific ones) ----- */
+
+export const walletTxn = pgTable(
+  "wallet_txn",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    kind: walletTxnKindEnum().notNull(),
+    category: walletTxnCategoryEnum().notNull().default("adjustment"),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    balanceAfter: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    reason: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("wallet_txn_church_idx").on(t.churchId)],
+);
+
+// Church-initiated wallet top-ups (paid via Paystack).
+export const walletTopup = pgTable(
+  "wallet_topup",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    reference: text().notNull().unique(),
+    status: paymentStatusEnum().notNull().default("pending"),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("wallet_topup_church_idx").on(t.churchId)],
+);
+
 // Church-initiated SMS wallet top-ups (paid via Paystack).
 export const smsTopup = pgTable(
   "sms_topup",
@@ -1121,3 +1213,6 @@ export type NewNotification = typeof notification.$inferInsert;
 export type PushSubscription = typeof pushSubscription.$inferSelect;
 export type Payment = typeof payment.$inferSelect;
 export type SmsWalletTxn = typeof smsWalletTxn.$inferSelect;
+export type WalletTxn = typeof walletTxn.$inferSelect;
+export type Media = typeof media.$inferSelect;
+export type NewMedia = typeof media.$inferInsert;

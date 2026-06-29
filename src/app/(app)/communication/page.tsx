@@ -42,7 +42,7 @@ export default async function CommunicationPage() {
       db
         .select({
           status: church.smsSenderStatus,
-          balance: church.smsBalance,
+          balance: church.walletBalance,
         })
         .from(church)
         .where(eq(church.id, c.id))

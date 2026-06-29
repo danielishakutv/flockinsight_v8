@@ -72,6 +72,15 @@ export const PERMISSION_CATALOG: PermModule[] = [
     perms: [{ key: "analytics.view", label: "View" }],
   },
   {
+    key: "media",
+    label: "Media library",
+    description: "Sermons, photos and other uploaded files.",
+    perms: [
+      { key: "media.view", label: "View" },
+      { key: "media.manage", label: "Upload & delete" },
+    ],
+  },
+  {
     key: "settings",
     label: "Church settings",
     description: "Church profile, services and giving categories.",

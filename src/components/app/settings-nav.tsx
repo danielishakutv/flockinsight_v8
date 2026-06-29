@@ -14,6 +14,8 @@ const allTabs: Tab[] = [
   { label: "SMS", href: "/settings/sms", need: "settings" },
   { label: "Reminders", href: "/settings/reminders", need: "settings" },
   { label: "Celebrations", href: "/settings/celebrations", need: "settings" },
+  { label: "Wallet", href: "/settings/wallet", need: "settings" },
+  { label: "Storage", href: "/settings/storage", need: "settings" },
   { label: "Billing", href: "/settings/billing", need: "settings" },
   { label: "Team", href: "/settings/team", need: "team" },
   { label: "Roles", href: "/settings/roles", need: "team" },

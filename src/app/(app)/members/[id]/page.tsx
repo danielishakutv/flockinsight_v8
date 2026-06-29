@@ -31,6 +31,7 @@ export default async function MemberDetailPage({
   const [m] = await db
     .select({
       id: member.id,
+      photoUrl: member.photoUrl,
       firstName: member.firstName,
       middleName: member.middleName,
       lastName: member.lastName,

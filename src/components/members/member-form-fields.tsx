@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageUpload } from "@/components/settings/image-upload";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ export type MemberStatus = "active" | "inactive" | "visitor" | "new_convert";
 
 export type MemberFormState = {
   id?: string;
+  photoUrl: string;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -61,6 +63,7 @@ function todayLocal(): string {
  */
 export function emptyMember(): MemberFormState {
   return {
+    photoUrl: "",
     firstName: "",
     middleName: "",
     lastName: "",
@@ -87,6 +90,7 @@ export function emptyMember(): MemberFormState {
 /** Build a form state from a saved member record (nulls → empty strings). */
 export function memberToForm(m: {
   id: string;
+  photoUrl: string | null;
   firstName: string;
   middleName: string | null;
   lastName: string | null;
@@ -110,6 +114,7 @@ export function memberToForm(m: {
 }): MemberFormState {
   return {
     id: m.id,
+    photoUrl: m.photoUrl ?? "",
     firstName: m.firstName,
     middleName: m.middleName ?? "",
     lastName: m.lastName ?? "",
@@ -137,6 +142,7 @@ export function memberToForm(m: {
 export function memberFormToInput(form: MemberFormState): MemberInput {
   return {
     id: form.id,
+    photoUrl: form.photoUrl,
     firstName: form.firstName,
     middleName: form.middleName,
     lastName: form.lastName,
@@ -172,6 +178,16 @@ export function MemberFormFields({
 
   return (
     <div className="space-y-4">
+      {/* Profile photo */}
+      <ImageUpload
+        value={form.photoUrl || null}
+        onChange={(url) => set({ photoUrl: url ?? "" })}
+        kind="member"
+        maxDim={512}
+        label="Profile photo"
+        aspect="square"
+      />
+
       {/* Names */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-2">

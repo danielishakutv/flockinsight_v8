@@ -12,6 +12,7 @@ import {
   LifeBuoy,
   CalendarDays,
   PlusCircle,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ export const mainNav: NavItem[] = [
     icon: HeartHandshake,
     perm: "followup.view",
   },
+  { label: "Media", href: "/media", icon: FolderOpen, perm: "media.view" },
   { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
@@ -132,6 +134,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Programs, flyers & public listings",
         tile: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
         perm: "settings.manage",
+      },
+      {
+        label: "Media",
+        href: "/media",
+        icon: FolderOpen,
+        description: "Sermons, photos & files",
+        tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
+        perm: "media.view",
       },
     ],
   },

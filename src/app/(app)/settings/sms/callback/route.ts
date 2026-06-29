@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, smsTopup, smsWalletTxn } from "@/db/schema";
+import { church, smsTopup, walletTxn } from "@/db/schema";
 import { paystackVerify } from "@/lib/paystack";
 
 // Paystack redirects here after an SMS wallet top-up.
@@ -28,18 +28,19 @@ export async function GET(request: Request) {
         .where(eq(smsTopup.id, t.id));
 
       const [c] = await tx
-        .select({ balance: church.smsBalance })
+        .select({ balance: church.walletBalance })
         .from(church)
         .where(eq(church.id, t.churchId))
         .limit(1);
       const newBalance = +((c?.balance ?? 0) + t.amount).toFixed(2);
       await tx
         .update(church)
-        .set({ smsBalance: newBalance })
+        .set({ walletBalance: newBalance })
         .where(eq(church.id, t.churchId));
-      await tx.insert(smsWalletTxn).values({
+      await tx.insert(walletTxn).values({
         churchId: t.churchId,
         kind: "credit",
+        category: "topup",
         amount: t.amount,
         balanceAfter: newBalance,
         reason: "Wallet top-up (Paystack)",

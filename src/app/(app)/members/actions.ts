@@ -30,6 +30,7 @@ const optDate = z.preprocess(
 
 const memberSchema = z.object({
   id: z.string().uuid().optional(),
+  photoUrl: optText(500),
   firstName: z.string().trim().min(1, "First name is required").max(80),
   middleName: optText(80),
   lastName: optText(80),
@@ -78,6 +79,7 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
 
   // Fields shared by insert and update.
   const fields = {
+    photoUrl: d.photoUrl,
     firstName: d.firstName,
     middleName: d.middleName,
     lastName: d.lastName,
