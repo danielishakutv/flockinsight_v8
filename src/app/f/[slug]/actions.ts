@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, form, formResponse, member, staff, user } from "@/db/schema";
@@ -77,6 +78,11 @@ export async function submitForm(input: {
       .set({ responseCount: sql`${form.responseCount} + 1` })
       .where(eq(form.id, f.id));
   });
+
+  // Refresh the church-facing views so the new response + count show up.
+  revalidatePath("/forms");
+  revalidatePath(`/forms/${f.id}`);
+  revalidatePath(`/forms/${f.id}/responses`);
 
   // Notify (best-effort — never blocks the submitter).
   await notifyManagers(f, fields, clean).catch((e) =>

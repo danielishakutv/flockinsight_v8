@@ -119,7 +119,7 @@ export function FormBuilder({
       });
       if (res.ok) {
         toast.success("Form saved");
-        router.refresh();
+        router.push("/forms");
       } else toast.error(res.error);
     });
   }
