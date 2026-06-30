@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateForm } from "@/app/(app)/forms/actions";
+import { useLiveCount } from "@/components/forms/use-live-counts";
 import {
   FIELD_TYPES,
   FIELD_TYPE_META,
@@ -74,6 +75,7 @@ export function FormBuilder({
   const router = useRouter();
   const [f, setF] = useState<BuilderState>(initial);
   const [saving, startSave] = useTransition();
+  const liveCount = useLiveCount(initial.id, initial.responseCount);
 
   const set = (patch: Partial<BuilderState>) => setF((p) => ({ ...p, ...patch }));
 
@@ -134,7 +136,7 @@ export function FormBuilder({
         </Button>
         <Button asChild variant="outline" size="sm">
           <Link href={`/forms/${f.id}/responses`}>
-            {f.responseCount} response{f.responseCount === 1 ? "" : "s"}
+            {liveCount} response{liveCount === 1 ? "" : "s"}
           </Link>
         </Button>
       </div>

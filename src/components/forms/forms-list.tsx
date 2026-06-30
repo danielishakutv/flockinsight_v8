@@ -22,6 +22,7 @@ import {
   deleteForm,
   setFormStatus,
 } from "@/app/(app)/forms/actions";
+import { useLiveCounts } from "@/components/forms/use-live-counts";
 import type { FormStatus } from "@/lib/forms-shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,9 @@ export function FormsList({
 }) {
   const router = useRouter();
   const [creating, startCreate] = useTransition();
+  const liveCounts = useLiveCounts(
+    Object.fromEntries(forms.map((f) => [f.id, f.responseCount])),
+  );
 
   function create() {
     startCreate(async () => {
@@ -88,6 +92,7 @@ export function FormsList({
             <FormCard
               key={f.id}
               form={f}
+              count={liveCounts[f.id] ?? f.responseCount}
               canManage={canManage}
               baseUrl={baseUrl}
             />
@@ -100,10 +105,12 @@ export function FormsList({
 
 function FormCard({
   form: f,
+  count,
   canManage,
   baseUrl,
 }: {
   form: FormRow;
+  count: number;
   canManage: boolean;
   baseUrl: string;
 }) {
@@ -150,7 +157,7 @@ function FormCard({
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <p className="text-muted-foreground mt-0.5 text-sm">
-            {f.responseCount} response{f.responseCount === 1 ? "" : "s"} · updated{" "}
+            {count} response{count === 1 ? "" : "s"} · updated{" "}
             {format(parseISO(f.updatedAt), "MMM d, yyyy")}
           </p>
           {f.status !== "draft" && (
