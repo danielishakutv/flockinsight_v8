@@ -18,6 +18,7 @@ export default async function PublicProfileSettingsPage() {
       initial={{
         handle: church.handle ?? church.slug,
         publicEnabled: church.publicEnabled,
+        theme: church.theme ?? "indigo",
         name: church.name,
         denomination: church.denomination ?? "",
         tagline: church.tagline ?? "",

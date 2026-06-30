@@ -3,6 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, gte } from "drizzle-orm";
 import {
+  ArrowRight,
+  CalendarDays,
+  Clock,
   Globe,
   Link2,
   Mail,
@@ -15,7 +18,9 @@ import { format, parseISO } from "date-fns";
 import { db } from "@/db";
 import { church, service, event } from "@/db/schema";
 import { siteUrl, churchUrl } from "@/lib/site";
+import { getTheme, themeVars } from "@/lib/church-themes";
 import { ShareButton } from "@/components/public/share-button";
+import { NewsletterSignup } from "@/components/public/newsletter-signup";
 
 export const revalidate = 3600;
 
@@ -74,8 +79,6 @@ function socialHref(key: string, value: string): string {
 
 const SOCIAL_ICON: Record<string, LucideIcon> = {
   whatsapp: MessageCircle,
-  // This lucide build has no brand glyphs — use a generic link icon; the
-  // visible label (Facebook, Instagram, …) makes the platform clear.
   facebook: Link2,
   instagram: Link2,
   youtube: Link2,
@@ -128,6 +131,7 @@ export default async function ChurchPublicPage({
       .limit(6),
   ]);
 
+  const theme = getTheme(c.theme);
   const url = churchUrl(handle);
   const locationLine = [c.addressText, c.city, c.state, c.country]
     .filter(Boolean)
@@ -141,125 +145,166 @@ export default async function ChurchPublicPage({
   const socials = Object.entries(c.socials ?? {}).filter(([, v]) => v);
 
   return (
-    <div className="min-h-dvh bg-slate-50 pb-16 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Hero */}
-      <div className="relative">
-        <div className="h-44 w-full overflow-hidden bg-gradient-to-br from-violet-600 to-indigo-600 sm:h-64">
-          {c.coverUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={c.coverUrl} alt="" className="size-full object-cover" />
-          )}
-        </div>
-        <div className="mx-auto max-w-3xl px-4">
-          <div className="-mt-12 flex items-end gap-4">
-            <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-2xl border-4 border-white bg-white shadow-lg dark:border-slate-900 dark:bg-slate-800">
+    <div
+      style={themeVars(theme)}
+      className="min-h-dvh bg-white pb-20 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
+    >
+      {/* ===== Hero ===== */}
+      <header className="relative isolate overflow-hidden">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[var(--brand-from)] to-[var(--brand-to)]" />
+        {c.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={c.coverUrl}
+            alt=""
+            className="absolute inset-0 -z-10 size-full object-cover opacity-40 mix-blend-overlay"
+          />
+        )}
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/60 via-black/10 to-black/30" />
+
+        <div className="mx-auto flex min-h-[26rem] max-w-5xl flex-col justify-end px-4 pb-10 pt-24 sm:min-h-[32rem] sm:px-8">
+          <div className="flex items-end gap-4">
+            <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white/30 bg-white/95 shadow-xl backdrop-blur sm:size-24">
               {c.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.logo} alt="" className="size-full object-cover" />
               ) : (
-                <span className="text-2xl font-extrabold text-violet-600">
+                <span className="text-2xl font-extrabold text-[var(--brand)]">
                   {initials(c.name)}
                 </span>
               )}
             </div>
-            <div className="mb-2">
-              <ShareButton url={url} title={c.name} />
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="mx-auto max-w-3xl space-y-6 px-4 pt-4">
-        {/* Identity */}
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+          <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-white drop-shadow-sm sm:text-6xl">
             {c.name}
           </h1>
           {c.tagline && (
-            <p className="mt-1 text-lg text-slate-600 dark:text-slate-300">
+            <p className="mt-2 max-w-2xl text-lg text-white/90 sm:text-xl">
               {c.tagline}
             </p>
           )}
-          <div className="mt-3 flex flex-wrap gap-2">
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {c.denomination && (
-              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">
                 {c.denomination}
               </span>
             )}
             {(c.city || c.state) && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">
                 <MapPin className="size-3" />
                 {[c.city, c.state].filter(Boolean).join(", ")}
               </span>
             )}
           </div>
-        </div>
 
-        {/* About */}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              href="#subscribe"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[var(--brand)] shadow-lg transition hover:bg-white/90"
+            >
+              <Mail className="size-4" /> Subscribe
+            </a>
+            {mapHref && (
+              <a
+                href={mapHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20"
+              >
+                <MapPin className="size-4" /> Directions
+              </a>
+            )}
+            <ShareButton
+              url={url}
+              title={c.name}
+              className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20"
+            />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-5xl space-y-10 px-4 pt-12 sm:px-8">
+        {/* ===== About ===== */}
         {c.about && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <h2 className="mb-2 text-lg font-bold">About us</h2>
-            <p className="whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">
+          <section>
+            <SectionTitle>About us</SectionTitle>
+            <p className="mt-3 max-w-3xl whitespace-pre-line text-lg leading-relaxed text-slate-700 dark:text-slate-300">
               {c.about}
             </p>
           </section>
         )}
 
-        {/* Service times */}
+        {/* ===== Service times ===== */}
         {services.length > 0 && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <h2 className="mb-3 text-lg font-bold">Service times</h2>
-            <ul className="space-y-2">
+          <section>
+            <SectionTitle>Service times</SectionTitle>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {services.map((s, i) => (
-                <li key={i} className="flex items-center justify-between gap-3">
-                  <span className="font-semibold">{s.name}</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
+                <div
+                  key={i}
+                  className="rounded-2xl border bg-white p-4 shadow-sm dark:bg-slate-900"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-9 place-items-center rounded-lg bg-[var(--brand)]/10 text-[var(--brand)]">
+                      <Clock className="size-4" />
+                    </span>
+                    <p className="font-bold">{s.name}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
                     {[s.dayOfWeek != null ? DAYS[s.dayOfWeek] : null, s.startTime]
                       .filter(Boolean)
-                      .join(" · ") || "—"}
-                  </span>
-                </li>
+                      .join(" · ") || "Time varies"}
+                  </p>
+                </div>
               ))}
-            </ul>
+            </div>
           </section>
         )}
 
-        {/* Upcoming events */}
+        {/* ===== Upcoming events ===== */}
         {events.length > 0 && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Upcoming events</h2>
-              <Link href="/events" className="text-primary text-sm font-semibold hover:underline">
-                See all
+          <section>
+            <div className="flex items-center justify-between">
+              <SectionTitle>Upcoming events</SectionTitle>
+              <Link
+                href="/events"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand)] hover:underline"
+              >
+                See all <ArrowRight className="size-4" />
               </Link>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {events.map((ev) => (
                 <Link
                   key={ev.id}
                   href={`/events/${ev.id}`}
-                  className="group flex gap-3 rounded-xl border p-2 transition hover:shadow-sm"
+                  className="group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900"
                 >
-                  <div className="bg-primary/10 grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg">
+                  <div className="relative aspect-[16/9] bg-[var(--brand)]/10">
                     {ev.flyerUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ev.flyerUrl} alt="" loading="lazy" className="size-full object-cover" />
+                      <img
+                        src={ev.flyerUrl}
+                        alt=""
+                        loading="lazy"
+                        className="size-full object-cover"
+                      />
                     ) : (
-                      <span className="text-primary text-xs font-bold">
-                        {format(parseISO(ev.date), "MMM d")}
-                      </span>
+                      <div className="grid size-full place-items-center text-[var(--brand)]">
+                        <CalendarDays className="size-10" />
+                      </div>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-primary text-xs font-bold uppercase">
+                  <div className="p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[var(--brand)]">
                       {format(parseISO(ev.date), "EEE, MMM d")}
                       {ev.startTime ? ` · ${ev.startTime}` : ""}
                     </p>
-                    <p className="truncate text-sm font-semibold group-hover:text-violet-600">
-                      {ev.title}
-                    </p>
+                    <p className="mt-1 font-bold">{ev.title}</p>
                     {ev.venue && (
-                      <p className="text-muted-foreground truncate text-xs">{ev.venue}</p>
+                      <p className="mt-0.5 truncate text-sm text-slate-500">{ev.venue}</p>
                     )}
                   </div>
                 </Link>
@@ -268,11 +313,32 @@ export default async function ChurchPublicPage({
           </section>
         )}
 
-        {/* Location */}
+        {/* ===== Gallery ===== */}
+        {c.photos && c.photos.length > 0 && (
+          <section>
+            <SectionTitle>Gallery</SectionTitle>
+            <div className="mt-4 columns-2 gap-3 sm:columns-3 [&>*]:mb-3">
+              {c.photos.map((p) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={p.url}
+                  src={p.url}
+                  alt={p.caption ?? ""}
+                  loading="lazy"
+                  className="w-full break-inside-avoid rounded-2xl object-cover shadow-sm"
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ===== Find us ===== */}
         {(locationLine || c.landmarks) && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <h2 className="mb-2 text-lg font-bold">Find us</h2>
-            {locationLine && <p className="text-slate-700 dark:text-slate-300">{locationLine}</p>}
+          <section className="rounded-3xl border bg-slate-50 p-6 dark:bg-slate-900/60">
+            <SectionTitle>Find us</SectionTitle>
+            {locationLine && (
+              <p className="mt-2 text-slate-700 dark:text-slate-300">{locationLine}</p>
+            )}
             {c.landmarks && (
               <p className="mt-1 text-sm text-slate-500">Landmark: {c.landmarks}</p>
             )}
@@ -281,7 +347,7 @@ export default async function ChurchPublicPage({
                 href={mapHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-700"
+                className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-white shadow transition hover:opacity-90"
               >
                 <MapPin className="size-4" /> Get directions
               </a>
@@ -289,38 +355,25 @@ export default async function ChurchPublicPage({
           </section>
         )}
 
-        {/* Photos */}
-        {c.photos && c.photos.length > 0 && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <h2 className="mb-3 text-lg font-bold">Photos</h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {c.photos.map((p) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={p.url}
-                  src={p.url}
-                  alt={p.caption ?? ""}
-                  loading="lazy"
-                  className="aspect-square w-full rounded-lg object-cover"
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Contact */}
+        {/* ===== Contact ===== */}
         {(c.publicPhone || c.publicEmail || c.website || socials.length > 0) && (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm dark:bg-slate-900">
-            <h2 className="mb-3 text-lg font-bold">Get in touch</h2>
-            <div className="flex flex-wrap gap-2">
+          <section>
+            <SectionTitle>Get in touch</SectionTitle>
+            <div className="mt-4 flex flex-wrap gap-2.5">
               {c.publicPhone && (
-                <a href={`tel:${c.publicPhone}`} className="contact-chip">
-                  <Phone className="size-4" /> {c.publicPhone}
+                <a
+                  href={`tel:${c.publicPhone}`}
+                  className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  <Phone className="size-4 text-[var(--brand)]" /> {c.publicPhone}
                 </a>
               )}
               {c.publicEmail && (
-                <a href={`mailto:${c.publicEmail}`} className="contact-chip">
-                  <Mail className="size-4" /> {c.publicEmail}
+                <a
+                  href={`mailto:${c.publicEmail}`}
+                  className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  <Mail className="size-4 text-[var(--brand)]" /> {c.publicEmail}
                 </a>
               )}
               {c.website && (
@@ -328,9 +381,9 @@ export default async function ChurchPublicPage({
                   href={/^https?:\/\//.test(c.website) ? c.website : `https://${c.website}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold transition hover:bg-slate-50 dark:hover:bg-slate-800"
+                  className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
-                  <Globe className="size-4" /> Website
+                  <Globe className="size-4 text-[var(--brand)]" /> Website
                 </a>
               )}
               {socials.map(([key, value]) => {
@@ -341,9 +394,9 @@ export default async function ChurchPublicPage({
                     href={socialHref(key, value)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold capitalize transition hover:bg-slate-50 dark:hover:bg-slate-800"
+                    className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold capitalize transition hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
-                    <Icon className="size-4" /> {key === "x" ? "X" : key}
+                    <Icon className="size-4 text-[var(--brand)]" /> {key === "x" ? "X" : key}
                   </a>
                 );
               })}
@@ -351,24 +404,44 @@ export default async function ChurchPublicPage({
           </section>
         )}
 
-        {/* Footer CTA */}
-        <div className="pt-4 text-center">
-          <ShareButton
-            url={url}
-            title={c.name}
-            className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-6 py-3 text-sm font-bold text-white shadow transition hover:bg-violet-700"
-          />
-          <p className="mt-4 text-xs text-slate-400">
-            <Link href="/churches" className="font-semibold hover:underline">
-              Find more churches
-            </Link>
-            {" · "}
-            <Link href="/" className="font-semibold hover:underline">
-              Powered by FlockInsight
-            </Link>
+        {/* ===== Subscribe band ===== */}
+        <section
+          id="subscribe"
+          className="overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--brand-from)] to-[var(--brand-to)] p-6 shadow-lg sm:p-10"
+        >
+          <h2 className="text-2xl font-extrabold text-white sm:text-3xl">
+            Stay connected
+          </h2>
+          <p className="mt-1 max-w-xl text-white/85">
+            Subscribe to get devotionals, newsletters and updates from {c.name}{" "}
+            straight to your inbox.
           </p>
+          <div className="mt-5 max-w-2xl">
+            <NewsletterSignup handle={handle} churchName={c.name} />
+          </div>
+        </section>
+
+        {/* ===== Footer ===== */}
+        <div className="pt-2 text-center text-xs text-slate-400">
+          <Link href="/churches" className="font-semibold hover:underline">
+            Find more churches
+          </Link>
+          {" · "}
+          <Link href="/" className="font-semibold hover:underline">
+            Powered by FlockInsight
+          </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+      <span className="bg-gradient-to-r from-[var(--brand-from)] to-[var(--brand-to)] bg-clip-text text-transparent">
+        {children}
+      </span>
+    </h2>
   );
 }

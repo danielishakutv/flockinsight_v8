@@ -29,6 +29,24 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.43.0",
+    date: "2026-06-30",
+    summary: "Devotionals & newsletters, a redesigned church page, and cleaner settings.",
+    changes: {
+      Added: [
+        "New Devotionals & Newsletters section: write devotionals and newsletters with a cover image, then send them by email to your members, your subscribers, or both.",
+        "Schedule a devotional or newsletter to go out at a specific date and time.",
+        "A newsletter sign-up form is now built into every church's public page — collect names and emails from anyone, not just members.",
+        "Subscribers list with a live count and CSV export; add or remove subscribers manually too.",
+        "Pick from 7 colour themes for your public church page.",
+      ],
+      Improved: [
+        "The public church page has been redesigned into a modern, landing-page style layout that showcases your logo, cover, photos, services and events.",
+        "Settings has been reorganised into a clean, grouped menu — no more sideways scrolling to find a tab.",
+      ],
+    },
+  },
+  {
     version: "0.42.0",
     date: "2026-06-29",
     summary: "Build your own forms and collect responses.",

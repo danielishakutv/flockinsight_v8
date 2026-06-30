@@ -46,6 +46,8 @@ function permForKind(kind: MediaKind): string {
       return "settings.manage";
     case "member":
       return "members.manage";
+    case "devotional":
+      return "devotionals.manage";
     default:
       return "media.manage"; // sermon, file
   }

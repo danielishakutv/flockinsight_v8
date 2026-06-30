@@ -193,6 +193,8 @@ export const church = pgTable("church", {
   tagline: text(),
   about: text(),
   coverUrl: text(),
+  // Public page colour theme (see lib/church-themes.ts). Default "indigo".
+  theme: text().notNull().default("indigo"),
   // Gallery: [{ url, caption? }].
   photos: jsonb()
     .$type<{ url: string; caption?: string }[]>()
@@ -1257,6 +1259,72 @@ export const formResponse = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — devotionals & newsletters + subscribers
+ * Churches publish devotionals/newsletters and bulk-send them by email to
+ * members and to public newsletter subscribers. Sends can be scheduled.
+ * ========================================================== */
+export const devotionalTypeEnum = pgEnum("devotional_type", [
+  "devotional",
+  "newsletter",
+]);
+export const devotionalStatusEnum = pgEnum("devotional_status", [
+  "draft",
+  "scheduled",
+  "sent",
+]);
+
+// Public newsletter subscribers (collected from the church's public page).
+export const subscriber = pgTable(
+  "subscriber",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text(),
+    email: text().notNull(),
+    status: text().notNull().default("active"), // active | unsubscribed
+    source: text().notNull().default("public"), // public | manual | member
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("subscriber_church_idx").on(t.churchId),
+    uniqueIndex("subscriber_church_email_idx").on(t.churchId, t.email),
+  ],
+);
+
+export const devotional = pgTable(
+  "devotional",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    type: devotionalTypeEnum().notNull().default("devotional"),
+    title: text().notNull(),
+    body: text().notNull(),
+    imageUrl: text(),
+    // Who receives it: subscribers | members | both.
+    audience: text().notNull().default("both"),
+    status: devotionalStatusEnum().notNull().default("draft"),
+    scheduledAt: timestamp({ withTimezone: true }),
+    sentAt: timestamp({ withTimezone: true }),
+    recipients: integer().notNull().default(0),
+    sentCount: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("devotional_church_idx").on(t.churchId),
+    index("devotional_status_idx").on(t.status, t.scheduledAt),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -1292,3 +1360,6 @@ export type NewMedia = typeof media.$inferInsert;
 export type Form = typeof form.$inferSelect;
 export type NewForm = typeof form.$inferInsert;
 export type FormResponse = typeof formResponse.$inferSelect;
+export type Subscriber = typeof subscriber.$inferSelect;
+export type Devotional = typeof devotional.$inferSelect;
+export type NewDevotional = typeof devotional.$inferInsert;

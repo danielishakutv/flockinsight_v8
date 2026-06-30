@@ -22,10 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload, GalleryUpload } from "@/components/settings/image-upload";
+import { CHURCH_THEMES } from "@/lib/church-themes";
+import { cn } from "@/lib/utils";
 
 type Initial = {
   handle: string;
   publicEnabled: boolean;
+  theme: string;
   name: string;
   denomination: string;
   tagline: string;
@@ -107,6 +110,7 @@ export function PublicProfileForm({
     const input: PublicProfileInput = {
       handle: f.handle,
       publicEnabled: f.publicEnabled,
+      theme: f.theme,
       denomination: f.denomination,
       tagline: f.tagline,
       about: f.about,
@@ -236,6 +240,35 @@ export function PublicProfileForm({
             value={f.coverUrl}
             onChange={(url) => set({ coverUrl: url })}
           />
+
+          {/* Colour theme */}
+          <div className="space-y-2">
+            <Label>Colour theme</Label>
+            <div className="flex flex-wrap gap-2.5">
+              {CHURCH_THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => set({ theme: t.id })}
+                  title={t.name}
+                  className={cn(
+                    "group relative size-11 rounded-xl ring-offset-2 transition-all ring-offset-background",
+                    f.theme === t.id
+                      ? "ring-foreground ring-2"
+                      : "hover:ring-foreground/30 ring-1 ring-transparent",
+                  )}
+                  style={{ background: `linear-gradient(135deg, ${t.from}, ${t.to})` }}
+                >
+                  {f.theme === t.id && (
+                    <Check className="absolute inset-0 m-auto size-5 text-white drop-shadow" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Sets the accent colours on your public church page.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

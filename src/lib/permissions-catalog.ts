@@ -90,6 +90,15 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "devotionals",
+    label: "Devotionals & newsletters",
+    description: "Publish devotionals/newsletters and manage subscribers.",
+    perms: [
+      { key: "devotionals.view", label: "View" },
+      { key: "devotionals.manage", label: "Create & send" },
+    ],
+  },
+  {
     key: "settings",
     label: "Church settings",
     description: "Church profile, services and giving categories.",

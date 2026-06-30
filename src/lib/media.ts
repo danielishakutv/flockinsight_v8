@@ -15,6 +15,7 @@ export type MediaKind =
   | "photo"
   | "member"
   | "event"
+  | "devotional"
   | "sermon"
   | "file";
 
@@ -24,6 +25,7 @@ export const MEDIA_KINDS: MediaKind[] = [
   "photo",
   "member",
   "event",
+  "devotional",
   "sermon",
   "file",
 ];

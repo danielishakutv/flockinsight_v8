@@ -44,7 +44,7 @@ export async function compress(
  */
 export async function uploadImage(
   file: File,
-  kind: "logo" | "cover" | "photo" | "member" | "event",
+  kind: "logo" | "cover" | "photo" | "member" | "event" | "devotional",
   maxDim: number,
 ): Promise<string> {
   const blob = await compress(file, maxDim);
@@ -70,7 +70,7 @@ export function ImageUpload({
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
-  kind: "logo" | "cover" | "member" | "event";
+  kind: "logo" | "cover" | "member" | "event" | "devotional";
   maxDim: number;
   label: string;
   aspect?: "square" | "wide";

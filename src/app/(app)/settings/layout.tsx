@@ -14,13 +14,15 @@ export default async function SettingsLayout({
   if (!canSettings && !canTeam) redirect("/dashboard");
 
   return (
-    <PageContainer className="max-w-3xl">
+    <PageContainer className="max-w-6xl">
       <PageHeader
         title="Settings"
         description="Manage your church profile, services, giving and team."
       />
-      <SettingsNav canSettings={canSettings} canTeam={canTeam} />
-      {children}
+      <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
+        <SettingsNav canSettings={canSettings} canTeam={canTeam} />
+        <div className="mt-6 min-w-0 lg:mt-0">{children}</div>
+      </div>
     </PageContainer>
   );
 }

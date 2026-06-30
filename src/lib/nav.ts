@@ -14,6 +14,7 @@ import {
   PlusCircle,
   FolderOpen,
   FileText,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,12 @@ export const mainNav: NavItem[] = [
   },
   { label: "Media", href: "/media", icon: FolderOpen, perm: "media.view" },
   { label: "Forms", href: "/forms", icon: FileText, perm: "forms.view" },
+  {
+    label: "Devotionals",
+    href: "/devotionals",
+    icon: BookOpen,
+    perm: "devotionals.view",
+  },
   { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
@@ -152,6 +159,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Build forms & collect responses",
         tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
         perm: "forms.view",
+      },
+      {
+        label: "Devotionals",
+        href: "/devotionals",
+        icon: BookOpen,
+        description: "Devotionals, newsletters & subscribers",
+        tile: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+        perm: "devotionals.view",
       },
     ],
   },

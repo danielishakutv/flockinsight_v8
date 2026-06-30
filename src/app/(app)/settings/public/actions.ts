@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { THEME_BY_ID } from "@/lib/church-themes";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -34,6 +35,7 @@ const schema = z.object({
       "Use 3–40 letters, numbers or hyphens (no spaces).",
     ),
   publicEnabled: z.boolean(),
+  theme: z.string().trim().max(20).default("indigo"),
   denomination: optText(80),
   tagline: optText(140),
   about: optText(4000),
@@ -105,6 +107,7 @@ export async function savePublicProfile(
     .set({
       handle: d.handle,
       publicEnabled: d.publicEnabled,
+      theme: THEME_BY_ID[d.theme] ? d.theme : "indigo",
       denomination: d.denomination,
       tagline: d.tagline,
       about: d.about,
