@@ -29,6 +29,20 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.42.0",
+    date: "2026-06-29",
+    summary: "Build your own forms and collect responses.",
+    changes: {
+      Added: [
+        "New Forms section: design your own forms — add questions, choose the answer type (short text, paragraph, email, phone, number, date, dropdown, multiple choice, checkboxes, yes/no), mark fields required and reorder them.",
+        "Give each form a title and choose its own shareable link (/f/your-name) — anyone can fill it in, no account needed.",
+        "Responses dashboard with a one-click CSV export.",
+        "Submissions can automatically match or create a member (and optionally add them to follow-up).",
+        "Get an email and in-app notification on every response — each can be toggled off per form.",
+      ],
+    },
+  },
+  {
     version: "0.41.0",
     date: "2026-06-29",
     summary: "Media library, optimised storage & a unified wallet.",

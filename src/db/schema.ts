@@ -1184,6 +1184,79 @@ export const event = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — form builder (Google-Forms-style)
+ * Churches design forms (fields stored as jsonb), publish a public link
+ * (/f/<slug>), and collect responses. Responses can match/create members.
+ * ========================================================== */
+export const formStatusEnum = pgEnum("form_status", [
+  "draft", // not public yet
+  "open", // public + accepting responses
+  "closed", // public page shows "no longer accepting"
+]);
+
+export const form = pgTable(
+  "form",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    title: text().notNull().default("Untitled form"),
+    description: text(),
+    // The "link half name": /f/<slug>. Globally unique so links are stable.
+    slug: text().notNull().unique(),
+    status: formStatusEnum().notNull().default("draft"),
+    // Ordered field definitions — see FormField in lib/forms-shared.ts.
+    fields: jsonb()
+      .$type<import("@/lib/forms-shared").FormField[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    confirmationMessage: text()
+      .notNull()
+      .default("Thanks! Your response has been recorded."),
+    // Notify church managers on each submission (toggleable).
+    notifyEmail: boolean().notNull().default(true),
+    notifyInApp: boolean().notNull().default(true),
+    // Match-or-create a member from each response (using mapped fields).
+    createMembers: boolean().notNull().default(true),
+    addToFollowUp: boolean().notNull().default(false),
+    responseCount: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("form_church_idx").on(t.churchId)],
+);
+
+export const formResponse = pgTable(
+  "form_response",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    formId: uuid()
+      .notNull()
+      .references(() => form.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    // Answers keyed by field id: { [fieldId]: value }.
+    data: jsonb()
+      .$type<Record<string, import("@/lib/forms-shared").FieldValue>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Linked member, when matched or created from the response.
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("form_response_form_idx").on(t.formId),
+    index("form_response_church_idx").on(t.churchId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -1216,3 +1289,6 @@ export type SmsWalletTxn = typeof smsWalletTxn.$inferSelect;
 export type WalletTxn = typeof walletTxn.$inferSelect;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
+export type Form = typeof form.$inferSelect;
+export type NewForm = typeof form.$inferInsert;
+export type FormResponse = typeof formResponse.$inferSelect;

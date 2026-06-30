@@ -81,6 +81,15 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "forms",
+    label: "Forms",
+    description: "Build forms and collect responses.",
+    perms: [
+      { key: "forms.view", label: "View & responses" },
+      { key: "forms.manage", label: "Create & edit" },
+    ],
+  },
+  {
     key: "settings",
     label: "Church settings",
     description: "Church profile, services and giving categories.",

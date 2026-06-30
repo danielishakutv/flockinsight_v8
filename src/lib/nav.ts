@@ -13,6 +13,7 @@ import {
   CalendarDays,
   PlusCircle,
   FolderOpen,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,7 @@ export const mainNav: NavItem[] = [
     perm: "followup.view",
   },
   { label: "Media", href: "/media", icon: FolderOpen, perm: "media.view" },
+  { label: "Forms", href: "/forms", icon: FileText, perm: "forms.view" },
   { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
@@ -142,6 +144,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Sermons, photos & files",
         tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
         perm: "media.view",
+      },
+      {
+        label: "Forms",
+        href: "/forms",
+        icon: FileText,
+        description: "Build forms & collect responses",
+        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
+        perm: "forms.view",
       },
     ],
   },
