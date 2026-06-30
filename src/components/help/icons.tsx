@@ -15,6 +15,12 @@ import {
   CalendarDays,
   Globe,
   UserCog,
+  FolderOpen,
+  FileText,
+  Mail,
+  Wallet,
+  HardDrive,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +41,13 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   team: UserCog,
   help: LifeBuoy,
   analytics: BarChart3,
+  media: FolderOpen,
+  forms: FileText,
+  devotionals: Mail,
+  events: CalendarDays,
+  celebrations: PartyPopper,
+  wallet: Wallet,
+  storage: HardDrive,
   default: BookOpen,
 };
 

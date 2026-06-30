@@ -25,6 +25,7 @@ export const GUIDE_CATEGORIES: { key: string; title: string }[] = [
   { key: "services", title: "Services & attendance" },
   { key: "giving", title: "Giving" },
   { key: "comms", title: "Communication & SMS" },
+  { key: "content", title: "Content & engagement" },
   { key: "public", title: "Your public page" },
   { key: "account", title: "Account, billing & team" },
 ];
@@ -51,7 +52,8 @@ export const GUIDES: Guide[] = [
         title: "Find your way around",
         body: [
           "The dashboard shows key numbers, upcoming birthdays & anniversaries, and a to-do list.",
-          "Everything is in the left menu (or the More menu on mobile): Attendance, Members, Groups, Giving, Follow-up, Communication and Settings.",
+          "Everything is in the left menu (or the More menu on mobile): Attendance, Analytics, Members, Groups, Giving, Follow-up, Communication, Media, Forms and Devotionals.",
+          "Settings is now a clean, grouped menu (Church, Engagement, Billing, People) — no more sideways scrolling.",
         ],
       },
     ],
@@ -263,14 +265,17 @@ export const GUIDES: Guide[] = [
         ],
       },
       {
-        title: "Fund your SMS wallet",
+        title: "Fund your wallet",
         body: [
-          "On Settings → SMS, top up your wallet via card/transfer. Each SMS page (160 characters) is deducted per recipient when you send.",
-          "Reminders and broadcasts pause automatically if the wallet runs out.",
+          "Your church now has one unified wallet (Settings → Wallet) that funds SMS, storage upgrades and more. Top up via card or transfer (Paystack).",
+          "Each SMS page (160 characters) is deducted per recipient when you send. Reminders and broadcasts pause automatically if the wallet runs out.",
         ],
       },
     ],
-    links: [{ label: "SMS settings", href: "/settings/sms" }],
+    links: [
+      { label: "SMS settings", href: "/settings/sms" },
+      { label: "Wallet", href: "/settings/wallet" },
+    ],
     tip: "Long messages use multiple SMS pages — keep texts concise to save credits.",
     keywords: ["sms", "sender id", "wallet", "credit", "top up", "termii"],
   },
@@ -299,19 +304,187 @@ export const GUIDES: Guide[] = [
     keywords: ["reminder", "automatic", "service day", "schedule", "notify"],
   },
   {
+    slug: "celebrations",
+    title: "Birthday & anniversary messages",
+    category: "comms",
+    icon: "celebrations",
+    summary: "Automatically wish members on their birthdays and anniversaries.",
+    minutes: 3,
+    sections: [
+      {
+        title: "Turn it on",
+        body: [
+          "Settings → Celebrations. Switch on, choose channels (email and/or SMS) and the time of day to send (your timezone).",
+          "Edit the birthday and anniversary templates — placeholders {name}, {church} and {occasion} fill in automatically.",
+        ],
+      },
+      {
+        title: "What's covered",
+        body: [
+          "Birthdays are taken from each member's date of birth; weddings, baptisms and any custom anniversaries you've added are celebrated on their day.",
+          "Make sure members have the relevant dates on their profile so no one is missed.",
+        ],
+      },
+    ],
+    links: [
+      { label: "Celebration settings", href: "/settings/celebrations" },
+      { label: "Members", href: "/members" },
+    ],
+    tip: "Birthdays & anniversaries in the next 14 days also show on your dashboard.",
+    keywords: ["birthday", "anniversary", "celebration", "wedding", "baptism", "auto message"],
+  },
+  {
+    slug: "media",
+    title: "Media library",
+    category: "content",
+    icon: "media",
+    summary: "Upload sermons, photos and files — then share links or downloads.",
+    minutes: 4,
+    sections: [
+      {
+        title: "Upload files",
+        body: [
+          "Open Media → Upload files. Pick a category (Sermon, Photo, or Document/Other) and choose any file: audio, video, images, PDFs and more.",
+          "Images and videos are automatically optimised and resized as they upload, so they take up far less space.",
+        ],
+      },
+      {
+        title: "Share & download",
+        body: [
+          "Each file has a Copy link button (a shareable link), a download option, and inline players for audio and video.",
+          "Use it for sermon recordings, bulletins, flyers, photo galleries — anything your church needs to store or share.",
+        ],
+      },
+      {
+        title: "Storage",
+        body: [
+          "Every church gets 200MB of free storage, shown as a live usage bar at the top of the library.",
+          "Need more? Upgrade with a monthly storage add-on, paid from your church wallet (Settings → Storage).",
+        ],
+      },
+    ],
+    links: [
+      { label: "Open Media", href: "/media" },
+      { label: "Storage", href: "/settings/storage" },
+    ],
+    keywords: ["media", "sermon", "audio", "video", "photo", "file", "upload", "download", "storage", "cloudinary"],
+  },
+  {
+    slug: "forms",
+    title: "Building forms",
+    category: "content",
+    icon: "forms",
+    summary: "Create your own forms, share a link and collect responses.",
+    minutes: 5,
+    sections: [
+      {
+        title: "Build a form",
+        body: [
+          "Open Forms → New form. Add a title and questions, choose each answer type (short text, paragraph, email, phone, number, date, dropdown, multiple choice, checkboxes, yes/no), mark fields required and reorder them.",
+          "Choose your own link — e.g. flockinsight.com/f/easter-2026. Anyone can fill it in; no account needed.",
+        ],
+      },
+      {
+        title: "Publish & share",
+        body: [
+          "Set the form to Live, then copy the link and share it on WhatsApp, social media or your bulletin.",
+          "Set it to Closed any time to stop accepting responses.",
+        ],
+      },
+      {
+        title: "Collect & manage responses",
+        body: [
+          "The response count updates live, with a one-click CSV export of everything.",
+          "Submissions can automatically match or create a member (and optionally add them to Follow-up), and you can get an email and in-app notification on every response — each toggleable per form.",
+        ],
+      },
+    ],
+    links: [{ label: "Open Forms", href: "/forms" }],
+    keywords: ["form", "survey", "registration", "responses", "google forms", "signup", "collect"],
+  },
+  {
+    slug: "devotionals",
+    title: "Devotionals & newsletters",
+    category: "content",
+    icon: "devotionals",
+    summary: "Write devotionals and newsletters, then send them by email.",
+    minutes: 5,
+    sections: [
+      {
+        title: "Write a devotional or newsletter",
+        body: [
+          "Open Devotionals → New devotional (or New newsletter). Add a title, an optional cover image, and your message.",
+          "Choose who receives it: your members, your subscribers, or both.",
+        ],
+      },
+      {
+        title: "Send now or schedule",
+        body: [
+          "Send immediately, or schedule it for a specific date and time — perfect for a daily devotional or a weekly newsletter.",
+          "Sent items show how many recipients received them.",
+        ],
+      },
+      {
+        title: "Subscribers",
+        body: [
+          "People who sign up on your public page are added to your subscriber list automatically.",
+          "Add or remove subscribers manually, see the live count, and export the full name + email list to CSV (Devotionals → Subscribers).",
+        ],
+      },
+    ],
+    links: [
+      { label: "Open Devotionals", href: "/devotionals" },
+      { label: "Public page", href: "/settings/public" },
+    ],
+    tip: "Email sending uses your church's email — no SMS credits needed for newsletters.",
+    keywords: ["devotional", "newsletter", "email", "subscribers", "mailing list", "bulk email", "schedule"],
+  },
+  {
+    slug: "events",
+    title: "Events & programs",
+    category: "content",
+    icon: "events",
+    summary: "Publish events and programs with flyers and share them.",
+    minutes: 3,
+    sections: [
+      {
+        title: "Create an event",
+        body: [
+          "Open Events → New. Add the title, date, time, venue and a flyer image.",
+          "Public events appear on your church's public page and in the public events directory automatically.",
+        ],
+      },
+    ],
+    links: [{ label: "Open Events", href: "/my-events" }],
+    keywords: ["event", "program", "flyer", "calendar", "crusade", "conference"],
+  },
+  {
     slug: "public-page",
     title: "Your public church page & invite link",
     category: "public",
     icon: "public",
-    summary: "A shareable page about your church that members use to invite people.",
+    summary: "A modern, shareable landing page for your church — with a colour theme and a newsletter sign-up.",
     minutes: 5,
     sections: [
       {
         title: "Build your page",
         body: [
           "Settings → Public page. Set your link name (e.g. flockinsight.com/c/grace-chapel), upload a logo and cover, and write your about, denomination and tagline.",
-          "Add your address, landmarks and (optionally) your map location so people can get directions. Add photos to bring it alive.",
-          "Add contact details and social links. Your service times come from Settings → Services automatically.",
+          "Add your address, landmarks and (optionally) your map location so people can get directions. Add photos to fill the gallery.",
+          "Add contact details and social links. Your service times and upcoming events appear automatically.",
+        ],
+      },
+      {
+        title: "Pick a colour theme",
+        body: [
+          "Choose one of 7 colour themes under Branding — it sets the accent colours and hero gradient on your public page so it matches your church's identity.",
+        ],
+      },
+      {
+        title: "Collect subscribers",
+        body: [
+          "Your public page includes a built-in newsletter sign-up. Anyone — not just members — can enter their name and email to subscribe.",
+          "Subscribers appear under Devotionals → Subscribers, where you can see the count, export them to CSV, and email them devotionals and newsletters.",
         ],
       },
       {
@@ -327,6 +500,36 @@ export const GUIDES: Guide[] = [
       { label: "Browse the directory", href: "/churches" },
     ],
     keywords: ["public", "page", "invite", "share", "directory", "profile", "link", "handle"],
+  },
+  {
+    slug: "wallet-storage",
+    title: "Wallet & storage",
+    category: "account",
+    icon: "wallet",
+    summary: "One wallet funds SMS and storage; upgrade storage when you need more.",
+    minutes: 3,
+    sections: [
+      {
+        title: "Your wallet",
+        body: [
+          "Settings → Wallet shows your single church wallet balance, which funds SMS sending and storage upgrades.",
+          "Top up via card or transfer (Paystack). Every credit and deduction is listed in your transaction history.",
+        ],
+      },
+      {
+        title: "Storage & upgrades",
+        body: [
+          "Every church gets 200MB of free storage for media and uploads. Track usage on the Media page or in Settings → Storage.",
+          "Need more space? Subscribe to a monthly storage add-on (e.g. +1GB, +5GB, +10GB) — it's billed automatically from your wallet, and your files are always kept safe even if an add-on lapses.",
+        ],
+      },
+    ],
+    links: [
+      { label: "Wallet", href: "/settings/wallet" },
+      { label: "Storage", href: "/settings/storage" },
+      { label: "Media", href: "/media" },
+    ],
+    keywords: ["wallet", "balance", "top up", "storage", "upgrade", "gigabyte", "quota", "paystack"],
   },
   {
     slug: "billing",
