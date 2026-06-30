@@ -23,7 +23,7 @@ export function formatBytes(n: number, decimals = 1): string {
 export type StorageBundle = { gb: number; price: number };
 
 export const DEFAULT_STORAGE_BUNDLES: StorageBundle[] = [
-  { gb: 1, price: 500 },
-  { gb: 5, price: 2000 },
-  { gb: 20, price: 7000 },
+  { gb: 1, price: 1200 },
+  { gb: 5, price: 5500 },
+  { gb: 10, price: 9500 },
 ];

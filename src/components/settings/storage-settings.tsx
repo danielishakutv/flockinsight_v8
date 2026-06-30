@@ -211,6 +211,19 @@ export function StorageSettings({
             );
           })}
         </div>
+
+        {/* More storage — contact us */}
+        <div className="bg-muted/40 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed p-4">
+          <div>
+            <p className="font-semibold">Need more than 10GB?</p>
+            <p className="text-muted-foreground text-sm">
+              We&apos;ll set up a custom storage plan for your church.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/help/support">Contact us</Link>
+          </Button>
+        </div>
       </div>
     </div>
   );
