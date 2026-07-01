@@ -9,6 +9,7 @@ import { MobileNav } from "@/components/app/mobile-nav";
 import { ImpersonationBanner } from "@/components/app/impersonation-banner";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
+import { UploadProvider } from "@/components/media/upload-provider";
 
 export default async function AppLayout({
   children,
@@ -51,7 +52,9 @@ export default async function AppLayout({
             unread={unread}
           />
           <DesktopTopbar unread={unread} canRecord={canRecord} />
-          <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">{children}</main>
+          <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">
+            <UploadProvider>{children}</UploadProvider>
+          </main>
         </div>
 
         <MobileNav perms={perms} isOwner={access.isOwner} />

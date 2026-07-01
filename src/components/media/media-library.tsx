@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Upload,
@@ -15,14 +15,22 @@ import {
   Search,
   HardDrive,
   ArrowUpCircle,
+  Play,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { compress } from "@/components/settings/image-upload";
 import { deleteMediaAction } from "@/app/(app)/media/actions";
+import { useUploads, type UploadResult } from "@/components/media/upload-provider";
 import { formatBytes } from "@/lib/storage-bytes";
 import type { StorageInfo } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Item = {
@@ -43,14 +51,18 @@ type Item = {
 
 type Group = "all" | "image" | "audio" | "video" | "document" | "sermon";
 
-function groupOf(m: Item): "image" | "audio" | "video" | "document" {
+function groupOf(m: { mime: string }): "image" | "audio" | "video" | "document" {
   if (m.mime.startsWith("image/")) return "image";
   if (m.mime.startsWith("audio/")) return "audio";
   if (m.mime.startsWith("video/")) return "video";
   return "document";
 }
 
-// Upload category the church picks → media `kind`.
+/** The best src for a media item — Cloudinary URL, else our own /media route. */
+function srcOf(item: { url: string | null; id: string }): string {
+  return item.url || `/media/${item.id}`;
+}
+
 const CATEGORIES = [
   { value: "sermon", label: "Sermon" },
   { value: "photo", label: "Photo" },
@@ -84,15 +96,42 @@ export function MediaLibrary({
   storage: StorageInfo;
   items: Item[];
 }) {
+  const { enqueue, onComplete } = useUploads();
   const [items, setItems] = useState<Item[]>(initial);
   const [used, setUsed] = useState(storage.used);
   const [filter, setFilter] = useState<Group>("all");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>(
-    "sermon",
-  );
-  const [busy, setBusy] = useState(false);
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>("sermon");
+  const [preview, setPreview] = useState<Item | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Live-add files as background uploads finish (even after navigating back).
+  useEffect(() => {
+    return onComplete((r: UploadResult) => {
+      setItems((prev) => {
+        if (prev.some((x) => x.id === r.id)) return prev;
+        return [
+          {
+            id: r.id,
+            kind: r.kind,
+            mime: r.mime,
+            bytes: r.bytes,
+            url: r.url,
+            provider: "cloudinary",
+            resourceType: null,
+            title: r.title,
+            originalName: r.originalName,
+            width: r.width,
+            height: r.height,
+            durationSec: r.durationSec,
+            createdAt: r.createdAt ?? new Date().toISOString(),
+          },
+          ...prev,
+        ];
+      });
+      setUsed((u) => u + r.bytes);
+    });
+  }, [onComplete]);
 
   const limit = storage.limit;
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
@@ -102,82 +141,21 @@ export function MediaLibrary({
     const q = query.trim().toLowerCase();
     return items.filter((m) => {
       if (filter === "sermon" && m.kind !== "sermon") return false;
-      if (
-        filter !== "all" &&
-        filter !== "sermon" &&
-        groupOf(m) !== filter
-      )
-        return false;
+      if (filter !== "all" && filter !== "sermon" && groupOf(m) !== filter) return false;
       if (!q) return true;
-      const name = (m.title || m.originalName || "").toLowerCase();
-      return name.includes(q);
+      return (m.title || m.originalName || "").toLowerCase().includes(q);
     });
   }, [items, filter, query]);
 
-  async function uploadOne(file: File) {
-    const isImage = file.type.startsWith("image/");
-    const fd = new FormData();
-    if (isImage) {
-      const blob = await compress(file, 1920);
-      fd.append(
-        "file",
-        blob,
-        (file.name.replace(/\.[^.]+$/, "") || "image") + ".webp",
-      );
-    } else {
-      fd.append("file", file);
-    }
-    fd.append("kind", category);
-    const res = await fetch("/api/media/upload", { method: "POST", body: fd });
-    const data = (await res.json().catch(() => null)) as
-      | ({ ok: true } & Item & { id: string; bytes: number })
-      | { ok: false; error: string }
-      | null;
-    if (!data || !data.ok) throw new Error(data?.error || "Upload failed");
-    return data;
-  }
-
-  async function onPick(files: FileList | null) {
+  function pick(files: FileList | null) {
     if (!files?.length) return;
-    setBusy(true);
-    let added = 0;
-    try {
-      for (const file of Array.from(files)) {
-        try {
-          const data = await uploadOne(file);
-          const item: Item = {
-            id: data.id,
-            kind: data.kind ?? category,
-            mime: data.mime ?? file.type,
-            bytes: data.bytes,
-            url: data.url ?? null,
-            provider: "cloudinary",
-            resourceType: data.resourceType ?? null,
-            title: data.title ?? null,
-            originalName: file.name,
-            width: data.width ?? null,
-            height: data.height ?? null,
-            durationSec: data.durationSec ?? null,
-            createdAt: new Date().toISOString(),
-          };
-          setItems((prev) => [item, ...prev]);
-          setUsed((u) => u + data.bytes);
-          added++;
-        } catch (e) {
-          toast.error(
-            `${file.name}: ${e instanceof Error ? e.message : "Upload failed"}`,
-          );
-        }
-      }
-      if (added) toast.success(`Uploaded ${added} file${added > 1 ? "s" : ""}.`);
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
+    enqueue(files, category);
+    if (inputRef.current) inputRef.current.value = "";
+    toast.message("Upload started — you can keep working while it finishes.");
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Storage usage */}
       <div className="bg-card rounded-2xl border p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -214,8 +192,7 @@ export function MediaLibrary({
         </div>
         {nearFull && (
           <p className="text-destructive mt-2 text-sm">
-            You&apos;re running low on storage. Delete files or upgrade to keep
-            uploading.
+            You&apos;re running low on storage. Delete files or upgrade to keep uploading.
           </p>
         )}
       </div>
@@ -250,27 +227,19 @@ export function MediaLibrary({
                   ))}
                 </div>
               </div>
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => inputRef.current?.click()}
-              >
-                {busy ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Upload className="size-4" />
-                )}
-                Upload files
+              <Button type="button" onClick={() => inputRef.current?.click()}>
+                <Upload className="size-4" /> Upload files
               </Button>
               <p className="text-muted-foreground text-sm">
-                Images & video are optimised automatically to save space.
+                Images & video are optimised automatically. Uploads keep running
+                if you move to another page.
               </p>
               <input
                 ref={inputRef}
                 type="file"
                 multiple
                 className="hidden"
-                onChange={(e) => onPick(e.target.files)}
+                onChange={(e) => pick(e.target.files)}
               />
             </div>
           )}
@@ -315,12 +284,13 @@ export function MediaLibrary({
             : "No files match your filter."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {filtered.map((m) => (
             <MediaCard
               key={m.id}
               item={m}
               canManage={canManage}
+              onOpen={() => setPreview(m)}
               onDeleted={() => {
                 setItems((prev) => prev.filter((x) => x.id !== m.id));
                 setUsed((u) => Math.max(0, u - m.bytes));
@@ -329,6 +299,8 @@ export function MediaLibrary({
           ))}
         </div>
       )}
+
+      <PreviewModal item={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }
@@ -336,16 +308,19 @@ export function MediaLibrary({
 function MediaCard({
   item,
   canManage,
+  onOpen,
   onDeleted,
 }: {
   item: Item;
   canManage: boolean;
+  onOpen: () => void;
   onDeleted: () => void;
 }) {
   const [pending, start] = useTransition();
   const group = groupOf(item);
   const name = item.title || item.originalName || "Untitled";
   const link = `/media/${item.id}`;
+  const src = srcOf(item);
 
   function copyLink() {
     const abs =
@@ -372,80 +347,66 @@ function MediaCard({
   }
 
   return (
-    <div className="bg-card flex flex-col overflow-hidden rounded-2xl border">
-      <div className="bg-muted relative aspect-video">
-        {group === "image" && item.url ? (
+    <div className="bg-card group flex flex-col overflow-hidden rounded-xl border">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="bg-muted relative aspect-square w-full overflow-hidden"
+        title={`Preview ${name}`}
+      >
+        {group === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.url} alt={name} className="size-full object-cover" />
-        ) : group === "video" && item.url ? (
-          <video src={item.url} controls className="size-full object-contain" />
+          <img
+            src={src}
+            alt={name}
+            loading="lazy"
+            className="size-full object-cover transition-transform group-hover:scale-105"
+          />
+        ) : group === "video" ? (
+          <div className="grid size-full place-items-center bg-slate-900">
+            <div className="grid size-11 place-items-center rounded-full bg-white/90 text-slate-900">
+              <Play className="size-5 translate-x-0.5" />
+            </div>
+          </div>
         ) : group === "audio" ? (
-          <div className="flex size-full flex-col items-center justify-center gap-3 p-4">
-            <Music className="text-muted-foreground size-8" />
-            {item.url && (
-              <audio src={item.url} controls className="w-full" />
-            )}
+          <div className="from-primary/20 grid size-full place-items-center bg-gradient-to-br to-fuchsia-500/20">
+            <Music className="text-primary size-8" />
           </div>
         ) : (
-          <div className="text-muted-foreground flex size-full flex-col items-center justify-center gap-2">
-            <FileText className="size-10" />
-            <span className="text-xs uppercase">
-              {item.mime.split("/").pop()}
-            </span>
+          <div className="text-muted-foreground grid size-full place-items-center">
+            <FileText className="size-8" />
           </div>
         )}
-        <span className="bg-background/80 absolute left-2 top-2 rounded-md px-2 py-0.5 text-xs font-medium capitalize backdrop-blur">
+        <span className="bg-background/85 absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold capitalize backdrop-blur">
           {item.kind === "sermon" ? "Sermon" : group}
         </span>
-      </div>
+      </button>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex items-start gap-2">
-          <GroupIcon group={group} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold" title={name}>
-              {name}
-            </p>
-            <p className="text-muted-foreground text-xs">
-              {formatBytes(item.bytes)}
-              {fmtDuration(item.durationSec)
-                ? ` · ${fmtDuration(item.durationSec)}`
-                : ""}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-auto flex items-center gap-1 pt-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={copyLink}
-            title="Copy link"
-          >
-            <Link2 className="size-4" /> Link
-          </Button>
-          <Button asChild variant="ghost" size="sm" title="Download">
+      <div className="flex flex-1 flex-col gap-1 p-2">
+        <p className="truncate text-xs font-semibold leading-tight" title={name}>
+          {name}
+        </p>
+        <p className="text-muted-foreground text-[11px]">
+          {formatBytes(item.bytes)}
+          {fmtDuration(item.durationSec) ? ` · ${fmtDuration(item.durationSec)}` : ""}
+        </p>
+        <div className="mt-auto flex items-center gap-0.5 pt-1">
+          <IconBtn title="Copy link" onClick={copyLink}>
+            <Link2 className="size-4" />
+          </IconBtn>
+          <Button asChild variant="ghost" size="icon" className="size-7" title="Download">
             <a href={`${link}?download=1`}>
-              <Download className="size-4" /> Save
+              <Download className="size-4" />
             </a>
           </Button>
           {canManage && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={pending}
+            <IconBtn
+              title="Delete"
               onClick={onDelete}
               className="text-muted-foreground hover:text-destructive ml-auto"
-              title="Delete"
             >
-              {pending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-            </Button>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            </IconBtn>
           )}
         </div>
       </div>
@@ -453,7 +414,115 @@ function MediaCard({
   );
 }
 
-function GroupIcon({ group }: { group: "image" | "audio" | "video" | "document" }) {
+function IconBtn({
+  children,
+  onClick,
+  title,
+  className,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  title: string;
+  className?: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn("size-7", className)}
+      title={title}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => void }) {
+  if (!item) return null;
+  const group = groupOf(item);
+  const name = item.title || item.originalName || "Untitled";
+  const src = srcOf(item);
+  const isPdf = item.mime === "application/pdf";
+
+  return (
+    <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="truncate pr-6">{name}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {group === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt={name}
+              className="mx-auto max-h-[70vh] w-auto rounded-lg object-contain"
+            />
+          ) : group === "video" ? (
+            <video
+              src={src}
+              controls
+              autoPlay
+              className="max-h-[70vh] w-full rounded-lg bg-black"
+            />
+          ) : group === "audio" ? (
+            <div className="bg-muted flex flex-col items-center gap-4 rounded-xl p-8">
+              <Music className="text-primary size-12" />
+              <audio src={src} controls autoPlay className="w-full" />
+            </div>
+          ) : isPdf ? (
+            <object data={src} type="application/pdf" className="h-[70vh] w-full rounded-lg border">
+              <div className="text-muted-foreground p-8 text-center text-sm">
+                Can&apos;t preview this PDF here.
+                <a href={src} target="_blank" rel="noreferrer" className="text-primary ml-1 font-medium">
+                  Open it in a new tab
+                </a>
+                .
+              </div>
+            </object>
+          ) : (
+            <div className="text-muted-foreground bg-muted grid place-items-center gap-3 rounded-xl p-12 text-center">
+              <FileText className="size-12" />
+              <p className="text-sm">No inline preview for this file type.</p>
+              <Button asChild variant="outline" size="sm">
+                <a href={src} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" /> Open file
+                </a>
+              </Button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const abs = new URL(`/media/${item.id}`, window.location.origin).toString();
+                navigator.clipboard.writeText(abs).then(() => toast.success("Link copied"));
+              }}
+            >
+              <Link2 className="size-4" /> Copy link
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <a href={`/media/${item.id}?download=1`}>
+                <Download className="size-4" /> Download
+              </a>
+            </Button>
+            <span className="text-muted-foreground ml-auto text-xs">
+              {formatBytes(item.bytes)}
+            </span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// (kept for potential reuse)
+export function MediaGroupIcon({ group }: { group: "image" | "audio" | "video" | "document" }) {
   const cls = "text-muted-foreground size-4 shrink-0";
   if (group === "image") return <ImageIcon className={cls} />;
   if (group === "audio") return <Music className={cls} />;
