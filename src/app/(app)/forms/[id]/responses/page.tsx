@@ -2,16 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { ArrowLeft, Download, Inbox, UserRound } from "lucide-react";
-import { format } from "date-fns";
+import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { form, formResponse, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
-import { displayValue, type FormField } from "@/lib/forms-shared";
+import { type FormField, type FieldValue } from "@/lib/forms-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { FormResponsesLive } from "@/components/forms/form-responses-live";
 
 export const metadata = { title: "Responses" };
 
@@ -57,70 +56,19 @@ export default async function FormResponsesPage({
           <ArrowLeft className="size-4" /> Forms
         </Link>
       </Button>
-      <PageHeader
-        title={f.title}
-        description={`${rows.length} response${rows.length === 1 ? "" : "s"}`}
-        action={
-          rows.length > 0 ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={`/forms/${id}/responses/export`}>
-                <Download className="size-4" /> Export CSV
-              </a>
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageHeader title={f.title} description="Responses update live as they come in." />
 
-      {rows.length === 0 ? (
-        <div className="text-muted-foreground rounded-2xl border border-dashed py-16 text-center">
-          <Inbox className="mx-auto mb-3 size-8 opacity-60" />
-          No responses yet. Share the form link to start collecting.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((r) => {
-            const data = (r.data ?? {}) as Record<string, unknown>;
-            const memberName = [r.firstName, r.lastName].filter(Boolean).join(" ");
-            return (
-              <Card key={r.id}>
-                <CardContent className="space-y-3 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-muted-foreground text-xs">
-                      {format(r.createdAt, "MMM d, yyyy · h:mm a")}
-                    </p>
-                    {r.memberId && (
-                      <Link
-                        href={`/members/${r.memberId}`}
-                        className="text-primary inline-flex items-center gap-1 text-xs font-medium hover:underline"
-                      >
-                        <UserRound className="size-3.5" />
-                        {memberName || "Member"}
-                      </Link>
-                    )}
-                  </div>
-                  <dl className="divide-y">
-                    {fields.map((field) => (
-                      <div
-                        key={field.id}
-                        className="flex flex-col gap-0.5 py-1.5 sm:flex-row sm:gap-4"
-                      >
-                        <dt className="text-muted-foreground w-48 shrink-0 text-sm">
-                          {field.label}
-                        </dt>
-                        <dd className="text-sm font-medium">
-                          {displayValue(
-                            (data[field.id] as never) ?? null,
-                          ) || "—"}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+      <FormResponsesLive
+        formId={id}
+        fields={fields}
+        initial={rows.map((r) => ({
+          id: r.id,
+          data: (r.data ?? {}) as Record<string, FieldValue>,
+          memberId: r.memberId,
+          memberName: [r.firstName, r.lastName].filter(Boolean).join(" "),
+          createdAt: r.createdAt.toISOString(),
+        }))}
+      />
     </PageContainer>
   );
 }

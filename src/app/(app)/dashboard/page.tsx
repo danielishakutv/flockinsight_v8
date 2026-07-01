@@ -167,9 +167,9 @@ export default async function DashboardPage() {
         <DateTime className="text-muted-foreground mt-2" />
       </div>
 
-      <div className="grid gap-4 lg:gap-6 xl:grid-cols-3">
+      <div className="grid min-w-0 gap-4 lg:gap-6 xl:grid-cols-3">
         {/* Main column */}
-        <div className="space-y-4 xl:col-span-2">
+        <div className="min-w-0 space-y-4 xl:col-span-2">
           {!last ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
@@ -299,7 +299,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Right column: personal to-do + birthdays + anniversaries */}
-        <aside className="space-y-4">
+        <aside className="min-w-0 space-y-4">
           {church.publicEnabled && church.handle && (
             <InviteCard
               url={`${siteUrl()}${churchPath(church.handle)}`}

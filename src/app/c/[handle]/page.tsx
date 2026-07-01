@@ -21,6 +21,7 @@ import { siteUrl, churchUrl } from "@/lib/site";
 import { getTheme, themeVars } from "@/lib/church-themes";
 import { ShareButton } from "@/components/public/share-button";
 import { NewsletterSignup } from "@/components/public/newsletter-signup";
+import { PublicThemeToggle } from "@/components/public/public-theme-toggle";
 
 export const revalidate = 3600;
 
@@ -149,6 +150,8 @@ export default async function ChurchPublicPage({
       style={themeVars(theme)}
       className="min-h-dvh bg-white pb-20 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
     >
+      <PublicThemeToggle />
+
       {/* ===== Hero ===== */}
       <header className="relative isolate overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[var(--brand-from)] to-[var(--brand-to)]" />
@@ -420,6 +423,21 @@ export default async function ChurchPublicPage({
             <NewsletterSignup handle={handle} churchName={c.name} />
           </div>
         </section>
+
+        {/* ===== "Get your own page" nudge ===== */}
+        <div className="rounded-3xl border border-dashed bg-slate-50 p-6 text-center dark:bg-slate-900/60">
+          <p className="text-lg font-bold">Do you lead a church or fellowship?</p>
+          <p className="text-muted-foreground mx-auto mt-1 max-w-md text-sm">
+            Get a beautiful page like this — plus attendance, members, giving,
+            devotionals and more — free on FlockInsight.
+          </p>
+          <Link
+            href="/signup"
+            className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--brand)] px-6 py-3 text-sm font-bold text-white shadow transition hover:opacity-90"
+          >
+            <ArrowRight className="size-4" /> Create your free church page
+          </Link>
+        </div>
 
         {/* ===== Footer ===== */}
         <div className="pt-2 text-center text-xs text-slate-400">
