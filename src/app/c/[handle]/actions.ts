@@ -28,7 +28,7 @@ export async function subscribeNewsletter(input: {
   const d = parsed.data;
 
   const [c] = await db
-    .select({ id: church.id, name: church.name })
+    .select({ id: church.id, name: church.name, publicEmail: church.publicEmail })
     .from(church)
     .where(and(eq(church.handle, d.handle), eq(church.publicEnabled, true)))
     .limit(1);
@@ -72,6 +72,8 @@ export async function subscribeNewsletter(input: {
         to: d.email,
         subject: `You're subscribed to ${c.name}`,
         html,
+        fromName: c.name,
+        replyTo: c.publicEmail || undefined,
       }).catch(() => false);
     }
   }

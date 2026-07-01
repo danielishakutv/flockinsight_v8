@@ -41,6 +41,27 @@ export type EmailAttachment = {
   contentType?: string;
 };
 
+const DEFAULT_FROM =
+  process.env.EMAIL_FROM ?? "FlockInsight <no-reply@flockinsight.com>";
+
+/** The bare address of the sending identity (always the flockinsight domain). */
+function fromAddress(): string {
+  const m = DEFAULT_FROM.match(/<([^>]+)>/);
+  return (m ? m[1] : DEFAULT_FROM).trim();
+}
+
+/**
+ * Build the From header. When `fromName` is given (e.g. a church's name), the
+ * display name becomes the church's — but the sending ADDRESS/domain stays
+ * flockinsight.com so DKIM/SPF and deliverability are unaffected.
+ */
+export function buildFrom(fromName?: string | null): string {
+  if (!fromName) return DEFAULT_FROM;
+  const name = fromName.replace(/["\r\n<>]/g, "").trim().slice(0, 78);
+  if (!name) return DEFAULT_FROM;
+  return `${name} <${fromAddress()}>`;
+}
+
 export async function sendEmail(opts: {
   to: string;
   subject: string;
@@ -48,10 +69,11 @@ export async function sendEmail(opts: {
   text?: string;
   cc?: string | string[];
   replyTo?: string;
+  /** Display name for the sender (e.g. the church's name). Domain stays ours. */
+  fromName?: string | null;
   attachments?: EmailAttachment[];
 }): Promise<boolean> {
-  const from =
-    process.env.EMAIL_FROM ?? "FlockInsight <no-reply@flockinsight.com>";
+  const from = buildFrom(opts.fromName);
 
   // Preferred: Resend API (uses RESEND_API_KEY).
   const resend = getResend();

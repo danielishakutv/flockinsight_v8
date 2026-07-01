@@ -74,6 +74,7 @@ export async function sendTestReminder(
       subject: `[Test] ${subject}`,
       html: emailLayout(subject, body.replace(/\n/g, "<br>")),
       text: body,
+      fromName: church.name,
     });
     if (!ok) return { ok: false, error: "Could not send the test email." };
   } catch {

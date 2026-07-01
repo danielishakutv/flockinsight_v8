@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { planPriceLabel } from "@/lib/plans";
 import { getPlans } from "@/lib/pricing";
 import { Wordmark } from "@/components/brand";
+import { PromoPopup } from "@/components/public/promo-popup";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ export default async function PricingPage() {
   const plans = await getPlans();
   return (
     <div className="min-h-dvh">
+      <PromoPopup />
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 lg:px-8">
         <Link href="/">
           <Wordmark />
@@ -42,6 +44,9 @@ export default async function PricingPage() {
             Start free and grow as your congregation grows. Prices in Naira, no
             card required to begin.
           </p>
+          <div className="bg-primary/10 text-primary mx-auto mt-6 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold">
+            <Sparkles className="size-4" /> Launch promo: your first 7 Sundays are free
+          </div>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-4">
@@ -62,10 +67,22 @@ export default async function PricingPage() {
               )}
               <h2 className="text-xl font-extrabold">{p.name}</h2>
               <p className="text-muted-foreground mt-1 text-sm">{p.tagline}</p>
-              <div className="mt-4 flex items-end gap-1">
-                <span className="text-3xl font-extrabold tracking-tight">
-                  {planPriceLabel(p)}
-                </span>
+              <div className="mt-4">
+                {p.priceMonthly && p.priceMonthly > 0 ? (
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                      {planPriceLabel(p)}
+                    </span>
+                    <span className="text-primary text-2xl font-extrabold">Free</span>
+                    <span className="text-primary basis-full text-xs font-bold uppercase tracking-wide">
+                      for your first 7 Sundays
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-3xl font-extrabold tracking-tight">
+                    {planPriceLabel(p)}
+                  </span>
+                )}
               </div>
               <ul className="mt-5 flex-1 space-y-2.5">
                 {p.features.map((f) => (

@@ -81,3 +81,67 @@ export async function restoreChurchAction(
   revalidatePath("/superadmin/churches");
   return res;
 }
+
+/** Comp a church: waive payment so it never needs to pay to use the app. */
+export async function setPaymentWaived(
+  id: string,
+  waived: boolean,
+): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const [c] = await db
+    .select({ name: church.name })
+    .from(church)
+    .where(eq(church.id, id))
+    .limit(1);
+  if (!c) return { ok: false, error: "Church not found." };
+
+  await db.update(church).set({ paymentWaived: waived }).where(eq(church.id, id));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "waive_payment",
+    summary: `${waived ? "Waived" : "Un-waived"} payment for "${c.name}"`,
+    targetType: "church",
+    targetId: id,
+  });
+
+  revalidatePath(`/superadmin/churches/${id}`);
+  return { ok: true };
+}
+
+/** Extend a church's free trial by N weeks (from the later of now / current end). */
+export async function extendTrial(id: string, weeks: number): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const w = Math.max(1, Math.min(52, Math.round(weeks)));
+
+  const [c] = await db
+    .select({ name: church.name, trialEndsAt: church.trialEndsAt })
+    .from(church)
+    .where(eq(church.id, id))
+    .limit(1);
+  if (!c) return { ok: false, error: "Church not found." };
+
+  const now = new Date();
+  const base =
+    c.trialEndsAt && new Date(c.trialEndsAt) > now ? new Date(c.trialEndsAt) : now;
+  const newEnd = new Date(base);
+  newEnd.setDate(newEnd.getDate() + w * 7);
+
+  await db
+    .update(church)
+    .set({ trialEndsAt: newEnd, trialReminderStage: 0 })
+    .where(eq(church.id, id));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "extend_trial",
+    summary: `Extended trial for "${c.name}" by ${w} week(s) → ${newEnd.toDateString()}`,
+    targetType: "church",
+    targetId: id,
+  });
+
+  revalidatePath(`/superadmin/churches/${id}`);
+  return { ok: true };
+}

@@ -223,6 +223,7 @@ async function notifyManagers(
           to: m.email,
           subject: `New response: ${f.title}`,
           html,
+          fromName: c?.name,
         }).catch(() => false),
       ),
     );

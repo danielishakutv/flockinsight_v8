@@ -5,6 +5,7 @@ import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { applyDiscount, getPlanPrices } from "@/lib/pricing";
 import { PLANS, type PlanId } from "@/lib/plans";
+import { computeStanding } from "@/lib/trial";
 import { PlanBilling } from "@/components/settings/plan-billing";
 
 export const metadata = { title: "Billing · Settings" };
@@ -52,6 +53,8 @@ export default async function BillingPage({
     PLANS.map((p) => [p.id, applyDiscount(basePrices[p.id], row.discount)]),
   ) as Record<PlanId, number | null>;
 
+  const standing = computeStanding(c);
+
   return (
     <PlanBilling
       currentPlan={row.plan}
@@ -59,6 +62,7 @@ export default async function BillingPage({
       discount={row.discount}
       prices={prices}
       basePrices={basePrices}
+      trial={{ state: standing.state, daysLeft: standing.daysLeft }}
       payments={payments.map((p) => ({
         id: p.id,
         plan: p.plan,

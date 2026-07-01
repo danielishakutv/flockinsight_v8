@@ -186,6 +186,7 @@ export async function runServiceReminders(): Promise<ReminderSummary> {
               subject,
               html: emailLayout(subject, bodyText.replace(/\n/g, "<br>")),
               text: bodyText,
+              fromName: c.name,
             });
             if (ok) sentEmail++;
           } catch {

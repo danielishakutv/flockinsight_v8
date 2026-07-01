@@ -256,6 +256,7 @@ export async function assignFollowUp(
             { label: "Open follow-up", url: `${siteUrl()}${link}` },
           ),
           text: `${me.name} assigned you to follow up with ${memberName} at ${church.name}. ${siteUrl()}${link}`,
+          fromName: church.name,
         });
       } catch (e) {
         console.error("[follow-up] assignment email failed", e);

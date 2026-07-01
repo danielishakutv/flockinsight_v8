@@ -29,6 +29,23 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.45.0",
+    date: "2026-07-01",
+    summary: "Launch promo: your first 7 Sundays free — plus church-branded emails.",
+    changes: {
+      Added: [
+        "Launch promo: every new church now uses FlockInsight completely free for its first 7 Sundays. No card required.",
+        "Friendly reminders go out 2 weeks, 1 week and 3 days before the trial ends — with the option to pay or request a trial extension from our team.",
+        "A clean promo pop-up welcomes visitors to the site (dismissible, mobile-friendly).",
+      ],
+      Improved: [
+        "Emails your church sends (devotionals, newsletters, reminders, celebrations, subscriber welcomes and more) now show YOUR church's name as the sender, while still delivering securely from the FlockInsight domain.",
+        "Pricing on the landing and billing pages now shows the free-trial promo clearly.",
+        "Note: SMS sending and storage upgrades are still funded from your church wallet, during and after the trial.",
+      ],
+    },
+  },
+  {
     version: "0.44.0",
     date: "2026-07-01",
     summary: "Media previews & background uploads, live form responses, safer backups, and SEO.",

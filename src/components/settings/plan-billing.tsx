@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Check, CreditCard, Loader2 } from "lucide-react";
+import { Check, CreditCard, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { startCheckout } from "@/app/(app)/settings/billing/actions";
 import { PLANS, planName, type PlanId } from "@/lib/plans";
@@ -38,6 +38,7 @@ export function PlanBilling({
   basePrices,
   payments,
   status,
+  trial,
 }: {
   currentPlan: string;
   renewsAt: string | null;
@@ -46,7 +47,10 @@ export function PlanBilling({
   basePrices: Record<PlanId, number | null>;
   payments: PaymentRow[];
   status: string | null;
+  trial?: { state: string; daysLeft: number | null } | null;
 }) {
+  const onTrial = trial?.state === "trialing";
+  const trialExpired = trial?.state === "expired";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
@@ -84,6 +88,34 @@ export function PlanBilling({
 
   return (
     <div className="space-y-5">
+      {/* Promo / trial banner */}
+      {(onTrial || trialExpired) && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-3 rounded-2xl p-4 text-white",
+            trialExpired
+              ? "bg-destructive"
+              : "from-primary bg-gradient-to-br to-violet-600",
+          )}
+        >
+          <Sparkles className="size-6 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">
+              {trialExpired
+                ? "Your free trial has ended"
+                : `Launch promo: your first 7 Sundays are free`}
+            </p>
+            <p className="text-sm text-white/85">
+              {trialExpired
+                ? "Choose a plan below to keep using FlockInsight."
+                : `Everything is free right now${
+                    trial?.daysLeft != null ? ` — ${trial.daysLeft} day${trial.daysLeft === 1 ? "" : "s"} left` : ""
+                  }. Pick a plan any time to continue after the trial.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Current plan */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-5">
@@ -135,11 +167,22 @@ export function PlanBilling({
                 {isCurrent && <Badge>Current</Badge>}
               </div>
               <p className="mt-1 text-xl font-extrabold tracking-tight">
-                {priceLabel}
-                {price !== null && price > 0 && discount > 0 && (
-                  <span className="text-muted-foreground ml-1 text-xs font-normal line-through">
-                    ₦{basePrices[p.id]?.toLocaleString()}
-                  </span>
+                {onTrial && price !== null && price > 0 ? (
+                  <>
+                    <span className="text-muted-foreground text-base font-bold line-through decoration-2">
+                      {priceLabel}
+                    </span>
+                    <span className="text-primary ml-2">Free now</span>
+                  </>
+                ) : (
+                  <>
+                    {priceLabel}
+                    {price !== null && price > 0 && discount > 0 && (
+                      <span className="text-muted-foreground ml-1 text-xs font-normal line-through">
+                        ₦{basePrices[p.id]?.toLocaleString()}
+                      </span>
+                    )}
+                  </>
                 )}
               </p>
               <ul className="mt-3 flex-1 space-y-1.5">

@@ -167,7 +167,7 @@ export async function sendCommunication(
         escapeHtml(subj),
         `<p>${escapeHtml(text).replace(/\n/g, "<br/>")}</p>`,
       );
-      return sendEmail({ to: r.email as string, subject: subj, html, text });
+      return sendEmail({ to: r.email as string, subject: subj, html, text, fromName: c.name });
     }),
   );
   const sent = results.filter((x) => x.status === "fulfilled" && x.value).length;
@@ -252,6 +252,7 @@ export async function notifyStaff(
             { label: "Open FlockInsight", url: `${BASE_URL}/notifications` },
           ),
           text: d.body,
+          fromName: c.name,
         }),
       ),
     );

@@ -17,6 +17,7 @@ import {
 import { Wordmark } from "@/components/brand";
 import { LandingHeaderAuth } from "@/components/landing-header-auth";
 import { JsonLd } from "@/components/seo/json-ld";
+import { PromoPopup } from "@/components/public/promo-popup";
 import { siteUrl } from "@/lib/site";
 import { getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
@@ -179,6 +180,7 @@ export default async function LandingPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <JsonLd data={jsonLd} />
+      <PromoPopup />
       {/* Header */}
       <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 lg:px-8">
@@ -228,7 +230,7 @@ export default async function LandingPage() {
               </Button>
             </div>
             <p className="text-muted-foreground mt-4 text-sm">
-              Free 30-day trial • No credit card required • Cancel anytime
+              First 7 Sundays free • No card required • Cancel anytime
             </p>
 
             {/* Stats */}
@@ -421,9 +423,25 @@ export default async function LandingPage() {
                   <p className="text-muted-foreground mt-1 text-sm">
                     {p.tagline}
                   </p>
-                  <p className="mt-4 text-3xl font-extrabold tracking-tight">
-                    {planPriceLabel(p)}
-                  </p>
+                  <div className="mt-4">
+                    {p.priceMonthly && p.priceMonthly > 0 ? (
+                      <>
+                        <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                          {planPriceLabel(p)}
+                        </span>
+                        <span className="text-primary ml-2 text-2xl font-extrabold">
+                          Free
+                        </span>
+                        <p className="text-primary mt-0.5 text-xs font-bold uppercase tracking-wide">
+                          First 7 Sundays
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-3xl font-extrabold tracking-tight">
+                        {planPriceLabel(p)}
+                      </span>
+                    )}
+                  </div>
                   <ul className="mt-5 flex-1 space-y-2.5">
                     {p.features.slice(0, 5).map((f) => (
                       <li key={f} className="flex items-start gap-2 text-sm">

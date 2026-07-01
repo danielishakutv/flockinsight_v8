@@ -71,6 +71,7 @@ export async function sendTestCelebration(
       subject,
       html: emailLayout(fillTemplate(d.birthdayEmailSubject, vars), body.replace(/\n/g, "<br>")),
       text: body,
+      fromName: church.name,
     });
     if (!ok) return { ok: false, error: "Could not send the test email." };
   } catch {

@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { payment } from "@/db/schema";
+import { payment, supportTicket, supportMessage } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { effectivePrice, activatePlan } from "@/lib/billing";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
+import { notifySupport } from "@/lib/support";
 import type { PlanId } from "@/lib/plans";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
@@ -76,4 +77,50 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
   });
   if (!init.ok) return init;
   return { ok: true, url: init.url };
+}
+
+export type ExtendResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Church asks the Head of Missions to extend their free trial. This opens a
+ * support ticket ("Extend my trial period") which the team can act on.
+ */
+export async function requestTrialExtension(): Promise<ExtendResult> {
+  const { church: c, user } = await requireChurch();
+
+  const [ticket] = await db
+    .insert(supportTicket)
+    .values({
+      churchId: c.id,
+      createdBy: user.id,
+      subject: "Extend my trial period",
+      category: "billing",
+      status: "open",
+      contactName: user.name,
+      contactEmail: user.email,
+    })
+    .returning({ id: supportTicket.id });
+
+  const body = `${c.name} is requesting an extension of their free trial (first 7 Sundays). Please review and extend if appropriate.`;
+  await db.insert(supportMessage).values({
+    ticketId: ticket.id,
+    authorType: "church",
+    authorUserId: user.id,
+    authorName: user.name,
+    body,
+  });
+
+  await notifySupport({
+    kind: "new",
+    ticketId: ticket.id,
+    churchName: c.name,
+    subject: "Extend my trial period",
+    category: "billing",
+    message: body,
+    contactName: user.name,
+    contactEmail: user.email,
+  }).catch(() => {});
+
+  revalidatePath("/help/support");
+  return { ok: true };
 }

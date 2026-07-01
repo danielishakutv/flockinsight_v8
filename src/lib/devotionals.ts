@@ -185,11 +185,12 @@ export async function sendDevotional(devotionalId: string): Promise<SendResult> 
   if (!claimed) return { ok: false, error: "This has already been sent." };
 
   const [c] = await db
-    .select({ name: church.name })
+    .select({ name: church.name, publicEmail: church.publicEmail })
     .from(church)
     .where(eq(church.id, d.churchId))
     .limit(1);
   const churchName = c?.name ?? "Your church";
+  const replyTo = c?.publicEmail || undefined;
 
   const recipients = await resolveRecipients(d.churchId, d.audience);
   if (recipients.length === 0) {
@@ -215,6 +216,8 @@ export async function sendDevotional(devotionalId: string): Promise<SendResult> 
       subject: d.title,
       html,
       text,
+      fromName: churchName,
+      replyTo,
     }).catch(() => false);
     if (ok) sent++;
   }

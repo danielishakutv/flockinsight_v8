@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church, staff, session as sessionTable, user } from "@/db/schema";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { ensureMemberForUser } from "@/lib/member-link";
+import { trialEndDate } from "@/lib/trial";
 
 export type SignUpResult =
   | { ok: true; signedIn: boolean }
@@ -97,9 +98,14 @@ export async function createChurchAccount(input: {
     try {
       await db.transaction(async (tx) => {
         // `handle` (public URL) defaults to the slug; the church can change it.
-        await tx
-          .insert(church)
-          .values({ id: churchId, name: churchName, slug, handle: slug });
+        await tx.insert(church).values({
+          id: churchId,
+          name: churchName,
+          slug,
+          handle: slug,
+          // Start the "first 7 Sundays free" trial from today.
+          trialEndsAt: trialEndDate(new Date()),
+        });
         await tx.insert(staff).values({
           id: crypto.randomUUID(),
           organizationId: churchId,

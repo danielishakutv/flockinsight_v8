@@ -160,6 +160,13 @@ export const church = pgTable("church", {
   // ----- Billing -----
   planRenewsAt: timestamp({ withTimezone: true }),
   planDiscountPct: integer().notNull().default(0), // admin-granted discount 0..100
+  // ----- Free trial ("first 7 Sundays free") -----
+  // End of the free trial. Null = grandfathered (never gated). Set at signup.
+  trialEndsAt: timestamp({ withTimezone: true }),
+  // Superadmin comp: when true, the church never needs to pay to keep using the app.
+  paymentWaived: boolean().notNull().default(false),
+  // Which trial-ending reminders have been sent (0=none,1=14d,2=7d,3=3d) — idempotent cron.
+  trialReminderStage: integer().notNull().default(0),
   // ----- SMS -----
   smsSenderId: text(), // requested/approved sender ID (<=11 chars)
   smsSenderStatus: smsSenderStatusEnum().notNull().default("none"),

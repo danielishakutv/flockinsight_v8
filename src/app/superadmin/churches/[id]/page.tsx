@@ -36,8 +36,10 @@ import { formatMoney } from "@/lib/money";
 import { planName } from "@/lib/plans";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
+import { computeStanding } from "@/lib/trial";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
 import { ChurchDataTools } from "@/components/superadmin/church-data-tools";
+import { ChurchTrialControls } from "@/components/superadmin/church-trial-controls";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,6 +171,18 @@ export default async function SuperadminChurchPage({
       .from(subscriber)
       .where(eq(subscriber.churchId, id)),
   ]);
+
+  const standing = computeStanding(c);
+  const standingLabel =
+    standing.state === "waived"
+      ? "Comped (payment waived)"
+      : standing.state === "paid"
+        ? "Active paid plan"
+        : standing.state === "trialing"
+          ? `On free trial (${standing.daysLeft ?? 0} days left)`
+          : standing.state === "expired"
+            ? "Trial expired — blocked until paid"
+            : "No trial set (grandfathered)";
 
   const memberTotalN = Number(memberTotal);
   const sessionCount = attAgg[0] ? Number(attAgg[0].c) : 0;
@@ -417,6 +431,13 @@ export default async function SuperadminChurchPage({
           </CardContent>
         </Card>
       </div>
+
+      <ChurchTrialControls
+        churchId={c.id}
+        paymentWaived={c.paymentWaived}
+        trialEndsAt={c.trialEndsAt ? c.trialEndsAt.toISOString() : null}
+        standingLabel={standingLabel}
+      />
 
       <ChurchDataTools churchId={c.id} churchName={c.name} />
     </div>

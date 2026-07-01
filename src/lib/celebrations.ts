@@ -147,7 +147,7 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
       .limit(2000);
 
     const smsRecipients: { phone: string; message: string }[] = [];
-    const emailJobs: { to: string; subject: string; body: string }[] = [];
+    const emailJobs: { to: string; subject: string; body: string; fromName: string }[] = [];
 
     for (const m of members) {
       const events = eventsForMember(m, mmdd, year);
@@ -174,6 +174,7 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
         if (c.email && m.email)
           emailJobs.push({
             to: m.email,
+            fromName: c.name,
             subject: fillTemplate(
               isBirthday ? c.birthdayEmailSubject : c.anniversaryEmailSubject,
               vars,
@@ -194,6 +195,7 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
           subject: job.subject,
           html: emailLayout(job.subject, job.body.replace(/\n/g, "<br>")),
           text: job.body,
+          fromName: job.fromName,
         });
         if (ok) emails++;
       } catch {
