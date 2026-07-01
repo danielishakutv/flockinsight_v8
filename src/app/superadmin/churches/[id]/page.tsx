@@ -8,8 +8,10 @@ import {
   ClipboardCheck,
   Coins,
   HandCoins,
+  HardDrive,
   Layers,
   LogIn,
+  Mail,
   UserCog,
   Users,
   UsersRound,
@@ -27,11 +29,15 @@ import {
   role,
   service,
   staff,
+  subscriber,
   user,
 } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
 import { planName } from "@/lib/plans";
+import { getStorageInfo } from "@/lib/storage";
+import { formatBytes } from "@/lib/storage-bytes";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
+import { ChurchDataTools } from "@/components/superadmin/church-data-tools";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,6 +160,16 @@ export default async function SuperadminChurchPage({
       .limit(10),
   ]);
 
+  const [storage, [{ subscriberTotal }]] = await Promise.all([
+    getStorageInfo(id, c.storageExtraBytes),
+    db
+      .select({
+        subscriberTotal: sql<number>`count(*) filter (where ${subscriber.status} = 'active')`,
+      })
+      .from(subscriber)
+      .where(eq(subscriber.churchId, id)),
+  ]);
+
   const memberTotalN = Number(memberTotal);
   const sessionCount = attAgg[0] ? Number(attAgg[0].c) : 0;
   const avgAttendance = attAgg[0] ? Number(attAgg[0].avg) : 0;
@@ -238,6 +254,18 @@ export default async function SuperadminChurchPage({
           }
           sub={lastAttendance ? format(parseISO(lastAttendance), "yyyy") : ""}
           icon={Layers}
+        />
+        <StatCard
+          label="Storage used"
+          value={formatBytes(storage.used)}
+          sub={`of ${formatBytes(storage.limit)}`}
+          icon={HardDrive}
+        />
+        <StatCard
+          label="Subscribers"
+          value={Number(subscriberTotal)}
+          sub="Newsletter mailing list"
+          icon={Mail}
         />
       </div>
 
@@ -389,6 +417,8 @@ export default async function SuperadminChurchPage({
           </CardContent>
         </Card>
       </div>
+
+      <ChurchDataTools churchId={c.id} churchName={c.name} />
     </div>
   );
 }

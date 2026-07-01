@@ -60,6 +60,7 @@ const QUICK_ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Notify", href: "/superadmin/notifications", icon: Bell },
   { label: "Support", href: "/superadmin/support", icon: LifeBuoy },
   { label: "Banners", href: "/superadmin/banners", icon: ImageIcon },
+  { label: "Changelog", href: "/changelog", icon: Sparkles },
 ];
 
 export default async function SuperadminOverviewPage() {
