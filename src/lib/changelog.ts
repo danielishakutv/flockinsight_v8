@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.44.0",
+    date: "2026-07-01",
+    summary: "Media previews & background uploads, live form responses, safer backups, and SEO.",
+    changes: {
+      Added: [
+        "Media library: preview images in a lightbox and play audio & video right in the app, with smaller thumbnails so you see more at a glance.",
+        "Uploads now run in the background with a live progress bar — keep working, or leave the page, while big files finish.",
+        "Form responses now update live on screen as they arrive — no refresh needed.",
+        "Public church pages get a light/dark switch and an invitation for other leaders to create their own free page.",
+        "New subscribers get an automatic welcome email, and your church is notified in-app the moment someone signs up.",
+        "Admins can export a full backup of any church, restore a backup as a brand-new church, and safely reset a church (backup + confirmation required).",
+      ],
+      Improved: [
+        "Church pages are now search-optimised with rich Google structured data, and public pages & events are added to the sitemap so churches get found.",
+        "Added HTTPS security headers across the site.",
+        "Fixed a layout overflow on the mobile dashboard.",
+      ],
+    },
+  },
+  {
     version: "0.43.0",
     date: "2026-06-30",
     summary: "Devotionals & newsletters, a redesigned church page, and cleaner settings.",

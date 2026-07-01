@@ -75,9 +75,9 @@ Create your own forms in minutes — registrations, surveys, prayer requests, vo
 **How it helps:** Stop paying for separate form tools or sending people to third-party sites. Collect data on your own branded link, keep it inside your church account, and turn sign-ups directly into members and follow-up.
 
 ### 10. Media library & storage
-Upload sermons, photos, documents and any other files. Images and videos are **automatically optimised and resized** to save space. Every file gets a shareable link, a download option and inline audio/video players. Each church starts with 200MB of free storage and a live usage bar; upgrade with affordable monthly add-ons when you need more.
+Upload sermons, photos, documents and any other files. Images and videos are **automatically optimised and resized** to save space. Preview everything in place — a lightbox for images, and built-in **players for audio and video** — plus a shareable link and one-click download for each file. Uploads run in the **background with a live progress bar**, so you can keep working (or move to another page) while big files finish. Each church starts with 200MB of free storage and a live usage bar; upgrade with affordable monthly add-ons when you need more.
 
-**How it helps:** A central home for sermon recordings, bulletins, flyers and photos — easy to share with members and light on storage.
+**How it helps:** A central home for sermon recordings, bulletins, flyers and photos — easy to preview, share and keep light on storage, even on slow connections.
 
 ### 11. Events & programs
 Publish events and programs with flyers, dates, times and venues. Public events appear on your church's public page and in the public events directory automatically.
@@ -125,9 +125,19 @@ Built-in, step-by-step guides for every feature, plus a direct support ticket sy
 **How it helps:** Your team is never stuck — answers are inside the app, and help is one message away.
 
 ### 20. Security, reliability & data ownership
-Each church's data is isolated and secured, with role-based access, rate-limited logins and **daily encrypted backups** (kept on-site and off-site). The platform runs on its own infrastructure behind Cloudflare with SSL.
+Each church's data is isolated and secured, with role-based access, rate-limited logins, hardened HTTP security headers (HSTS, anti-clickjacking, MIME-sniffing protection) and SSL end-to-end behind Cloudflare. The whole platform database is **backed up daily, encrypted, on-site and off-site**.
 
 **How it helps:** Member information is protected and recoverable — peace of mind for pastors and members alike.
+
+### 21. Backups, restore & recovery (never lose data)
+Beyond the automatic daily platform backups, each church's complete data can be **exported to a single backup file** at any time. If the worst happens, a backup can be **restored as a brand-new church** — the restore never overwrites live data, so recovery is always safe. Administrative resets require a fresh backup and a typed confirmation, and every sensitive action is written to an **audit log**.
+
+**How it helps:** A church's records — years of attendance, giving and member history — are safe, portable and recoverable. Data loss simply isn't on the table.
+
+### 22. Found on Google (SEO & discoverability)
+Every public church page is search-optimised out of the box: clean titles and descriptions, social share previews, canonical links, and rich **structured data** so churches can appear as proper results (with logo, address and contact) on Google. Public church pages and upcoming events are automatically added to the site's sitemap.
+
+**How it helps:** Newcomers searching for "a church near me" can actually find your church — a free front door that keeps working around the clock.
 
 ---
 
