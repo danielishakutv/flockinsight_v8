@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { LandingHeaderAuth } from "@/components/landing-header-auth";
+import { JsonLd } from "@/components/seo/json-ld";
+import { siteUrl } from "@/lib/site";
 import { getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
@@ -140,9 +142,43 @@ const testimonials = [
 ];
 
 export default async function LandingPage() {
+  const site = siteUrl();
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "FlockInsight",
+      url: site,
+      logo: `${site}/icon-512`,
+      description:
+        "Church management software for attendance, members, groups, giving, communication and more — built for Africa.",
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "FlockInsight",
+      url: site,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${site}/churches?q={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "FlockInsight",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web, iOS, Android",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "NGN" },
+      description:
+        "All-in-one church management: attendance, members, giving, follow-up, communication, devotionals, forms and a public church page.",
+    },
+  ];
   const plans = await getPlans();
   return (
     <div className="flex min-h-dvh flex-col">
+      <JsonLd data={jsonLd} />
       {/* Header */}
       <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 lg:px-8">

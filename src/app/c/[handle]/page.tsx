@@ -22,6 +22,7 @@ import { getTheme, themeVars } from "@/lib/church-themes";
 import { ShareButton } from "@/components/public/share-button";
 import { NewsletterSignup } from "@/components/public/newsletter-signup";
 import { PublicThemeToggle } from "@/components/public/public-theme-toggle";
+import { JsonLd } from "@/components/seo/json-ld";
 
 export const revalidate = 3600;
 
@@ -52,15 +53,22 @@ export async function generateMetadata({
   return {
     title: `${c.name} · FlockInsight`,
     description: desc,
+    alternates: { canonical: churchUrl(handle) },
     openGraph: {
       title: c.name,
       description: desc,
       url: churchUrl(handle),
-      images: img ? [`${siteUrl()}${img}`] : undefined,
+      images: img ? [img.startsWith("http") ? img : `${siteUrl()}${img}`] : undefined,
       type: "website",
     },
     twitter: { card: "summary_large_image", title: c.name, description: desc },
   };
+}
+
+/** Absolute URL for an asset that may be a Cloudinary URL or a /media path. */
+function abs(u: string | null): string | undefined {
+  if (!u) return undefined;
+  return u.startsWith("http") ? u : `${siteUrl()}${u}`;
 }
 
 function socialHref(key: string, value: string): string {
@@ -145,11 +153,39 @@ export default async function ChurchPublicPage({
         : null;
   const socials = Object.entries(c.socials ?? {}).filter(([, v]) => v);
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Church",
+    name: c.name,
+    url,
+    ...(abs(c.logo) ? { logo: abs(c.logo) } : {}),
+    ...(abs(c.coverUrl) || abs(c.logo) ? { image: abs(c.coverUrl) || abs(c.logo) } : {}),
+    ...(c.about ? { description: c.about.slice(0, 300) } : c.tagline ? { description: c.tagline } : {}),
+    ...(c.publicPhone ? { telephone: c.publicPhone } : {}),
+    ...(c.publicEmail ? { email: c.publicEmail } : {}),
+    ...(locationLine || c.city || c.state
+      ? {
+          address: {
+            "@type": "PostalAddress",
+            ...(c.addressText ? { streetAddress: c.addressText } : {}),
+            ...(c.city ? { addressLocality: c.city } : {}),
+            ...(c.state ? { addressRegion: c.state } : {}),
+            ...(c.country ? { addressCountry: c.country } : {}),
+          },
+        }
+      : {}),
+    ...(c.lat != null && c.lng != null
+      ? { geo: { "@type": "GeoCoordinates", latitude: c.lat, longitude: c.lng } }
+      : {}),
+    ...(socials.length ? { sameAs: socials.map(([k, v]) => socialHref(k, v)) } : {}),
+  };
+
   return (
     <div
       style={themeVars(theme)}
       className="min-h-dvh bg-white pb-20 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
     >
+      <JsonLd data={jsonLd} />
       <PublicThemeToggle />
 
       {/* ===== Hero ===== */}
