@@ -27,6 +27,8 @@ export default async function AttendancePage() {
       total: attendanceSession.totalCount,
       male: attendanceSession.maleCount,
       female: attendanceSession.femaleCount,
+      teenMale: attendanceSession.teenMaleCount,
+      teenFemale: attendanceSession.teenFemaleCount,
       children: attendanceSession.childrenCount,
       firstTimers: attendanceSession.firstTimerCount,
       newConverts: attendanceSession.newConvertCount,
@@ -120,9 +122,15 @@ export default async function AttendancePage() {
                           {r.serviceName ?? r.title ?? "Event"}
                         </p>
                         <div className="mt-1 flex flex-wrap gap-1.5">
-                          <Badge variant="secondary">M {r.male}</Badge>
-                          <Badge variant="secondary">W {r.female}</Badge>
-                          <Badge variant="secondary">C {r.children}</Badge>
+                          <Badge variant="secondary">
+                            Adults {r.male + r.female}
+                          </Badge>
+                          <Badge variant="secondary">
+                            Teens {r.teenMale + r.teenFemale}
+                          </Badge>
+                          <Badge variant="secondary">
+                            Children {r.children}
+                          </Badge>
                           {r.firstTimers > 0 && (
                             <Badge variant="outline">
                               {r.firstTimers} first-timer

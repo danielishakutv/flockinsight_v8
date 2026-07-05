@@ -253,6 +253,7 @@ export async function renderAttendancePdf(args: {
               <View style={styles.tileRow}>
                 <Tile label="Men" value={s.male} />
                 <Tile label="Women" value={s.female} />
+                <Tile label="Teens" value={s.teens} />
                 <Tile label="Children" value={s.children} />
                 <Tile label="First-timers" value={s.firstTimers} />
                 <Tile label="New converts" value={s.newConverts} />
@@ -265,6 +266,7 @@ export async function renderAttendancePdf(args: {
                   <Text style={[styles.th, styles.colName]}>Service / Event</Text>
                   <Text style={[styles.th, styles.colNum]}>Men</Text>
                   <Text style={[styles.th, styles.colNum]}>Women</Text>
+                  <Text style={[styles.th, styles.colNum]}>Teens</Text>
                   <Text style={[styles.th, styles.colNum]}>Children</Text>
                   <Text style={[styles.th, styles.colNum]}>First</Text>
                   <Text style={[styles.th, styles.colNum]}>New</Text>
@@ -280,6 +282,9 @@ export async function renderAttendancePdf(args: {
                     <Text style={[styles.tdName, styles.colName]}>{r.name}</Text>
                     <Text style={[styles.tdNum, styles.colNum]}>{r.male}</Text>
                     <Text style={[styles.tdNum, styles.colNum]}>{r.female}</Text>
+                    <Text style={[styles.tdNum, styles.colNum]}>
+                      {r.teenMale + r.teenFemale}
+                    </Text>
                     <Text style={[styles.tdNum, styles.colNum]}>{r.children}</Text>
                     <Text style={[styles.tdNum, styles.colNum]}>{r.firstTimers}</Text>
                     <Text style={[styles.tdNum, styles.colNum]}>{r.newConverts}</Text>
@@ -291,6 +296,7 @@ export async function renderAttendancePdf(args: {
                   <Text style={[styles.tfootCell, styles.colName]}> </Text>
                   <Text style={[styles.tfootCell, styles.colNum]}>{s.male}</Text>
                   <Text style={[styles.tfootCell, styles.colNum]}>{s.female}</Text>
+                  <Text style={[styles.tfootCell, styles.colNum]}>{s.teens}</Text>
                   <Text style={[styles.tfootCell, styles.colNum]}>{s.children}</Text>
                   <Text style={[styles.tfootCell, styles.colNum]}>{s.firstTimers}</Text>
                   <Text style={[styles.tfootCell, styles.colNum]}>{s.newConverts}</Text>

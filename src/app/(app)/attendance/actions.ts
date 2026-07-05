@@ -15,10 +15,23 @@ const recordSchema = z.object({
   serviceId: z.string().uuid().nullable(),
   title: z.string().trim().max(120).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  // Adults by gender.
   maleCount: count,
   femaleCount: count,
+  // Teens by gender.
+  teenMaleCount: count,
+  teenFemaleCount: count,
+  // Children / first-timers / converts by gender. The totals are sent by the
+  // form too: for rows recorded before the split they carry the legacy value
+  // (splits untouched at 0), otherwise they equal the split sum.
+  childMaleCount: count,
+  childFemaleCount: count,
   childrenCount: count,
+  firstTimerMaleCount: count,
+  firstTimerFemaleCount: count,
   firstTimerCount: count,
+  newConvertMaleCount: count,
+  newConvertFemaleCount: count,
   newConvertCount: count,
   notes: z.string().trim().max(1000).optional(),
 });
@@ -46,7 +59,22 @@ export async function recordAttendance(
     return { ok: false, error: "Pick a service or name the event." };
   }
 
-  const total = d.maleCount + d.femaleCount + d.childrenCount;
+  // A gender split always wins over the accompanying total; the total only
+  // stands on its own for legacy rows recorded before the split existed.
+  const children =
+    d.childMaleCount + d.childFemaleCount > 0
+      ? d.childMaleCount + d.childFemaleCount
+      : d.childrenCount;
+  const firstTimers =
+    d.firstTimerMaleCount + d.firstTimerFemaleCount > 0
+      ? d.firstTimerMaleCount + d.firstTimerFemaleCount
+      : d.firstTimerCount;
+  const newConverts =
+    d.newConvertMaleCount + d.newConvertFemaleCount > 0
+      ? d.newConvertMaleCount + d.newConvertFemaleCount
+      : d.newConvertCount;
+  const total =
+    d.maleCount + d.femaleCount + d.teenMaleCount + d.teenFemaleCount + children;
 
   const values = {
     churchId: church.id,
@@ -55,9 +83,17 @@ export async function recordAttendance(
     date: d.date,
     maleCount: d.maleCount,
     femaleCount: d.femaleCount,
-    childrenCount: d.childrenCount,
-    firstTimerCount: d.firstTimerCount,
-    newConvertCount: d.newConvertCount,
+    teenMaleCount: d.teenMaleCount,
+    teenFemaleCount: d.teenFemaleCount,
+    childMaleCount: d.childMaleCount,
+    childFemaleCount: d.childFemaleCount,
+    childrenCount: children,
+    firstTimerMaleCount: d.firstTimerMaleCount,
+    firstTimerFemaleCount: d.firstTimerFemaleCount,
+    firstTimerCount: firstTimers,
+    newConvertMaleCount: d.newConvertMaleCount,
+    newConvertFemaleCount: d.newConvertFemaleCount,
+    newConvertCount: newConverts,
     totalCount: total,
     notes: d.notes || null,
     recordedBy: user.id,

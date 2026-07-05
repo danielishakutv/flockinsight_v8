@@ -35,6 +35,54 @@ function todayStr() {
 
 type Initial = Partial<RecordAttendanceInput> & { id?: string };
 
+/** A "Male / Female" stepper pair with a group heading. */
+function GenderGroup({
+  title,
+  male,
+  female,
+  onMale,
+  onFemale,
+  accent,
+  hint,
+  legacyNote,
+}: {
+  title: string;
+  male: number;
+  female: number;
+  onMale: (n: number) => void;
+  onFemale: (n: number) => void;
+  accent?: boolean;
+  hint?: string;
+  legacyNote?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
+        {title}
+      </h3>
+      <div className="grid grid-cols-2 gap-3">
+        <Stepper
+          label="Male"
+          hint={hint}
+          value={male}
+          onChange={onMale}
+          accent={accent}
+        />
+        <Stepper
+          label="Female"
+          hint={hint}
+          value={female}
+          onChange={onFemale}
+          accent={accent}
+        />
+      </div>
+      {legacyNote && (
+        <p className="text-muted-foreground px-1 text-xs">{legacyNote}</p>
+      )}
+    </div>
+  );
+}
+
 export function RecordForm({
   services,
   initial,
@@ -50,15 +98,44 @@ export function RecordForm({
   );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [date, setDate] = useState(initial?.date ?? todayStr());
-  const [men, setMen] = useState(initial?.maleCount ?? 0);
-  const [women, setWomen] = useState(initial?.femaleCount ?? 0);
-  const [children, setChildren] = useState(initial?.childrenCount ?? 0);
-  const [firstTimers, setFirstTimers] = useState(initial?.firstTimerCount ?? 0);
-  const [newConverts, setNewConverts] = useState(initial?.newConvertCount ?? 0);
+
+  // Adults (historically "Men"/"Women").
+  const [adultM, setAdultM] = useState(initial?.maleCount ?? 0);
+  const [adultF, setAdultF] = useState(initial?.femaleCount ?? 0);
+  // Teens.
+  const [teenM, setTeenM] = useState(initial?.teenMaleCount ?? 0);
+  const [teenF, setTeenF] = useState(initial?.teenFemaleCount ?? 0);
+  // Children / first-timers / converts by gender.
+  const [childM, setChildM] = useState(initial?.childMaleCount ?? 0);
+  const [childF, setChildF] = useState(initial?.childFemaleCount ?? 0);
+  const [ftM, setFtM] = useState(initial?.firstTimerMaleCount ?? 0);
+  const [ftF, setFtF] = useState(initial?.firstTimerFemaleCount ?? 0);
+  const [ncM, setNcM] = useState(initial?.newConvertMaleCount ?? 0);
+  const [ncF, setNcF] = useState(initial?.newConvertFemaleCount ?? 0);
+
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [showNotes, setShowNotes] = useState(!!initial?.notes);
 
-  const total = men + women + children;
+  // Records saved before the gender split only carry totals. Keep those
+  // totals until the user actually enters a split.
+  const legacyChildren =
+    (initial?.childMaleCount ?? 0) + (initial?.childFemaleCount ?? 0) === 0
+      ? (initial?.childrenCount ?? 0)
+      : 0;
+  const legacyFirstTimers =
+    (initial?.firstTimerMaleCount ?? 0) + (initial?.firstTimerFemaleCount ?? 0) === 0
+      ? (initial?.firstTimerCount ?? 0)
+      : 0;
+  const legacyNewConverts =
+    (initial?.newConvertMaleCount ?? 0) + (initial?.newConvertFemaleCount ?? 0) === 0
+      ? (initial?.newConvertCount ?? 0)
+      : 0;
+
+  const childrenTotal = childM + childF > 0 ? childM + childF : legacyChildren;
+  const firstTimerTotal = ftM + ftF > 0 ? ftM + ftF : legacyFirstTimers;
+  const newConvertTotal = ncM + ncF > 0 ? ncM + ncF : legacyNewConverts;
+
+  const total = adultM + adultF + teenM + teenF + childrenTotal;
   const isAdhoc = serviceKey === ADHOC;
 
   const canSave = useMemo(() => {
@@ -74,11 +151,19 @@ export function RecordForm({
         serviceId: isAdhoc ? null : serviceKey,
         title: isAdhoc ? title.trim() : undefined,
         date,
-        maleCount: men,
-        femaleCount: women,
-        childrenCount: children,
-        firstTimerCount: firstTimers,
-        newConvertCount: newConverts,
+        maleCount: adultM,
+        femaleCount: adultF,
+        teenMaleCount: teenM,
+        teenFemaleCount: teenF,
+        childMaleCount: childM,
+        childFemaleCount: childF,
+        childrenCount: childrenTotal,
+        firstTimerMaleCount: ftM,
+        firstTimerFemaleCount: ftF,
+        firstTimerCount: firstTimerTotal,
+        newConvertMaleCount: ncM,
+        newConvertFemaleCount: ncF,
+        newConvertCount: newConvertTotal,
         notes: notes.trim() || undefined,
       });
       if (!res.ok) {
@@ -149,7 +234,7 @@ export function RecordForm({
                 Total attendance
               </div>
               <div className="text-muted-foreground text-xs leading-tight">
-                Men + Women + Children
+                Adults + Teens + Children
               </div>
             </div>
           </div>
@@ -160,44 +245,63 @@ export function RecordForm({
       </Card>
 
       {/* Headcount */}
-      <section className="space-y-2">
-        <h2 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
-          Headcount
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Stepper label="Men" value={men} onChange={setMen} accent />
-          <Stepper label="Women" value={women} onChange={setWomen} accent />
-          <div className="col-span-2">
-            <Stepper
-              label="Children"
-              value={children}
-              onChange={setChildren}
-              accent
-            />
-          </div>
-        </div>
-      </section>
+      <GenderGroup
+        title="Adults"
+        male={adultM}
+        female={adultF}
+        onMale={setAdultM}
+        onFemale={setAdultF}
+        accent
+      />
+      <GenderGroup
+        title="Teens"
+        male={teenM}
+        female={teenF}
+        onMale={setTeenM}
+        onFemale={setTeenF}
+        accent
+      />
+      <GenderGroup
+        title="Children"
+        male={childM}
+        female={childF}
+        onMale={setChildM}
+        onFemale={setChildF}
+        accent
+        legacyNote={
+          legacyChildren > 0 && childM + childF === 0
+            ? `${legacyChildren} children were recorded without a gender split — that number stays in the total until you enter one.`
+            : undefined
+        }
+      />
 
       {/* Highlights */}
-      <section className="space-y-2">
-        <h2 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
-          First-timers &amp; converts
-        </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Stepper
-            label="First-timers"
-            hint="incl. above"
-            value={firstTimers}
-            onChange={setFirstTimers}
-          />
-          <Stepper
-            label="New converts"
-            hint="incl. above"
-            value={newConverts}
-            onChange={setNewConverts}
-          />
-        </div>
-      </section>
+      <GenderGroup
+        title="First-timers"
+        male={ftM}
+        female={ftF}
+        onMale={setFtM}
+        onFemale={setFtF}
+        hint="incl. above"
+        legacyNote={
+          legacyFirstTimers > 0 && ftM + ftF === 0
+            ? `${legacyFirstTimers} first-timer${legacyFirstTimers === 1 ? " was" : "s were"} recorded without a gender split.`
+            : undefined
+        }
+      />
+      <GenderGroup
+        title="New converts"
+        male={ncM}
+        female={ncF}
+        onMale={setNcM}
+        onFemale={setNcF}
+        hint="incl. above"
+        legacyNote={
+          legacyNewConverts > 0 && ncM + ncF === 0
+            ? `${legacyNewConverts} new convert${legacyNewConverts === 1 ? " was" : "s were"} recorded without a gender split.`
+            : undefined
+        }
+      />
 
       {/* Notes (collapsed by default) */}
       {showNotes ? (

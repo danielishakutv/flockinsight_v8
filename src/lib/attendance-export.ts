@@ -7,10 +7,18 @@ export type AttendanceExportRow = {
   date: string; // YYYY-MM-DD
   name: string; // service name, else one-off title, else "Event"
   total: number;
-  male: number;
-  female: number;
-  children: number;
+  male: number; // adults
+  female: number; // adults
+  teenMale: number;
+  teenFemale: number;
+  childMale: number;
+  childFemale: number;
+  children: number; // stored total (legacy rows have only this)
+  firstTimerMale: number;
+  firstTimerFemale: number;
   firstTimers: number;
+  newConvertMale: number;
+  newConvertFemale: number;
   newConverts: number;
   notes: string | null;
 };
@@ -18,8 +26,9 @@ export type AttendanceExportRow = {
 export type AttendanceSummary = {
   sessions: number;
   total: number;
-  male: number;
-  female: number;
+  male: number; // adults
+  female: number; // adults
+  teens: number;
   children: number;
   firstTimers: number;
   newConverts: number;
@@ -41,8 +50,16 @@ export async function getAttendanceRows(
       total: attendanceSession.totalCount,
       male: attendanceSession.maleCount,
       female: attendanceSession.femaleCount,
+      teenMale: attendanceSession.teenMaleCount,
+      teenFemale: attendanceSession.teenFemaleCount,
+      childMale: attendanceSession.childMaleCount,
+      childFemale: attendanceSession.childFemaleCount,
       children: attendanceSession.childrenCount,
+      firstTimerMale: attendanceSession.firstTimerMaleCount,
+      firstTimerFemale: attendanceSession.firstTimerFemaleCount,
       firstTimers: attendanceSession.firstTimerCount,
+      newConvertMale: attendanceSession.newConvertMaleCount,
+      newConvertFemale: attendanceSession.newConvertFemaleCount,
       newConverts: attendanceSession.newConvertCount,
       notes: attendanceSession.notes,
     })
@@ -57,8 +74,16 @@ export async function getAttendanceRows(
     total: r.total,
     male: r.male,
     female: r.female,
+    teenMale: r.teenMale,
+    teenFemale: r.teenFemale,
+    childMale: r.childMale,
+    childFemale: r.childFemale,
     children: r.children,
+    firstTimerMale: r.firstTimerMale,
+    firstTimerFemale: r.firstTimerFemale,
     firstTimers: r.firstTimers,
+    newConvertMale: r.newConvertMale,
+    newConvertFemale: r.newConvertFemale,
     newConverts: r.newConverts,
     notes: r.notes,
   }));
@@ -73,6 +98,7 @@ export function summarizeAttendance(
     total: 0,
     male: 0,
     female: 0,
+    teens: 0,
     children: 0,
     firstTimers: 0,
     newConverts: 0,
@@ -86,6 +112,7 @@ export function summarizeAttendance(
     s.total += r.total;
     s.male += r.male;
     s.female += r.female;
+    s.teens += r.teenMale + r.teenFemale;
     s.children += r.children;
     s.firstTimers += r.firstTimers;
     s.newConverts += r.newConverts;

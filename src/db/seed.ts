@@ -152,37 +152,65 @@ async function main() {
     const growth = (11 - w) * 4; // grows over time
     const wobble = ((w * 7) % 11) - 5; // small +/- variation
 
+    // Split a total into a male/female pair (male share ≈ 45%).
+    const split = (total: number) => {
+      const male = Math.round(total * 0.45);
+      return { male, female: total - male };
+    };
+
     // Sunday first service
     const m1 = 60 + growth + wobble;
     const f1 = 80 + growth + Math.round(wobble / 2);
-    const c1 = 25 + Math.round(growth / 2);
+    const t1 = split(18 + Math.round(growth / 3));
+    const c1 = split(25 + Math.round(growth / 2));
+    const ft1 = split(3 + (w % 4));
+    const nc1 = split(1 + (w % 3));
     sessions.push({
       churchId,
       serviceId: sundayFirst.id,
       date: sundayStr,
       maleCount: m1,
       femaleCount: f1,
-      childrenCount: c1,
-      firstTimerCount: 3 + (w % 4),
-      newConvertCount: 1 + (w % 3),
-      totalCount: m1 + f1 + c1,
+      teenMaleCount: t1.male,
+      teenFemaleCount: t1.female,
+      childMaleCount: c1.male,
+      childFemaleCount: c1.female,
+      childrenCount: c1.male + c1.female,
+      firstTimerMaleCount: ft1.male,
+      firstTimerFemaleCount: ft1.female,
+      firstTimerCount: ft1.male + ft1.female,
+      newConvertMaleCount: nc1.male,
+      newConvertFemaleCount: nc1.female,
+      newConvertCount: nc1.male + nc1.female,
+      totalCount: m1 + f1 + t1.male + t1.female + c1.male + c1.female,
       recordedBy: owner.id,
     });
 
     // Sunday second service
     const m2 = 70 + growth - wobble;
     const f2 = 95 + growth;
-    const c2 = 30 + Math.round(growth / 2);
+    const t2 = split(22 + Math.round(growth / 3));
+    const c2 = split(30 + Math.round(growth / 2));
+    const ft2 = split(5 + (w % 5));
+    const nc2 = split(2 + (w % 3));
     sessions.push({
       churchId,
       serviceId: sundaySecond.id,
       date: sundayStr,
       maleCount: m2,
       femaleCount: f2,
-      childrenCount: c2,
-      firstTimerCount: 5 + (w % 5),
-      newConvertCount: 2 + (w % 3),
-      totalCount: m2 + f2 + c2,
+      teenMaleCount: t2.male,
+      teenFemaleCount: t2.female,
+      childMaleCount: c2.male,
+      childFemaleCount: c2.female,
+      childrenCount: c2.male + c2.female,
+      firstTimerMaleCount: ft2.male,
+      firstTimerFemaleCount: ft2.female,
+      firstTimerCount: ft2.male + ft2.female,
+      newConvertMaleCount: nc2.male,
+      newConvertFemaleCount: nc2.female,
+      newConvertCount: nc2.male + nc2.female,
+      totalCount: m2 + f2 + t2.male + t2.female + c2.male + c2.female,
       recordedBy: owner.id,
     });
 
@@ -191,16 +219,28 @@ async function main() {
     wed.setDate(sunday.getDate() + 3);
     const m3 = 35 + Math.round(growth / 2);
     const f3 = 50 + Math.round(growth / 2);
+    const t3 = split(8);
+    const c3 = split(10);
+    const ft3 = split(1 + (w % 2));
+    const nc3 = split(w % 2);
     sessions.push({
       churchId,
       serviceId: midweek.id,
       date: wed.toISOString().slice(0, 10),
       maleCount: m3,
       femaleCount: f3,
-      childrenCount: 10,
-      firstTimerCount: 1 + (w % 2),
-      newConvertCount: w % 2,
-      totalCount: m3 + f3 + 10,
+      teenMaleCount: t3.male,
+      teenFemaleCount: t3.female,
+      childMaleCount: c3.male,
+      childFemaleCount: c3.female,
+      childrenCount: c3.male + c3.female,
+      firstTimerMaleCount: ft3.male,
+      firstTimerFemaleCount: ft3.female,
+      firstTimerCount: ft3.male + ft3.female,
+      newConvertMaleCount: nc3.male,
+      newConvertFemaleCount: nc3.female,
+      newConvertCount: nc3.male + nc3.female,
+      totalCount: m3 + f3 + t3.male + t3.female + c3.male + c3.female,
       recordedBy: owner.id,
     });
   }

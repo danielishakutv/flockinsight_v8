@@ -29,6 +29,22 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.46.0",
+    date: "2026-07-05",
+    summary: "Richer attendance headcounts: adults, teens and children — each split male/female.",
+    changes: {
+      Added: [
+        "Attendance now captures Adults, Teens and Children separately, each split into male and female.",
+        "First-timers and new converts are also recorded by gender.",
+        "Analytics gained a Teens series in the weekly breakdown and demographics donut, and reports/exports include the new columns.",
+      ],
+      Improved: [
+        "Older attendance records keep their original totals — nothing is lost, and you can add the gender split any time you edit a record.",
+        "The CSV import understands the new columns (and still accepts files in the old format).",
+      ],
+    },
+  },
+  {
     version: "0.45.0",
     date: "2026-07-01",
     summary: "Launch promo: your first 7 Sundays free — plus church-branded emails.",

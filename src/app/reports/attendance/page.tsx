@@ -126,9 +126,10 @@ export default async function AttendanceReportPage() {
             </section>
 
             {/* Composition */}
-            <section className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <section className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <StatTile label="Men" value={s.male} />
               <StatTile label="Women" value={s.female} />
+              <StatTile label="Teens" value={s.teens} />
               <StatTile label="Children" value={s.children} />
               <StatTile label="First-timers" value={s.firstTimers} />
               <StatTile label="New converts" value={s.newConverts} />
@@ -147,6 +148,7 @@ export default async function AttendanceReportPage() {
                       <th className="px-3 py-2.5 font-semibold">Service / Event</th>
                       <th className="px-3 py-2.5 text-right font-semibold">Men</th>
                       <th className="px-3 py-2.5 text-right font-semibold">Women</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Teens</th>
                       <th className="px-3 py-2.5 text-right font-semibold">Children</th>
                       <th className="px-3 py-2.5 text-right font-semibold">First</th>
                       <th className="px-3 py-2.5 text-right font-semibold">New</th>
@@ -176,6 +178,9 @@ export default async function AttendanceReportPage() {
                           {r.female}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
+                          {r.teenMale + r.teenFemale}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
                           {r.children}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
@@ -197,6 +202,7 @@ export default async function AttendanceReportPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{s.male}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{s.female}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{s.teens}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{s.children}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{s.firstTimers}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{s.newConverts}</td>

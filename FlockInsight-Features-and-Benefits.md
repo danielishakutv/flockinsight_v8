@@ -35,7 +35,7 @@ Build a complete, searchable directory of your congregation. Capture names, gend
 **How it helps:** No more lost records or scattered contact lists. Every member's details, history and milestones are in one place — ready for attendance, follow-up, messaging and pastoral care.
 
 ### 2. Attendance tracking
-Take fast headcounts in seconds — total, male, female, children, first-timers and new converts — for any service or event. Review full attendance history, edit past records, and watch trends build automatically.
+Take fast headcounts in seconds — adults, teens and children (each split male/female), plus first-timers and new converts — for any service or event. Review full attendance history, edit past records, and watch trends build automatically.
 
 **How it helps:** Know your real numbers week to week. Spot growth, dips and seasonal patterns early, and make decisions with facts instead of guesses.
 

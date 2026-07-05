@@ -75,8 +75,16 @@ export async function POST(request: Request) {
     date: string;
     male: number;
     female: number;
+    teenMale: number;
+    teenFemale: number;
+    childMale: number;
+    childFemale: number;
     children: number;
+    firstTimerMale: number;
+    firstTimerFemale: number;
     firstTimers: number;
+    newConvertMale: number;
+    newConvertFemale: number;
     newConverts: number;
     total: number;
     notes: string | null;
@@ -108,8 +116,29 @@ export async function POST(request: Request) {
 
     const male = normalizeCount(get("male"));
     const female = normalizeCount(get("female"));
-    const children = normalizeCount(get("children"));
-    const breakdown = male + female + children;
+    const teenMale = normalizeCount(get("teenMale"));
+    const teenFemale = normalizeCount(get("teenFemale"));
+    const childMale = normalizeCount(get("childMale"));
+    const childFemale = normalizeCount(get("childFemale"));
+    // A gender split wins over the total column; the total only stands on
+    // its own for files without a split (e.g. exported before it existed).
+    const children =
+      childMale + childFemale > 0
+        ? childMale + childFemale
+        : normalizeCount(get("children"));
+    const firstTimerMale = normalizeCount(get("firstTimerMale"));
+    const firstTimerFemale = normalizeCount(get("firstTimerFemale"));
+    const firstTimers =
+      firstTimerMale + firstTimerFemale > 0
+        ? firstTimerMale + firstTimerFemale
+        : normalizeCount(get("firstTimers"));
+    const newConvertMale = normalizeCount(get("newConvertMale"));
+    const newConvertFemale = normalizeCount(get("newConvertFemale"));
+    const newConverts =
+      newConvertMale + newConvertFemale > 0
+        ? newConvertMale + newConvertFemale
+        : normalizeCount(get("newConverts"));
+    const breakdown = male + female + teenMale + teenFemale + children;
     // Prefer the breakdown; fall back to a provided Total when there's none.
     const total = breakdown > 0 ? breakdown : normalizeCount(get("total"));
 
@@ -119,9 +148,17 @@ export async function POST(request: Request) {
       date,
       male,
       female,
+      teenMale,
+      teenFemale,
+      childMale,
+      childFemale,
       children,
-      firstTimers: normalizeCount(get("firstTimers")),
-      newConverts: normalizeCount(get("newConverts")),
+      firstTimerMale,
+      firstTimerFemale,
+      firstTimers,
+      newConvertMale,
+      newConvertFemale,
+      newConverts,
       total,
       notes: get("notes").trim().slice(0, 1000) || null,
     });
@@ -138,8 +175,16 @@ export async function POST(request: Request) {
           date: r.date,
           maleCount: r.male,
           femaleCount: r.female,
+          teenMaleCount: r.teenMale,
+          teenFemaleCount: r.teenFemale,
+          childMaleCount: r.childMale,
+          childFemaleCount: r.childFemale,
           childrenCount: r.children,
+          firstTimerMaleCount: r.firstTimerMale,
+          firstTimerFemaleCount: r.firstTimerFemale,
           firstTimerCount: r.firstTimers,
+          newConvertMaleCount: r.newConvertMale,
+          newConvertFemaleCount: r.newConvertFemale,
           newConvertCount: r.newConverts,
           totalCount: r.total,
           notes: r.notes,

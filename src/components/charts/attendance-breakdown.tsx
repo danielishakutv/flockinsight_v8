@@ -11,11 +11,18 @@ import {
   YAxis,
 } from "recharts";
 
-type Point = { label: string; men: number; women: number; children: number };
+type Point = {
+  label: string;
+  men: number;
+  women: number;
+  teens: number;
+  children: number;
+};
 
 const SERIES = [
   { key: "men", name: "Men", color: "var(--chart-1)" },
   { key: "women", name: "Women", color: "var(--chart-5)" },
+  { key: "teens", name: "Teens", color: "var(--chart-2)" },
   { key: "children", name: "Children", color: "var(--chart-4)" },
 ] as const;
 

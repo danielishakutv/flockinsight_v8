@@ -48,6 +48,8 @@ export default async function AnalyticsPage() {
         total: attendanceSession.totalCount,
         male: attendanceSession.maleCount,
         female: attendanceSession.femaleCount,
+        teenMale: attendanceSession.teenMaleCount,
+        teenFemale: attendanceSession.teenFemaleCount,
         children: attendanceSession.childrenCount,
         firstTimers: attendanceSession.firstTimerCount,
         newConverts: attendanceSession.newConvertCount,
@@ -90,12 +92,13 @@ export default async function AnalyticsPage() {
     (a, r) => {
       a.men += r.male;
       a.women += r.female;
+      a.teens += r.teenMale + r.teenFemale;
       a.children += r.children;
       a.firstTimers += r.firstTimers;
       a.newConverts += r.newConverts;
       return a;
     },
-    { men: 0, women: 0, children: 0, firstTimers: 0, newConverts: 0 },
+    { men: 0, women: 0, teens: 0, children: 0, firstTimers: 0, newConverts: 0 },
   );
 
   const perService = new Map<string, { sum: number; count: number }>();
@@ -117,12 +120,14 @@ export default async function AnalyticsPage() {
     label: s.label,
     men: s.male,
     women: s.female,
+    teens: s.teens,
     children: s.children,
   }));
 
   const donutData = [
-    { name: "Men", value: totals.men, color: "var(--chart-1)" },
-    { name: "Women", value: totals.women, color: "var(--chart-5)" },
+    { name: "Adult men", value: totals.men, color: "var(--chart-1)" },
+    { name: "Adult women", value: totals.women, color: "var(--chart-5)" },
+    { name: "Teens", value: totals.teens, color: "var(--chart-2)" },
     { name: "Children", value: totals.children, color: "var(--chart-4)" },
   ];
 
@@ -169,7 +174,9 @@ export default async function AnalyticsPage() {
       <Card className="mt-4">
         <CardHeader>
           <CardTitle className="text-lg">Weekly breakdown</CardTitle>
-          <CardDescription>Men, women &amp; children per week</CardDescription>
+          <CardDescription>
+            Adults, teens &amp; children per week
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <AttendanceBreakdown data={breakdownData} />

@@ -518,12 +518,26 @@ export const attendanceSession = pgTable(
     title: text(), // label for one-off events (when serviceId is null)
     date: date().notNull(),
     // ----- fast headcounts -----
+    // totalCount = adults + teens + children (first-timers/converts are included above).
     totalCount: integer().notNull().default(0),
+    // Adults by gender (historically the "Men"/"Women" counts).
     maleCount: integer().notNull().default(0),
     femaleCount: integer().notNull().default(0),
+    // Teens by gender.
+    teenMaleCount: integer().notNull().default(0),
+    teenFemaleCount: integer().notNull().default(0),
+    // Children: childrenCount is the stored total. Rows recorded before the
+    // gender split have only the total (male/female stay 0).
     childrenCount: integer().notNull().default(0),
+    childMaleCount: integer().notNull().default(0),
+    childFemaleCount: integer().notNull().default(0),
+    // First-timers & new converts: same pattern — total + optional gender split.
     firstTimerCount: integer().notNull().default(0),
+    firstTimerMaleCount: integer().notNull().default(0),
+    firstTimerFemaleCount: integer().notNull().default(0),
     newConvertCount: integer().notNull().default(0),
+    newConvertMaleCount: integer().notNull().default(0),
+    newConvertFemaleCount: integer().notNull().default(0),
     notes: text(),
     recordedBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

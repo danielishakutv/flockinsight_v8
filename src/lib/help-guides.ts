@@ -178,7 +178,7 @@ export const GUIDES: Guide[] = [
       {
         title: "Record a session",
         body: [
-          "Tap Record (top bar or dashboard). Pick the service and date, then enter headcounts (total, male, female, children, first-timers).",
+          "Tap Record (top bar or dashboard). Pick the service and date, then enter headcounts — adults, teens and children, each split male/female, plus first-timers and new converts.",
           "Save — the dashboard and analytics update with trends instantly.",
         ],
       },

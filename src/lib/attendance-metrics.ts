@@ -8,8 +8,9 @@ export type WeekPoint = {
   weekStart: string; // YYYY-MM-DD (Sunday)
   label: string; // e.g. "May 4"
   total: number;
-  male: number;
-  female: number;
+  male: number; // adults
+  female: number; // adults
+  teens: number;
   children: number;
   firstTimers: number;
   newConverts: number;
@@ -44,6 +45,8 @@ export async function getWeeklySeries(
       total: attendanceSession.totalCount,
       male: attendanceSession.maleCount,
       female: attendanceSession.femaleCount,
+      teenMale: attendanceSession.teenMaleCount,
+      teenFemale: attendanceSession.teenFemaleCount,
       children: attendanceSession.childrenCount,
       firstTimers: attendanceSession.firstTimerCount,
       newConverts: attendanceSession.newConvertCount,
@@ -67,6 +70,7 @@ export async function getWeeklySeries(
       total: 0,
       male: 0,
       female: 0,
+      teens: 0,
       children: 0,
       firstTimers: 0,
       newConverts: 0,
@@ -81,6 +85,7 @@ export async function getWeeklySeries(
     b.total += r.total;
     b.male += r.male;
     b.female += r.female;
+    b.teens += r.teenMale + r.teenFemale;
     b.children += r.children;
     b.firstTimers += r.firstTimers;
     b.newConverts += r.newConverts;
