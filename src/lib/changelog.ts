@@ -29,6 +29,15 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.46.1",
+    date: "2026-07-06",
+    changes: {
+      Fixed: [
+        "Analytics and dashboard stats no longer show “no data” when all your attendance records are older than 12 weeks — the charts now show the 12 weeks up to your most recent record.",
+      ],
+    },
+  },
+  {
     version: "0.46.0",
     date: "2026-07-05",
     summary: "Richer attendance headcounts: adults, teens and children — each split male/female.",

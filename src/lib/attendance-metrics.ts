@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, max } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
@@ -30,12 +30,27 @@ function startOfWeekSunday(d: Date): Date {
   return x;
 }
 
-/** Weekly-bucketed attendance for the last `weeks` weeks (oldest → newest). */
+/** The date (YYYY-MM-DD) of the church's most recent session, or null. */
+export async function getLatestSessionDate(
+  churchId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ latest: max(attendanceSession.date) })
+    .from(attendanceSession)
+    .where(eq(attendanceSession.churchId, churchId));
+  return row?.latest ?? null;
+}
+
+/**
+ * Weekly-bucketed attendance for the `weeks` weeks ending at `endDate`
+ * (default: today), oldest → newest.
+ */
 export async function getWeeklySeries(
   churchId: string,
   weeks = 12,
+  endDate?: string,
 ): Promise<WeekPoint[]> {
-  const start = startOfWeekSunday(new Date());
+  const start = startOfWeekSunday(endDate ? parseISO(endDate) : new Date());
   start.setDate(start.getDate() - (weeks - 1) * 7);
   const startStr = isoDate(start);
 
@@ -93,6 +108,25 @@ export async function getWeeklySeries(
   }
 
   return [...buckets.values()];
+}
+
+/**
+ * Weekly series with a smart window: normally the last `weeks` weeks, but if
+ * the church's newest record predates that window entirely (e.g. it only has
+ * backfilled history), the window shifts to end at that record so the charts
+ * still show data. `anchored` tells the caller the shift happened.
+ */
+export async function getAnchoredWeeklySeries(
+  churchId: string,
+  weeks = 12,
+): Promise<{ series: WeekPoint[]; endDate: string; anchored: boolean }> {
+  const windowStart = startOfWeekSunday(new Date());
+  windowStart.setDate(windowStart.getDate() - (weeks - 1) * 7);
+  const latest = await getLatestSessionDate(churchId);
+  const anchored = latest !== null && latest < isoDate(windowStart);
+  const endDate = anchored ? (latest as string) : isoDate(new Date());
+  const series = await getWeeklySeries(churchId, weeks, endDate);
+  return { series, endDate, anchored };
 }
 
 export type LastSession = {

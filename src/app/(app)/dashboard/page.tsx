@@ -25,8 +25,8 @@ import {
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import {
+  getAnchoredWeeklySeries,
   getLastSession,
-  getWeeklySeries,
   growthPct,
   weeklyAverage,
 } from "@/lib/attendance-metrics";
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
   const sumAmount = sql<number>`coalesce(sum(${giving.amount}), 0)`;
 
   const [
-    series,
+    { series },
     last,
     [{ memberCount }],
     recent,
@@ -77,7 +77,9 @@ export default async function DashboardPage() {
     canSettings,
     canTeam,
   ] = await Promise.all([
-    getWeeklySeries(church.id, 12),
+    // Window ends at the newest record when it's older than 12 weeks, so
+    // churches with only backfilled data still see their stats and trend.
+    getAnchoredWeeklySeries(church.id, 12),
     getLastSession(church.id),
     db.select({ memberCount: count() }).from(member).where(eq(member.churchId, church.id)),
     db

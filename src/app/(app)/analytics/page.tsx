@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { and, eq, gte } from "drizzle-orm";
+import { format, parseISO } from "date-fns";
 import { CalendarDays, Sparkles, TrendingUp, UserPlus } from "lucide-react";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import {
-  getWeeklySeries,
+  getAnchoredWeeklySeries,
   growthPct,
   weeklyAverage,
 } from "@/lib/attendance-metrics";
@@ -27,8 +28,8 @@ import {
 
 export const metadata = { title: "Analytics" };
 
-function isoDaysAgo(days: number) {
-  const d = new Date();
+function isoDaysBefore(base: Date, days: number) {
+  const d = new Date(base);
   d.setDate(d.getDate() - days);
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -39,32 +40,36 @@ export default async function AnalyticsPage() {
   const { church } = await requireChurch();
   await requireCan("analytics.view");
 
-  const sinceStr = isoDaysAgo(7 * 12);
+  // The 12-week window normally ends today, but shifts back to the newest
+  // record when a church only has older (e.g. backfilled) data — otherwise
+  // real attendance would show as "no data".
+  const { series, endDate, anchored } = await getAnchoredWeeklySeries(
+    church.id,
+    12,
+  );
+  const sinceStr = isoDaysBefore(parseISO(endDate), 7 * 12);
 
-  const [series, raw] = await Promise.all([
-    getWeeklySeries(church.id, 12),
-    db
-      .select({
-        total: attendanceSession.totalCount,
-        male: attendanceSession.maleCount,
-        female: attendanceSession.femaleCount,
-        teenMale: attendanceSession.teenMaleCount,
-        teenFemale: attendanceSession.teenFemaleCount,
-        children: attendanceSession.childrenCount,
-        firstTimers: attendanceSession.firstTimerCount,
-        newConverts: attendanceSession.newConvertCount,
-        title: attendanceSession.title,
-        serviceName: service.name,
-      })
-      .from(attendanceSession)
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
-      .where(
-        and(
-          eq(attendanceSession.churchId, church.id),
-          gte(attendanceSession.date, sinceStr),
-        ),
+  const raw = await db
+    .select({
+      total: attendanceSession.totalCount,
+      male: attendanceSession.maleCount,
+      female: attendanceSession.femaleCount,
+      teenMale: attendanceSession.teenMaleCount,
+      teenFemale: attendanceSession.teenFemaleCount,
+      children: attendanceSession.childrenCount,
+      firstTimers: attendanceSession.firstTimerCount,
+      newConverts: attendanceSession.newConvertCount,
+      title: attendanceSession.title,
+      serviceName: service.name,
+    })
+    .from(attendanceSession)
+    .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+    .where(
+      and(
+        eq(attendanceSession.churchId, church.id),
+        gte(attendanceSession.date, sinceStr),
       ),
-  ]);
+    );
 
   if (raw.length === 0) {
     return (
@@ -135,7 +140,11 @@ export default async function AnalyticsPage() {
     <PageContainer>
       <PageHeader
         title="Analytics"
-        description="Trends, breakdowns and growth · last 12 weeks"
+        description={
+          anchored
+            ? `Trends, breakdowns and growth · 12 weeks to ${format(parseISO(endDate), "MMM d, yyyy")} (your most recent record)`
+            : "Trends, breakdowns and growth · last 12 weeks"
+        }
       />
 
       <SetupNotices />
@@ -145,7 +154,7 @@ export default async function AnalyticsPage() {
         <StatCard
           label="Weekly average"
           value={avg}
-          sub="Last 8 weeks"
+          sub={anchored ? "In the period shown" : "Last 8 weeks"}
           icon={CalendarDays}
           delta={growth}
         />
@@ -159,13 +168,13 @@ export default async function AnalyticsPage() {
         <StatCard
           label="First-timers"
           value={totals.firstTimers}
-          sub="Last 12 weeks"
+          sub={anchored ? "In the period shown" : "Last 12 weeks"}
           icon={Sparkles}
         />
         <StatCard
           label="New converts"
           value={totals.newConverts}
-          sub="Last 12 weeks"
+          sub={anchored ? "In the period shown" : "Last 12 weeks"}
           icon={UserPlus}
         />
       </div>
