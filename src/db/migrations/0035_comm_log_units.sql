@@ -1,0 +1,1 @@
+ALTER TABLE "communication_log" ADD COLUMN "units" integer DEFAULT 0 NOT NULL;

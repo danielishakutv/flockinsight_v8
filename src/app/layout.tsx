@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { PostHogProvider } from "@/components/analytics/posthog-provider";
+import { MatomoProvider } from "@/components/analytics/matomo-provider";
 
 const SITE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -93,6 +94,7 @@ export default function RootLayout({
             {children}
             <Toaster />
             <ServiceWorkerRegister />
+            <MatomoProvider />
           </PostHogProvider>
         </ThemeProvider>
       </body>

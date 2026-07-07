@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 
@@ -133,10 +133,18 @@ export function normalizeDate(v: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-/** All members of a church as CSV rows (matching MEMBER_CSV_HEADERS). */
+/**
+ * Members of a church as CSV rows (matching MEMBER_CSV_HEADERS). Pass `ids` to
+ * export only a selection; omit for the whole church.
+ */
 export async function getMemberExportRows(
   churchId: string,
+  ids?: string[],
 ): Promise<(string | null)[][]> {
+  const scope =
+    ids && ids.length > 0
+      ? and(eq(member.churchId, churchId), inArray(member.id, ids))
+      : eq(member.churchId, churchId);
   const rows = await db
     .select({
       firstName: member.firstName,
@@ -157,7 +165,7 @@ export async function getMemberExportRows(
       notes: member.notes,
     })
     .from(member)
-    .where(eq(member.churchId, churchId))
+    .where(scope)
     .orderBy(asc(member.firstName), asc(member.lastName));
 
   return rows.map((m) => [

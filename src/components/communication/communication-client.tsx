@@ -19,7 +19,9 @@ import {
 } from "@/app/(app)/communication/actions";
 import { COMM_TEMPLATES } from "@/lib/comm-templates";
 import { formatMoney } from "@/lib/money";
+import { track } from "@/lib/track";
 import { cn } from "@/lib/utils";
+import { RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +52,7 @@ type LogRow = {
   recipients: number;
   sent: number;
   failed: number;
+  units: number;
   cost: number;
   createdAt: string;
 };
@@ -71,6 +74,7 @@ export function CommunicationClient({
   smsPrice,
   smsBalance,
   senderApproved,
+  smsAvailable = true,
   recent,
 }: {
   canManage: boolean;
@@ -81,6 +85,7 @@ export function CommunicationClient({
   smsPrice: number;
   smsBalance: number;
   senderApproved: boolean;
+  smsAvailable?: boolean;
   recent: LogRow[];
 }) {
   const router = useRouter();
@@ -143,6 +148,7 @@ export function CommunicationClient({
         toast.success(
           `Sent to ${res.staff} staff${res.pushSent ? ` · ${res.pushSent} push` : ""}${res.emailSent ? ` · ${res.emailSent} email` : ""}.`,
         );
+        track("staff.notice.sent", { value: res.staff });
         setStaffTitle("");
         setBody("");
         router.refresh();
@@ -154,6 +160,8 @@ export function CommunicationClient({
     if (audience === "group" && !groupId) return toast.error("Pick a group.");
     if (audience === "selected" && selected.size === 0)
       return toast.error("Choose at least one member.");
+    if (channel === "sms" && !smsAvailable)
+      return toast.error("SMS isn't available in your country yet.");
     if (channel === "sms" && !senderApproved)
       return toast.error("Your SMS sender ID isn't approved yet (Settings → SMS).");
 
@@ -175,8 +183,28 @@ export function CommunicationClient({
       toast.success(
         `Sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ""}${cost}.`,
       );
+      track(channel === "sms" ? "sms.sent" : "email.sent", { value: res.sent });
+      // Reset the composer so the page is ready for the next message.
+      setBody("");
+      setSubject("");
+      setSelected(new Set());
+      setQuery("");
       router.refresh();
     });
+  }
+
+  /** Load a past message back into the composer to send again. */
+  function reuse(r: LogRow) {
+    if (r.channel === "notification") {
+      setChannel("staff");
+      setStaffTitle(r.subject ?? "");
+      setBody(r.body);
+    } else {
+      setChannel(r.channel);
+      setBody(r.body);
+      if (r.channel === "email") setSubject(r.subject ?? "");
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const channels = [
@@ -219,6 +247,12 @@ export function CommunicationClient({
 
       <Card>
         <CardContent className="space-y-4 py-5">
+          {channel === "sms" && !smsAvailable && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+              SMS isn&apos;t available in your country yet — we&apos;re working on
+              it and it&apos;s coming soon. Email still works.
+            </div>
+          )}
           {channel === "staff" ? (
             <>
               <p className="text-muted-foreground text-sm">
@@ -428,7 +462,13 @@ export function CommunicationClient({
                   ? `${reach} recipient${reach === 1 ? "" : "s"}`
                   : "Recipients in the group"}
             </p>
-            <Button onClick={send} disabled={pending || !canManage} size="lg">
+            <Button
+              onClick={send}
+              disabled={
+                pending || !canManage || (channel === "sms" && !smsAvailable)
+              }
+              size="lg"
+            >
               {pending ? <Loader2 className="animate-spin" /> : <Send className="size-4" />}
               Send
             </Button>
@@ -469,10 +509,25 @@ export function CommunicationClient({
                     <p className="text-muted-foreground mt-1 text-xs">
                       {format(parseISO(r.createdAt), "MMM d, yyyy · h:mm a")} ·{" "}
                       {r.sent}/{r.recipients} sent
+                      {r.channel === "sms" && r.units
+                        ? ` · ${r.units} unit${r.units === 1 ? "" : "s"}`
+                        : ""}
                       {r.failed ? ` · ${r.failed} failed` : ""}
                       {r.cost ? ` · ${formatMoney(r.cost, currency)}` : ""}
                     </p>
                   </div>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => reuse(r)}
+                      title="Use this message again"
+                    >
+                      <RotateCcw className="size-4" />
+                      <span className="hidden sm:inline">Reuse</span>
+                    </Button>
+                  )}
                 </div>
               );
             })}

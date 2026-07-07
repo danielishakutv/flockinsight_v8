@@ -3,7 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { CalendarDays, Loader2, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  Copy,
+  ExternalLink,
+  Globe,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { saveEvent, deleteEvent, type EventInput } from "@/app/(app)/my-events/actions";
 import { ImageUpload } from "@/components/settings/image-upload";
@@ -61,12 +72,32 @@ function emptyEvent(): FormState {
   };
 }
 
-export function EventsManager({ events }: { events: EventRow[] }) {
+export function EventsManager({
+  events,
+  baseUrl,
+  publicEnabled = true,
+}: {
+  events: EventRow[];
+  baseUrl: string;
+  publicEnabled?: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyEvent());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const set = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
+
+  async function copyLink(id: string, url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      toast.success("Link copied");
+      setTimeout(() => setCopiedId(null), 1600);
+    } catch {
+      toast.error("Couldn't copy the link.");
+    }
+  }
 
   function openNew() {
     setForm(emptyEvent());
@@ -109,7 +140,16 @@ export function EventsManager({ events }: { events: EventRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {publicEnabled ? (
+          <Button variant="outline" asChild>
+            <a href={`${baseUrl}/events`} target="_blank" rel="noreferrer">
+              <Globe className="size-4" /> Public events page
+            </a>
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button onClick={openNew}>
           <Plus className="size-4" /> New event
         </Button>
@@ -151,6 +191,27 @@ export function EventsManager({ events }: { events: EventRow[] }) {
                     {e.venue ? ` · ${e.venue}` : ""}
                   </p>
                 </div>
+                {e.isPublic && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => copyLink(e.id, `${baseUrl}/events/${e.id}`)}
+                      title="Copy public link"
+                    >
+                      {copiedId === e.id ? (
+                        <Check className="size-4" />
+                      ) : (
+                        <Copy className="size-4" />
+                      )}
+                    </Button>
+                    <Button size="sm" variant="ghost" asChild title="Open public page">
+                      <a href={`${baseUrl}/events/${e.id}`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="size-4" />
+                      </a>
+                    </Button>
+                  </>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => openEdit(e)}>
                   <Pencil className="size-4" />
                 </Button>

@@ -37,7 +37,7 @@ import {
 import { metricTotal, topChurchesByMetric } from "@/lib/usage";
 import { getPlanPrices } from "@/lib/pricing";
 import { PLANS, planName } from "@/lib/plans";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, formatMoneyCompact } from "@/lib/money";
 import { isEmailConfigured } from "@/lib/mailer";
 import { isSmsConfigured } from "@/lib/sms";
 import { isPushConfigured } from "@/lib/push";
@@ -277,19 +277,19 @@ export default async function SuperadminOverviewPage() {
         <StatCard label="Suspended" value={suspended} icon={PauseCircle} />
         <StatCard
           label="Revenue"
-          value={formatMoney(Number(revenueTotal), "NGN")}
+          value={formatMoneyCompact(Number(revenueTotal), "NGN")}
           sub="All time"
           icon={Banknote}
         />
         <StatCard
           label="This month"
-          value={formatMoney(Number(revenueMonth), "NGN")}
+          value={formatMoneyCompact(Number(revenueMonth), "NGN")}
           sub={format(now, "MMMM yyyy")}
           icon={TrendingUp}
         />
         <StatCard
           label="MRR"
-          value={formatMoney(mrr, "NGN")}
+          value={formatMoneyCompact(mrr, "NGN")}
           sub="Active paid plans"
           icon={CreditCard}
         />

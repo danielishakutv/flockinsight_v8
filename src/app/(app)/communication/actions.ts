@@ -17,8 +17,10 @@ import {
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
+import { smsPages } from "@/lib/sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
+import { recordAction } from "@/lib/analytics";
 import { sendPushToUsers } from "@/lib/push";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
@@ -138,6 +140,7 @@ export async function sendCommunication(
     });
     if (!res.ok) return res;
 
+    const units = smsPages(d.body) * res.sent;
     await db.insert(communicationLog).values({
       churchId: c.id,
       channel: "sms",
@@ -146,9 +149,21 @@ export async function sendCommunication(
       recipients: list.length,
       sent: res.sent,
       failed: res.failed,
+      units,
       cost: res.cost,
       createdBy: u.id,
     });
+    try {
+      await recordAction({
+        churchId: c.id,
+        userId: u.id,
+        name: "sms.sent",
+        plan: c.plan,
+        props: { sent: res.sent, units },
+      });
+    } catch {
+      /* best-effort */
+    }
     revalidatePath("/communication");
     return { ok: true, sent: res.sent, failed: res.failed, cost: res.cost };
   }
@@ -184,6 +199,17 @@ export async function sendCommunication(
     failed: list.length - sent,
     createdBy: u.id,
   });
+  try {
+    await recordAction({
+      churchId: c.id,
+      userId: u.id,
+      name: "email.sent",
+      plan: c.plan,
+      props: { sent },
+    });
+  } catch {
+    /* best-effort */
+  }
   revalidatePath("/communication");
   return { ok: true, sent, failed: list.length - sent };
 }

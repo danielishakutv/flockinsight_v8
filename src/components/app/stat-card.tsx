@@ -46,8 +46,8 @@ export function StatCard({
         </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-end gap-2">
-        <span className="text-3xl font-extrabold tabular-nums leading-none break-all sm:text-4xl sm:break-normal lg:text-5xl">
+      <div className="mt-3 flex w-full flex-wrap items-end gap-2">
+        <span className="min-w-0 max-w-full text-3xl font-extrabold tabular-nums leading-none break-words sm:text-4xl">
           {value}
         </span>
         {hasDelta && (

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { event } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { siteUrl } from "@/lib/site";
 import { EventsManager } from "@/components/events/events-manager";
 
 export const metadata = { title: "Events" };
@@ -30,6 +31,8 @@ export default async function MyEventsPage() {
         </p>
       </div>
       <EventsManager
+        baseUrl={siteUrl()}
+        publicEnabled={church.publicEnabled}
         events={rows.map((e) => ({
           id: e.id,
           title: e.title,

@@ -4,6 +4,7 @@ import { church, communicationLog, group, member, staff } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import {
   CommunicationClient,
@@ -58,6 +59,7 @@ export default async function CommunicationPage() {
           recipients: communicationLog.recipients,
           sent: communicationLog.sent,
           failed: communicationLog.failed,
+          units: communicationLog.units,
           cost: communicationLog.cost,
           createdAt: communicationLog.createdAt,
         })
@@ -89,6 +91,7 @@ export default async function CommunicationPage() {
         smsPrice={price}
         smsBalance={Number(smsRow.balance)}
         senderApproved={smsRow.status === "approved"}
+        smsAvailable={smsAvailableForCountry(c.country)}
         recent={recent.map((r) => ({
           id: r.id,
           channel: r.channel,
@@ -98,6 +101,7 @@ export default async function CommunicationPage() {
           recipients: r.recipients,
           sent: r.sent,
           failed: r.failed,
+          units: r.units,
           cost: Number(r.cost),
           createdAt: r.createdAt.toISOString(),
         }))}

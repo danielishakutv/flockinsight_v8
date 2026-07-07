@@ -2,13 +2,14 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
+import { recordAction } from "@/lib/analytics";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -129,12 +130,53 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
       .values({ churchId: church.id, ...fields, createdBy: user.id })
       .returning({ id: member.id });
 
+    try {
+      await recordAction({
+        churchId: church.id,
+        userId: user.id,
+        name: "member.added",
+        plan: church.plan,
+      });
+    } catch {
+      /* analytics best-effort */
+    }
+
     revalidatePath("/members");
     revalidatePath("/dashboard");
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("saveMember failed", e);
     return { ok: false, error: "Could not save member." };
+  }
+}
+
+export type BulkResult =
+  | { ok: true; deleted: number }
+  | { ok: false; error: string };
+
+/** Delete many members at once (church-scoped). */
+export async function deleteMembers(ids: string[]): Promise<BulkResult> {
+  const clean = [...new Set((ids ?? []).filter((v) => typeof v === "string"))];
+  if (clean.length === 0) return { ok: false, error: "Nothing selected." };
+  if (clean.some((id) => !z.string().uuid().safeParse(id).success))
+    return { ok: false, error: "Invalid selection." };
+  if (clean.length > 1000)
+    return { ok: false, error: "Please delete at most 1000 at a time." };
+
+  const { church } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+  try {
+    const rows = await db
+      .delete(member)
+      .where(and(inArray(member.id, clean), eq(member.churchId, church.id)))
+      .returning({ id: member.id });
+    revalidatePath("/members");
+    revalidatePath("/dashboard");
+    return { ok: true, deleted: rows.length };
+  } catch (e) {
+    console.error("deleteMembers failed", e);
+    return { ok: false, error: "Could not delete the selected members." };
   }
 }
 

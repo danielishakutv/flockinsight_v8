@@ -24,11 +24,14 @@ export function PostHogIdentify({
   role: string;
 }) {
   useEffect(() => {
-    if (!KEY || typeof window === "undefined") return;
-    // Only identify once posthog.init has run (set by the provider).
-    if (!(posthog as unknown as { __loaded?: boolean }).__loaded) return;
-    posthog.identify(userId, { plan, role });
-    posthog.group("church", churchId, { name: churchName, plan });
+    if (typeof window === "undefined") return;
+    if (KEY && (posthog as unknown as { __loaded?: boolean }).__loaded) {
+      posthog.identify(userId, { plan, role });
+      posthog.group("church", churchId, { name: churchName, plan });
+    }
+    // Tie Matomo visits to the same user for cross-tool consistency.
+    const paq = (window as unknown as { _paq?: unknown[] })._paq;
+    if (paq) paq.push(["setUserId", userId]);
   }, [userId, churchId, churchName, plan, role]);
 
   return null;

@@ -972,6 +972,8 @@ export const communicationLog = pgTable(
     recipients: integer().notNull().default(0),
     sent: integer().notNull().default(0),
     failed: integer().notNull().default(0),
+    // SMS pages ("units") consumed by this send; null/0 for email & notices.
+    units: integer().notNull().default(0),
     cost: numeric({ precision: 14, scale: 2, mode: "number" })
       .notNull()
       .default(0),

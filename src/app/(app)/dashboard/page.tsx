@@ -32,6 +32,10 @@ import {
 } from "@/lib/attendance-metrics";
 import { formatMoney } from "@/lib/money";
 import { siteUrl, churchPath } from "@/lib/site";
+import { getSmsPrice } from "@/lib/platform-settings";
+import { churchUsageSince } from "@/lib/usage";
+import { emailAllowanceFor } from "@/lib/plans";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { PageContainer } from "@/components/app/page-header";
 import { DateTime } from "@/components/app/date-time";
 import { StatCard } from "@/components/app/stat-card";
@@ -40,6 +44,7 @@ import { MiniTodo } from "@/components/dashboard/mini-todo";
 import { UpcomingBirthdays } from "@/components/dashboard/upcoming-birthdays";
 import { UpcomingAnniversaries } from "@/components/dashboard/upcoming-anniversaries";
 import { InviteCard } from "@/components/dashboard/invite-card";
+import { WalletCard } from "@/components/dashboard/wallet-card";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +81,8 @@ export default async function DashboardPage() {
     todos,
     canSettings,
     canTeam,
+    smsPrice,
+    monthUsage,
   ] = await Promise.all([
     // Window ends at the newest record when it's older than 12 weeks, so
     // churches with only backfilled data still see their stats and trend.
@@ -117,7 +124,17 @@ export default async function DashboardPage() {
       .limit(50),
     can("settings.manage"),
     can("team.manage"),
+    getSmsPrice(),
+    churchUsageSince(church.id, startOfMonth),
   ]);
+
+  const emailAllowance = emailAllowanceFor(church.plan);
+  const smsAvailable = smsAvailableForCountry(church.country);
+  const smsApproved = church.smsSenderStatus === "approved";
+  const smsAffordable =
+    smsApproved && smsPrice > 0
+      ? Math.floor(church.walletBalance / smsPrice)
+      : null;
 
   const avg = weeklyAverage(series, 8);
   const growth = growthPct(series, 4);
@@ -300,8 +317,20 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Right column: personal to-do + birthdays + anniversaries */}
+        {/* Right column: wallet + to-do + birthdays + anniversaries */}
         <aside className="min-w-0 space-y-4">
+          {canSettings && (
+            <WalletCard
+              walletBalance={church.walletBalance}
+              emailUsed={monthUsage.email}
+              emailAllowance={emailAllowance}
+              smsSent={monthUsage.sms}
+              smsAffordable={smsAffordable}
+              smsAvailable={smsAvailable}
+              country={church.country}
+              smsApproved={smsApproved}
+            />
+          )}
           {church.publicEnabled && church.handle && (
             <InviteCard
               url={`${siteUrl()}${churchPath(church.handle)}`}

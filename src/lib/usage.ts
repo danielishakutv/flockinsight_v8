@@ -55,6 +55,23 @@ export async function churchUsage(
   return { email: map.get("email") ?? 0, sms: map.get("sms") ?? 0 };
 }
 
+/** Email + SMS totals for one church since a given day (YYYY-MM-DD). */
+export async function churchUsageSince(
+  churchId: string,
+  sinceDay: string,
+): Promise<{ email: number; sms: number }> {
+  const rows = await db
+    .select({
+      metric: usageStat.metric,
+      total: sql<number>`coalesce(sum(${usageStat.count}), 0)`,
+    })
+    .from(usageStat)
+    .where(and(eq(usageStat.churchId, churchId), gte(usageStat.day, sinceDay)))
+    .groupBy(usageStat.metric);
+  const map = new Map(rows.map((r) => [r.metric, Number(r.total)]));
+  return { email: map.get("email") ?? 0, sms: map.get("sms") ?? 0 };
+}
+
 /** Top churches by a metric (all time). */
 export async function topChurchesByMetric(
   metric: "email" | "sms",
