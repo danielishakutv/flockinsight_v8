@@ -10,6 +10,11 @@ import {
   type CelebrationInput,
 } from "@/app/(app)/settings/celebrations/actions";
 import type { QueueItem } from "@/lib/celebrations";
+import {
+  BIRTHDAY_PRESETS,
+  ANNIVERSARY_PRESETS,
+  type CelebrationPreset,
+} from "@/lib/celebration-templates";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,6 +64,31 @@ function ToggleRow({
         <p className="text-muted-foreground text-xs">{desc}</p>
       </div>
       <Toggle checked={checked} onChange={onChange} />
+    </div>
+  );
+}
+
+/** A row of preset templates the church can apply to fill the fields below. */
+function PresetRow({
+  presets,
+  onApply,
+}: {
+  presets: CelebrationPreset[];
+  onApply: (p: CelebrationPreset) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted-foreground text-xs font-medium">Templates:</span>
+      {presets.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => onApply(p)}
+          className="hover:bg-primary/10 hover:text-primary hover:border-primary/40 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
+        >
+          {p.name}
+        </button>
+      ))}
     </div>
   );
 }
@@ -166,6 +196,16 @@ export function CelebrationsForm({
             <p className="flex items-center gap-2 text-sm font-bold">
               <Cake className="text-primary size-4" /> Birthday
             </p>
+            <PresetRow
+              presets={BIRTHDAY_PRESETS}
+              onApply={(p) =>
+                set({
+                  birthdayEmailSubject: p.emailSubject,
+                  birthdayEmailBody: p.emailBody,
+                  birthdaySms: p.sms,
+                })
+              }
+            />
             {f.email && (
               <>
                 <Input
@@ -195,6 +235,16 @@ export function CelebrationsForm({
             <p className="flex items-center gap-2 text-sm font-bold">
               <Heart className="text-primary size-4" /> Anniversaries (wedding, baptism, custom)
             </p>
+            <PresetRow
+              presets={ANNIVERSARY_PRESETS}
+              onApply={(p) =>
+                set({
+                  anniversaryEmailSubject: p.emailSubject,
+                  anniversaryEmailBody: p.emailBody,
+                  anniversarySms: p.sms,
+                })
+              }
+            />
             {f.email && (
               <>
                 <Input

@@ -529,9 +529,9 @@ export default async function LandingPage() {
           <div>
             <p className="text-sm font-bold">Company</p>
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
-              <li><span>About Us</span></li>
-              <li><span>Contact</span></li>
-              <li><span>Blog</span></li>
+              <li><Link href="/blog" className="hover:text-primary">Blog</Link></li>
+              <li><a href="mailto:support@flockinsight.com" className="hover:text-primary">Contact</a></li>
+              <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
             </ul>
           </div>
           <div>

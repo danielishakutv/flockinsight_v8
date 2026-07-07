@@ -15,6 +15,7 @@ import {
   reLoginEmail,
   weekendRecordEmail,
 } from "@/lib/reminder-emails";
+import { runFirstTimers } from "@/lib/first-timers";
 
 export const dynamic = "force-dynamic";
 
@@ -143,8 +144,25 @@ export async function GET(request: Request) {
     }
   }
 
+  // Piggyback the daily first-timer nurture sequence so it runs without needing
+  // a separate crontab entry. Idempotent — safe if the dedicated cron also runs.
+  let firstTimers: Awaited<ReturnType<typeof runFirstTimers>> | null = null;
+  try {
+    firstTimers = await runFirstTimers();
+  } catch (e) {
+    console.error("[cron/reminders] first-timers failed", e);
+  }
+
+  // Housekeeping: clear out expired one-time codes.
+  try {
+    const { purgeExpiredOtps } = await import("@/lib/otp");
+    await purgeExpiredOtps();
+  } catch (e) {
+    console.error("[cron/reminders] otp purge failed", e);
+  }
+
   return new Response(
-    JSON.stringify({ ok: true, checked: owners.length, sent, byKind }),
+    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers }),
     { headers: { "Content-Type": "application/json" } },
   );
 }

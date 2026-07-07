@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
+import { ensureSignup, signupUrl } from "@/lib/member-signup";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { MembersList, type MemberRow } from "@/components/members/members-list";
 
@@ -32,13 +33,23 @@ export default async function MembersPage() {
   const active = rows.filter((r) => r.status === "active").length;
   const visitors = rows.filter((r) => r.status === "visitor").length;
 
+  // The public self-registration link (only needed for managers).
+  const signup = canManage
+    ? await ensureSignup({ id: church.id, name: church.name, handle: church.handle })
+    : null;
+
   return (
     <PageContainer>
       <PageHeader
         title="Members"
         description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}`}
       />
-      <MembersList members={rows} canManage={canManage} />
+      <MembersList
+        members={rows}
+        canManage={canManage}
+        signupUrl={signup ? signupUrl(signup.slug) : undefined}
+        signupEnabled={signup?.enabled ?? false}
+      />
     </PageContainer>
   );
 }

@@ -303,3 +303,104 @@ export async function getCelebrationQueue(
   }
   return items.sort((a, b) => a.offset - b.offset).slice(0, 40);
 }
+
+export type CelebrationCategory = "birthday" | "wedding" | "baptism" | "other";
+
+export type CelebrationListItem = {
+  id: string;
+  memberId: string;
+  name: string;
+  category: CelebrationCategory;
+  occasion: string;
+  dateLabel: string;
+  offset: number;
+  years: number | null;
+};
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * A full "view all" list of upcoming birthdays & anniversaries over the next
+ * `days` days, each tagged with a filterable category. Used by the /celebrations
+ * directory page (no send — display only).
+ */
+export async function getUpcomingCelebrations(
+  churchId: string,
+  days = 90,
+): Promise<CelebrationListItem[]> {
+  const today = new Date();
+  const win = new Map<
+    string,
+    { offset: number; label: string; year: number }
+  >();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const key = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // Keep the first (nearest) occurrence for each MM-DD in the window.
+    if (win.has(key)) continue;
+    win.set(key, {
+      offset: i,
+      label:
+        i === 0
+          ? "Today"
+          : i === 1
+            ? "Tomorrow"
+            : `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`,
+      year: d.getFullYear(),
+    });
+  }
+
+  const rows = await db
+    .select({
+      id: member.id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      dateOfBirth: member.dateOfBirth,
+      weddingDate: member.weddingDate,
+      baptismDate: member.baptismDate,
+      anniversaries: member.anniversaries,
+    })
+    .from(member)
+    .where(
+      and(
+        eq(member.churchId, churchId),
+        or(
+          isNotNull(member.dateOfBirth),
+          isNotNull(member.weddingDate),
+          isNotNull(member.baptismDate),
+          ne(sql`jsonb_array_length(${member.anniversaries})`, 0),
+        ),
+      ),
+    )
+    .limit(5000);
+
+  const items: CelebrationListItem[] = [];
+  const add = (
+    r: (typeof rows)[number],
+    iso: string | null,
+    category: CelebrationCategory,
+    occasion: string,
+  ) => {
+    if (!iso) return;
+    const w = win.get(iso.slice(5));
+    if (!w) return;
+    items.push({
+      id: `${r.id}-${category}-${occasion}`,
+      memberId: r.id,
+      name: [r.firstName, r.lastName].filter(Boolean).join(" "),
+      category,
+      occasion,
+      dateLabel: w.label,
+      offset: w.offset,
+      years: yearsTo(iso, w.year),
+    });
+  };
+  for (const r of rows) {
+    add(r, r.dateOfBirth, "birthday", "Birthday");
+    add(r, r.weddingDate, "wedding", "Wedding anniversary");
+    add(r, r.baptismDate, "baptism", "Baptism anniversary");
+    for (const a of r.anniversaries ?? []) add(r, a.date, "other", a.label);
+  }
+  return items.sort((a, b) => a.offset - b.offset).slice(0, 500);
+}

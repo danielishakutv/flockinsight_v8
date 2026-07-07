@@ -20,6 +20,7 @@ import {
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { MembersDataMenu } from "@/components/members/members-data-menu";
+import { MemberSignupLink } from "@/components/members/member-signup-link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,9 +75,13 @@ function initials(m: MemberRow) {
 export function MembersList({
   members,
   canManage = true,
+  signupUrl,
+  signupEnabled = false,
 }: {
   members: MemberRow[];
   canManage?: boolean;
+  signupUrl?: string;
+  signupEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -140,6 +145,9 @@ export function MembersList({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {canManage && signupUrl && (
+            <MemberSignupLink url={signupUrl} enabled={signupEnabled} />
+          )}
           <MembersDataMenu canManage={canManage} />
           {canManage && (
             <Button onClick={openAdd} size="lg" className="flex-1 sm:flex-none">

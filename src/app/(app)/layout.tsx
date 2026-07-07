@@ -14,6 +14,7 @@ import { ImpersonationBanner } from "@/components/app/impersonation-banner";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
+import { WhatsNewBanner } from "@/components/app/whats-new-banner";
 
 export default async function AppLayout({
   children,
@@ -87,7 +88,10 @@ export default async function AppLayout({
           />
           <DesktopTopbar unread={unread} canRecord={canRecord} />
           <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">
-            <UploadProvider>{children}</UploadProvider>
+            <UploadProvider>
+              <WhatsNewBanner />
+              {children}
+            </UploadProvider>
           </main>
         </div>
 

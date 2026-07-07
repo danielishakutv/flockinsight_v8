@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.47.0",
+    date: "2026-07-07",
+    summary:
+      "Members can now sign themselves up, first-timers are nurtured automatically, and celebrations get a home of their own.",
+    changes: {
+      Added: [
+        "Member self-registration: share one public link and people add themselves to your church — no account needed. Find it on the Members page (“Public link”), in Forms, or under Settings → Sign-up link.",
+        "Smart duplicate handling: if someone already exists, they must confirm a one-time code (by email or SMS) before their details are updated — so nobody can overwrite someone else's record, and you never get duplicates.",
+        "People can pick the ministries, departments and groups they belong to right on the sign-up form.",
+        "First-timer follow-up: automatically thank new visitors, then invite them to become full members after a couple of weeks — with the invite link that converts them from visitor to member in one tap (Settings → First-timers).",
+        "A new Celebrations page lists every upcoming birthday and anniversary, filterable by type (birthday, wedding, baptism and more).",
+        "A library of ready-made birthday & anniversary message templates to pick from as your default (Settings → Celebrations).",
+        "A FlockInsight Blog at flockinsight.com/blog — helpful articles for churches, fully managed by our team.",
+      ],
+      Improved: [
+        "Your dashboard's upcoming birthdays and anniversaries cards now link straight to the full Celebrations view.",
+      ],
+    },
+  },
+  {
     version: "0.46.1",
     date: "2026-07-06",
     changes: {

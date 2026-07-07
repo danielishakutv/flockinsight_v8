@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Cake } from "lucide-react";
 import { db } from "@/db";
@@ -102,6 +103,12 @@ export async function UpcomingBirthdays({ churchId }: { churchId: string }) {
             </span>
           </div>
         ))}
+        <Link
+          href="/celebrations"
+          className="text-primary block pt-1 text-xs font-semibold hover:underline"
+        >
+          View all celebrations →
+        </Link>
       </CardContent>
     </Card>
   );

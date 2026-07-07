@@ -232,6 +232,13 @@
       "when": 1783238867238,
       "tag": "0032_lazy_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1783436412252,
+      "tag": "0033_feature_bundle_v047",
+      "breakpoints": true
     }
   ]
 }

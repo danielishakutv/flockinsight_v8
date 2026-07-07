@@ -9,12 +9,14 @@ import {
   HandCoins,
   BellRing,
   PartyPopper,
+  HeartHandshake,
   MessageSquare,
   Wallet,
   HardDrive,
   CreditCard,
   Users,
   ShieldCheck,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,6 +39,7 @@ const GROUPS: Group[] = [
     title: "Engagement",
     items: [
       { label: "Reminders", href: "/settings/reminders", need: "settings", icon: BellRing },
+      { label: "First-timers", href: "/settings/first-timers", need: "settings", icon: HeartHandshake },
       { label: "Celebrations", href: "/settings/celebrations", need: "settings", icon: PartyPopper },
       { label: "SMS", href: "/settings/sms", need: "settings", icon: MessageSquare },
     ],
@@ -52,6 +55,7 @@ const GROUPS: Group[] = [
   {
     title: "People",
     items: [
+      { label: "Sign-up link", href: "/settings/signup", need: "settings", icon: UserPlus },
       { label: "Team", href: "/settings/team", need: "team", icon: Users },
       { label: "Roles", href: "/settings/roles", need: "team", icon: ShieldCheck },
     ],

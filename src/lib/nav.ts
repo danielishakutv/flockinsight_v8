@@ -15,6 +15,7 @@ import {
   FolderOpen,
   FileText,
   BookOpen,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,7 @@ export const mainNav: NavItem[] = [
   { label: "Analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view" },
   { label: "Members", href: "/members", icon: Users, perm: "members.view" },
   { label: "Groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
+  { label: "Celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
   { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
   {
     label: "Follow-up",
@@ -188,6 +190,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Ministries & groups",
         tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
         perm: "groups.view",
+      },
+      {
+        label: "Celebrations",
+        href: "/celebrations",
+        icon: PartyPopper,
+        description: "Upcoming birthdays & anniversaries",
+        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
+        perm: "members.view",
       },
       {
         label: "Follow-up",

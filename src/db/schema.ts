@@ -1346,6 +1346,185 @@ export const devotional = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — member self-registration (public sign-up link)
+ * Each church gets one always-available public link (/join/<slug>) where
+ * people add/update their own details with no account. Matches an existing
+ * member by email/phone; updating an existing record requires an emailed/SMS
+ * OTP so nobody can overwrite someone else's data.
+ * ========================================================== */
+export const memberSignup = pgTable("member_signup", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  // Public link half-name: /join/<slug>. Globally unique so links are stable.
+  slug: text().notNull().unique(),
+  enabled: boolean().notNull().default(true),
+  title: text().notNull().default("Join our church family"),
+  intro: text()
+    .notNull()
+    .default(
+      "Fill in your details below so we can stay connected with you. It only takes a minute.",
+    ),
+  successMessage: text()
+    .notNull()
+    .default("Thank you! Your details have been saved. We're glad to have you."),
+  // Status new self-registrations are created with (member_status value).
+  newMemberStatus: text().notNull().default("active"),
+  // Which optional sections the public form shows.
+  collectBirthday: boolean().notNull().default(true),
+  collectAddress: boolean().notNull().default(true),
+  collectAnniversary: boolean().notNull().default(true),
+  // Let people tick the ministries/departments/groups they belong to.
+  allowGroupSelect: boolean().notNull().default(true),
+  // Notify church managers on each new/updated self-registration.
+  notifyInApp: boolean().notNull().default(true),
+  notifyEmail: boolean().notNull().default(true),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/* ============================================================
+ * FlockInsight platform — one-time codes (OTP)
+ * Generic short-lived numeric codes for verifying ownership of an email or
+ * phone before a sensitive action (currently: a member confirming an update
+ * to an existing record via the public sign-up link). Codes are stored hashed.
+ * ========================================================== */
+export const otpCode = pgTable(
+  "otp_code",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
+    // What the code authorises, e.g. "member_self_update".
+    purpose: text().notNull(),
+    channel: text().notNull(), // "email" | "sms"
+    // Normalised destination the code was sent to (lower-email / digits-phone).
+    destination: text().notNull(),
+    codeHash: text().notNull(),
+    // The member this code lets the holder update (when applicable).
+    memberId: uuid().references(() => member.id, { onDelete: "cascade" }),
+    // Pending payload to apply once verified (arbitrary JSON).
+    payload: jsonb().$type<Record<string, unknown>>(),
+    attempts: integer().notNull().default(0),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    consumedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("otp_lookup_idx").on(t.destination, t.purpose),
+    index("otp_expires_idx").on(t.expiresAt),
+  ],
+);
+
+/* ============================================================
+ * FlockInsight domain — first-timer nurture sequence
+ * When a first-time worshipper is registered (status visitor/new_convert), an
+ * automated sequence thanks them, keeps them warm, and finally invites them to
+ * become a full member (via the public sign-up link, which promotes them).
+ * One settings row per church + a run log to keep the cron idempotent.
+ * ========================================================== */
+export const firstTimerSetting = pgTable("first_timer_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  sms: boolean().notNull().default(false),
+  email: boolean().notNull().default(true),
+  sendTime: text().notNull().default("10:00"), // local church time HH:MM
+  // Days after registration to send the welcome/appreciation message.
+  welcomeDelayDays: integer().notNull().default(1),
+  // Days after registration to send the "become a member" invite.
+  inviteDelayDays: integer().notNull().default(14),
+  welcomeSms: text()
+    .notNull()
+    .default(
+      "Hi {name}, it was a joy to have you at {church}! 🙏 Thank you for worshipping with us. We'd love to see you again soon.",
+    ),
+  welcomeEmailSubject: text()
+    .notNull()
+    .default("Thank you for visiting {church}, {name}!"),
+  welcomeEmailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nThank you so much for visiting {church}! It was a joy to have you worship with us.\n\nWe'd love to stay connected and see you again. If there's any way we can pray for you or serve you, please let us know.\n\nWith love,\n{church}",
+    ),
+  inviteSms: text()
+    .notNull()
+    .default(
+      "Hi {name}, we'd love for you to become part of the {church} family! Complete your membership here: {link}",
+    ),
+  inviteEmailSubject: text()
+    .notNull()
+    .default("Become part of the {church} family, {name}"),
+  inviteEmailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nWe've loved having you with us these past couple of weeks. We'd be honoured to have you become a full member of the {church} family.\n\nIt only takes a minute — just complete your details here:\n{link}\n\nWe look forward to walking this journey with you.\n\nWith love,\n{church}",
+    ),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const firstTimerRun = pgTable(
+  "first_timer_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    stage: text().notNull(), // "welcome" | "invite"
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  // One send per member per stage — makes re-runs a no-op.
+  (t) => [uniqueIndex("first_timer_run_unique").on(t.memberId, t.stage)],
+);
+
+/* ============================================================
+ * FlockInsight platform — blog (public marketing site, superadmin-managed)
+ * Posts published on flockinsight.com/blog for SEO & sharing.
+ * ========================================================== */
+export const blogStatusEnum = pgEnum("blog_status", ["draft", "published"]);
+
+export const blogPost = pgTable(
+  "blog_post",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Public URL half-name: /blog/<slug>. Globally unique.
+    slug: text().notNull().unique(),
+    title: text().notNull(),
+    excerpt: text(),
+    // Markdown body (rendered with react-markdown on the public page).
+    body: text().notNull().default(""),
+    coverUrl: text(),
+    status: blogStatusEnum().notNull().default("draft"),
+    authorName: text().notNull().default("The FlockInsight Team"),
+    tags: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    // Optional SEO overrides (fall back to title/excerpt).
+    seoTitle: text(),
+    seoDescription: text(),
+    views: integer().notNull().default(0),
+    publishedAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("blog_status_idx").on(t.status, t.publishedAt),
+    index("blog_slug_idx").on(t.slug),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -1384,3 +1563,8 @@ export type FormResponse = typeof formResponse.$inferSelect;
 export type Subscriber = typeof subscriber.$inferSelect;
 export type Devotional = typeof devotional.$inferSelect;
 export type NewDevotional = typeof devotional.$inferInsert;
+export type MemberSignup = typeof memberSignup.$inferSelect;
+export type OtpCode = typeof otpCode.$inferSelect;
+export type FirstTimerSetting = typeof firstTimerSetting.$inferSelect;
+export type BlogPost = typeof blogPost.$inferSelect;
+export type NewBlogPost = typeof blogPost.$inferInsert;
