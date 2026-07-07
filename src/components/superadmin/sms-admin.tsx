@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Loader2, Pencil, Search, Wallet, X } from "lucide-react";
+import { Ban, Check, Loader2, Pencil, Search, Send, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
@@ -11,6 +11,7 @@ import {
   sendTestSms,
   setSenderId,
   setSmsPrice,
+  submitSenderIdToTermii,
 } from "@/app/superadmin/sms/actions";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ export type ChurchSms = {
   currency: string;
   senderId: string | null;
   status: "none" | "pending" | "approved" | "rejected" | "revoked";
+  stage: string | null;
   note: string | null;
   balance: number;
 };
@@ -128,6 +130,18 @@ export function SmsAdmin({
         return;
       }
       toast.success(approve ? "Sender ID approved" : "Sender ID rejected");
+      router.refresh();
+    });
+  }
+
+  function submit(c: ChurchSms) {
+    startTransition(async () => {
+      const res = await submitSenderIdToTermii(c.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Submitted to the network — the church now sees 'Processing'.");
       router.refresh();
     });
   }
@@ -238,42 +252,53 @@ export function SmsAdmin({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {applications.map((c) => (
-              <div
-                key={c.id}
-                className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">
-                    {c.name} — <span className="font-mono">{c.senderId}</span>
-                  </p>
-                  {c.note && (
-                    <p className="text-muted-foreground truncate text-xs">
-                      {c.note}
+            {applications.map((c) => {
+              const submitted = c.stage === "submitted";
+              return (
+                <div
+                  key={c.id}
+                  className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">
+                      {c.name} — <span className="font-mono">{c.senderId}</span>
+                      <Badge variant="secondary">
+                        {submitted ? "Processing" : "Awaiting review"}
+                      </Badge>
                     </p>
+                    {c.note && (
+                      <p className="text-muted-foreground truncate text-xs">{c.note}</p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => editId(c)}
+                    disabled={pending}
+                  >
+                    <Pencil className="size-4" /> Edit ID
+                  </Button>
+                  {!submitted && (
+                    <Button size="sm" onClick={() => submit(c)} disabled={pending}>
+                      <Send className="size-4" /> Submit to network
+                    </Button>
                   )}
+                  {submitted && (
+                    <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
+                      <Check className="size-4" /> Mark approved
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => review(c, false)}
+                    disabled={pending}
+                  >
+                    <X className="size-4" /> Reject
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => editId(c)}
-                  disabled={pending}
-                >
-                  <Pencil className="size-4" /> Edit ID
-                </Button>
-                <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
-                  <Check className="size-4" /> Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => review(c, false)}
-                  disabled={pending}
-                >
-                  <X className="size-4" /> Reject
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
@@ -304,7 +329,11 @@ export function SmsAdmin({
                   {c.status === "approved" && (
                     <Badge variant="success">{c.senderId}</Badge>
                   )}
-                  {c.status === "pending" && <Badge variant="secondary">Pending</Badge>}
+                  {c.status === "pending" && (
+                    <Badge variant="secondary">
+                      {c.stage === "submitted" ? "Processing" : "Awaiting review"}
+                    </Badge>
+                  )}
                   {c.status === "rejected" && (
                     <Badge variant="destructive">Rejected</Badge>
                   )}

@@ -17,6 +17,7 @@ export default async function SuperadminSmsPage() {
         currency: church.currency,
         senderId: church.smsSenderId,
         status: church.smsSenderStatus,
+        stage: church.smsSenderStage,
         note: church.smsSenderNote,
         balance: church.walletBalance,
       })

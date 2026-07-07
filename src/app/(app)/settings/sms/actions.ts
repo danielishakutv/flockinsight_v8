@@ -8,12 +8,9 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { isSmsConfigured } from "@/lib/sms";
-import {
-  requestSenderId,
-  fetchSenderIdInfo,
-  fetchSenderIdStatus,
-  type SenderIdStatus,
-} from "@/lib/termii-sender";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { notifySuperAdminsByEmail } from "@/lib/notifications";
+import { fetchSenderIdStatus, type SenderIdStatus } from "@/lib/termii-sender";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -72,6 +69,11 @@ export async function applySenderId(
 
   if (!isSmsConfigured())
     return { ok: false, error: "SMS isn't enabled on the platform yet." };
+  if (!smsAvailableForCountry(c.country))
+    return {
+      ok: false,
+      error: "SMS isn't available in your country yet — it's coming soon.",
+    };
 
   const cleanNote = (note || "").trim().slice(0, 500) || null;
 
@@ -93,49 +95,24 @@ export async function applySenderId(
       error: "That sender ID is already in use by another church. Please choose a different one.",
     };
 
-  // Check Termii FIRST so we never submit a duplicate request for an ID that
-  // already exists (active or pending) on the account.
-  const info = await fetchSenderIdInfo(id);
-  if (info.found) {
-    if (info.status === "approved") {
-      await db
-        .update(church)
-        .set({ smsSenderId: id, smsSenderStatus: "approved", smsSenderNote: null })
-        .where(eq(church.id, c.id));
-      revalidatePath("/settings/sms");
-      return { ok: true, outcome: "approved" };
-    }
-    if (info.status === "pending") {
-      await db
-        .update(church)
-        .set({ smsSenderId: id, smsSenderStatus: "pending", smsSenderNote: cleanNote })
-        .where(eq(church.id, c.id));
-      revalidatePath("/settings/sms");
-      return { ok: true, outcome: "pending" };
-    }
-    // Blocked/rejected on Termii — re-requesting the same ID won't help.
-    return {
-      ok: false,
-      error: "That sender ID was blocked or rejected by the network. Please choose a different one.",
-    };
-  }
-
-  // Brand-new ID → submit a request to Termii for review.
-  const reg = await requestSenderId({
-    senderId: id,
-    usecase: (note || "").trim() || "Church service alerts and member updates",
-    company: c.name,
-  });
-  if (!reg.ok) return { ok: false, error: reg.error };
-
+  // Record the request for superadmin review. The superadmin submits it to the
+  // network (Termii) — the church isn't submitted directly, so it can be vetted.
   await db
     .update(church)
     .set({
       smsSenderId: id,
       smsSenderStatus: "pending",
+      smsSenderStage: null, // awaiting review
       smsSenderNote: cleanNote,
     })
     .where(eq(church.id, c.id));
+
+  await notifySuperAdminsByEmail({
+    subject: `SMS sender ID request: ${id}`,
+    title: "New SMS sender ID request",
+    body: `${c.name} has requested the sender ID "${id}".${cleanNote ? ` Note: ${cleanNote}.` : ""} Review it and submit to the network.`,
+    linkPath: "/superadmin/sms",
+  });
 
   revalidatePath("/settings/sms");
   return { ok: true, outcome: "requested" };

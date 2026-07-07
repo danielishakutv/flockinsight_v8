@@ -4,6 +4,7 @@ import { church, walletTxn } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { SmsSettings } from "@/components/settings/sms-settings";
 
 export const metadata = { title: "SMS · Settings" };
@@ -22,6 +23,7 @@ export default async function SmsSettingsPage({
       .select({
         senderId: church.smsSenderId,
         status: church.smsSenderStatus,
+        stage: church.smsSenderStage,
         note: church.smsSenderNote,
         balance: church.walletBalance,
         currency: church.currency,
@@ -49,6 +51,9 @@ export default async function SmsSettingsPage({
     <SmsSettings
       senderId={row.senderId}
       status={row.status}
+      stage={row.stage}
+      smsAvailable={smsAvailableForCountry(c.country)}
+      country={c.country}
       note={row.note}
       balance={row.balance}
       currency={row.currency}

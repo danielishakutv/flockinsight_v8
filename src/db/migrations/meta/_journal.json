@@ -253,6 +253,13 @@
       "when": 1783465222399,
       "tag": "0035_comm_log_units",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783465951937,
+      "tag": "0036_sms_sender_stage",
+      "breakpoints": true
     }
   ]
 }

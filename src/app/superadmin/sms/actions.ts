@@ -8,6 +8,7 @@ import { church, walletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
+import { requestSenderId } from "@/lib/termii-sender";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
@@ -92,6 +93,61 @@ export async function revokeSenderId(
   return { ok: true };
 }
 
+/**
+ * Superadmin sends a reviewed request to the network (Termii). The church then
+ * sees the ID as "Processing" until it's finally approved.
+ */
+export async function submitSenderIdToTermii(
+  churchId: string,
+): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(churchId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [c] = await db
+    .select({
+      name: church.name,
+      senderId: church.smsSenderId,
+      note: church.smsSenderNote,
+      status: church.smsSenderStatus,
+    })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  if (!c || !c.senderId)
+    return { ok: false, error: "This church hasn't requested a sender ID yet." };
+  if (c.status !== "pending")
+    return { ok: false, error: "This request isn't pending review." };
+
+  const reg = await requestSenderId({
+    senderId: c.senderId,
+    usecase: c.note || "Church service alerts and member updates",
+    company: c.name,
+  });
+  if (!reg.ok) return { ok: false, error: reg.error };
+
+  await db
+    .update(church)
+    .set({ smsSenderStage: "submitted" })
+    .where(eq(church.id, churchId));
+  await notifyChurchManagers({
+    churchId,
+    title: "SMS sender ID submitted",
+    body: "Your SMS sender ID has been submitted to the network and is now processing. We'll let you know once it's approved.",
+    linkUrl: "/settings/sms",
+  });
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "submit_sender_id",
+    summary: `Submitted a church's SMS sender ID "${c.senderId}" to the network`,
+    targetType: "church",
+    targetId: churchId,
+  });
+  revalidatePath("/superadmin/sms");
+  return { ok: true };
+}
+
 export async function reviewSenderId(
   churchId: string,
   approve: boolean,
@@ -104,6 +160,7 @@ export async function reviewSenderId(
     .update(church)
     .set({
       smsSenderStatus: approve ? "approved" : "rejected",
+      smsSenderStage: null,
       smsSenderNote: approve ? null : (reason || "").slice(0, 500) || null,
     })
     .where(eq(church.id, churchId));

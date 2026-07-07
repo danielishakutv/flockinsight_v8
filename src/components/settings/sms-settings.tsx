@@ -48,6 +48,9 @@ const PRESETS = [500, 1000, 2000, 5000];
 export function SmsSettings({
   senderId,
   status,
+  stage,
+  smsAvailable = true,
+  country,
   note,
   balance,
   currency,
@@ -57,6 +60,9 @@ export function SmsSettings({
 }: {
   senderId: string | null;
   status: "none" | "pending" | "approved" | "rejected" | "revoked";
+  stage?: string | null;
+  smsAvailable?: boolean;
+  country?: string;
   note: string | null;
   balance: number;
   currency: string;
@@ -105,9 +111,10 @@ export function SmsSettings({
       }
       if (res.outcome === "approved")
         toast.success("That sender ID is already approved — you can send SMS now!");
-      else if (res.outcome === "pending")
-        toast.message("That sender ID is already awaiting approval.");
-      else toast.success("Sender ID submitted to Termii for review.");
+      else
+        toast.success(
+          "Request received — we'll review it and submit it to the network for approval.",
+        );
       router.refresh();
     });
   }
@@ -127,7 +134,9 @@ export function SmsSettings({
   }
 
   const showForm =
-    status === "none" || status === "rejected" || status === "revoked";
+    smsAvailable &&
+    (status === "none" || status === "rejected" || status === "revoked");
+  const processing = status === "pending" && stage === "submitted";
 
   return (
     <div className="space-y-4">
@@ -165,17 +174,48 @@ export function SmsSettings({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {status === "pending" && (
+          {!smsAvailable && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+              <Clock className="mt-0.5 size-5 shrink-0 text-amber-500" />
+              <div>
+                <p className="font-semibold">SMS is coming soon</p>
+                <p className="text-muted-foreground text-sm">
+                  SMS sending isn&apos;t available in {country ?? "your country"}{" "}
+                  yet — we&apos;re working on it and it&apos;ll be available soon.
+                  Email messaging works today.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {status === "pending" && !processing && (
             <div className="flex items-start gap-3 rounded-xl border p-3">
               <Clock className="mt-0.5 size-5 shrink-0 text-amber-500" />
               <div className="flex-1">
                 <p className="font-semibold">
-                  “{senderId}” is under review{" "}
-                  <Badge variant="secondary">Pending</Badge>
+                  “{senderId}” requested{" "}
+                  <Badge variant="secondary">Awaiting review</Badge>
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Termii is reviewing your sender ID. Approval usually takes a few
-                  hours. Check the latest status below.
+                  We&apos;ve received your request. Our team will review it and
+                  submit it to the network for approval — you&apos;ll be notified
+                  as it progresses.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {processing && (
+            <div className="flex items-start gap-3 rounded-xl border p-3">
+              <Loader2 className="text-primary mt-0.5 size-5 shrink-0 animate-spin" />
+              <div className="flex-1">
+                <p className="font-semibold">
+                  “{senderId}” is processing{" "}
+                  <Badge variant="secondary">Processing</Badge>
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  Your sender ID has been submitted to the network for approval.
+                  This usually takes a few hours.
                 </p>
                 <Button
                   variant="outline"

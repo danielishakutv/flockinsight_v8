@@ -1,0 +1,1 @@
+ALTER TABLE "church" ADD COLUMN "sms_sender_stage" text;

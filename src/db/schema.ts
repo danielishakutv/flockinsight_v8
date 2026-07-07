@@ -171,6 +171,9 @@ export const church = pgTable("church", {
   smsSenderId: text(), // requested/approved sender ID (<=11 chars)
   smsSenderStatus: smsSenderStatusEnum().notNull().default("none"),
   smsSenderNote: text(), // application note / rejection reason
+  // Sub-state within "pending": null = awaiting superadmin review,
+  // "submitted" = superadmin sent it to the network (church sees "Processing").
+  smsSenderStage: text(),
   // Legacy SMS-only balance. Superseded by the unified `walletBalance` below
   // (migration 0028 copies this value across). Kept for history; not written to.
   smsBalance: numeric({ precision: 14, scale: 2, mode: "number" })

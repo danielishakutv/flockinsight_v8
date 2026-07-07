@@ -117,6 +117,38 @@ export async function notifyChurchManagers(opts: {
   }
 }
 
+/**
+ * Email all platform superadmins (e.g. to alert them of a new SMS sender-ID
+ * request that needs review). Best-effort — never throws.
+ */
+export async function notifySuperAdminsByEmail(opts: {
+  subject: string;
+  title: string;
+  body: string;
+  linkPath?: string;
+}): Promise<void> {
+  try {
+    const { sendEmail, emailLayout, isEmailConfigured } = await import("@/lib/mailer");
+    if (!isEmailConfigured()) return;
+    const { siteUrl } = await import("@/lib/site");
+    const admins = await db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.isSuperAdmin, true));
+    const cta = opts.linkPath
+      ? { label: "Open admin", url: `${siteUrl()}${opts.linkPath}` }
+      : undefined;
+    const html = emailLayout(opts.title, opts.body, cta);
+    await Promise.allSettled(
+      admins.map((a) =>
+        sendEmail({ to: a.email, subject: opts.subject, html, text: opts.body }),
+      ),
+    );
+  } catch (e) {
+    console.error("[notify] notifySuperAdminsByEmail failed", e);
+  }
+}
+
 export async function listNotifications(
   ctx: NotificationCtx,
   opts?: { category?: "system" | "general"; limit?: number },
