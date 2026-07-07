@@ -15,6 +15,12 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Replace the {name} tag with a recipient's first name (or a neutral word). */
+function fillName(text: string, name?: string | null): string {
+  const first = (name || "").trim().split(/\s+/)[0] || "there";
+  return text.replace(/\{name\}/g, first);
+}
+
 export type BroadcastAudience = "all" | "plan" | "country" | "churches";
 
 export type DeliverInput = {
@@ -42,12 +48,17 @@ export async function deliverBroadcast(
   let pushSent = 0;
   let emailSent = 0;
 
+  // In-app + push reach many people at once, so they can't be personalised —
+  // use a neutral greeting there. Email is personalised per recipient below.
+  const neutralTitle = fillName(d.title);
+  const neutralBody = fillName(d.body);
+
   if (d.inApp) {
     const [row] = await db
       .insert(notification)
       .values({
-        title: d.title,
-        body: d.body,
+        title: neutralTitle,
+        body: neutralBody,
         category: d.category,
         audience: d.audience,
         targetPlan: d.audience === "plan" ? (d.targetPlan as "starter") : null,
@@ -71,8 +82,8 @@ export async function deliverBroadcast(
       churchIds,
     });
     pushSent = await sendPushToUsers(userIds, {
-      title: d.title,
-      body: d.body,
+      title: neutralTitle,
+      body: neutralBody,
       url: d.linkUrl || "/notifications",
       tag: row.id,
     });
@@ -96,15 +107,18 @@ export async function deliverBroadcast(
         ? d.linkUrl
         : `${BASE_URL}${d.linkUrl}`
       : `${BASE_URL}/notifications`;
-    const html = emailLayout(
-      escapeHtml(d.title),
-      `<p>${escapeHtml(d.body).replace(/\n/g, "<br/>")}</p>`,
-      { label: "Open FlockInsight", url: linkAbs },
-    );
     const results = await Promise.allSettled(
-      recipients.map((r) =>
-        sendEmail({ to: r.email, subject: d.title, html, text: d.body }),
-      ),
+      recipients.map((r) => {
+        // Personalise per recipient: {name} → their first name.
+        const subject = fillName(d.title, r.name);
+        const body = fillName(d.body, r.name);
+        const html = emailLayout(
+          escapeHtml(subject),
+          `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+          { label: "Open FlockInsight", url: linkAbs },
+        );
+        return sendEmail({ to: r.email, subject, html, text: body });
+      }),
     );
     emailSent = results.filter((x) => x.status === "fulfilled" && x.value).length;
   }

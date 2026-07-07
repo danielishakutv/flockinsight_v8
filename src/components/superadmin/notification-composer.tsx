@@ -268,6 +268,11 @@ export function NotificationComposer({
             placeholder="Write your announcement…"
             rows={4}
           />
+          <p className="text-muted-foreground text-xs">
+            Tip: use <code className="bg-muted rounded px-1">{"{name}"}</code> to
+            greet each person by their first name in emails (in-app/push use a
+            neutral greeting).
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-link">Link (optional)</Label>
