@@ -1212,6 +1212,31 @@ export const event = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — event speakers / guests
+ * People invited to (or featuring at) an event, so the church can email/SMS
+ * them about it. Scoped to an event (and its church).
+ * ========================================================== */
+export const eventGuest = pgTable(
+  "event_guest",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    eventId: uuid()
+      .notNull()
+      .references(() => event.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    role: text().notNull().default("Guest"), // e.g. "Speaker", "Guest", "Minister"
+    email: text(),
+    phone: text(),
+    note: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("event_guest_event_idx").on(t.eventId)],
+);
+
+/* ============================================================
  * FlockInsight domain — form builder (Google-Forms-style)
  * Churches design forms (fields stored as jsonb), publish a public link
  * (/f/<slug>), and collect responses. Responses can match/create members.
@@ -1608,3 +1633,4 @@ export type FirstTimerSetting = typeof firstTimerSetting.$inferSelect;
 export type BlogPost = typeof blogPost.$inferSelect;
 export type NewBlogPost = typeof blogPost.$inferInsert;
 export type AnalyticsEvent = typeof analyticsEvent.$inferSelect;
+export type EventGuest = typeof eventGuest.$inferSelect;

@@ -14,9 +14,14 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { saveEvent, deleteEvent, type EventInput } from "@/app/(app)/my-events/actions";
+import {
+  EventGuestsDialog,
+  type Guest,
+} from "@/components/events/event-guests-dialog";
 import { ImageUpload } from "@/components/settings/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,16 +81,21 @@ export function EventsManager({
   events,
   baseUrl,
   publicEnabled = true,
+  guestsByEvent = {},
+  smsAvailable = true,
 }: {
   events: EventRow[];
   baseUrl: string;
   publicEnabled?: boolean;
+  guestsByEvent?: Record<string, Guest[]>;
+  smsAvailable?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyEvent());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [guestsFor, setGuestsFor] = useState<EventRow | null>(null);
   const set = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 
   async function copyLink(id: string, url: string) {
@@ -212,6 +222,17 @@ export function EventsManager({
                     </Button>
                   </>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setGuestsFor(e)}
+                  title="Speakers & guests"
+                >
+                  <Users className="size-4" />
+                  <span className="tabular-nums">
+                    {(guestsByEvent[e.id] ?? []).length || ""}
+                  </span>
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => openEdit(e)}>
                   <Pencil className="size-4" />
                 </Button>
@@ -357,6 +378,17 @@ export function EventsManager({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {guestsFor && (
+        <EventGuestsDialog
+          open={!!guestsFor}
+          onOpenChange={(o) => !o && setGuestsFor(null)}
+          eventId={guestsFor.id}
+          eventTitle={guestsFor.title}
+          guests={guestsByEvent[guestsFor.id] ?? []}
+          smsAvailable={smsAvailable}
+        />
+      )}
     </div>
   );
 }

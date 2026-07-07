@@ -260,6 +260,13 @@
       "when": 1783465951937,
       "tag": "0036_sms_sender_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1783466332323,
+      "tag": "0037_event_guests",
+      "breakpoints": true
     }
   ]
 }
