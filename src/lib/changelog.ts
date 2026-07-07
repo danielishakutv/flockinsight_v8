@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.48.0",
+    date: "2026-07-08",
+    summary:
+      "Bulk member tools, a wallet & messaging dashboard card, event speakers/guests, and a smoother SMS experience.",
+    changes: {
+      Added: [
+        "Members: select many at once to delete them, or download the selection as a CSV or a nicely formatted PDF directory.",
+        "Dashboard: a new Wallet & messaging card shows your balance, emails and SMS used this month (vs your plan allowance), and quick actions.",
+        "Events: add speakers & guests to any event and email or SMS them about it — all in one place.",
+        "Events: copy the public link for any event, and open your public events page, straight from the Events screen.",
+      ],
+      Improved: [
+        "After you send an SMS or email, the composer clears so you're ready to send the next one.",
+        "Message history now shows the units each SMS used, with a one-tap “Reuse” to send a past message again to the same or a different audience.",
+        "SMS sender ID requests now show a clear Requested → Processing → Approved status, and our team is alerted the moment you request one.",
+        "Where SMS isn't available yet in your country, it's clearly marked “coming soon” — email messaging still works everywhere.",
+      ],
+    },
+  },
+  {
     version: "0.47.0",
     date: "2026-07-07",
     summary:
