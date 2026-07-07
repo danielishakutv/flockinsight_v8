@@ -153,12 +153,18 @@ export async function GET(request: Request) {
     console.error("[cron/reminders] first-timers failed", e);
   }
 
-  // Housekeeping: clear out expired one-time codes.
+  // Housekeeping: clear out expired one-time codes + old analytics events.
   try {
     const { purgeExpiredOtps } = await import("@/lib/otp");
     await purgeExpiredOtps();
   } catch (e) {
     console.error("[cron/reminders] otp purge failed", e);
+  }
+  try {
+    const { pruneOldEvents } = await import("@/lib/analytics");
+    await pruneOldEvents(180);
+  } catch (e) {
+    console.error("[cron/reminders] analytics prune failed", e);
   }
 
   return new Response(

@@ -1525,6 +1525,40 @@ export const blogPost = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight platform — first-party product analytics
+ * Lightweight event log (pageviews + key actions) used by the superadmin
+ * "Usage" dashboard to understand feature adoption per church/plan. Kept
+ * first-party (in our own DB) so tenant data never leaves. Complemented by
+ * PostHog for deep behavioural analysis (funnels, paths, session replay).
+ * ========================================================== */
+export const analyticsEvent = pgTable(
+  "analytics_event",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    // Anonymous per-browser session id (cookie), for counting sessions.
+    sessionId: text(),
+    kind: text().notNull().default("pageview"), // "pageview" | "action"
+    // Friendly feature label (e.g. "Members") or action name (e.g. "attendance.record").
+    name: text().notNull(),
+    path: text(),
+    // Snapshots at event time, so historic rows survive plan/role changes.
+    plan: text(),
+    role: text(),
+    // Time spent on the page in ms (pageviews only, best-effort).
+    durationMs: integer(),
+    props: jsonb().$type<Record<string, unknown>>(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("analytics_created_idx").on(t.createdAt),
+    index("analytics_church_idx").on(t.churchId, t.createdAt),
+    index("analytics_name_idx").on(t.name),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -1568,3 +1602,4 @@ export type OtpCode = typeof otpCode.$inferSelect;
 export type FirstTimerSetting = typeof firstTimerSetting.$inferSelect;
 export type BlogPost = typeof blogPost.$inferSelect;
 export type NewBlogPost = typeof blogPost.$inferInsert;
+export type AnalyticsEvent = typeof analyticsEvent.$inferSelect;

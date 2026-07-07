@@ -15,6 +15,8 @@ import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
+import { PageTracker } from "@/components/analytics/page-tracker";
+import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 
 export default async function AppLayout({
   children,
@@ -99,6 +101,14 @@ export default async function AppLayout({
       </div>
       <InstallPrompt />
       <OfflineIndicator />
+      <PageTracker />
+      <PostHogIdentify
+        userId={user.id}
+        churchId={church.id}
+        churchName={church.name}
+        plan={church.plan}
+        role={access.isOwner ? "owner" : "member"}
+      />
     </div>
   );
 }

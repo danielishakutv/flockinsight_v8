@@ -239,6 +239,13 @@
       "when": 1783436412252,
       "tag": "0033_feature_bundle_v047",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783461154453,
+      "tag": "0034_analytics_events",
+      "breakpoints": true
     }
   ]
 }

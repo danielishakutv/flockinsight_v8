@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
+import { PostHogProvider } from "@/components/analytics/posthog-provider";
 
 const SITE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -88,9 +89,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster />
-          <ServiceWorkerRegister />
+          <PostHogProvider>
+            {children}
+            <Toaster />
+            <ServiceWorkerRegister />
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>

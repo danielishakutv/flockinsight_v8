@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   Bell,
   Building2,
   Database,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 const tabs: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Overview", href: "/superadmin", icon: LayoutDashboard },
+  { label: "Usage", href: "/superadmin/usage", icon: BarChart3 },
   { label: "Churches", href: "/superadmin/churches", icon: Building2 },
   { label: "Users", href: "/superadmin/users", icon: Users },
   { label: "Notifications", href: "/superadmin/notifications", icon: Bell },
