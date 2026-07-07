@@ -45,15 +45,65 @@ export async function getPlanPrices(): Promise<Record<PlanId, number | null>> {
   return out;
 }
 
-/** Plan catalog with admin-resolved prices applied. */
+/** Plan catalog with admin-resolved prices AND features applied. */
 export async function getPlans(): Promise<Plan[]> {
-  const prices = await getPlanPrices();
-  return PLANS.map((p) => ({ ...p, priceMonthly: prices[p.id] }));
+  const [prices, features] = await Promise.all([
+    getPlanPrices(),
+    getAllPlanFeatures(),
+  ]);
+  return PLANS.map((p) => ({
+    ...p,
+    priceMonthly: prices[p.id],
+    features: features[p.id],
+  }));
 }
 
 /** Persist a plan's monthly price (admin only — caller must authorize). */
 export async function setPlanPrice(id: PlanId, price: number): Promise<void> {
   await setSetting(planPriceKey(id), String(Math.max(0, Math.round(price))));
+}
+
+/* ----- Plan feature lists (admin-managed) ----- */
+
+export const planFeaturesKey = (id: PlanId) => `plan_features_${id}`;
+
+function cleanFeatures(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+/** Resolved feature bullet list for a plan (admin override → built-in default). */
+export async function getPlanFeatures(id: PlanId): Promise<string[]> {
+  const fallback = PLAN_BY_ID[id]?.features ?? [];
+  const raw = await getSetting(planFeaturesKey(id), "");
+  if (raw) {
+    try {
+      const clean = cleanFeatures(JSON.parse(raw));
+      if (clean.length) return clean;
+    } catch {
+      /* fall through */
+    }
+  }
+  return fallback;
+}
+
+/** Resolved feature lists for every plan. */
+export async function getAllPlanFeatures(): Promise<Record<PlanId, string[]>> {
+  const out = {} as Record<PlanId, string[]>;
+  await Promise.all(
+    PLANS.map(async (p) => {
+      out[p.id] = await getPlanFeatures(p.id);
+    }),
+  );
+  return out;
+}
+
+/** Persist a plan's feature list (admin only — caller must authorize). */
+export async function setPlanFeatures(id: PlanId, features: string[]): Promise<void> {
+  await setSetting(planFeaturesKey(id), JSON.stringify(cleanFeatures(features)));
 }
 
 /** Apply an admin discount to a base price. */

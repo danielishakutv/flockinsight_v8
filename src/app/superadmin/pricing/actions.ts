@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/session";
-import { setPlanPrice, setStorageBundles } from "@/lib/pricing";
+import { setPlanPrice, setPlanFeatures, setStorageBundles } from "@/lib/pricing";
+import { planName, type PlanId } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -37,6 +38,32 @@ export async function setPlanPrices(input: PlanPriceInput): Promise<ActionResult
   });
 
   // Refresh the public surfaces that show prices.
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/superadmin/pricing");
+  return { ok: true };
+}
+
+const featuresSchema = z.object({
+  plan: z.enum(["starter", "growth", "pro", "enterprise"]),
+  features: z.array(z.string().trim().min(1).max(120)).max(30),
+});
+
+export async function setPlanFeaturesAction(
+  input: z.input<typeof featuresSchema>,
+): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const parsed = featuresSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  await setPlanFeatures(parsed.data.plan as PlanId, parsed.data.features);
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_plan_features",
+    summary: `Updated ${planName(parsed.data.plan)} plan features (${parsed.data.features.length} items)`,
+  });
   revalidatePath("/");
   revalidatePath("/pricing");
   revalidatePath("/superadmin/pricing");

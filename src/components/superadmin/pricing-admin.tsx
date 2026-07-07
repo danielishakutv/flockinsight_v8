@@ -2,14 +2,24 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { HardDrive, Loader2, Plus, Tag, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  HardDrive,
+  ListChecks,
+  Loader2,
+  Plus,
+  Tag,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   setPlanPrices,
+  setPlanFeaturesAction,
   setStorageBundlesAction,
   type PlanPriceInput,
 } from "@/app/superadmin/pricing/actions";
-import { PLAN_BY_ID } from "@/lib/plans";
+import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
 import type { StorageBundle } from "@/lib/storage-bytes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,13 +27,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const PRICED = ["starter", "growth", "pro"] as const;
+const ALL_PLANS: PlanId[] = ["starter", "growth", "pro", "enterprise"];
 
 export function PricingAdmin({
   initial,
   bundles: initialBundles,
+  features,
 }: {
   initial: PlanPriceInput;
   bundles: StorageBundle[];
+  features: Record<PlanId, string[]>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -129,6 +142,23 @@ export function PricingAdmin({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
+            <ListChecks className="text-primary size-5" /> Plan features
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-muted-foreground text-sm">
+            The bullet list shown for each plan on the landing &amp; pricing
+            pages. Reorder with the arrows.
+          </p>
+          {ALL_PLANS.map((id) => (
+            <FeaturesEditor key={id} plan={id} initial={features[id] ?? []} />
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
             <HardDrive className="text-primary size-5" /> Storage bundles
           </CardTitle>
         </CardHeader>
@@ -201,6 +231,103 @@ export function PricingAdmin({
         <Button onClick={saveBundles} disabled={savingBundles} size="lg">
           {savingBundles && <Loader2 className="size-4 animate-spin" />}
           Save storage bundles
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FeaturesEditor({
+  plan,
+  initial,
+}: {
+  plan: PlanId;
+  initial: string[];
+}) {
+  const router = useRouter();
+  const [items, setItems] = useState<string[]>(initial);
+  const [saving, start] = useTransition();
+  const meta = PLAN_BY_ID[plan];
+
+  const edit = (i: number, v: string) =>
+    setItems((p) => p.map((x, j) => (j === i ? v : x)));
+  const remove = (i: number) => setItems((p) => p.filter((_, j) => j !== i));
+  const move = (i: number, dir: -1 | 1) =>
+    setItems((p) => {
+      const j = i + dir;
+      if (j < 0 || j >= p.length) return p;
+      const next = [...p];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
+  function save() {
+    const clean = items.map((s) => s.trim()).filter(Boolean).slice(0, 30);
+    start(async () => {
+      const res = await setPlanFeaturesAction({ plan, features: clean });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${meta.name} features saved`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="rounded-xl border p-3">
+      <p className="mb-2 font-bold">{meta.name}</p>
+      <div className="space-y-2">
+        {items.map((f, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input
+              value={f}
+              onChange={(e) => edit(i, e.target.value)}
+              className="h-9 flex-1"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label="Move up"
+              disabled={i === 0}
+              onClick={() => move(i, -1)}
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label="Move down"
+              disabled={i === items.length - 1}
+              onClick={() => move(i, 1)}
+            >
+              <ArrowDown className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive size-8"
+              aria-label="Remove"
+              onClick={() => remove(i)}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setItems((p) => [...p, ""])}
+        >
+          <Plus className="size-4" /> Add feature
+        </Button>
+        <Button size="sm" onClick={save} disabled={saving}>
+          {saving && <Loader2 className="size-4 animate-spin" />}
+          Save {meta.name}
         </Button>
       </div>
     </div>
