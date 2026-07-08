@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Loader2, Pencil, Search, Send, Wallet, X } from "lucide-react";
+import { Ban, Check, Loader2, Pencil, RefreshCw, Search, Send, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
+  checkSenderIdOnNetwork,
   reviewSenderId,
   revokeSenderId,
   sendTestSms,
@@ -141,7 +142,21 @@ export function SmsAdmin({
         toast.error(res.error);
         return;
       }
-      toast.success("Submitted to the network — the church now sees 'Processing'.");
+      toast.success(res.message);
+      router.refresh();
+    });
+  }
+
+  function checkNetwork(c: ChurchSms) {
+    startTransition(async () => {
+      const res = await checkSenderIdOnNetwork(c.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.status === "approved") toast.success("Approved by the network!");
+      else if (res.status === "rejected") toast.error("Rejected by the network.");
+      else toast.message("Still processing — check again later.");
       router.refresh();
     });
   }
@@ -284,9 +299,19 @@ export function SmsAdmin({
                     </Button>
                   )}
                   {submitted && (
-                    <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
-                      <Check className="size-4" /> Mark approved
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => checkNetwork(c)}
+                        disabled={pending}
+                      >
+                        <RefreshCw className="size-4" /> Check status
+                      </Button>
+                      <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
+                        <Check className="size-4" /> Mark approved
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm"

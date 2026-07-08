@@ -8,7 +8,12 @@ import { church, walletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
-import { requestSenderId } from "@/lib/termii-sender";
+import {
+  requestSenderId,
+  fetchSenderIdInfo,
+  fetchSenderIdStatus,
+  type SenderIdStatus,
+} from "@/lib/termii-sender";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
@@ -93,13 +98,21 @@ export async function revokeSenderId(
   return { ok: true };
 }
 
+export type SubmitSenderResult =
+  | { ok: true; outcome: "approved" | "processing"; message: string }
+  | { ok: false; error: string };
+
 /**
- * Superadmin sends a reviewed request to the network (Termii). The church then
- * sees the ID as "Processing" until it's finally approved.
+ * Superadmin sends a reviewed request to the network (Termii). Checks the
+ * network FIRST — a church that requested before this review step existed may
+ * already be on Termii. If it's already approved there, we approve it for the
+ * church; if already pending, we just mark it processing (no duplicate submit);
+ * otherwise we submit a fresh request. The church then sees "Processing" until
+ * it's finally approved.
  */
 export async function submitSenderIdToTermii(
   churchId: string,
-): Promise<ActionResult> {
+): Promise<SubmitSenderResult> {
   const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
@@ -119,6 +132,69 @@ export async function submitSenderIdToTermii(
   if (c.status !== "pending")
     return { ok: false, error: "This request isn't pending review." };
 
+  // Look it up on the network first, so we never submit a duplicate.
+  const info = await fetchSenderIdInfo(c.senderId);
+  if (info.found) {
+    if (info.status === "approved") {
+      await db
+        .update(church)
+        .set({ smsSenderStatus: "approved", smsSenderStage: null, smsSenderNote: null })
+        .where(eq(church.id, churchId));
+      await notifyChurchManagers({
+        churchId,
+        title: "SMS sender ID approved",
+        body: "Your SMS sender ID was approved — you can now send SMS to your members.",
+        linkUrl: "/settings/sms",
+      });
+      await recordAudit({
+        actorUserId: admin.id,
+        actorName: admin.name,
+        action: "approve_sender_id",
+        summary: `Approved "${c.senderId}" (already approved on the network)`,
+        targetType: "church",
+        targetId: churchId,
+      });
+      revalidatePath("/superadmin/sms");
+      return {
+        ok: true,
+        outcome: "approved",
+        message: `"${c.senderId}" already exists on the network and is APPROVED — approved for ${c.name}.`,
+      };
+    }
+    if (info.status === "rejected") {
+      return {
+        ok: false,
+        error: `"${c.senderId}" exists on the network but was rejected/blocked. Ask the church to request a different ID.`,
+      };
+    }
+    // Already on the network and pending → mark processing, don't re-submit.
+    await db
+      .update(church)
+      .set({ smsSenderStage: "submitted" })
+      .where(eq(church.id, churchId));
+    await notifyChurchManagers({
+      churchId,
+      title: "SMS sender ID submitted",
+      body: "Your SMS sender ID is now processing with the network. We'll let you know once it's approved.",
+      linkUrl: "/settings/sms",
+    });
+    await recordAudit({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: "submit_sender_id",
+      summary: `Marked "${c.senderId}" as processing (already on the network)`,
+      targetType: "church",
+      targetId: churchId,
+    });
+    revalidatePath("/superadmin/sms");
+    return {
+      ok: true,
+      outcome: "processing",
+      message: `"${c.senderId}" already exists on the network — marked as processing.`,
+    };
+  }
+
+  // Not on the network → submit a fresh request.
   const reg = await requestSenderId({
     senderId: c.senderId,
     usecase: c.note || "Church service alerts and member updates",
@@ -145,7 +221,70 @@ export async function submitSenderIdToTermii(
     targetId: churchId,
   });
   revalidatePath("/superadmin/sms");
-  return { ok: true };
+  return {
+    ok: true,
+    outcome: "processing",
+    message: `Submitted "${c.senderId}" to the network — now processing.`,
+  };
+}
+
+/**
+ * Superadmin: re-check a processing sender ID against the network now. If the
+ * network has approved/rejected it, we update the church and notify its team.
+ */
+export async function checkSenderIdOnNetwork(
+  churchId: string,
+): Promise<{ ok: true; status: SenderIdStatus } | { ok: false; error: string }> {
+  const admin = await requireSuperAdmin();
+  if (!z.string().min(1).safeParse(churchId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [c] = await db
+    .select({ senderId: church.smsSenderId })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  if (!c || !c.senderId)
+    return { ok: false, error: "This church hasn't requested a sender ID yet." };
+
+  const status = await fetchSenderIdStatus(c.senderId);
+  if (status === "approved") {
+    await db
+      .update(church)
+      .set({ smsSenderStatus: "approved", smsSenderStage: null, smsSenderNote: null })
+      .where(eq(church.id, churchId));
+    await notifyChurchManagers({
+      churchId,
+      title: "SMS sender ID approved",
+      body: "Your SMS sender ID was approved — you can now send SMS to your members.",
+      linkUrl: "/settings/sms",
+    });
+    await recordAudit({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: "approve_sender_id",
+      summary: `"${c.senderId}" approved by the network (checked by admin)`,
+      targetType: "church",
+      targetId: churchId,
+    });
+  } else if (status === "rejected") {
+    await db
+      .update(church)
+      .set({
+        smsSenderStatus: "rejected",
+        smsSenderStage: null,
+        smsSenderNote: "Rejected by the network",
+      })
+      .where(eq(church.id, churchId));
+    await notifyChurchManagers({
+      churchId,
+      title: "SMS sender ID rejected",
+      body: "Your SMS sender ID was rejected by the network. You can request a different one in Settings → SMS.",
+      linkUrl: "/settings/sms",
+    });
+  }
+  revalidatePath("/superadmin/sms");
+  return { ok: true, status };
 }
 
 export async function reviewSenderId(

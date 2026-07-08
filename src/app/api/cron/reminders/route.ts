@@ -167,8 +167,18 @@ export async function GET(request: Request) {
     console.error("[cron/reminders] analytics prune failed", e);
   }
 
+  // Settle any SMS sender IDs the network has now approved/rejected, notifying
+  // the church + superadmins.
+  let senderIds: Awaited<ReturnType<typeof import("@/lib/sender-id-checks").runSenderIdChecks>> | null = null;
+  try {
+    const { runSenderIdChecks } = await import("@/lib/sender-id-checks");
+    senderIds = await runSenderIdChecks();
+  } catch (e) {
+    console.error("[cron/reminders] sender-id checks failed", e);
+  }
+
   return new Response(
-    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers }),
+    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers, senderIds }),
     { headers: { "Content-Type": "application/json" } },
   );
 }
