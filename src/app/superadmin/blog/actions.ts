@@ -7,6 +7,8 @@ import { db } from "@/db";
 import { blogPost } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { uniqueBlogSlug, excerptFromBody } from "@/lib/blog";
+import { deliverBroadcast } from "@/lib/broadcasts";
+import { recordAudit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -133,4 +135,76 @@ export async function deletePost(id: string): Promise<ActionResult> {
   revalidatePath("/superadmin/blog");
   revalidatePath("/blog");
   return { ok: true };
+}
+
+const announceSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(1, "Add a headline").max(120),
+  body: z.string().trim().min(1, "Add a short message").max(2000),
+  inApp: z.boolean(),
+  email: z.boolean(),
+});
+
+export type AnnounceResult =
+  | { ok: true; pushSent: number; emailSent: number; inApp: boolean; email: boolean }
+  | { ok: false; error: string };
+
+/**
+ * "Push to all": announce a published post to every church on the platform via
+ * an in-app notification (+ web push) and/or email. Reuses the same broadcast
+ * pipeline as the superadmin notifications composer.
+ */
+export async function announcePost(
+  input: z.input<typeof announceSchema>,
+): Promise<AnnounceResult> {
+  const admin = await requireSuperAdmin();
+  const parsed = announceSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  const d = parsed.data;
+  if (!d.inApp && !d.email)
+    return { ok: false, error: "Pick at least one channel (in-app or email)." };
+
+  const [post] = await db
+    .select({
+      id: blogPost.id,
+      slug: blogPost.slug,
+      title: blogPost.title,
+      status: blogPost.status,
+    })
+    .from(blogPost)
+    .where(eq(blogPost.id, d.id))
+    .limit(1);
+  if (!post) return { ok: false, error: "Post not found." };
+  if (post.status !== "published")
+    return { ok: false, error: "Publish the post before announcing it." };
+
+  const { pushSent, emailSent } = await deliverBroadcast({
+    title: d.title,
+    body: d.body,
+    category: "general",
+    audience: "all",
+    linkUrl: `/blog/${post.slug}`,
+    inApp: d.inApp,
+    email: d.email,
+    createdBy: admin.id,
+  });
+
+  await db
+    .update(blogPost)
+    .set({ announcedAt: new Date() })
+    .where(eq(blogPost.id, post.id));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "announce_blog_post",
+    summary: `Announced blog post "${post.title}" to all · ${emailSent} emails, ${pushSent} push`,
+    targetType: "blog_post",
+    targetId: post.id,
+  });
+
+  revalidatePath("/superadmin/blog");
+  revalidatePath(`/superadmin/blog/${post.id}`);
+  return { ok: true, pushSent, emailSent, inApp: d.inApp, email: d.email };
 }

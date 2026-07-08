@@ -1,0 +1,1 @@
+ALTER TABLE "blog_post" ADD COLUMN "announced_at" timestamp with time zone;

@@ -31,6 +31,7 @@ type Post = {
   authorName: string;
   views: number;
   publishedAt: string | null;
+  announcedAt: string | null;
   updatedAt: string;
 };
 
@@ -117,6 +118,12 @@ export function BlogList({
                 <p className="text-muted-foreground truncate text-xs">
                   {p.authorName} · {p.views} view{p.views === 1 ? "" : "s"} ·{" "}
                   {new Date(p.updatedAt).toLocaleDateString()}
+                  {p.announcedAt && (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      {" "}
+                      · Announced
+                    </span>
+                  )}
                 </p>
               </Link>
               <Badge variant={p.status === "published" ? "success" : "outline"}>

@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/blog/markdown";
 import { MarkdownToolbar } from "@/components/superadmin/markdown-toolbar";
+import { AnnounceDialog } from "@/components/superadmin/blog-announce-dialog";
 import { uploadBlogImage } from "@/components/superadmin/blog-upload";
 import { slugify } from "@/lib/slug";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ type PostState = {
   seoTitle: string;
   seoDescription: string;
   status: "draft" | "published";
+  announcedAt: string | null;
 };
 
 export function BlogEditor({
@@ -75,11 +77,23 @@ export function BlogEditor({
         </Button>
         <div className="flex items-center gap-2">
           {f.status === "published" && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={`${baseUrl}/blog/${f.slug}`} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" /> View live
-              </a>
-            </Button>
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <a href={`${baseUrl}/blog/${f.slug}`} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" /> View live
+                </a>
+              </Button>
+              <AnnounceDialog
+                baseUrl={baseUrl}
+                post={{
+                  id: f.id,
+                  slug: f.slug,
+                  title: f.title,
+                  excerpt: f.excerpt,
+                  announcedAt: f.announcedAt,
+                }}
+              />
+            </>
           )}
           <Button
             variant="outline"

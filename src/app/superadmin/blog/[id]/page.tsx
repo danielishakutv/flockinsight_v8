@@ -38,6 +38,7 @@ export default async function BlogEditorPage({
         seoTitle: post.seoTitle ?? "",
         seoDescription: post.seoDescription ?? "",
         status: post.status,
+        announcedAt: post.announcedAt ? post.announcedAt.toISOString() : null,
       }}
     />
   );

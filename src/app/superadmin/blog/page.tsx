@@ -16,6 +16,7 @@ export default async function SuperadminBlogPage() {
       authorName: blogPost.authorName,
       views: blogPost.views,
       publishedAt: blogPost.publishedAt,
+      announcedAt: blogPost.announcedAt,
       updatedAt: blogPost.updatedAt,
     })
     .from(blogPost)
@@ -41,6 +42,7 @@ export default async function SuperadminBlogPage() {
           authorName: r.authorName,
           views: r.views,
           publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
+          announcedAt: r.announcedAt ? r.announcedAt.toISOString() : null,
           updatedAt: r.updatedAt.toISOString(),
         }))}
       />

@@ -1541,6 +1541,8 @@ export const blogPost = pgTable(
     seoDescription: text(),
     views: integer().notNull().default(0),
     publishedAt: timestamp({ withTimezone: true }),
+    // When the post was last announced ("push to all"). Null = never announced.
+    announcedAt: timestamp({ withTimezone: true }),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true })
