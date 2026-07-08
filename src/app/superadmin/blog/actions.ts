@@ -35,9 +35,17 @@ export async function createPost(): Promise<
 > {
   const user = await requireSuperAdmin();
   const slug = await uniqueBlogSlug("untitled-post");
+  // Default the byline to the signed-in admin's name (fallback: Daniel Ishaku).
+  const authorName = user.name?.trim() || "Daniel Ishaku";
   const [row] = await db
     .insert(blogPost)
-    .values({ title: "Untitled post", slug, body: "", createdBy: user.id })
+    .values({
+      title: "Untitled post",
+      slug,
+      body: "",
+      authorName,
+      createdBy: user.id,
+    })
     .returning({ id: blogPost.id });
   revalidatePath("/superadmin/blog");
   return { ok: true, id: row.id };
