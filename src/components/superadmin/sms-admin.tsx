@@ -2,11 +2,23 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Loader2, Pencil, RefreshCw, Search, Send, Wallet, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Search,
+  Send,
+  Radio,
+  Wallet,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
   checkSenderIdOnNetwork,
+  listSenderIdsOnNetwork,
   reviewSenderId,
   revokeSenderId,
   sendTestSms,
@@ -14,6 +26,14 @@ import {
   setSmsPrice,
   submitSenderIdToTermii,
 } from "@/app/superadmin/sms/actions";
+
+/** Mirrors NetworkSenderId — kept local so this client file never pulls in the
+ *  server-only Termii module. */
+type NetworkSenderId = {
+  senderId: string;
+  status: "approved" | "pending" | "rejected" | "unknown";
+  raw: string;
+};
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +57,10 @@ export type ChurchSms = {
   stage: string | null;
   note: string | null;
   balance: number;
+  /** This ID has already been sent to the network — it can't be sent again. */
+  sentToNetwork: boolean;
+  sentAt: string | null;
+  networkStatus: string | null;
 };
 
 export function SmsAdmin({
@@ -58,6 +82,8 @@ export function SmsAdmin({
   const [kind, setKind] = useState<"credit" | "debit">("credit");
   const [testTo, setTestTo] = useState("");
   const [testMsg, setTestMsg] = useState("");
+  const [network, setNetwork] = useState<NetworkSenderId[] | null>(null);
+  const [loadingNetwork, setLoadingNetwork] = useState(false);
 
   function sendTest() {
     if (!testTo.trim()) return toast.error("Enter a phone number.");
@@ -136,13 +162,19 @@ export function SmsAdmin({
   }
 
   function submit(c: ChurchSms) {
+    if (
+      !confirm(
+        `Send "${c.senderId}" to the network for ${c.name}?\n\nThis registers the sender ID with Termii. It can only ever be sent once.`,
+      )
+    )
+      return;
     startTransition(async () => {
       const res = await submitSenderIdToTermii(c.id);
       if (!res.ok) {
-        toast.error(res.error);
+        toast.error(res.error, { duration: 8000 });
         return;
       }
-      toast.success(res.message);
+      toast.success(res.message, { duration: 8000 });
       router.refresh();
     });
   }
@@ -150,14 +182,33 @@ export function SmsAdmin({
   function checkNetwork(c: ChurchSms) {
     startTransition(async () => {
       const res = await checkSenderIdOnNetwork(c.id);
+      // A failed lookup is a failure — not "still processing".
       if (!res.ok) {
-        toast.error(res.error);
+        toast.error(res.error, { duration: 8000 });
         return;
       }
-      if (res.status === "approved") toast.success("Approved by the network!");
-      else if (res.status === "rejected") toast.error("Rejected by the network.");
-      else toast.message("Still processing — check again later.");
+      if (res.status === "approved")
+        toast.success("Approved by the network — the church has been notified.");
+      else if (res.status === "rejected")
+        toast.error(`Rejected by the network (it says: "${res.raw}").`);
+      else
+        toast.message(
+          `Still under review at the network (it says: "${res.raw || "pending"}").`,
+        );
       router.refresh();
+    });
+  }
+
+  function loadNetwork() {
+    setLoadingNetwork(true);
+    startTransition(async () => {
+      const res = await listSenderIdsOnNetwork();
+      setLoadingNetwork(false);
+      if (!res.ok) {
+        toast.error(res.error, { duration: 8000 });
+        return;
+      }
+      setNetwork(res.ids);
     });
   }
 
@@ -268,7 +319,10 @@ export function SmsAdmin({
           </CardHeader>
           <CardContent className="space-y-2">
             {applications.map((c) => {
-              const submitted = c.stage === "submitted";
+              // Once an ID has left for the network it must never be sent
+              // again — the network keeps one registration per ID, and a second
+              // request just creates a duplicate nobody can remove.
+              const withNetwork = c.stage === "submitted" || c.sentToNetwork;
               return (
                 <div
                   key={c.id}
@@ -278,11 +332,21 @@ export function SmsAdmin({
                     <p className="flex flex-wrap items-center gap-2 font-semibold">
                       {c.name} — <span className="font-mono">{c.senderId}</span>
                       <Badge variant="secondary">
-                        {submitted ? "Processing" : "Awaiting review"}
+                        {withNetwork ? "Processing" : "Awaiting review"}
                       </Badge>
                     </p>
                     {c.note && (
                       <p className="text-muted-foreground truncate text-xs">{c.note}</p>
+                    )}
+                    {c.sentToNetwork && (
+                      <p className="text-muted-foreground text-xs">
+                        Sent to the network
+                        {c.sentAt
+                          ? ` on ${new Date(c.sentAt).toLocaleDateString()}`
+                          : ""}{" "}
+                        — it won&apos;t be sent again
+                        {c.networkStatus ? ` · network says: ${c.networkStatus}` : ""}
+                      </p>
                     )}
                   </div>
                   <Button
@@ -293,12 +357,12 @@ export function SmsAdmin({
                   >
                     <Pencil className="size-4" /> Edit ID
                   </Button>
-                  {!submitted && (
+                  {!withNetwork && (
                     <Button size="sm" onClick={() => submit(c)} disabled={pending}>
                       <Send className="size-4" /> Submit to network
                     </Button>
                   )}
-                  {submitted && (
+                  {withNetwork && (
                     <>
                       <Button
                         size="sm"
@@ -327,6 +391,65 @@ export function SmsAdmin({
           </CardContent>
         </Card>
       )}
+
+      {/* What the network itself says — the tie-breaker when the app and the
+          Termii dashboard seem to disagree. */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3">
+          <CardTitle className="text-lg">Sender IDs on the network</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={loadNetwork}
+            disabled={pending || !gatewayReady}
+          >
+            {loadingNetwork ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Radio className="size-4" />
+            )}
+            {network ? "Refresh" : "Load from network"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {!network ? (
+            <p className="text-muted-foreground text-sm">
+              Every sender ID registered on our Termii account, exactly as the API
+              reports it. Load this if a status here doesn&apos;t match the Termii
+              dashboard.
+            </p>
+          ) : network.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              The network has no sender IDs registered.
+            </p>
+          ) : (
+            <ul className="divide-y text-sm">
+              {network.map((n, i) => (
+                <li
+                  key={`${n.senderId}-${i}`}
+                  className="flex items-center justify-between gap-3 py-2"
+                >
+                  <span className="font-mono">{n.senderId}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">{n.raw}</span>
+                    <Badge
+                      variant={
+                        n.status === "approved"
+                          ? "success"
+                          : n.status === "rejected"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {n.status}
+                    </Badge>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       {/* All churches + wallets */}
       <Card>

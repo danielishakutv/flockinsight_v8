@@ -935,6 +935,38 @@ export const smsTopup = pgTable(
   (t) => [index("sms_topup_church_idx").on(t.churchId)],
 );
 
+/**
+ * Ledger of every sender ID we have sent to the SMS network (Termii).
+ *
+ * The network holds ONE registration per sender ID across our whole account, so
+ * `senderKey` (the ID lowercased with spaces stripped) is unique platform-wide.
+ * A row here is the record that a submission left our servers — we insert it
+ * *before* the network call, so a duplicate submit (double-click, retry after a
+ * timeout, a failed lookup) hits the unique index instead of the network.
+ * Nothing else in the app may POST a sender ID without claiming a row first.
+ */
+export const smsSenderSubmission = pgTable(
+  "sms_sender_submission",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    senderKey: text().notNull().unique(), // norm(senderId): lowercase, no spaces
+    senderId: text().notNull(), // exactly as submitted
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    // "submitting" = claimed, network call in flight; "submitted" = the network
+    // accepted it; "exists" = it was already registered, we never re-sent it;
+    // "failed" = the network call failed, so a retry may claim this row again.
+    state: text().notNull().default("submitting"),
+    error: text(), // last failure reason, when state = "failed"
+    submittedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    submittedAt: timestamp({ withTimezone: true }),
+    // Last verdict we saw from the network, for support/debugging.
+    lastStatus: text(),
+    lastCheckedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("sms_sender_submission_church_idx").on(t.churchId)],
+);
+
 export const payment = pgTable(
   "payment",
   {

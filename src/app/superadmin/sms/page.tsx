@@ -1,14 +1,15 @@
-import { asc, eq } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { db } from "@/db";
-import { church } from "@/db/schema";
+import { church, smsSenderSubmission } from "@/db/schema";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { isSmsConfigured } from "@/lib/sms";
+import { normalizeSenderId } from "@/lib/termii-sender";
 import { SmsAdmin, type ChurchSms } from "@/components/superadmin/sms-admin";
 
 export const metadata = { title: "SMS · Admin" };
 
 export default async function SuperadminSmsPage() {
-  const [price, rows] = await Promise.all([
+  const [price, rows, submissions] = await Promise.all([
     getSmsPrice(),
     db
       .select({
@@ -23,9 +24,30 @@ export default async function SuperadminSmsPage() {
       })
       .from(church)
       .orderBy(asc(church.name)),
+    db
+      .select({
+        senderKey: smsSenderSubmission.senderKey,
+        state: smsSenderSubmission.state,
+        submittedAt: smsSenderSubmission.submittedAt,
+        lastStatus: smsSenderSubmission.lastStatus,
+      })
+      .from(smsSenderSubmission),
   ]);
 
-  const churches: ChurchSms[] = rows.map((r) => ({ ...r, balance: Number(r.balance) }));
+  // An ID that's already been sent to the network can never be sent again —
+  // surface that in the UI so nobody is tempted to try.
+  const sent = new Map(submissions.map((s) => [s.senderKey, s]));
+
+  const churches: ChurchSms[] = rows.map((r) => {
+    const s = r.senderId ? sent.get(normalizeSenderId(r.senderId)) : undefined;
+    return {
+      ...r,
+      balance: Number(r.balance),
+      sentToNetwork: !!s && s.state !== "failed",
+      sentAt: s?.submittedAt?.toISOString() ?? null,
+      networkStatus: s?.lastStatus ?? null,
+    };
+  });
 
   return (
     <div className="space-y-6">

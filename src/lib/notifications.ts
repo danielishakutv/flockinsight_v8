@@ -78,8 +78,10 @@ export async function notifyUser(opts: {
 }
 
 /**
- * In-app notification to a church's managers (owner + admins). Use for team /
- * account changes the church should know about. Never throws.
+ * Notify a church's managers (owner + admins) about a team / account change:
+ * in-app + push always, and email too when `email` is set — use it for things
+ * they'd want to hear about even if they aren't in the app, like an SMS sender
+ * ID being approved. Never throws.
  */
 export async function notifyChurchManagers(opts: {
   churchId: string;
@@ -87,11 +89,14 @@ export async function notifyChurchManagers(opts: {
   body: string;
   linkUrl?: string | null;
   excludeUserId?: string;
+  /** Also email them. `true` uses `title` as the subject. */
+  email?: boolean | { subject: string };
 }): Promise<void> {
   try {
     const rows = await db
-      .select({ userId: staff.userId })
+      .select({ userId: staff.userId, email: user.email })
       .from(staff)
+      .innerJoin(user, eq(user.id, staff.userId))
       .where(
         and(
           eq(staff.organizationId, opts.churchId),
@@ -99,9 +104,14 @@ export async function notifyChurchManagers(opts: {
           eq(staff.temp, false),
         ),
       );
-    const ids = [...new Set(rows.map((r) => r.userId))].filter(
-      (id) => id !== opts.excludeUserId,
-    );
+    const managers = rows.filter((r) => r.userId !== opts.excludeUserId);
+    const ids = [...new Set(managers.map((r) => r.userId))];
+
+    if (!ids.length)
+      console.warn(
+        `[notify] church ${opts.churchId} has no owner/admin to notify: "${opts.title}"`,
+      );
+
     await Promise.all(
       ids.map((id) =>
         notifyUser({
@@ -112,6 +122,28 @@ export async function notifyChurchManagers(opts: {
         }),
       ),
     );
+
+    if (!opts.email) return;
+    const { sendEmail, emailLayout, isEmailConfigured } = await import("@/lib/mailer");
+    if (!isEmailConfigured()) {
+      console.warn(`[notify] email not configured — skipped "${opts.title}"`);
+      return;
+    }
+    const { siteUrl } = await import("@/lib/site");
+    const subject = typeof opts.email === "object" ? opts.email.subject : opts.title;
+    const cta = opts.linkUrl
+      ? { label: "Open FlockInsight", url: `${siteUrl()}${opts.linkUrl}` }
+      : undefined;
+    const html = emailLayout(opts.title, opts.body, cta);
+    const emails = [...new Set(managers.map((r) => r.email).filter(Boolean))];
+    const sent = await Promise.allSettled(
+      emails.map((to) => sendEmail({ to, subject, html, text: opts.body })),
+    );
+    const failed = sent.filter((r) => r.status === "rejected" || r.value === false);
+    if (failed.length)
+      console.error(
+        `[notify] ${failed.length}/${emails.length} emails failed for "${subject}"`,
+      );
   } catch (e) {
     console.error("[notify] notifyChurchManagers failed", e);
   }

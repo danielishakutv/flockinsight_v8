@@ -10,7 +10,11 @@ import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { isSmsConfigured } from "@/lib/sms";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { notifySuperAdminsByEmail } from "@/lib/notifications";
-import { fetchSenderIdStatus, type SenderIdStatus } from "@/lib/termii-sender";
+import {
+  lookupSenderId,
+  normalizeSenderId,
+  type SenderIdStatus,
+} from "@/lib/termii-sender";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -76,6 +80,22 @@ export async function applySenderId(
     };
 
   const cleanNote = (note || "").trim().slice(0, 500) || null;
+  const same = normalizeSenderId(c.smsSenderId ?? "") === normalizeSenderId(id);
+
+  // Re-applying for the ID you already have changes nothing — and must NOT send
+  // it back to "awaiting review", or a superadmin would submit it to the
+  // network a second time.
+  if (same && c.smsSenderStatus === "approved")
+    return { ok: true, outcome: "approved" };
+  if (same && c.smsSenderStatus === "pending") {
+    if (cleanNote && cleanNote !== c.smsSenderNote)
+      await db
+        .update(church)
+        .set({ smsSenderNote: cleanNote })
+        .where(eq(church.id, c.id));
+    revalidatePath("/settings/sms");
+    return { ok: true, outcome: "pending" };
+  }
 
   // Don't let two churches claim the same sender ID.
   const [taken] = await db
@@ -122,7 +142,7 @@ export type StatusResult =
   | { ok: true; status: SenderIdStatus }
   | { ok: false; error: string };
 
-/** Ask Termii whether the church's requested sender ID is approved yet. */
+/** Ask the network whether the church's requested sender ID is approved yet. */
 export async function checkSenderIdStatus(): Promise<StatusResult> {
   const { church: c } = await requireChurch();
   if (!(await can("settings.manage")))
@@ -130,15 +150,25 @@ export async function checkSenderIdStatus(): Promise<StatusResult> {
   if (!c.smsSenderId)
     return { ok: false, error: "You haven't requested a sender ID yet." };
 
-  const status = await fetchSenderIdStatus(c.smsSenderId);
+  const lookup = await lookupSenderId(c.smsSenderId);
+  // Couldn't reach the network — say so, rather than implying it's still under
+  // review (a silent failure here is what left an approved ID stuck on
+  // "Processing").
+  if (!lookup.ok) return { ok: false, error: lookup.error };
+  // Not on the network yet: still with us for review.
+  if (!lookup.found) return { ok: true, status: "pending" };
 
   // Persist a definite verdict so sending/UI reflect it.
-  if (status === "approved" || status === "rejected") {
+  if (lookup.status === "approved" || lookup.status === "rejected") {
     await db
       .update(church)
-      .set({ smsSenderStatus: status })
+      .set({
+        smsSenderStatus: lookup.status,
+        smsSenderStage: null,
+        ...(lookup.status === "approved" ? { smsSenderNote: null } : {}),
+      })
       .where(eq(church.id, c.id));
     revalidatePath("/settings/sms");
   }
-  return { ok: true, status };
+  return { ok: true, status: lookup.status };
 }
