@@ -10,6 +10,7 @@ import {
   type MemberSignup,
 } from "@/db/schema";
 import { normalizePhone } from "@/lib/sms";
+import { normalizeBirthday } from "@/lib/birthday";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { siteUrl } from "@/lib/site";
 import { notifyChurchManagers } from "@/lib/notifications";
@@ -196,8 +197,11 @@ export function cleanSignupValues(
       error: "Please provide an email address or phone number so we can reach you.",
     };
 
-  const dob = (raw.dateOfBirth || "").trim();
-  if (dob && !DATE_RE.test(dob))
+  // Birthday: the year is optional (day & month is enough), so accept a full
+  // date or a year-less MM-DD and store it with the sentinel year.
+  const dobRaw = (raw.dateOfBirth || "").trim();
+  const dob = dobRaw ? normalizeBirthday(dobRaw) : null;
+  if (dobRaw && !dob)
     return { ok: false, error: "Please enter a valid date of birth." };
   const wedding = (raw.weddingDate || "").trim();
   if (wedding && !DATE_RE.test(wedding))
@@ -220,7 +224,7 @@ export function cleanSignupValues(
       email: email || null,
       emailNorm: email ? email.toLowerCase() : null,
       phoneNorm,
-      dateOfBirth: signup.collectBirthday && dob ? dob : null,
+      dateOfBirth: signup.collectBirthday ? dob : null,
       weddingDate: signup.collectAnniversary && wedding ? wedding : null,
       address: signup.collectAddress ? (raw.address || "").trim().slice(0, 300) || null : null,
       city: signup.collectAddress ? (raw.city || "").trim().slice(0, 120) || null : null,

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload } from "@/components/settings/image-upload";
+import { BirthdayInput } from "@/components/members/birthday-input";
 import {
   Select,
   SelectContent,
@@ -274,16 +275,18 @@ export function MemberFormFields({
       </div>
 
       {/* Dates */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="dob">Date of birth</Label>
-          <Input
+          <BirthdayInput
             id="dob"
-            type="date"
             value={form.dateOfBirth}
-            onChange={(e) => set({ dateOfBirth: e.target.value })}
-            className="h-11"
+            onChange={(v) => set({ dateOfBirth: v })}
           />
+          <p className="text-muted-foreground text-xs">
+            The year is optional — leave it blank if you only know the day and
+            month.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="joined">Date joined</Label>

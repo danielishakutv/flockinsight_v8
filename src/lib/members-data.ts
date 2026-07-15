@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
+import { formatBirthdayForCsv } from "@/lib/birthday";
 
 /** CSV column order for export and the template. */
 export const MEMBER_CSV_HEADERS = [
@@ -176,7 +177,7 @@ export async function getMemberExportRows(
     m.status,
     m.phone,
     m.email,
-    m.dateOfBirth,
+    formatBirthdayForCsv(m.dateOfBirth),
     m.joinedAt,
     m.house,
     m.street,

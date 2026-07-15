@@ -29,6 +29,19 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.49.0",
+    date: "2026-07-15",
+    summary:
+      "Record a birthday even when you only know the day and month — the year is now optional.",
+    changes: {
+      Improved: [
+        "Date of birth now uses a simple Day / Month / Year picker, and the year is optional — perfect for members who share only the day and month they were born.",
+        "Birthdays without a year show as just the day and month (e.g. “Jul 15”) on the member profile, exports and PDF directory, and never show a made-up age.",
+        "Importing members from CSV accepts year-less birthdays too (e.g. “07-15”), and exports keep the same format so they re-import cleanly.",
+      ],
+    },
+  },
+  {
     version: "0.48.0",
     date: "2026-07-08",
     summary:

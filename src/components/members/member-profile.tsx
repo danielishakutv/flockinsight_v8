@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Pencil, ShieldCheck } from "lucide-react";
+import { formatBirthday } from "@/lib/birthday";
 import { memberToForm } from "@/components/members/member-form-fields";
 import { MemberEditForm } from "@/components/members/member-edit-form";
 import { Badge } from "@/components/ui/badge";
@@ -124,7 +125,10 @@ function MemberView({
 
         <Section title="Personal">
           <Row label="Gender" value={gender} />
-          <Row label="Date of birth" value={fmtDate(member.dateOfBirth)} />
+          <Row
+            label="Date of birth"
+            value={formatBirthday(member.dateOfBirth) || null}
+          />
           <Row label="Date joined" value={fmtDate(member.joinedAt)} />
         </Section>
 

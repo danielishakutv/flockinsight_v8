@@ -7,6 +7,7 @@ import {
   submitSelfRegistration,
   verifySelfRegistration,
 } from "@/app/join/[slug]/actions";
+import { BirthdayInput } from "@/components/members/birthday-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -237,12 +238,10 @@ export function MemberSignupForm({
             </Select>
           </Field>
           {config.collectBirthday && (
-            <Field label="Date of birth">
-              <Input
-                type="date"
-                className="h-11"
+            <Field label="Date of birth" hint="Year is optional.">
+              <BirthdayInput
                 value={values.dateOfBirth}
-                onChange={(e) => set("dateOfBirth", e.target.value)}
+                onChange={(v) => set("dateOfBirth", v)}
               />
             </Field>
           )}
@@ -352,10 +351,12 @@ function Section({
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -363,6 +364,11 @@ function Field({
       <Label className="mb-1 block">
         {label}
         {required && <span className="text-destructive"> *</span>}
+        {hint && (
+          <span className="text-muted-foreground ml-1 font-normal">
+            ({hint})
+          </span>
+        )}
       </Label>
       {children}
     </div>

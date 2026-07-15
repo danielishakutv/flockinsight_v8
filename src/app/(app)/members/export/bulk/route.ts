@@ -1,6 +1,7 @@
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { MEMBER_CSV_HEADERS, getMemberExportRows } from "@/lib/members-data";
+import { formatBirthday } from "@/lib/birthday";
 import { CSV_BOM, toCsv } from "@/lib/csv";
 import { renderMembersPdf, type MemberPdfRow } from "@/lib/members-pdf";
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       status: (r[4] ?? "").replace(/_/g, " "),
       phone: r[5] ?? "",
       email: r[6] ?? "",
-      dob: r[7] ?? "",
+      dob: formatBirthday(r[7]),
     }));
     const pdf = await renderMembersPdf({ churchName: church.name, rows: pdfRows });
     return new Response(new Uint8Array(pdf), {

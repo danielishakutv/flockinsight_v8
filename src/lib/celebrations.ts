@@ -6,6 +6,7 @@ import { sendChurchSmsBatch } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { fillTemplate } from "@/lib/service-reminders";
+import { isYearUnknown } from "@/lib/birthday";
 
 function nowInTz(tz: string): { date: string; minutes: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -31,7 +32,8 @@ function toMinutes(hm: string): number {
 }
 
 function yearsTo(iso: string | null, currentYear: number): number | null {
-  if (!iso) return null;
+  // A year-less birthday (sentinel year) has no age/anniversary count.
+  if (!iso || isYearUnknown(iso)) return null;
   const y = Number(iso.slice(0, 4));
   const n = currentYear - y;
   return n > 0 ? n : null;

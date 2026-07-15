@@ -5,6 +5,7 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { parseCsv } from "@/lib/csv";
+import { normalizeBirthday } from "@/lib/birthday";
 import {
   headerToField,
   normalizeDate,
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
       status: normalizeStatus(get("status")),
       phone: clip(get("phone"), 40),
       email,
-      dateOfBirth: normalizeDate(get("dateOfBirth")),
+      dateOfBirth: normalizeBirthday(get("dateOfBirth")),
       joinedAt: normalizeDate(get("joinedAt")),
       house: clip(get("house"), 120),
       street: clip(get("street"), 160),
