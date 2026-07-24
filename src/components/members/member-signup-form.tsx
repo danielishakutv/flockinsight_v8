@@ -307,27 +307,29 @@ export function MemberSignupForm({
                     Remove
                   </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="First name">
-                    <Input
-                      value={c.firstName}
-                      onChange={(e) => setChild(i, { firstName: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Gender">
-                    <Select
-                      value={c.gender || undefined}
-                      onValueChange={(v) => setChild(i, { gender: v as Child["gender"] })}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="First name">
+                      <Input
+                        value={c.firstName}
+                        onChange={(e) => setChild(i, { firstName: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Gender">
+                      <Select
+                        value={c.gender || undefined}
+                        onValueChange={(v) => setChild(i, { gender: v as Child["gender"] })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
                   <Field label="Date of birth" hint="Year optional">
                     <BirthdayInput
                       value={c.dateOfBirth}

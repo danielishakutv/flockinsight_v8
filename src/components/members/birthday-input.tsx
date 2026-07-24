@@ -70,12 +70,15 @@ export function BirthdayInput({
   );
 
   return (
+    // Day / Month / Year share the row proportionally and all shrink together,
+    // so the picker stays usable from a full-width field down to a cramped one
+    // (Month keeps the largest share since its labels are the longest).
     <div className="flex gap-2">
       <Select
         value={parts.day || undefined}
         onValueChange={(v) => update({ day: v })}
       >
-        <SelectTrigger id={id} className="h-11 w-[5.5rem] shrink-0">
+        <SelectTrigger id={id} className="h-11 min-w-0 flex-[0_1_4.5rem]">
           <SelectValue placeholder="Day" />
         </SelectTrigger>
         <SelectContent className="max-h-64">
@@ -91,7 +94,7 @@ export function BirthdayInput({
         value={parts.month || undefined}
         onValueChange={(v) => update({ month: v })}
       >
-        <SelectTrigger className="h-11 min-w-0 flex-1">
+        <SelectTrigger className="h-11 min-w-0 flex-[1_1_7rem]">
           <SelectValue placeholder="Month" />
         </SelectTrigger>
         <SelectContent className="max-h-64">
@@ -113,7 +116,7 @@ export function BirthdayInput({
         onChange={(e) =>
           update({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })
         }
-        className="h-11 w-20 shrink-0"
+        className="h-11 min-w-0 flex-[0_1_4.5rem]"
       />
     </div>
   );
