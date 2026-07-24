@@ -10,6 +10,7 @@ import {
   memberToForm,
   memberFormToInput,
   type Guardian,
+  type HouseholdOption,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,12 @@ export function MemberEditForm({
   member,
   onDone,
   guardians = [],
+  households = [],
 }: {
   member: MemberRecord;
   onDone?: () => void;
   guardians?: Guardian[];
+  households?: HouseholdOption[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState<MemberFormState>(() => memberToForm(member));
@@ -64,6 +67,7 @@ export function MemberEditForm({
           form={form}
           set={(patch) => setForm((f) => ({ ...f, ...patch }))}
           guardians={guardians}
+          households={households}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">

@@ -10,6 +10,7 @@ import {
   FileText,
   Link2,
   BarChart3,
+  CalendarDays,
   Pencil,
   Trash2,
   Eye,
@@ -34,6 +35,8 @@ type FormRow = {
   status: FormStatus;
   responseCount: number;
   updatedAt: string;
+  eventId: string | null;
+  eventTitle: string | null;
 };
 
 const STATUS: Record<FormStatus, { label: string; variant: "secondary" | "success" | "outline" }> = {
@@ -152,9 +155,17 @@ function FormCard({
     <div className="bg-card rounded-2xl border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-semibold">{f.title}</p>
             <Badge variant={status.variant}>{status.label}</Badge>
+            {f.eventId && (
+              <Link href="/my-events">
+                <Badge variant="secondary" className="gap-1">
+                  <CalendarDays className="size-3" />
+                  {f.eventTitle ?? "Event"}
+                </Badge>
+              </Link>
+            )}
           </div>
           <p className="text-muted-foreground mt-0.5 text-sm">
             {count} response{count === 1 ? "" : "s"} · updated{" "}

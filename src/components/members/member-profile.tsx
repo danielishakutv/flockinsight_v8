@@ -7,6 +7,7 @@ import { formatBirthday } from "@/lib/birthday";
 import {
   memberToForm,
   type Guardian,
+  type HouseholdOption,
 } from "@/components/members/member-form-fields";
 import { MemberEditForm } from "@/components/members/member-edit-form";
 import { Badge } from "@/components/ui/badge";
@@ -206,12 +207,14 @@ export function MemberProfile({
   isTeamMember,
   guardians = [],
   guardianName,
+  households = [],
 }: {
   member: MemberRecord;
   canManage?: boolean;
   isTeamMember?: boolean;
   guardians?: Guardian[];
   guardianName?: string | null;
+  households?: HouseholdOption[];
 }) {
   const [mode, setMode] = useState<"view" | "edit">("view");
 
@@ -227,6 +230,7 @@ export function MemberProfile({
     <MemberEditForm
       member={member}
       guardians={guardians}
+      households={households}
       onDone={() => setMode("view")}
     />
   );

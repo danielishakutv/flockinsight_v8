@@ -3,9 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, CalendarDays, Clock, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarDays, ClipboardList, Clock, MapPin } from "lucide-react";
 import { db } from "@/db";
-import { church, event } from "@/db/schema";
+import { church, event, form } from "@/db/schema";
 import { siteUrl } from "@/lib/site";
 import { ShareButton } from "@/components/public/share-button";
 
@@ -61,6 +61,15 @@ export async function generateMetadata({
   };
 }
 
+/** Open (accepting) registration/sign-up forms attached to a public event. */
+async function getEventForms(eventId: string) {
+  return db
+    .select({ slug: form.slug, title: form.title })
+    .from(form)
+    .where(and(eq(form.eventId, eventId), eq(form.status, "open")))
+    .limit(10);
+}
+
 export default async function EventDetailPage({
   params,
 }: {
@@ -69,6 +78,7 @@ export default async function EventDetailPage({
   const { id } = await params;
   const e = await getEvent(id);
   if (!e) notFound();
+  const forms = await getEventForms(e.id);
 
   const place = [e.venue, e.address, e.city, e.state, e.country]
     .filter(Boolean)
@@ -135,6 +145,25 @@ export default async function EventDetailPage({
               <p className="whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">
                 {e.description}
               </p>
+            )}
+
+            {forms.length > 0 && (
+              <div className="rounded-xl border bg-violet-50 p-4 dark:bg-violet-950/30">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-bold">
+                  <ClipboardList className="size-4" /> Register for this event
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {forms.map((f) => (
+                    <Link
+                      key={f.slug}
+                      href={`/f/${f.slug}`}
+                      className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-700"
+                    >
+                      <ClipboardList className="size-4" /> {f.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             )}
 
             {place && (

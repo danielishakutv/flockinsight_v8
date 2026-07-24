@@ -10,6 +10,7 @@ import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
 import { recordAction } from "@/lib/analytics";
+import { createHousehold, householdInChurch } from "@/lib/households";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -45,6 +46,9 @@ const memberSchema = z.object({
   isMinor: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
   guardianId: z.preprocess(emptyToNull, z.string().uuid().nullable()).default(null),
   relationship: optText(40),
+  // Household: link to an existing one, or provide a name to create a new one.
+  householdId: z.preprocess(emptyToNull, z.string().uuid().nullable()).default(null),
+  householdName: optText(120),
   dateOfBirth: optDate,
   joinedAt: optDate,
   weddingDate: optDate,
@@ -99,6 +103,17 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     guardianId = g.id;
   }
 
+  // Household: create a new one if a name was typed, else use the selected one
+  // (validated to belong to this church). Blank = no household (optional).
+  let householdId: string | null = null;
+  if (d.householdName) {
+    householdId = await createHousehold(church.id, d.householdName, user.id);
+  } else if (d.householdId) {
+    if (!(await householdInChurch(church.id, d.householdId)))
+      return { ok: false, error: "That household isn't part of your church." };
+    householdId = d.householdId;
+  }
+
   // Fields shared by insert and update.
   const fields = {
     photoUrl: d.photoUrl,
@@ -112,6 +127,7 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     isMinor: d.isMinor,
     guardianId,
     relationship,
+    householdId,
     dateOfBirth: d.dateOfBirth,
     joinedAt: d.joinedAt,
     weddingDate: d.weddingDate,
@@ -139,6 +155,10 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
       revalidatePath(`/members/${row.id}`);
       // The guardian's profile lists their children — keep it fresh.
       if (guardianId) revalidatePath(`/members/${guardianId}`);
+      if (householdId) {
+        revalidatePath("/members/households");
+        revalidatePath(`/members/households/${householdId}`);
+      }
       return { ok: true, id: row.id };
     }
 
@@ -170,6 +190,10 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     revalidatePath("/members");
     revalidatePath("/dashboard");
     if (guardianId) revalidatePath(`/members/${guardianId}`);
+    if (householdId) {
+      revalidatePath("/members/households");
+      revalidatePath(`/members/households/${householdId}`);
+    }
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("saveMember failed", e);

@@ -455,6 +455,11 @@ export const member = pgTable(
       onDelete: "set null",
     }),
     relationship: text(),
+    // Optional family/household grouping. Never required — most members can
+    // stand alone; set null if the household is deleted.
+    householdId: uuid().references((): AnyPgColumn => household.id, {
+      onDelete: "set null",
+    }),
     // ----- Milestones / anniversaries -----
     weddingDate: date(),
     baptized: boolean().notNull().default(false),
@@ -493,7 +498,37 @@ export const member = pgTable(
     uniqueIndex("member_church_user_idx").on(t.churchId, t.userId),
     // Look up a guardian's children quickly.
     index("member_guardian_idx").on(t.guardianId),
+    // Look up a household's members quickly.
+    index("member_household_idx").on(t.householdId),
   ],
+);
+
+/* ============================================================
+ * FlockInsight domain — households (optional family grouping)
+ * A household groups related members (e.g. a family) under one name, with an
+ * optional "head". Entirely optional — a member can belong to none.
+ * ========================================================== */
+export const household = pgTable(
+  "household",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    // The member who heads this household (optional). Set null if they leave.
+    headMemberId: uuid().references((): AnyPgColumn => member.id, {
+      onDelete: "set null",
+    }),
+    note: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("household_church_idx").on(t.churchId)],
 );
 
 /* ============================================================
@@ -1305,6 +1340,10 @@ export const form = pgTable(
     // The "link half name": /f/<slug>. Globally unique so links are stable.
     slug: text().notNull().unique(),
     status: formStatusEnum().notNull().default("draft"),
+    // Optionally attach this form to an event (registration/sign-up). The form
+    // then appears in both the Events and Forms screens; set null on event
+    // delete so the form (and its responses) survive.
+    eventId: uuid().references(() => event.id, { onDelete: "set null" }),
     // Ordered field definitions — see FormField in lib/forms-shared.ts.
     fields: jsonb()
       .$type<import("@/lib/forms-shared").FormField[]>()
@@ -1327,7 +1366,10 @@ export const form = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index("form_church_idx").on(t.churchId)],
+  (t) => [
+    index("form_church_idx").on(t.churchId),
+    index("form_event_idx").on(t.eventId),
+  ],
 );
 
 export const formResponse = pgTable(

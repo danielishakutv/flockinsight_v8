@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { form } from "@/db/schema";
+import { event, form } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { siteUrl } from "@/lib/site";
@@ -22,17 +22,26 @@ export default async function FormEditPage({
   const { church } = await requireChurch();
   await requireCan("forms.manage");
 
-  const [f] = await db
-    .select()
-    .from(form)
-    .where(and(eq(form.id, id), eq(form.churchId, church.id)))
-    .limit(1);
+  const [[f], events] = await Promise.all([
+    db
+      .select()
+      .from(form)
+      .where(and(eq(form.id, id), eq(form.churchId, church.id)))
+      .limit(1),
+    db
+      .select({ id: event.id, title: event.title })
+      .from(event)
+      .where(eq(event.churchId, church.id))
+      .orderBy(desc(event.date))
+      .limit(200),
+  ]);
   if (!f) notFound();
 
   return (
     <PageContainer className="max-w-3xl">
       <FormBuilder
         baseUrl={siteUrl()}
+        events={events}
         initial={{
           id: f.id,
           title: f.title,
@@ -45,6 +54,7 @@ export default async function FormEditPage({
           notifyInApp: f.notifyInApp,
           createMembers: f.createMembers,
           addToFollowUp: f.addToFollowUp,
+          eventId: f.eventId ?? "",
           responseCount: f.responseCount,
         }}
       />

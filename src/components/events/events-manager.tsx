@@ -8,6 +8,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  FileText,
   Globe,
   Loader2,
   MapPin,
@@ -22,6 +23,10 @@ import {
   EventGuestsDialog,
   type Guest,
 } from "@/components/events/event-guests-dialog";
+import {
+  EventFormsDialog,
+  type EventForm,
+} from "@/components/events/event-forms-dialog";
 import { ImageUpload } from "@/components/settings/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,12 +87,18 @@ export function EventsManager({
   baseUrl,
   publicEnabled = true,
   guestsByEvent = {},
+  formsByEvent = {},
+  unlinkedForms = [],
+  canManageForms = false,
   smsAvailable = true,
 }: {
   events: EventRow[];
   baseUrl: string;
   publicEnabled?: boolean;
   guestsByEvent?: Record<string, Guest[]>;
+  formsByEvent?: Record<string, EventForm[]>;
+  unlinkedForms?: { id: string; title: string }[];
+  canManageForms?: boolean;
   smsAvailable?: boolean;
 }) {
   const router = useRouter();
@@ -96,6 +107,7 @@ export function EventsManager({
   const [form, setForm] = useState<FormState>(emptyEvent());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [guestsFor, setGuestsFor] = useState<EventRow | null>(null);
+  const [formsFor, setFormsFor] = useState<EventRow | null>(null);
   const set = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 
   async function copyLink(id: string, url: string) {
@@ -222,6 +234,17 @@ export function EventsManager({
                     </Button>
                   </>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setFormsFor(e)}
+                  title="Registration forms"
+                >
+                  <FileText className="size-4" />
+                  <span className="tabular-nums">
+                    {(formsByEvent[e.id] ?? []).length || ""}
+                  </span>
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -387,6 +410,19 @@ export function EventsManager({
           eventTitle={guestsFor.title}
           guests={guestsByEvent[guestsFor.id] ?? []}
           smsAvailable={smsAvailable}
+        />
+      )}
+
+      {formsFor && (
+        <EventFormsDialog
+          open={!!formsFor}
+          onOpenChange={(o) => !o && setFormsFor(null)}
+          eventId={formsFor.id}
+          eventTitle={formsFor.title}
+          forms={formsByEvent[formsFor.id] ?? []}
+          unlinkedForms={unlinkedForms}
+          baseUrl={baseUrl}
+          canManageForms={canManageForms}
         />
       )}
     </div>

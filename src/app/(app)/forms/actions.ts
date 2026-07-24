@@ -4,10 +4,24 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { form } from "@/db/schema";
+import { event, form } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { slugify, randomSuffix } from "@/lib/slug";
+
+/** Resolve an event id to itself + title if it belongs to this church. */
+async function eventInChurch(
+  churchId: string,
+  eventId: string,
+): Promise<{ id: string; title: string } | null> {
+  if (!z.string().uuid().safeParse(eventId).success) return null;
+  const [ev] = await db
+    .select({ id: event.id, title: event.title })
+    .from(event)
+    .where(and(eq(event.id, eventId), eq(event.churchId, churchId)))
+    .limit(1);
+  return ev ?? null;
+}
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -60,6 +74,13 @@ const updateSchema = z.object({
   notifyInApp: z.boolean(),
   createMembers: z.boolean(),
   addToFollowUp: z.boolean(),
+  // Optional linked event (registration/sign-up). "" or null = unlinked.
+  eventId: z
+    .preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+      z.string().uuid().nullable(),
+    )
+    .default(null),
 });
 
 export type FormUpdateInput = z.input<typeof updateSchema>;
@@ -84,34 +105,75 @@ async function uniqueSlug(base: string, excludeId?: string): Promise<string> {
   return `${slugify(base) || "form"}-${randomSuffix(6)}`;
 }
 
-/** Create a blank form and return its id. */
-export async function createForm(): Promise<ActionResult> {
+/**
+ * Create a blank form and return its id. Pass an `eventId` to attach it to an
+ * event (registration/sign-up) — the form then appears in Events and Forms.
+ */
+export async function createForm(eventId?: string): Promise<ActionResult> {
   const { church, user } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to create forms." };
 
-  const slug = await uniqueSlug("untitled-form");
+  // If linking to an event, base the title on it and pre-fill contact fields.
+  const ev = eventId ? await eventInChurch(church.id, eventId) : null;
+  const title = ev ? `${ev.title} — Registration`.slice(0, 160) : "Untitled form";
+  const slug = await uniqueSlug(title);
+
+  const fields = ev
+    ? [
+        { id: `f0_${randomSuffix(6)}`, type: "short_text" as const, label: "Full name", required: true, map: "fullName" as const },
+        { id: `f1_${randomSuffix(6)}`, type: "phone" as const, label: "Phone", required: true, map: "phone" as const },
+        { id: `f2_${randomSuffix(6)}`, type: "email" as const, label: "Email", required: false, map: "email" as const },
+      ]
+    : [
+        { id: `f0_${randomSuffix(6)}`, type: "short_text" as const, label: "Full name", required: true, map: "fullName" as const },
+      ];
+
   const [row] = await db
     .insert(form)
     .values({
       churchId: church.id,
-      title: "Untitled form",
+      title,
       slug,
+      eventId: ev?.id ?? null,
       createdBy: user.id,
-      fields: [
-        {
-          id: `f0_${randomSuffix(6)}`,
-          type: "short_text",
-          label: "Full name",
-          required: true,
-          map: "fullName",
-        },
-      ],
+      fields,
     })
     .returning({ id: form.id });
 
   revalidatePath("/forms");
+  if (ev) revalidatePath("/my-events");
   return { ok: true, id: row.id };
+}
+
+/** Link a form to an event, or unlink it (eventId = null). */
+export async function setFormEvent(
+  formId: string,
+  eventId: string | null,
+): Promise<ActionResult> {
+  const { church } = await requireChurch();
+  if (!(await can("forms.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+  if (!z.string().uuid().safeParse(formId).success)
+    return { ok: false, error: "Invalid id." };
+
+  let linked: string | null = null;
+  if (eventId) {
+    const ev = await eventInChurch(church.id, eventId);
+    if (!ev) return { ok: false, error: "That event isn't part of your church." };
+    linked = ev.id;
+  }
+
+  const res = await db
+    .update(form)
+    .set({ eventId: linked })
+    .where(and(eq(form.id, formId), eq(form.churchId, church.id)))
+    .returning({ id: form.id });
+  if (!res.length) return { ok: false, error: "Form not found." };
+  revalidatePath("/forms");
+  revalidatePath(`/forms/${formId}`);
+  revalidatePath("/my-events");
+  return { ok: true, id: formId };
 }
 
 /** Save all of a form's content + settings. */
@@ -140,6 +202,14 @@ export async function updateForm(input: FormUpdateInput): Promise<ActionResult> 
     slug = await uniqueSlug(slug, d.id);
   }
 
+  // Validate the linked event (if any) belongs to this church.
+  let eventId: string | null = null;
+  if (d.eventId) {
+    const ev = await eventInChurch(church.id, d.eventId);
+    if (!ev) return { ok: false, error: "That event isn't part of your church." };
+    eventId = ev.id;
+  }
+
   // Drop empty options and options on non-option fields.
   const fields = d.fields.map((f) => ({
     ...f,
@@ -164,11 +234,13 @@ export async function updateForm(input: FormUpdateInput): Promise<ActionResult> 
       notifyInApp: d.notifyInApp,
       createMembers: d.createMembers,
       addToFollowUp: d.addToFollowUp,
+      eventId,
     })
     .where(and(eq(form.id, d.id), eq(form.churchId, church.id)));
 
   revalidatePath("/forms");
   revalidatePath(`/forms/${d.id}`);
+  revalidatePath("/my-events");
   return { ok: true, id: d.id };
 }
 

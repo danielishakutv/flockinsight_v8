@@ -1,21 +1,24 @@
 import { redirect } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { event, eventGuest } from "@/db/schema";
+import { event, eventGuest, form } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { can } from "@/lib/permissions";
+import { can, getAccess } from "@/lib/permissions";
 import { siteUrl } from "@/lib/site";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { EventsManager } from "@/components/events/events-manager";
 import type { Guest } from "@/components/events/event-guests-dialog";
+import type { EventForm } from "@/components/events/event-forms-dialog";
 
 export const metadata = { title: "Events" };
 
 export default async function MyEventsPage() {
   const { church } = await requireChurch();
   if (!(await can("settings.manage"))) redirect("/dashboard");
+  const access = await getAccess();
+  const canManageForms = access.isOwner || access.perms.has("forms.manage");
 
-  const [rows, guestRows] = await Promise.all([
+  const [rows, guestRows, formRows] = await Promise.all([
     db
       .select()
       .from(event)
@@ -34,6 +37,18 @@ export default async function MyEventsPage() {
       .from(eventGuest)
       .where(eq(eventGuest.churchId, church.id))
       .orderBy(asc(eventGuest.createdAt)),
+    db
+      .select({
+        id: form.id,
+        title: form.title,
+        slug: form.slug,
+        status: form.status,
+        responseCount: form.responseCount,
+        eventId: form.eventId,
+      })
+      .from(form)
+      .where(eq(form.churchId, church.id))
+      .orderBy(desc(form.updatedAt)),
   ]);
 
   const guestsByEvent: Record<string, Guest[]> = {};
@@ -45,6 +60,21 @@ export default async function MyEventsPage() {
       email: g.email,
       phone: g.phone,
     });
+  }
+
+  // Forms attached to each event, plus the unlinked forms available to attach.
+  const formsByEvent: Record<string, EventForm[]> = {};
+  const unlinkedForms: { id: string; title: string }[] = [];
+  for (const f of formRows) {
+    const lite: EventForm = {
+      id: f.id,
+      title: f.title,
+      slug: f.slug,
+      status: f.status,
+      responseCount: f.responseCount,
+    };
+    if (f.eventId) (formsByEvent[f.eventId] ??= []).push(lite);
+    else unlinkedForms.push({ id: f.id, title: f.title });
   }
 
   return (
@@ -61,6 +91,9 @@ export default async function MyEventsPage() {
         baseUrl={siteUrl()}
         publicEnabled={church.publicEnabled}
         guestsByEvent={guestsByEvent}
+        formsByEvent={formsByEvent}
+        unlinkedForms={unlinkedForms}
+        canManageForms={canManageForms}
         smsAvailable={smsAvailableForCountry(church.country)}
         events={rows.map((e) => ({
           id: e.id,

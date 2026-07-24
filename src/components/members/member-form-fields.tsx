@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { MemberInput } from "@/app/(app)/members/actions";
 import {
   COUNTRIES,
@@ -25,6 +26,7 @@ import {
 export type MemberStatus = "active" | "inactive" | "visitor" | "new_convert";
 
 export type Guardian = { id: string; name: string };
+export type HouseholdOption = { id: string; name: string };
 
 export type MemberFormState = {
   id?: string;
@@ -37,6 +39,8 @@ export type MemberFormState = {
   isMinor: boolean;
   guardianId: string; // "" = none
   relationship: string; // "" = unspecified
+  householdId: string; // "" = none
+  householdName: string; // non-empty = create a new household with this name
   phone: string;
   email: string;
   dateOfBirth: string;
@@ -58,6 +62,8 @@ export const GENDER_NONE = "none";
 // Radix Select can't hold an empty-string value, so use sentinels for "none".
 const GUARDIAN_NONE = "__none__";
 const REL_NONE = "__none__";
+const HH_NONE = "__none__";
+const HH_NEW = "__new__";
 
 /** Today as YYYY-MM-DD in the browser's local time. */
 function todayLocal(): string {
@@ -82,6 +88,8 @@ export function emptyMember(): MemberFormState {
     isMinor: false,
     guardianId: "",
     relationship: "",
+    householdId: "",
+    householdName: "",
     phone: "",
     email: "",
     dateOfBirth: "",
@@ -112,6 +120,7 @@ export function memberToForm(m: {
   isMinor?: boolean | null;
   guardianId?: string | null;
   relationship?: string | null;
+  householdId?: string | null;
   phone: string | null;
   email: string | null;
   dateOfBirth: string | null;
@@ -139,6 +148,8 @@ export function memberToForm(m: {
     isMinor: m.isMinor ?? false,
     guardianId: m.guardianId ?? "",
     relationship: m.relationship ?? "",
+    householdId: m.householdId ?? "",
+    householdName: "",
     phone: m.phone ?? "",
     email: m.email ?? "",
     dateOfBirth: m.dateOfBirth ?? "",
@@ -170,6 +181,9 @@ export function memberFormToInput(form: MemberFormState): MemberInput {
     isMinor: form.isMinor,
     guardianId: form.isMinor ? form.guardianId : null,
     relationship: form.isMinor ? form.relationship : null,
+    // A typed new-household name takes precedence; else the picked existing one.
+    householdId: form.householdName.trim() ? null : form.householdId || null,
+    householdName: form.householdName.trim() || null,
     phone: form.phone,
     email: form.email,
     dateOfBirth: form.dateOfBirth,
@@ -193,6 +207,7 @@ export function MemberFormFields({
   set,
   guardians = [],
   lockGuardian = false,
+  households = [],
 }: {
   form: MemberFormState;
   set: (patch: Partial<MemberFormState>) => void;
@@ -200,10 +215,15 @@ export function MemberFormFields({
   guardians?: Guardian[];
   /** Guardian is fixed (e.g. adding a child from a parent's profile). */
   lockGuardian?: boolean;
+  /** Existing households this member can join. */
+  households?: HouseholdOption[];
 }) {
   const isNigeria = form.country === DEFAULT_COUNTRY;
   const lgaOptions = isNigeria ? lgasForState(form.state) : [];
   const guardianName = guardians.find((g) => g.id === form.guardianId)?.name;
+  const [makingHousehold, setMakingHousehold] = useState(
+    () => form.householdName.trim().length > 0,
+  );
 
   return (
     <div className="space-y-4">
@@ -278,6 +298,60 @@ export function MemberFormFields({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Household (optional, for everyone) */}
+      <div className="space-y-2 rounded-xl border p-3">
+        <Label htmlFor="household">Household</Label>
+        {makingHousehold ? (
+          <div className="flex gap-2">
+            <Input
+              id="household"
+              autoFocus
+              value={form.householdName}
+              onChange={(e) => set({ householdName: e.target.value })}
+              placeholder="New household name, e.g. The Johnsons"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setMakingHousehold(false);
+                set({ householdName: "" });
+              }}
+              className="text-muted-foreground hover:text-foreground shrink-0 px-2 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <Select
+            value={form.householdId || HH_NONE}
+            onValueChange={(v) => {
+              if (v === HH_NEW) {
+                setMakingHousehold(true);
+                set({ householdId: "" });
+              } else {
+                set({ householdId: v === HH_NONE ? "" : v, householdName: "" });
+              }
+            }}
+          >
+            <SelectTrigger id="household" className="w-full">
+              <SelectValue placeholder="No household" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value={HH_NONE}>No household</SelectItem>
+              {households.map((h) => (
+                <SelectItem key={h.id} value={h.id}>
+                  {h.name}
+                </SelectItem>
+              ))}
+              <SelectItem value={HH_NEW}>＋ Create a new household…</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+        <p className="text-muted-foreground text-xs">
+          Optional — group family members together. Leave empty if not needed.
+        </p>
       </div>
 
       {/* Profile photo */}

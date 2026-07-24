@@ -29,6 +29,21 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.52.0",
+    date: "2026-07-24",
+    summary:
+      "Group families into households, and attach registration/sign-up forms to your events.",
+    changes: {
+      Added: [
+        "Households: an optional way to group family members together. Create one from the new Members → Households screen, or straight from a member's form, and set a head of household. Everything is optional — members never need a household.",
+        "A member's profile shows their household and everyone else in it; adding a child to a parent puts them in the same household automatically.",
+        "Events: attach one or more forms to an event (registration, sign-up, feedback). Create a ready-made registration form in a click, or link an existing one.",
+        "A form linked to an event shows up in both places automatically — with an event badge on the Forms screen, and under the event on the Events screen.",
+        "Public event pages now show a “Register for this event” button for each open form, so people can sign up directly.",
+      ],
+    },
+  },
+  {
     version: "0.51.0",
     date: "2026-07-24",
     summary:

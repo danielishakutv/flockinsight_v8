@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { ArrowLeft, UsersRound } from "lucide-react";
+import { ArrowLeft, ChevronRight, Home, UsersRound } from "lucide-react";
 import { db } from "@/db";
-import { group, groupMembership, member } from "@/db/schema";
+import { group, groupMembership, household, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
+import { householdOptions } from "@/lib/households";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export default async function MemberDetailPage({
       isMinor: member.isMinor,
       guardianId: member.guardianId,
       relationship: member.relationship,
+      householdId: member.householdId,
       phone: member.phone,
       email: member.email,
       dateOfBirth: member.dateOfBirth,
@@ -63,46 +65,76 @@ export default async function MemberDetailPage({
 
   if (!m) notFound();
 
-  const [memberGroups, children, guardianOptions] = await Promise.all([
-    // Groups / ministries this member belongs to.
-    db
-      .select({
-        id: group.id,
-        name: group.name,
-        type: group.type,
-        isLeader: groupMembership.isLeader,
-        role: groupMembership.role,
-      })
-      .from(groupMembership)
-      .innerJoin(group, eq(group.id, groupMembership.groupId))
-      .where(and(eq(groupMembership.memberId, id), eq(group.churchId, church.id)))
-      .orderBy(asc(group.name)),
-    // This member's own children.
-    db
-      .select({
-        id: member.id,
-        firstName: member.firstName,
-        lastName: member.lastName,
-        relationship: member.relationship,
-        dateOfBirth: member.dateOfBirth,
-        status: member.status,
-      })
-      .from(member)
-      .where(and(eq(member.guardianId, id), eq(member.churchId, church.id)))
-      .orderBy(asc(member.firstName), asc(member.lastName)),
-    // Adults who can be picked as a guardian (everyone but minors & this member).
-    db
-      .select({ id: member.id, firstName: member.firstName, lastName: member.lastName })
-      .from(member)
-      .where(
-        and(
-          eq(member.churchId, church.id),
-          eq(member.isMinor, false),
-          ne(member.id, id),
-        ),
-      )
-      .orderBy(asc(member.firstName), asc(member.lastName)),
-  ]);
+  const [memberGroups, children, guardianOptions, households, householdRow, householdSiblings] =
+    await Promise.all([
+      // Groups / ministries this member belongs to.
+      db
+        .select({
+          id: group.id,
+          name: group.name,
+          type: group.type,
+          isLeader: groupMembership.isLeader,
+          role: groupMembership.role,
+        })
+        .from(groupMembership)
+        .innerJoin(group, eq(group.id, groupMembership.groupId))
+        .where(and(eq(groupMembership.memberId, id), eq(group.churchId, church.id)))
+        .orderBy(asc(group.name)),
+      // This member's own children.
+      db
+        .select({
+          id: member.id,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          relationship: member.relationship,
+          dateOfBirth: member.dateOfBirth,
+          status: member.status,
+        })
+        .from(member)
+        .where(and(eq(member.guardianId, id), eq(member.churchId, church.id)))
+        .orderBy(asc(member.firstName), asc(member.lastName)),
+      // Adults who can be picked as a guardian (everyone but minors & this member).
+      db
+        .select({ id: member.id, firstName: member.firstName, lastName: member.lastName })
+        .from(member)
+        .where(
+          and(
+            eq(member.churchId, church.id),
+            eq(member.isMinor, false),
+            ne(member.id, id),
+          ),
+        )
+        .orderBy(asc(member.firstName), asc(member.lastName)),
+      // Household options for the edit form's picker.
+      householdOptions(church.id),
+      // This member's household (name).
+      m.householdId
+        ? db
+            .select({ id: household.id, name: household.name })
+            .from(household)
+            .where(and(eq(household.id, m.householdId), eq(household.churchId, church.id)))
+            .limit(1)
+        : Promise.resolve([]),
+      // Other people in the same household.
+      m.householdId
+        ? db
+            .select({
+              id: member.id,
+              firstName: member.firstName,
+              lastName: member.lastName,
+              isMinor: member.isMinor,
+            })
+            .from(member)
+            .where(
+              and(
+                eq(member.householdId, m.householdId),
+                eq(member.churchId, church.id),
+                ne(member.id, id),
+              ),
+            )
+            .orderBy(asc(member.firstName), asc(member.lastName))
+        : Promise.resolve([]),
+    ]);
 
   const name = [m.firstName, m.middleName, m.lastName]
     .filter(Boolean)
@@ -123,6 +155,7 @@ export default async function MemberDetailPage({
     dateOfBirth: c.dateOfBirth,
     status: c.status,
   }));
+  const householdName = householdRow[0]?.name ?? null;
 
   return (
     <PageContainer className="max-w-2xl">
@@ -142,6 +175,7 @@ export default async function MemberDetailPage({
         isTeamMember={!!m.userId}
         guardians={guardians}
         guardianName={guardianName}
+        households={households}
       />
 
       <MemberFamily
@@ -152,7 +186,58 @@ export default async function MemberDetailPage({
         guardianName={guardianName}
         kids={childList}
         canManage={canManage}
+        householdId={m.householdId}
+        households={households}
       />
+
+      {m.householdId && householdName && (
+        <Card className="mt-4">
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Home className="text-primary size-5" />
+              Household
+            </CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/members/households/${m.householdId}`}>
+                {householdName}
+                <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {householdSiblings.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                The only member of{" "}
+                <Link
+                  href={`/members/households/${m.householdId}`}
+                  className="text-primary font-medium underline"
+                >
+                  {householdName}
+                </Link>{" "}
+                so far.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {householdSiblings.map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/members/${s.id}`}
+                    className="hover:bg-accent flex items-center gap-3 rounded-xl px-2 py-2 transition-colors"
+                  >
+                    <div className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg text-xs font-bold">
+                      {[s.firstName?.[0], s.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "?"}
+                    </div>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {[s.firstName, s.lastName].filter(Boolean).join(" ")}
+                    </span>
+                    <ChevronRight className="text-muted-foreground size-4" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mt-4">
         <CardHeader>

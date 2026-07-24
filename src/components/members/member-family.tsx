@@ -11,6 +11,7 @@ import {
   MemberFormFields,
   emptyMember,
   memberFormToInput,
+  type HouseholdOption,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -62,6 +63,8 @@ export function MemberFamily({
   guardianName,
   kids,
   canManage,
+  householdId = null,
+  households = [],
 }: {
   parentId: string;
   parentName: string;
@@ -70,6 +73,9 @@ export function MemberFamily({
   guardianName: string | null;
   kids: Child[];
   canManage: boolean;
+  /** The parent's household — a new child inherits it by default. */
+  householdId?: string | null;
+  households?: HouseholdOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -113,7 +119,13 @@ export function MemberFamily({
   if (!canManage && kids.length === 0) return null;
 
   function openAdd() {
-    setForm({ ...emptyMember(), isMinor: true, guardianId: parentId });
+    setForm({
+      ...emptyMember(),
+      isMinor: true,
+      guardianId: parentId,
+      // Inherit the parent's household by default (still editable).
+      householdId: householdId ?? "",
+    });
     setOpen(true);
   }
 
@@ -193,6 +205,7 @@ export function MemberFamily({
             set={(patch) => setForm((f) => ({ ...f, ...patch }))}
             guardians={[{ id: parentId, name: parentName }]}
             lockGuardian
+            households={households}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>

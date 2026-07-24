@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { form } from "@/db/schema";
+import { event, form } from "@/db/schema";
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { requireChurch } from "@/lib/session";
@@ -27,8 +27,11 @@ export default async function FormsPage() {
       status: form.status,
       responseCount: form.responseCount,
       updatedAt: form.updatedAt,
+      eventId: form.eventId,
+      eventTitle: event.title,
     })
     .from(form)
+    .leftJoin(event, eq(event.id, form.eventId))
     .where(eq(form.churchId, church.id))
     .orderBy(desc(form.updatedAt));
 
@@ -77,6 +80,8 @@ export default async function FormsPage() {
           status: r.status,
           responseCount: r.responseCount,
           updatedAt: r.updatedAt.toISOString(),
+          eventId: r.eventId,
+          eventTitle: r.eventTitle,
         }))}
       />
     </PageContainer>

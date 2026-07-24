@@ -23,6 +23,7 @@ import {
   MemberFormFields,
   emptyMember,
   memberFormToInput,
+  type HouseholdOption,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { MembersDataMenu } from "@/components/members/members-data-menu";
@@ -99,11 +100,13 @@ export function MembersList({
   canManage = true,
   signupUrl,
   signupEnabled = false,
+  households = [],
 }: {
   members: MemberRow[];
   canManage?: boolean;
   signupUrl?: string;
   signupEnabled?: boolean;
+  households?: HouseholdOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -420,6 +423,7 @@ export function MembersList({
             form={form}
             set={(patch) => setForm((f) => ({ ...f, ...patch }))}
             guardians={guardians}
+            households={households}
           />
           <DialogFooter>
             <Button

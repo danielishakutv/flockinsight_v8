@@ -56,8 +56,13 @@ type BuilderState = {
   notifyInApp: boolean;
   createMembers: boolean;
   addToFollowUp: boolean;
+  eventId: string; // "" = not linked to an event
   responseCount: number;
 };
+
+export type EventOption = { id: string; title: string };
+
+const EVENT_NONE = "__none__";
 
 const STATUSES: { value: FormStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
@@ -68,9 +73,11 @@ const STATUSES: { value: FormStatus; label: string }[] = [
 export function FormBuilder({
   initial,
   baseUrl,
+  events = [],
 }: {
   initial: BuilderState;
   baseUrl: string;
+  events?: EventOption[];
 }) {
   const router = useRouter();
   const [f, setF] = useState<BuilderState>(initial);
@@ -118,6 +125,7 @@ export function FormBuilder({
         notifyInApp: f.notifyInApp,
         createMembers: f.createMembers,
         addToFollowUp: f.addToFollowUp,
+        eventId: f.eventId,
       });
       if (res.ok) {
         toast.success("Form saved");
@@ -277,6 +285,29 @@ export function FormBuilder({
               onChange={(v) => set({ addToFollowUp: v })}
             />
           )}
+          <div className="space-y-1.5">
+            <Label htmlFor="ev">Linked event</Label>
+            <Select
+              value={f.eventId || EVENT_NONE}
+              onValueChange={(v) => set({ eventId: v === EVENT_NONE ? "" : v })}
+            >
+              <SelectTrigger id="ev" className="w-full">
+                <SelectValue placeholder="Not linked to an event" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value={EVENT_NONE}>Not linked to an event</SelectItem>
+                {events.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Attach this form to an event so it shows up as a registration /
+              sign-up on the Events screen and the event&apos;s public page.
+            </p>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm">Confirmation message</Label>
             <Textarea
