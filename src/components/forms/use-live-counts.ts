@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Poll the church's form response counts so views update live (no reload).
@@ -13,9 +13,6 @@ export function useLiveCounts(
   intervalMs = 5000,
 ): Record<string, number> {
   const [counts, setCounts] = useState<Record<string, number>>(initial);
-  // Keep the latest seed without retriggering the effect on every render.
-  const seedRef = useRef(initial);
-  seedRef.current = initial;
 
   useEffect(() => {
     let active = true;
