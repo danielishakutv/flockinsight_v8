@@ -7,8 +7,8 @@ import {
   ChevronRight,
   HandCoins,
   Plus,
-  Sparkles,
   TrendingUp,
+  UserPlus,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -23,13 +23,18 @@ import {
   todo,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { can } from "@/lib/permissions";
+import { getAccess } from "@/lib/permissions";
 import {
   getAnchoredWeeklySeries,
   getLastSession,
   growthPct,
   weeklyAverage,
 } from "@/lib/attendance-metrics";
+import {
+  getMemberBreakdown,
+  getModuleHighlights,
+  getRegistrationTrend,
+} from "@/lib/dashboard-data";
 import { formatMoney } from "@/lib/money";
 import { siteUrl, churchPath } from "@/lib/site";
 import { getSmsPrice } from "@/lib/platform-settings";
@@ -41,11 +46,14 @@ import { DateTime } from "@/components/app/date-time";
 import { StatCard } from "@/components/app/stat-card";
 import { SetupNotices, type Notice } from "@/components/dashboard/setup-notices";
 import { MiniTodo } from "@/components/dashboard/mini-todo";
+import { ModuleHighlights } from "@/components/dashboard/module-highlights";
+import { PeopleSnapshot } from "@/components/dashboard/people-snapshot";
 import { UpcomingBirthdays } from "@/components/dashboard/upcoming-birthdays";
 import { UpcomingAnniversaries } from "@/components/dashboard/upcoming-anniversaries";
 import { InviteCard } from "@/components/dashboard/invite-card";
 import { WalletCard } from "@/components/dashboard/wallet-card";
 import { AttendanceTrend } from "@/components/charts/attendance-trend";
+import { MemberGrowth } from "@/components/charts/member-growth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -69,6 +77,15 @@ export default async function DashboardPage() {
   );
   const sumAmount = sql<number>`coalesce(sum(${giving.amount}), 0)`;
 
+  // "This month" for the module highlights & usage counters.
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthLabel = format(now, "MMMM");
+
+  const access = await getAccess();
+  const perms = [...access.perms];
+  const canSettings = access.isOwner || access.perms.has("settings.manage");
+  const canTeam = access.isOwner || access.perms.has("team.manage");
+
   const [
     { series },
     last,
@@ -79,8 +96,9 @@ export default async function DashboardPage() {
     [{ givingCatCount }],
     [{ staffCount }],
     todos,
-    canSettings,
-    canTeam,
+    breakdown,
+    registrations,
+    highlights,
     smsPrice,
     monthUsage,
   ] = await Promise.all([
@@ -122,8 +140,9 @@ export default async function DashboardPage() {
       .where(eq(todo.userId, user.id))
       .orderBy(asc(todo.done), desc(todo.createdAt))
       .limit(50),
-    can("settings.manage"),
-    can("team.manage"),
+    getMemberBreakdown(church.id),
+    getRegistrationTrend(church.id, 6),
+    getModuleHighlights(church.id, monthStart),
     getSmsPrice(),
     churchUsageSince(church.id, startOfMonth),
   ]);
@@ -139,6 +158,7 @@ export default async function DashboardPage() {
   const avg = weeklyAverage(series, 8);
   const growth = growthPct(series, 4);
   const firstTimers4w = series.slice(-4).reduce((a, w) => a + w.firstTimers, 0);
+  const newThisMonth = registrations.points.at(-1)?.people ?? 0;
 
   const givingMonth = Number(givingAgg?.month ?? 0);
   const givingPrev = Number(givingAgg?.prev ?? 0);
@@ -189,131 +209,170 @@ export default async function DashboardPage() {
       <div className="grid min-w-0 gap-4 lg:gap-6 xl:grid-cols-3">
         {/* Main column */}
         <div className="min-w-0 space-y-4 xl:col-span-2">
-          {!last ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-                <div className="bg-primary/10 text-primary grid size-16 place-items-center rounded-2xl">
-                  <CalendarDays className="size-8" />
-                </div>
-                <div>
-                  <p className="text-lg font-semibold">
-                    No attendance recorded yet
-                  </p>
+          {/* Headline numbers — shown even before any attendance is recorded,
+              so a new church still sees its people data. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            <StatCard
+              label="Last service"
+              value={last ? last.total : "—"}
+              sub={
+                last
+                  ? `${last.name} · ${format(parseISO(last.date), "MMM d")}`
+                  : "Nothing recorded yet"
+              }
+              icon={Users}
+              accent
+            />
+            <StatCard
+              label="Weekly average"
+              value={avg}
+              sub="Last 8 weeks"
+              icon={CalendarDays}
+              delta={growth}
+            />
+            <StatCard
+              label="Total members"
+              value={memberCount}
+              sub={`${breakdown.active.toLocaleString()} active`}
+              icon={UsersRound}
+            />
+            <StatCard
+              label="Registered"
+              value={newThisMonth}
+              sub={`${monthLabel} · ${registrations.total} in 6 months`}
+              icon={UserPlus}
+            />
+          </div>
+
+          {hasGiving && (
+            <Link
+              href="/giving"
+              className="block transition-transform hover:-translate-y-0.5"
+            >
+              <StatCard
+                label="Giving this month"
+                value={formatMoney(givingMonth, church.currency)}
+                sub={`${format(now, "MMMM yyyy")} · tap to view giving`}
+                icon={HandCoins}
+                delta={givingDelta}
+              />
+            </Link>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <TrendingUp className="text-primary size-5" />
+                Attendance trend
+              </CardTitle>
+              <CardDescription>
+                Weekly total · last 12 weeks
+                {firstTimers4w > 0 &&
+                  ` · ${firstTimers4w} first-timer${firstTimers4w === 1 ? "" : "s"} in 4 weeks`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {last ? (
+                <AttendanceTrend
+                  data={series.map((s) => ({ label: s.label, total: s.total }))}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <div className="bg-primary/10 text-primary grid size-14 place-items-center rounded-2xl">
+                    <CalendarDays className="size-7" />
+                  </div>
                   <p className="text-muted-foreground text-sm">
-                    Record your first service to unlock insights.
+                    Record your first service to unlock attendance insights.
                   </p>
-                </div>
-                <Button asChild size="lg">
-                  <Link href="/attendance/record">
-                    <Plus className="size-5" />
-                    Record attendance
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3 lg:gap-4">
-                <StatCard
-                  label="Last service"
-                  value={last.total}
-                  sub={`${last.name} · ${format(parseISO(last.date), "MMM d")}`}
-                  icon={Users}
-                  accent
-                />
-                <StatCard
-                  label="Weekly average"
-                  value={avg}
-                  sub="Last 8 weeks"
-                  icon={CalendarDays}
-                  delta={growth}
-                />
-                <StatCard
-                  label="Total members"
-                  value={memberCount}
-                  sub="In your congregation"
-                  icon={UsersRound}
-                />
-                <StatCard
-                  label="First-timers"
-                  value={firstTimers4w}
-                  sub="Last 4 weeks"
-                  icon={Sparkles}
-                />
-              </div>
-
-              {hasGiving && (
-                <Link
-                  href="/giving"
-                  className="block transition-transform hover:-translate-y-0.5"
-                >
-                  <StatCard
-                    label="Giving this month"
-                    value={formatMoney(givingMonth, church.currency)}
-                    sub={`${format(now, "MMMM yyyy")} · tap to view giving`}
-                    icon={HandCoins}
-                    delta={givingDelta}
-                  />
-                </Link>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <TrendingUp className="text-primary size-5" />
-                    Attendance trend
-                  </CardTitle>
-                  <CardDescription>Weekly total · last 12 weeks</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AttendanceTrend
-                    data={series.map((s) => ({ label: s.label, total: s.total }))}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex-row items-center justify-between">
-                  <CardTitle className="text-lg">Recent services</CardTitle>
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href="/attendance">
-                      View all
-                      <ChevronRight className="size-4" />
+                  {/* On mobile this is the centre button of the bottom bar,
+                      so the duplicate is only shown on wide screens. */}
+                  <Button asChild size="lg" className="hidden lg:inline-flex">
+                    <Link href="/attendance/record">
+                      <Plus className="size-5" />
+                      Record attendance
                     </Link>
                   </Button>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {recent.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/attendance/${r.id}/edit`}
-                      className="hover:bg-accent flex items-center gap-3 rounded-xl px-2 py-2 transition-colors"
-                    >
-                      <div className="bg-muted grid size-11 shrink-0 place-items-center rounded-lg text-center leading-none">
-                        <span className="text-muted-foreground text-[9px] font-bold uppercase">
-                          {format(parseISO(r.date), "EEE")}
-                        </span>
-                        <span className="text-base font-extrabold">
-                          {format(parseISO(r.date), "d")}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">
-                          {r.serviceName ?? r.title ?? "Event"}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {format(parseISO(r.date), "MMM d, yyyy")}
-                        </p>
-                      </div>
-                      <span className="text-xl font-extrabold tabular-nums">
-                        {r.total}
+                  <p className="text-muted-foreground text-xs lg:hidden">
+                    Tap <strong>Record</strong> in the bar below to start.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <PeopleSnapshot data={breakdown} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <UserPlus className="text-primary size-5" />
+                People registered
+              </CardTitle>
+              <CardDescription>
+                {registrations.total.toLocaleString()} joined in the last 6
+                months
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MemberGrowth data={registrations.points} />
+            </CardContent>
+          </Card>
+
+          <ModuleHighlights
+            data={highlights}
+            perms={perms}
+            isOwner={access.isOwner}
+            periodLabel={monthLabel}
+          />
+
+          {last && (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle className="text-lg">Recent services</CardTitle>
+                {/* Attendance has its own tab in the mobile bottom bar. */}
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="hidden lg:inline-flex"
+                >
+                  <Link href="/attendance">
+                    View all
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {recent.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/attendance/${r.id}/edit`}
+                    className="hover:bg-accent flex items-center gap-3 rounded-xl px-2 py-2 transition-colors"
+                  >
+                    <div className="bg-muted grid size-11 shrink-0 place-items-center rounded-lg text-center leading-none">
+                      <span className="text-muted-foreground text-[9px] font-bold uppercase">
+                        {format(parseISO(r.date), "EEE")}
                       </span>
-                      <ChevronRight className="text-muted-foreground size-4" />
-                    </Link>
-                  ))}
-                </CardContent>
-              </Card>
-            </>
+                      <span className="text-base font-extrabold">
+                        {format(parseISO(r.date), "d")}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">
+                        {r.serviceName ?? r.title ?? "Event"}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {format(parseISO(r.date), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <span className="text-xl font-extrabold tabular-nums">
+                      {r.total}
+                    </span>
+                    <ChevronRight className="text-muted-foreground size-4" />
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
           )}
         </div>
 

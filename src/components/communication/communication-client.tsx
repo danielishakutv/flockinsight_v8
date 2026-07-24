@@ -1,16 +1,20 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
   Check,
+  History,
   Loader2,
   Mail,
   MessageSquare,
   Search,
   Send,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +22,7 @@ import {
   sendCommunication,
 } from "@/app/(app)/communication/actions";
 import { COMM_TEMPLATES } from "@/lib/comm-templates";
+import { smsPages } from "@/lib/sms-pages";
 import { formatMoney } from "@/lib/money";
 import { track } from "@/lib/track";
 import { cn } from "@/lib/utils";
@@ -57,13 +62,15 @@ type LogRow = {
   createdAt: string;
 };
 
-function smsPages(body: string) {
-  const len = body.trim().length;
-  if (len === 0) return 0;
-  return len <= 160 ? 1 : Math.ceil(len / 153);
-}
-
 const CHANNEL_ICON = { sms: MessageSquare, email: Mail, notification: Users };
+
+/** Split pasted text on commas / semicolons / whitespace into contact entries. */
+function splitContacts(raw: string): string[] {
+  return raw
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export function CommunicationClient({
   canManage,
@@ -92,12 +99,17 @@ export function CommunicationClient({
   const [pending, startTransition] = useTransition();
 
   const [channel, setChannel] = useState<"sms" | "email" | "staff">("sms");
-  const [audience, setAudience] = useState<"all" | "group" | "selected">("all");
+  const [audience, setAudience] = useState<
+    "all" | "group" | "selected" | "contacts"
+  >("all");
   const [groupId, setGroupId] = useState(groups[0]?.id ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  // Hand-typed recipients who aren't members yet.
+  const [contacts, setContacts] = useState<string[]>([]);
+  const [contactDraft, setContactDraft] = useState("");
   // Staff notice
   const [staffTitle, setStaffTitle] = useState("");
   const [alsoEmail, setAlsoEmail] = useState(true);
@@ -110,8 +122,17 @@ export function CommunicationClient({
       return members.filter((m) => m[contactKey]).length;
     if (audience === "selected")
       return members.filter((m) => selected.has(m.id) && m[contactKey]).length;
+    if (audience === "contacts") return contacts.length;
     return null; // group reach computed on send
-  }, [channel, audience, members, selected, contactKey, staffCount]);
+  }, [channel, audience, members, selected, contactKey, staffCount, contacts]);
+
+  /** Commit whatever is in the contact input (plus anything pasted with it). */
+  function addContacts(raw: string) {
+    const parts = splitContacts(raw);
+    if (parts.length === 0) return;
+    setContacts((prev) => [...new Set([...prev, ...parts])].slice(0, 200));
+    setContactDraft("");
+  }
 
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -132,6 +153,10 @@ export function CommunicationClient({
     if (audience === "all") return "All members";
     if (audience === "group")
       return `Group: ${groups.find((g) => g.id === groupId)?.name ?? ""}`;
+    if (audience === "contacts")
+      return contacts.length === 1
+        ? `New contact: ${contacts[0]}`
+        : `${contacts.length} new contacts`;
     return `${selected.size} selected`;
   }
 
@@ -156,10 +181,20 @@ export function CommunicationClient({
       return;
     }
 
+    // Typing a contact and hitting Send straight away should still include it.
+    const typed = audience === "contacts" ? splitContacts(contactDraft) : [];
+    const allContacts = [...new Set([...contacts, ...typed])];
+
     if (!body.trim()) return toast.error("Write a message.");
     if (audience === "group" && !groupId) return toast.error("Pick a group.");
     if (audience === "selected" && selected.size === 0)
       return toast.error("Choose at least one member.");
+    if (audience === "contacts" && allContacts.length === 0)
+      return toast.error(
+        channel === "sms"
+          ? "Add at least one phone number."
+          : "Add at least one email address.",
+      );
     if (channel === "sms" && !smsAvailable)
       return toast.error("SMS isn't available in your country yet.");
     if (channel === "sms" && !senderApproved)
@@ -171,9 +206,15 @@ export function CommunicationClient({
         audience,
         groupId: audience === "group" ? groupId : "",
         memberIds: audience === "selected" ? [...selected] : [],
+        contacts: audience === "contacts" ? allContacts : [],
         subject: channel === "email" ? subject : undefined,
         body,
-        audienceLabel: audienceLabel(),
+        audienceLabel:
+          audience === "contacts"
+            ? allContacts.length === 1
+              ? `New contact: ${allContacts[0]}`
+              : `${allContacts.length} new contacts`
+            : audienceLabel(),
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -189,6 +230,8 @@ export function CommunicationClient({
       setSubject("");
       setSelected(new Set());
       setQuery("");
+      setContacts([]);
+      setContactDraft("");
       router.refresh();
     });
   }
@@ -231,7 +274,12 @@ export function CommunicationClient({
         {channels.map((ch) => (
           <button
             key={ch.id}
-            onClick={() => setChannel(ch.id)}
+            onClick={() => {
+              setChannel(ch.id);
+              // Phone numbers aren't email addresses — start the list over.
+              setContacts([]);
+              setContactDraft("");
+            }}
             className={cn(
               "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
               channel === ch.id
@@ -281,6 +329,7 @@ export function CommunicationClient({
                       ["all", "All members"],
                       ["group", "A group"],
                       ["selected", "Choose members"],
+                      ["contacts", "New contact"],
                     ] as const
                   ).map(([id, label]) => (
                     <button
@@ -313,6 +362,78 @@ export function CommunicationClient({
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+
+              {audience === "contacts" && (
+                <div className="space-y-2">
+                  <Label htmlFor="contact">
+                    {channel === "sms" ? "Phone numbers" : "Email addresses"}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="contact"
+                      value={contactDraft}
+                      onChange={(e) => setContactDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault();
+                          addContacts(contactDraft);
+                        }
+                      }}
+                      onBlur={() => addContacts(contactDraft)}
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData("text");
+                        if (splitContacts(text).length > 1) {
+                          e.preventDefault();
+                          addContacts(text);
+                        }
+                      }}
+                      inputMode={channel === "sms" ? "tel" : "email"}
+                      type={channel === "sms" ? "tel" : "email"}
+                      placeholder={
+                        channel === "sms" ? "0803 123 4567" : "name@example.com"
+                      }
+                      disabled={!canManage}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addContacts(contactDraft)}
+                      disabled={!canManage || !contactDraft.trim()}
+                    >
+                      <UserPlus className="size-4" />
+                      <span className="hidden sm:inline">Add</span>
+                    </Button>
+                  </div>
+                  {contacts.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {contacts.map((cnt) => (
+                        <span
+                          key={cnt}
+                          className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-3 text-sm font-medium"
+                        >
+                          {cnt}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setContacts((p) => p.filter((x) => x !== cnt))
+                            }
+                            className="hover:bg-primary/20 grid size-5 place-items-center rounded-full"
+                            aria-label={`Remove ${cnt}`}
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-muted-foreground text-xs">
+                    Send to someone who isn&apos;t a member yet. Paste a whole
+                    list — separate them with commas, spaces or new lines.{" "}
+                    <code>{"{name}"}</code> falls back to &ldquo;there&rdquo; for
+                    these recipients.
+                  </p>
+                </div>
               )}
 
               {audience === "selected" && (
@@ -479,8 +600,14 @@ export function CommunicationClient({
       {/* History */}
       {recent.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-lg">Recent messages</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/communication/history">
+                <History className="size-4" />
+                History &amp; analytics
+              </Link>
+            </Button>
           </CardHeader>
           <CardContent className="space-y-2">
             {recent.map((r) => {

@@ -17,7 +17,7 @@ import {
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
-import { smsPages } from "@/lib/sms";
+import { normalizePhone, smsPages } from "@/lib/sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { recordAction } from "@/lib/analytics";
@@ -44,6 +44,60 @@ type Recipient = {
   phone: string | null;
   email: string | null;
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Turn hand-typed phone numbers / email addresses into recipients. These
+ * people aren't members yet, so there's no name to personalise with.
+ */
+function resolveTypedContacts(
+  channel: "sms" | "email",
+  raw: string[],
+): { ok: true; recipients: Recipient[] } | { ok: false; error: string } {
+  const seen = new Set<string>();
+  const recipients: Recipient[] = [];
+  const invalid: string[] = [];
+
+  for (const entry of raw) {
+    const value = entry.trim();
+    if (!value) continue;
+    if (channel === "sms") {
+      const phone = normalizePhone(value);
+      if (!phone) {
+        invalid.push(value);
+        continue;
+      }
+      if (seen.has(phone)) continue;
+      seen.add(phone);
+      recipients.push({ id: `contact:${phone}`, name: "", phone, email: null });
+    } else {
+      const email = value.toLowerCase();
+      if (!EMAIL_RE.test(email)) {
+        invalid.push(value);
+        continue;
+      }
+      if (seen.has(email)) continue;
+      seen.add(email);
+      recipients.push({ id: `contact:${email}`, name: "", phone: null, email });
+    }
+  }
+
+  if (invalid.length)
+    return {
+      ok: false,
+      error: `Check ${invalid.length === 1 ? "this" : "these"}: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`,
+    };
+  if (recipients.length === 0)
+    return {
+      ok: false,
+      error:
+        channel === "sms"
+          ? "Add at least one phone number."
+          : "Add at least one email address.",
+    };
+  return { ok: true, recipients };
+}
 
 async function resolveRecipients(
   churchId: string,
@@ -93,12 +147,17 @@ async function resolveRecipients(
 
 const sendSchema = z.object({
   channel: z.enum(["sms", "email"]),
-  audience: z.enum(["all", "group", "selected", "single"]),
+  audience: z.enum(["all", "group", "selected", "single", "contacts"]),
   groupId: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
     z.string().uuid().nullable(),
   ),
   memberIds: z.array(z.string().uuid()).default([]),
+  /**
+   * Phone numbers / email addresses typed in by hand — people who aren't in
+   * the member list yet. Only used when audience is "contacts".
+   */
+  contacts: z.array(z.string().trim().min(1).max(160)).max(200).default([]),
   subject: z.string().trim().max(160).optional(),
   body: z.string().trim().min(1, "Message is empty").max(2000),
   audienceLabel: z.string().trim().max(80).default("Members"),
@@ -116,12 +175,19 @@ export async function sendCommunication(
   if (!(await can("communication.manage")))
     return { ok: false, error: "You don't have permission to send messages." };
 
-  const recipients = await resolveRecipients(
-    c.id,
-    d.audience,
-    d.groupId,
-    d.memberIds,
-  );
+  let recipients: Recipient[];
+  if (d.audience === "contacts") {
+    const typed = resolveTypedContacts(d.channel, d.contacts);
+    if (!typed.ok) return typed;
+    recipients = typed.recipients;
+  } else {
+    recipients = await resolveRecipients(
+      c.id,
+      d.audience,
+      d.groupId,
+      d.memberIds,
+    );
+  }
   if (recipients.length === 0)
     return { ok: false, error: "No recipients matched your selection." };
 
@@ -130,7 +196,13 @@ export async function sendCommunication(
       .filter((r) => r.phone)
       .map((r) => ({ phone: r.phone as string, message: fill(d.body, r.name, c.name) }));
     if (list.length === 0)
-      return { ok: false, error: "None of those members have a phone number." };
+      return {
+        ok: false,
+        error:
+          d.audience === "contacts"
+            ? "Add at least one phone number."
+            : "None of those members have a phone number.",
+      };
 
     const res = await sendChurchSmsBatch({
       churchId: c.id,
@@ -165,13 +237,20 @@ export async function sendCommunication(
       /* best-effort */
     }
     revalidatePath("/communication");
+    revalidatePath("/communication/history");
     return { ok: true, sent: res.sent, failed: res.failed, cost: res.cost };
   }
 
   // Email
   const list = recipients.filter((r) => r.email);
   if (list.length === 0)
-    return { ok: false, error: "None of those members have an email address." };
+    return {
+      ok: false,
+      error:
+        d.audience === "contacts"
+          ? "Add at least one email address."
+          : "None of those members have an email address.",
+    };
 
   const subjectBase = d.subject || `A message from ${c.name}`;
   const results = await Promise.allSettled(
@@ -211,6 +290,7 @@ export async function sendCommunication(
     /* best-effort */
   }
   revalidatePath("/communication");
+  revalidatePath("/communication/history");
   return { ok: true, sent, failed: list.length - sent };
 }
 
@@ -297,6 +377,7 @@ export async function notifyStaff(
     createdBy: u.id,
   });
   revalidatePath("/communication");
+  revalidatePath("/communication/history");
   revalidatePath("/notifications");
   return { ok: true, staff: userIds.length, pushSent, emailSent };
 }

@@ -9,6 +9,7 @@ import {
   applyVerifiedUpdate,
   sendSignupOtp,
   notifySignupManagers,
+  sendSignupConfirmation,
   type SignupValues,
   type CleanSignup,
 } from "@/lib/member-signup";
@@ -58,6 +59,14 @@ export async function submitSelfRegistration(input: {
       personName: [value.firstName, value.lastName].filter(Boolean).join(" "),
       isNew: true,
     });
+    await sendSignupConfirmation({
+      signup: data.signup,
+      churchId: data.church.id,
+      churchName: data.church.name,
+      firstName: value.firstName,
+      email: value.email,
+      phone: value.phone,
+    });
     revalidatePath("/members");
     revalidatePath("/dashboard");
     return { ok: true, done: true, message: data.signup.successMessage };
@@ -106,7 +115,7 @@ export async function verifySelfRegistration(input: {
 
   // Belt-and-braces: the code was issued for this purpose only.
   const value = res.payload as unknown as CleanSignup;
-  await applyVerifiedUpdate(data.church.id, res.memberId, value);
+  const contact = await applyVerifiedUpdate(data.church.id, res.memberId, value);
   await notifySignupManagers({
     signup: data.signup,
     churchId: data.church.id,
@@ -115,6 +124,17 @@ export async function verifySelfRegistration(input: {
     personName: [value.firstName, value.lastName].filter(Boolean).join(" "),
     isNew: false,
   });
+  if (contact) {
+    await sendSignupConfirmation({
+      signup: data.signup,
+      churchId: data.church.id,
+      churchName: data.church.name,
+      firstName: contact.firstName,
+      email: contact.email,
+      phone: contact.phone,
+      isUpdate: true,
+    });
+  }
   revalidatePath("/members");
   revalidatePath("/dashboard");
 

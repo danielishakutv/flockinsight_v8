@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { ensureSignup, signupUrl } from "@/lib/member-signup";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { SignupForm } from "@/components/settings/signup-form";
 
 export const metadata = { title: "Sign-up link · Settings" };
@@ -32,8 +33,16 @@ export default async function SignupSettingsPage() {
         allowGroupSelect: s.allowGroupSelect,
         notifyInApp: s.notifyInApp,
         notifyEmail: s.notifyEmail,
+        confirmEmail: s.confirmEmail,
+        confirmSms: s.confirmSms,
+        confirmSubject: s.confirmSubject,
+        confirmMessage: s.confirmMessage,
       }}
       url={signupUrl(s.slug)}
+      smsReady={
+        smsAvailableForCountry(church.country) &&
+        church.smsSenderStatus === "approved"
+      }
     />
   );
 }

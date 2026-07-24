@@ -3,19 +3,21 @@ import { and, asc, eq, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
+  communicationLog,
   group,
   groupMembership,
   member,
   memberSignup,
   type MemberSignup,
 } from "@/db/schema";
-import { normalizePhone } from "@/lib/sms";
+import { normalizePhone, smsPages } from "@/lib/sms";
 import { normalizeBirthday } from "@/lib/birthday";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { siteUrl } from "@/lib/site";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { sendChurchSms } from "@/lib/church-sms";
+import { recordUsage } from "@/lib/usage";
 import { issueOtp } from "@/lib/otp";
 
 export const SIGNUP_OTP_PURPOSE = "member_self_update";
@@ -330,22 +332,32 @@ export async function createMemberFromSignup(
   return created.id;
 }
 
+/** Where we can reach a member after a self-registration. */
+export type MemberContact = {
+  firstName: string;
+  email: string | null;
+  phone: string | null;
+};
+
 /**
  * Apply a verified update to an EXISTING member: overwrite the fields they
  * provided, add the groups they picked, and promote a visitor/new-convert to
  * a full member (the "become a member" conversion).
+ *
+ * Returns the member's contact details AFTER the update (so a confirmation
+ * goes to the address they just gave us, not the one we had on file).
  */
 export async function applyVerifiedUpdate(
   churchId: string,
   memberId: string,
   data: CleanSignup,
-): Promise<void> {
+): Promise<MemberContact | null> {
   const [current] = await db
     .select({ status: member.status })
     .from(member)
     .where(and(eq(member.id, memberId), eq(member.churchId, churchId)))
     .limit(1);
-  if (!current) return;
+  if (!current) return null;
 
   // Confirming via the sign-up link promotes a visitor/new convert to a member.
   const promote = current.status === "visitor" || current.status === "new_convert";
@@ -364,12 +376,18 @@ export async function applyVerifiedUpdate(
   if (data.state) patch.state = data.state;
   if (promote) patch.status = "active";
 
-  await db
+  const [updated] = await db
     .update(member)
     .set(patch)
-    .where(and(eq(member.id, memberId), eq(member.churchId, churchId)));
+    .where(and(eq(member.id, memberId), eq(member.churchId, churchId)))
+    .returning({
+      firstName: member.firstName,
+      email: member.email,
+      phone: member.phone,
+    });
 
   await setGroupMemberships(churchId, memberId, data.groupIds);
+  return updated ?? null;
 }
 
 function maskEmail(email: string): string {
@@ -461,6 +479,130 @@ export async function sendSignupOtp(opts: {
     ok: false,
     error: "We couldn't find a way to verify this record. Please contact the church.",
   };
+}
+
+/** Replace the {name}/{church} placeholders in a confirmation template. */
+function fillTemplate(text: string, name: string, churchName: string): string {
+  return text
+    .replace(/\{name\}/g, name || "there")
+    .replace(/\{church\}/g, churchName);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Confirm to the PERSON who just used the sign-up link that we've got their
+ * details — by email (free) and/or SMS (costs wallet balance, so opt-in).
+ *
+ * Each attempt is written to the communication log so it shows up in the
+ * church's message history alongside manual sends. Never throws: a failed
+ * confirmation must never fail the registration itself.
+ */
+export async function sendSignupConfirmation(opts: {
+  signup: MemberSignup;
+  churchId: string;
+  churchName: string;
+  firstName: string;
+  email: string | null;
+  phone: string | null;
+  /** An existing member confirming an update, rather than a new sign-up. */
+  isUpdate?: boolean;
+}): Promise<void> {
+  const wantsEmail = opts.signup.confirmEmail && !!opts.email;
+  const wantsSms = opts.signup.confirmSms && !!opts.phone;
+  if (!wantsEmail && !wantsSms) return;
+
+  // A returning member who confirmed an update gets an accurate short note;
+  // brand-new people get the church's configured welcome message.
+  const body = opts.isUpdate
+    ? `Hi ${opts.firstName || "there"}, your details at ${opts.churchName} have been updated. Thank you!`
+    : fillTemplate(opts.signup.confirmMessage, opts.firstName, opts.churchName);
+  const audience = opts.isUpdate
+    ? "Self-registration · details updated"
+    : "Self-registration · welcome";
+
+  if (wantsEmail && isEmailConfigured()) {
+    const subject = opts.isUpdate
+      ? `Your details at ${opts.churchName} have been updated`
+      : fillTemplate(opts.signup.confirmSubject, opts.firstName, opts.churchName);
+    let ok = false;
+    try {
+      ok = await sendEmail({
+        to: opts.email as string,
+        subject,
+        html: emailLayout(
+          escapeHtml(subject),
+          `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+        ),
+        text: body,
+        fromName: opts.churchName,
+      });
+    } catch {
+      ok = false;
+    }
+    if (ok) await recordUsage("email", opts.churchId, 1);
+    await logConfirmation({
+      churchId: opts.churchId,
+      channel: "email",
+      audience,
+      subject,
+      body,
+      ok,
+    });
+  }
+
+  if (wantsSms) {
+    let ok = false;
+    try {
+      const res = await sendChurchSms({
+        churchId: opts.churchId,
+        to: opts.phone as string,
+        message: body,
+        reason: "Self-registration confirmation",
+      });
+      ok = res.ok;
+    } catch {
+      ok = false;
+    }
+    await logConfirmation({
+      churchId: opts.churchId,
+      channel: "sms",
+      audience,
+      subject: null,
+      body,
+      ok,
+      units: ok ? smsPages(body) : 0,
+    });
+  }
+}
+
+/** Write one confirmation attempt to the church's message history. */
+async function logConfirmation(opts: {
+  churchId: string;
+  channel: "email" | "sms";
+  audience: string;
+  subject: string | null;
+  body: string;
+  ok: boolean;
+  units?: number;
+}): Promise<void> {
+  try {
+    await db.insert(communicationLog).values({
+      churchId: opts.churchId,
+      channel: opts.channel,
+      audience: opts.audience,
+      subject: opts.subject,
+      body: opts.body,
+      recipients: 1,
+      sent: opts.ok ? 1 : 0,
+      failed: opts.ok ? 0 : 1,
+      units: opts.units ?? 0,
+    });
+  } catch {
+    /* best-effort */
+  }
 }
 
 /** Notify church managers about a new/updated self-registration. Never throws. */

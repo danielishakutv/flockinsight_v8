@@ -1441,6 +1441,17 @@ export const memberSignup = pgTable("member_signup", {
   // Notify church managers on each new/updated self-registration.
   notifyInApp: boolean().notNull().default(true),
   notifyEmail: boolean().notNull().default(true),
+  // ----- Confirmation message sent to the PERSON who just registered -----
+  // Email is free, so it's on by default; SMS costs wallet balance, so it's
+  // opt-in. Both support {name} and {church} placeholders.
+  confirmEmail: boolean().notNull().default(true),
+  confirmSms: boolean().notNull().default(false),
+  confirmSubject: text().notNull().default("Welcome to {church}"),
+  confirmMessage: text()
+    .notNull()
+    .default(
+      "Hi {name}, thank you for registering with {church}. We're glad to have you — see you soon!",
+    ),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true })
     .notNull()

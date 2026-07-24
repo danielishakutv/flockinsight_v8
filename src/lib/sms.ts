@@ -47,12 +47,8 @@ type TermiiSendResponse = {
   balance?: number;
 };
 
-/** Number of SMS "pages" a message occupies (160 chars each, GSM-7 assumed). */
-export function smsPages(message: string): number {
-  const len = message.trim().length;
-  if (len === 0) return 0;
-  return len <= 160 ? 1 : Math.ceil(len / 153);
-}
+// Page maths lives in a client-safe module so composers can use it too.
+export { smsPages } from "@/lib/sms-pages";
 
 /** Send an SMS to one or more recipients. `senderId` overrides the env one. */
 export async function sendSms(opts: {

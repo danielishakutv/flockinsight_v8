@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  MailCheck,
   RefreshCw,
   UserPlus,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import {
   regenerateSlug,
   type SignupSettingsInput,
 } from "@/app/(app)/settings/signup/actions";
+import { smsPages } from "@/lib/sms-pages";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,9 +83,12 @@ function ToggleRow({
 export function SignupForm({
   initial,
   url: initialUrl,
+  smsReady = false,
 }: {
   initial: SignupSettingsInput;
   url: string;
+  /** SMS is available in this country AND the sender ID is approved. */
+  smsReady?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -275,6 +280,61 @@ export function SignupForm({
             <p className="text-muted-foreground text-xs">
               Existing visitors who confirm via this link become active members
               automatically.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MailCheck className="text-primary size-5" /> Confirmation message
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground text-sm">
+            Sent to the person straight after they register, so they know you
+            got their details. Use <code>{"{name}"}</code> for their first name
+            and <code>{"{church}"}</code> for your church name.
+          </p>
+          <ToggleRow
+            title="Send a confirmation email"
+            desc="Free — included in your plan's email allowance."
+            checked={f.confirmEmail}
+            onChange={(v) => set({ confirmEmail: v })}
+          />
+          <ToggleRow
+            title="Send a confirmation SMS"
+            desc={
+              smsReady
+                ? "Costs one SMS from your wallet per registration."
+                : "Needs an approved sender ID (Settings → SMS) before it can send."
+            }
+            checked={f.confirmSms}
+            onChange={(v) => set({ confirmSms: v })}
+          />
+          <div className="space-y-2">
+            <Label htmlFor="csubj">Email subject</Label>
+            <Input
+              id="csubj"
+              value={f.confirmSubject}
+              onChange={(e) => set({ confirmSubject: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cmsg">Message</Label>
+            <Textarea
+              id="cmsg"
+              rows={3}
+              value={f.confirmMessage}
+              onChange={(e) => set({ confirmMessage: e.target.value })}
+            />
+            <p className="text-muted-foreground text-xs">
+              {f.confirmMessage.trim().length} characters ·{" "}
+              {smsPages(f.confirmMessage)} SMS page
+              {smsPages(f.confirmMessage) === 1 ? "" : "s"} if sent by SMS.
+              Someone who already exists and confirms an update gets a short
+              &ldquo;your details have been updated&rdquo; note instead.
             </p>
           </div>
         </CardContent>

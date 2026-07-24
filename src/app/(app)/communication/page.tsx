@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { History } from "lucide-react";
 import { asc, count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, communicationLog, group, member, staff } from "@/db/schema";
@@ -6,6 +8,7 @@ import { can, requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
+import { Button } from "@/components/ui/button";
 import {
   CommunicationClient,
   type CommMember,
@@ -81,6 +84,14 @@ export default async function CommunicationPage() {
       <PageHeader
         title="Communication"
         description="Send SMS, email and notices to your church."
+        action={
+          <Button asChild variant="outline">
+            <Link href="/communication/history">
+              <History className="size-4" />
+              History &amp; analytics
+            </Link>
+          </Button>
+        }
       />
       <CommunicationClient
         canManage={canManage}

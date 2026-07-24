@@ -23,6 +23,14 @@ const schema = z.object({
   allowGroupSelect: z.boolean(),
   notifyInApp: z.boolean(),
   notifyEmail: z.boolean(),
+  confirmEmail: z.boolean(),
+  confirmSms: z.boolean(),
+  confirmSubject: z.string().trim().min(1, "Add a subject").max(160),
+  confirmMessage: z
+    .string()
+    .trim()
+    .min(1, "Add a confirmation message")
+    .max(500),
 });
 
 export type SignupSettingsInput = z.input<typeof schema>;

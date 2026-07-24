@@ -29,6 +29,24 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.50.0",
+    date: "2026-07-24",
+    summary:
+      "Welcome messages for people who sign themselves up, a full message history with delivery analytics, texting anyone (member or not), and a dashboard that finally shows the whole church at a glance.",
+    changes: {
+      Added: [
+        "Sign-up link: people who register themselves now get an automatic welcome email (and an SMS if you turn it on) — write your own wording in Settings → Sign-up link.",
+        "Message history & analytics: a new screen showing everything you've sent, how many were delivered, how many failed, SMS units and spend — filter by channel, date range or search, and download it all as a CSV.",
+        "Communication: send an SMS or email to someone who isn't a member yet — just type or paste their phone number(s) or email address(es).",
+        "Dashboard: a gender donut and member-status breakdown, a “people registered” chart for the last 6 months, and headline numbers from groups, follow-up, forms, messages, media, subscribers and events.",
+      ],
+      Improved: [
+        "Dashboard: your member charts now show even before you've recorded any attendance.",
+        "Dashboard: fewer buttons — actions that already live on the mobile bottom bar no longer repeat on the home screen.",
+      ],
+    },
+  },
+  {
     version: "0.49.0",
     date: "2026-07-15",
     summary:

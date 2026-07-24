@@ -115,16 +115,12 @@ export function WalletCard({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/communication">
-              <Send className="size-4" /> Send message
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/settings/wallet">Buy SMS credit</Link>
-          </Button>
-        </div>
+        {/* One action only — "Top up" above already covers buying credit. */}
+        <Button asChild variant="outline" size="sm" className="w-full">
+          <Link href="/communication">
+            <Send className="size-4" /> Send a message
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   );
