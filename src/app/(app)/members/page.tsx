@@ -14,7 +14,7 @@ export default async function MembersPage() {
   await requireCan("members.view");
   const canManage = await can("members.manage");
 
-  const rows: MemberRow[] = await db
+  const raw = await db
     .select({
       id: member.id,
       firstName: member.firstName,
@@ -25,13 +25,38 @@ export default async function MembersPage() {
       status: member.status,
       dateOfBirth: member.dateOfBirth,
       notes: member.notes,
+      isMinor: member.isMinor,
+      guardianId: member.guardianId,
     })
     .from(member)
     .where(eq(member.churchId, church.id))
     .orderBy(asc(member.firstName), asc(member.lastName));
 
+  // Resolve each child's guardian name from the same list (all members are
+  // loaded here anyway), so we avoid a self-join.
+  const nameById = new Map(
+    raw.map((r) => [
+      r.id,
+      [r.firstName, r.lastName].filter(Boolean).join(" "),
+    ]),
+  );
+  const rows: MemberRow[] = raw.map((r) => ({
+    id: r.id,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    gender: r.gender,
+    phone: r.phone,
+    email: r.email,
+    status: r.status,
+    dateOfBirth: r.dateOfBirth,
+    notes: r.notes,
+    isMinor: r.isMinor,
+    guardianName: r.guardianId ? nameById.get(r.guardianId) ?? null : null,
+  }));
+
   const active = rows.filter((r) => r.status === "active").length;
   const visitors = rows.filter((r) => r.status === "visitor").length;
+  const children = rows.filter((r) => r.isMinor).length;
 
   // The public self-registration link (only needed for managers).
   const signup = canManage
@@ -42,7 +67,7 @@ export default async function MembersPage() {
     <PageContainer>
       <PageHeader
         title="Members"
-        description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}`}
+        description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}${children ? ` · ${children} child${children === 1 ? "" : "ren"}` : ""}`}
       />
       <MembersList
         members={rows}

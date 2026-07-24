@@ -143,6 +143,13 @@ export async function getSignupBySlug(
   return { signup: s, church: c, groups };
 }
 
+/** A child a parent adds on the public sign-up form. */
+export type ChildValue = {
+  firstName: string;
+  gender?: "male" | "female" | "";
+  dateOfBirth?: string;
+};
+
 /** The fields a person can submit on the public sign-up form. */
 export type SignupValues = {
   firstName: string;
@@ -156,6 +163,14 @@ export type SignupValues = {
   city?: string;
   state?: string;
   groupIds?: string[];
+  children?: ChildValue[];
+};
+
+export type CleanChild = {
+  firstName: string;
+  gender: "male" | "female" | null;
+  dateOfBirth: string | null;
+  relationship: string | null;
 };
 
 export type CleanSignup = {
@@ -172,6 +187,7 @@ export type CleanSignup = {
   city: string | null;
   state: string | null;
   groupIds: string[];
+  children: CleanChild[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -216,6 +232,30 @@ export function cleanSignupValues(
     ? [...new Set(raw.groupIds.filter((g) => typeof g === "string"))].slice(0, 30)
     : [];
 
+  // Children (only when the church collects them). Each needs a first name;
+  // gender & birthday are optional, and the relationship is derived from gender.
+  const children: CleanChild[] = [];
+  if (signup.collectChildren && Array.isArray(raw.children)) {
+    for (const rc of raw.children.slice(0, 15)) {
+      const cn = (rc?.firstName || "").trim();
+      if (!cn) continue;
+      const cg = rc.gender === "male" || rc.gender === "female" ? rc.gender : null;
+      const cDobRaw = (rc.dateOfBirth || "").trim();
+      const cDob = cDobRaw ? normalizeBirthday(cDobRaw) : null;
+      if (cDobRaw && !cDob)
+        return {
+          ok: false,
+          error: `Please enter a valid date of birth for ${cn}.`,
+        };
+      children.push({
+        firstName: cn.slice(0, 80),
+        gender: cg,
+        dateOfBirth: cDob,
+        relationship: cg === "male" ? "son" : cg === "female" ? "daughter" : null,
+      });
+    }
+  }
+
   return {
     ok: true,
     value: {
@@ -232,6 +272,7 @@ export function cleanSignupValues(
       city: signup.collectAddress ? (raw.city || "").trim().slice(0, 120) || null : null,
       state: signup.collectAddress ? (raw.state || "").trim().slice(0, 120) || null : null,
       groupIds,
+      children,
     },
   };
 }
@@ -295,6 +336,52 @@ async function setGroupMemberships(
 }
 
 /**
+ * Register the children a parent added, as members under them (isMinor, linked
+ * by guardianId, inheriting the parent's surname). Skips any child whose first
+ * name already exists under this guardian, so a re-submit can't duplicate them.
+ * Returns how many were created. Never throws — a child failure must not fail
+ * the parent's registration.
+ */
+export async function createChildrenForGuardian(
+  churchId: string,
+  guardianId: string,
+  parentLastName: string | null,
+  children: CleanChild[],
+): Promise<number> {
+  if (!children.length) return 0;
+  try {
+    const existing = await db
+      .select({ firstName: member.firstName })
+      .from(member)
+      .where(
+        and(eq(member.churchId, churchId), eq(member.guardianId, guardianId)),
+      );
+    const have = new Set(existing.map((e) => e.firstName.trim().toLowerCase()));
+    const toCreate = children.filter(
+      (c) => !have.has(c.firstName.trim().toLowerCase()),
+    );
+    if (!toCreate.length) return 0;
+    await db.insert(member).values(
+      toCreate.map((c) => ({
+        churchId,
+        guardianId,
+        isMinor: true,
+        relationship: c.relationship,
+        firstName: c.firstName,
+        lastName: parentLastName,
+        gender: c.gender,
+        dateOfBirth: c.dateOfBirth,
+        status: "active" as const,
+        joinedAt: sql`current_date`,
+      })),
+    );
+    return toCreate.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Create a brand-new member from a self-registration (no match found).
  * Returns the new member id.
  */
@@ -329,6 +416,12 @@ export async function createMemberFromSignup(
     .returning({ id: member.id });
 
   await setGroupMemberships(churchId, created.id, data.groupIds);
+  await createChildrenForGuardian(
+    churchId,
+    created.id,
+    data.lastName,
+    data.children,
+  );
   return created.id;
 }
 
@@ -382,11 +475,19 @@ export async function applyVerifiedUpdate(
     .where(and(eq(member.id, memberId), eq(member.churchId, churchId)))
     .returning({
       firstName: member.firstName,
+      lastName: member.lastName,
       email: member.email,
       phone: member.phone,
     });
 
   await setGroupMemberships(churchId, memberId, data.groupIds);
+  // Register any children they added, under this (now-verified) member.
+  await createChildrenForGuardian(
+    churchId,
+    memberId,
+    updated?.lastName ?? data.lastName,
+    data.children,
+  );
   return updated ?? null;
 }
 

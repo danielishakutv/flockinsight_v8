@@ -2,15 +2,25 @@
 
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Pencil, ShieldCheck } from "lucide-react";
+import { Baby, Pencil, ShieldCheck } from "lucide-react";
 import { formatBirthday } from "@/lib/birthday";
-import { memberToForm } from "@/components/members/member-form-fields";
+import {
+  memberToForm,
+  type Guardian,
+} from "@/components/members/member-form-fields";
 import { MemberEditForm } from "@/components/members/member-edit-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 type MemberRecord = Parameters<typeof memberToForm>[0];
+
+const REL_LABEL: Record<string, string> = {
+  son: "Son",
+  daughter: "Daughter",
+  ward: "Ward",
+  dependent: "Dependent",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   active: "Active",
@@ -68,11 +78,13 @@ function MemberView({
   onEdit,
   canManage,
   isTeamMember,
+  guardianName,
 }: {
   member: MemberRecord;
   onEdit: () => void;
   canManage: boolean;
   isTeamMember?: boolean;
+  guardianName?: string | null;
 }) {
   const addressParts = [
     [member.house, member.street].filter(Boolean).join(" "),
@@ -103,6 +115,11 @@ function MemberView({
               <Badge variant={STATUS_VARIANT[member.status] ?? "secondary"}>
                 {STATUS_LABEL[member.status] ?? member.status}
               </Badge>
+              {member.isMinor && (
+                <Badge variant="secondary" className="gap-1">
+                  <Baby className="size-3" /> Child
+                </Badge>
+              )}
               {isTeamMember && (
                 <Badge variant="default" className="gap-1">
                   <ShieldCheck className="size-3" /> Team member
@@ -118,13 +135,27 @@ function MemberView({
           )}
         </div>
 
-        <Section title="Contact">
-          <Row label="Phone" value={member.phone} />
-          <Row label="Email" value={member.email} />
-        </Section>
+        {(member.phone || member.email) && (
+          <Section title="Contact">
+            <Row label="Phone" value={member.phone} />
+            <Row label="Email" value={member.email} />
+          </Section>
+        )}
 
         <Section title="Personal">
           <Row label="Gender" value={gender} />
+          {member.isMinor && (
+            <Row
+              label="Guardian"
+              value={
+                guardianName
+                  ? member.relationship
+                    ? `${guardianName} · ${REL_LABEL[member.relationship] ?? member.relationship}`
+                    : guardianName
+                  : "Not linked"
+              }
+            />
+          )}
           <Row
             label="Date of birth"
             value={formatBirthday(member.dateOfBirth) || null}
@@ -173,10 +204,14 @@ export function MemberProfile({
   member,
   canManage = true,
   isTeamMember,
+  guardians = [],
+  guardianName,
 }: {
   member: MemberRecord;
   canManage?: boolean;
   isTeamMember?: boolean;
+  guardians?: Guardian[];
+  guardianName?: string | null;
 }) {
   const [mode, setMode] = useState<"view" | "edit">("view");
 
@@ -185,9 +220,14 @@ export function MemberProfile({
       member={member}
       canManage={canManage}
       isTeamMember={isTeamMember}
+      guardianName={guardianName}
       onEdit={() => setMode("edit")}
     />
   ) : (
-    <MemberEditForm member={member} onDone={() => setMode("view")} />
+    <MemberEditForm
+      member={member}
+      guardians={guardians}
+      onDone={() => setMode("view")}
+    />
   );
 }

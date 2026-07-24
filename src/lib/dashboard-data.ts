@@ -27,6 +27,8 @@ export type MemberBreakdown = {
   inactive: number;
   visitors: number;
   newConverts: number;
+  adults: number;
+  children: number;
   withPhone: number;
   withEmail: number;
 };
@@ -45,6 +47,8 @@ export async function getMemberBreakdown(
       inactive: sql<number>`count(*) filter (where ${member.status} = 'inactive')`,
       visitors: sql<number>`count(*) filter (where ${member.status} = 'visitor')`,
       newConverts: sql<number>`count(*) filter (where ${member.status} = 'new_convert')`,
+      adults: sql<number>`count(*) filter (where ${member.isMinor} = false)`,
+      children: sql<number>`count(*) filter (where ${member.isMinor} = true)`,
       withPhone: sql<number>`count(*) filter (where ${member.phone} is not null and ${member.phone} <> '')`,
       withEmail: sql<number>`count(*) filter (where ${member.email} is not null and ${member.email} <> '')`,
     })
@@ -60,6 +64,8 @@ export async function getMemberBreakdown(
     inactive: Number(row?.inactive ?? 0),
     visitors: Number(row?.visitors ?? 0),
     newConverts: Number(row?.newConverts ?? 0),
+    adults: Number(row?.adults ?? 0),
+    children: Number(row?.children ?? 0),
     withPhone: Number(row?.withPhone ?? 0),
     withEmail: Number(row?.withEmail ?? 0),
   };

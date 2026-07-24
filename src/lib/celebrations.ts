@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, member, celebrationRun, celebrationSetting } from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
@@ -129,6 +129,8 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
         firstName: member.firstName,
         phone: member.phone,
         email: member.email,
+        isMinor: member.isMinor,
+        guardianId: member.guardianId,
         dateOfBirth: member.dateOfBirth,
         weddingDate: member.weddingDate,
         baptismDate: member.baptismDate,
@@ -148,10 +150,44 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
       )
       .limit(2000);
 
+    // A child usually has no contact of their own, so their celebration reaches
+    // their parent/guardian instead. Fetch guardians' contact in one query.
+    const guardianIds = [
+      ...new Set(
+        members
+          .filter((m) => m.isMinor && m.guardianId && !m.phone && !m.email)
+          .map((m) => m.guardianId as string),
+      ),
+    ];
+    const guardianContact = new Map<
+      string,
+      { phone: string | null; email: string | null }
+    >();
+    if (guardianIds.length > 0) {
+      const gs = await db
+        .select({ id: member.id, phone: member.phone, email: member.email })
+        .from(member)
+        .where(
+          and(
+            eq(member.churchId, c.churchId),
+            inArray(member.id, guardianIds),
+          ),
+        );
+      for (const g of gs)
+        guardianContact.set(g.id, { phone: g.phone, email: g.email });
+    }
+
     const smsRecipients: { phone: string; message: string }[] = [];
     const emailJobs: { to: string; subject: string; body: string; fromName: string }[] = [];
 
     for (const m of members) {
+      // Route to the child's own contact when they have one, else their
+      // guardian's (children are celebrated via their parents).
+      const g =
+        m.isMinor && m.guardianId ? guardianContact.get(m.guardianId) : undefined;
+      const toPhone = m.phone || g?.phone || null;
+      const toEmail = m.email || g?.email || null;
+
       const events = eventsForMember(m, mmdd, year);
       for (const ev of events) {
         const [run] = await db
@@ -168,14 +204,14 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
           occasion: ev.occasion,
           years: ev.years ? String(ev.years) : "",
         };
-        if (c.sms && m.phone)
+        if (c.sms && toPhone)
           smsRecipients.push({
-            phone: m.phone,
+            phone: toPhone,
             message: fillTemplate(isBirthday ? c.birthdaySms : c.anniversarySms, vars),
           });
-        if (c.email && m.email)
+        if (c.email && toEmail)
           emailJobs.push({
-            to: m.email,
+            to: toEmail,
             fromName: c.name,
             subject: fillTemplate(
               isBirthday ? c.birthdayEmailSubject : c.anniversaryEmailSubject,

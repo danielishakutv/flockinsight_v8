@@ -255,6 +255,12 @@ export function SignupForm({
             onChange={(v) => set({ collectAddress: v })}
           />
           <ToggleRow
+            title="Children"
+            desc="Let parents add their children, registered as members under them."
+            checked={f.collectChildren}
+            onChange={(v) => set({ collectChildren: v })}
+          />
+          <ToggleRow
             title="Ministries & groups"
             desc="Let people pick the groups they belong to."
             checked={f.allowGroupSelect}

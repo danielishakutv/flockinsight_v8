@@ -63,6 +63,7 @@ export default async function JoinPage({
               collectBirthday: signup.collectBirthday,
               collectAddress: signup.collectAddress,
               collectAnniversary: signup.collectAnniversary,
+              collectChildren: signup.collectChildren,
               allowGroupSelect: signup.allowGroupSelect,
             }}
             groups={groups}

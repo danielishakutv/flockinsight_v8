@@ -10,6 +10,7 @@ import {
 } from "@/lib/geo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload } from "@/components/settings/image-upload";
 import { BirthdayInput } from "@/components/members/birthday-input";
@@ -23,6 +24,8 @@ import {
 
 export type MemberStatus = "active" | "inactive" | "visitor" | "new_convert";
 
+export type Guardian = { id: string; name: string };
+
 export type MemberFormState = {
   id?: string;
   photoUrl: string;
@@ -31,6 +34,9 @@ export type MemberFormState = {
   lastName: string;
   gender: string; // NONE | "male" | "female"
   status: MemberStatus;
+  isMinor: boolean;
+  guardianId: string; // "" = none
+  relationship: string; // "" = unspecified
   phone: string;
   email: string;
   dateOfBirth: string;
@@ -49,6 +55,9 @@ export type MemberFormState = {
 };
 
 export const GENDER_NONE = "none";
+// Radix Select can't hold an empty-string value, so use sentinels for "none".
+const GUARDIAN_NONE = "__none__";
+const REL_NONE = "__none__";
 
 /** Today as YYYY-MM-DD in the browser's local time. */
 function todayLocal(): string {
@@ -70,6 +79,9 @@ export function emptyMember(): MemberFormState {
     lastName: "",
     gender: GENDER_NONE,
     status: "active",
+    isMinor: false,
+    guardianId: "",
+    relationship: "",
     phone: "",
     email: "",
     dateOfBirth: "",
@@ -97,6 +109,9 @@ export function memberToForm(m: {
   lastName: string | null;
   gender: "male" | "female" | null;
   status: MemberStatus;
+  isMinor?: boolean | null;
+  guardianId?: string | null;
+  relationship?: string | null;
   phone: string | null;
   email: string | null;
   dateOfBirth: string | null;
@@ -121,6 +136,9 @@ export function memberToForm(m: {
     lastName: m.lastName ?? "",
     gender: m.gender ?? GENDER_NONE,
     status: m.status,
+    isMinor: m.isMinor ?? false,
+    guardianId: m.guardianId ?? "",
+    relationship: m.relationship ?? "",
     phone: m.phone ?? "",
     email: m.email ?? "",
     dateOfBirth: m.dateOfBirth ?? "",
@@ -149,6 +167,9 @@ export function memberFormToInput(form: MemberFormState): MemberInput {
     lastName: form.lastName,
     gender: form.gender === GENDER_NONE ? null : (form.gender as "male" | "female"),
     status: form.status,
+    isMinor: form.isMinor,
+    guardianId: form.isMinor ? form.guardianId : null,
+    relationship: form.isMinor ? form.relationship : null,
     phone: form.phone,
     email: form.email,
     dateOfBirth: form.dateOfBirth,
@@ -170,15 +191,95 @@ export function memberFormToInput(form: MemberFormState): MemberInput {
 export function MemberFormFields({
   form,
   set,
+  guardians = [],
+  lockGuardian = false,
 }: {
   form: MemberFormState;
   set: (patch: Partial<MemberFormState>) => void;
+  /** Non-minor members who can be picked as a guardian. */
+  guardians?: Guardian[];
+  /** Guardian is fixed (e.g. adding a child from a parent's profile). */
+  lockGuardian?: boolean;
 }) {
   const isNigeria = form.country === DEFAULT_COUNTRY;
   const lgaOptions = isNigeria ? lgasForState(form.state) : [];
+  const guardianName = guardians.find((g) => g.id === form.guardianId)?.name;
 
   return (
     <div className="space-y-4">
+      {/* Child / guardian */}
+      <div className="space-y-3 rounded-xl border p-3">
+        <label className="flex items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-semibold">
+              This is a child
+            </span>
+            <span className="text-muted-foreground block text-xs">
+              Register a child under a parent or guardian. They&apos;re counted
+              as a member and celebrated too.
+            </span>
+          </span>
+          <Switch
+            checked={form.isMinor}
+            onCheckedChange={(v) => set({ isMinor: v })}
+          />
+        </label>
+
+        {form.isMinor && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="guardian">Parent / guardian</Label>
+              {lockGuardian ? (
+                <div className="bg-muted flex h-11 items-center rounded-md border px-3 text-sm font-medium">
+                  {guardianName ?? "This member"}
+                </div>
+              ) : (
+                <Select
+                  value={form.guardianId || GUARDIAN_NONE}
+                  onValueChange={(v) =>
+                    set({ guardianId: v === GUARDIAN_NONE ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="guardian" className="w-full">
+                    <SelectValue placeholder="Select a parent/guardian" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value={GUARDIAN_NONE}>
+                      No guardian linked
+                    </SelectItem>
+                    {guardians.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="relationship">Relationship</Label>
+              <Select
+                value={form.relationship || REL_NONE}
+                onValueChange={(v) =>
+                  set({ relationship: v === REL_NONE ? "" : v })
+                }
+              >
+                <SelectTrigger id="relationship" className="w-full">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={REL_NONE}>—</SelectItem>
+                  <SelectItem value="son">Son</SelectItem>
+                  <SelectItem value="daughter">Daughter</SelectItem>
+                  <SelectItem value="ward">Ward</SelectItem>
+                  <SelectItem value="dependent">Dependent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Profile photo */}
       <ImageUpload
         value={form.photoUrl || null}
@@ -253,26 +354,29 @@ export function MemberFormFields({
         </div>
       </div>
 
-      {/* Contact */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
-          <Input
-            id="phone"
-            value={form.phone}
-            onChange={(e) => set({ phone: e.target.value })}
-          />
+      {/* Contact — children are usually reached via their guardian, so this is
+          hidden for them (any existing value is kept, never wiped). */}
+      {!form.isMinor && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              value={form.phone}
+              onChange={(e) => set({ phone: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={form.email}
+              onChange={(e) => set({ email: e.target.value })}
+            />
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={form.email}
-            onChange={(e) => set({ email: e.target.value })}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Dates */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -410,7 +514,8 @@ export function MemberFormFields({
         </div>
       </div>
 
-      {/* Address */}
+      {/* Address — hidden for children (they inherit the guardian's). */}
+      {!form.isMinor && (
       <div className="space-y-3 rounded-xl border p-3">
         <p className="text-muted-foreground text-xs font-bold uppercase tracking-wide">
           Address
@@ -529,6 +634,7 @@ export function MemberFormFields({
           </div>
         </div>
       </div>
+      )}
 
       {/* Notes */}
       <div className="space-y-2">

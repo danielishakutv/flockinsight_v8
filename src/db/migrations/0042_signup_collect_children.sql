@@ -1,0 +1,1 @@
+ALTER TABLE "member_signup" ADD COLUMN "collect_children" boolean DEFAULT true NOT NULL;

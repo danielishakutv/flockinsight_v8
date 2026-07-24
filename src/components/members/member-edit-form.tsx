@@ -9,6 +9,7 @@ import {
   MemberFormFields,
   memberToForm,
   memberFormToInput,
+  type Guardian,
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,11 @@ type MemberRecord = Parameters<typeof memberToForm>[0];
 export function MemberEditForm({
   member,
   onDone,
+  guardians = [],
 }: {
   member: MemberRecord;
   onDone?: () => void;
+  guardians?: Guardian[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState<MemberFormState>(() => memberToForm(member));
@@ -60,6 +63,7 @@ export function MemberEditForm({
         <MemberFormFields
           form={form}
           set={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          guardians={guardians}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">

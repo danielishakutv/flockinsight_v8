@@ -30,6 +30,7 @@ export default async function SignupSettingsPage() {
         collectBirthday: s.collectBirthday,
         collectAddress: s.collectAddress,
         collectAnniversary: s.collectAnniversary,
+        collectChildren: s.collectChildren,
         allowGroupSelect: s.allowGroupSelect,
         notifyInApp: s.notifyInApp,
         notifyEmail: s.notifyEmail,

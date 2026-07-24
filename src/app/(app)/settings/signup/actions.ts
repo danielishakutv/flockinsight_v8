@@ -20,6 +20,7 @@ const schema = z.object({
   collectBirthday: z.boolean(),
   collectAddress: z.boolean(),
   collectAnniversary: z.boolean(),
+  collectChildren: z.boolean(),
   allowGroupSelect: z.boolean(),
   notifyInApp: z.boolean(),
   notifyEmail: z.boolean(),

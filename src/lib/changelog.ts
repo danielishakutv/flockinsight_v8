@@ -29,6 +29,21 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.51.0",
+    date: "2026-07-24",
+    summary:
+      "Register children under their parents — counted as members, celebrated on their birthdays, and addable right from your public sign-up link.",
+    changes: {
+      Added: [
+        "Members: mark someone as a child and link them to a parent or guardian. Children are counted as members, with their own profile that shows who their guardian is.",
+        "A parent's profile now has a “Children” section with a one-tap “Add child”.",
+        "Public sign-up link: parents can add their children (name, gender, birthday) when they register themselves — no account needed.",
+        "Birthdays for children are celebrated too: because a child usually has no phone or email, the birthday message goes to their parent/guardian automatically.",
+        "Dashboard and the Members list now show how many of your people are adults vs children, and the CSV export includes each child's guardian and relationship.",
+      ],
+    },
+  },
+  {
     version: "0.50.0",
     date: "2026-07-24",
     summary:

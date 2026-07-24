@@ -42,6 +42,9 @@ const memberSchema = z.object({
     z.string().trim().email("Invalid email").max(160).nullable(),
   ),
   status: z.enum(["active", "inactive", "visitor", "new_convert"]),
+  isMinor: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
+  guardianId: z.preprocess(emptyToNull, z.string().uuid().nullable()).default(null),
+  relationship: optText(40),
   dateOfBirth: optDate,
   joinedAt: optDate,
   weddingDate: optDate,
@@ -78,6 +81,24 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
   if (!(await can("members.manage")))
     return { ok: false, error: "You don't have permission to manage members." };
 
+  // Guardian link (only meaningful for a child). Validate it belongs to this
+  // church and isn't the member themselves, so a bad id can never link across
+  // churches or make someone their own guardian.
+  let guardianId: string | null = d.isMinor ? d.guardianId : null;
+  const relationship = d.isMinor ? d.relationship : null;
+  if (guardianId) {
+    if (d.id && guardianId === d.id)
+      return { ok: false, error: "A member can't be their own guardian." };
+    const [g] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.id, guardianId), eq(member.churchId, church.id)))
+      .limit(1);
+    if (!g)
+      return { ok: false, error: "That guardian isn't a member of your church." };
+    guardianId = g.id;
+  }
+
   // Fields shared by insert and update.
   const fields = {
     photoUrl: d.photoUrl,
@@ -88,6 +109,9 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     phone: d.phone,
     email: d.email,
     status: d.status,
+    isMinor: d.isMinor,
+    guardianId,
+    relationship,
     dateOfBirth: d.dateOfBirth,
     joinedAt: d.joinedAt,
     weddingDate: d.weddingDate,
@@ -113,6 +137,8 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
       if (!row) return { ok: false, error: "Member not found." };
       revalidatePath("/members");
       revalidatePath(`/members/${row.id}`);
+      // The guardian's profile lists their children — keep it fresh.
+      if (guardianId) revalidatePath(`/members/${guardianId}`);
       return { ok: true, id: row.id };
     }
 
@@ -143,6 +169,7 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
 
     revalidatePath("/members");
     revalidatePath("/dashboard");
+    if (guardianId) revalidatePath(`/members/${guardianId}`);
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("saveMember failed", e);

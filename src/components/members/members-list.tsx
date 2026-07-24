@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Baby,
   Check,
   ChevronRight,
   Download,
@@ -50,6 +51,8 @@ export type MemberRow = {
   status: "active" | "inactive" | "visitor" | "new_convert";
   dateOfBirth: string | null;
   notes: string | null;
+  isMinor: boolean;
+  guardianName: string | null;
 };
 
 const STATUS_LABEL: Record<MemberRow["status"], string> = {
@@ -117,11 +120,20 @@ export function MembersList({
     const q = query.trim().toLowerCase();
     if (!q) return members;
     return members.filter((m) =>
-      [fullName(m), m.phone, m.email]
+      [fullName(m), m.phone, m.email, m.guardianName]
         .filter(Boolean)
         .some((v) => v!.toLowerCase().includes(q)),
     );
   }, [members, query]);
+
+  // Only adults can be a guardian.
+  const guardians = useMemo(
+    () =>
+      members
+        .filter((m) => !m.isMinor)
+        .map((m) => ({ id: m.id, name: fullName(m) })),
+    [members],
+  );
 
   const allSelected =
     filtered.length > 0 && filtered.every((m) => selected.has(m.id));
@@ -347,10 +359,19 @@ export function MembersList({
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{fullName(m)}</p>
                   <p className="text-muted-foreground truncate text-xs">
-                    {m.phone || m.email || "No contact"}
+                    {m.isMinor
+                      ? m.guardianName
+                        ? `Child of ${m.guardianName}`
+                        : "Child"
+                      : m.phone || m.email || "No contact"}
                   </p>
                 </div>
               </Link>
+              {m.isMinor && (
+                <Badge variant="secondary" className="gap-1">
+                  <Baby className="size-3" /> Child
+                </Badge>
+              )}
               <Badge variant={STATUS_VARIANT[m.status]}>
                 {STATUS_LABEL[m.status]}
               </Badge>
@@ -398,6 +419,7 @@ export function MembersList({
           <MemberFormFields
             form={form}
             set={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            guardians={guardians}
           />
           <DialogFooter>
             <Button

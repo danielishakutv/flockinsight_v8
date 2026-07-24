@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { ArrowLeft, UsersRound } from "lucide-react";
 import { db } from "@/db";
@@ -9,10 +9,10 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MemberProfile } from "@/components/members/member-profile";
+import { MemberFamily } from "@/components/members/member-family";
 
 export const metadata = { title: "Member" };
 
@@ -37,6 +37,9 @@ export default async function MemberDetailPage({
       lastName: member.lastName,
       gender: member.gender,
       status: member.status,
+      isMinor: member.isMinor,
+      guardianId: member.guardianId,
+      relationship: member.relationship,
       phone: member.phone,
       email: member.email,
       dateOfBirth: member.dateOfBirth,
@@ -60,25 +63,66 @@ export default async function MemberDetailPage({
 
   if (!m) notFound();
 
-  // Groups / ministries this member belongs to.
-  const memberGroups = await db
-    .select({
-      id: group.id,
-      name: group.name,
-      type: group.type,
-      isLeader: groupMembership.isLeader,
-      role: groupMembership.role,
-    })
-    .from(groupMembership)
-    .innerJoin(group, eq(group.id, groupMembership.groupId))
-    .where(
-      and(eq(groupMembership.memberId, id), eq(group.churchId, church.id)),
-    )
-    .orderBy(asc(group.name));
+  const [memberGroups, children, guardianOptions] = await Promise.all([
+    // Groups / ministries this member belongs to.
+    db
+      .select({
+        id: group.id,
+        name: group.name,
+        type: group.type,
+        isLeader: groupMembership.isLeader,
+        role: groupMembership.role,
+      })
+      .from(groupMembership)
+      .innerJoin(group, eq(group.id, groupMembership.groupId))
+      .where(and(eq(groupMembership.memberId, id), eq(group.churchId, church.id)))
+      .orderBy(asc(group.name)),
+    // This member's own children.
+    db
+      .select({
+        id: member.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        relationship: member.relationship,
+        dateOfBirth: member.dateOfBirth,
+        status: member.status,
+      })
+      .from(member)
+      .where(and(eq(member.guardianId, id), eq(member.churchId, church.id)))
+      .orderBy(asc(member.firstName), asc(member.lastName)),
+    // Adults who can be picked as a guardian (everyone but minors & this member).
+    db
+      .select({ id: member.id, firstName: member.firstName, lastName: member.lastName })
+      .from(member)
+      .where(
+        and(
+          eq(member.churchId, church.id),
+          eq(member.isMinor, false),
+          ne(member.id, id),
+        ),
+      )
+      .orderBy(asc(member.firstName), asc(member.lastName)),
+  ]);
 
   const name = [m.firstName, m.middleName, m.lastName]
     .filter(Boolean)
     .join(" ");
+  const guardians = guardianOptions.map((g) => ({
+    id: g.id,
+    name: [g.firstName, g.lastName].filter(Boolean).join(" "),
+  }));
+  // The guardian is a non-minor member (validated on save), so they're in the
+  // candidate list — resolve their name from it instead of a self-join.
+  const guardianName = m.guardianId
+    ? guardians.find((g) => g.id === m.guardianId)?.name ?? null
+    : null;
+  const childList = children.map((c) => ({
+    id: c.id,
+    name: [c.firstName, c.lastName].filter(Boolean).join(" "),
+    relationship: c.relationship,
+    dateOfBirth: c.dateOfBirth,
+    status: c.status,
+  }));
 
   return (
     <PageContainer className="max-w-2xl">
@@ -89,11 +133,25 @@ export default async function MemberDetailPage({
         </Link>
       </Button>
       <h1 className="text-3xl font-extrabold tracking-tight">{name}</h1>
-      <p className="text-muted-foreground mb-6 mt-1">Member profile</p>
+      <p className="text-muted-foreground mb-6 mt-1">
+        {m.isMinor ? "Child profile" : "Member profile"}
+      </p>
       <MemberProfile
         member={m}
         canManage={canManage}
         isTeamMember={!!m.userId}
+        guardians={guardians}
+        guardianName={guardianName}
+      />
+
+      <MemberFamily
+        parentId={m.id}
+        parentName={name}
+        isMinor={m.isMinor}
+        guardianId={m.guardianId}
+        guardianName={guardianName}
+        kids={childList}
+        canManage={canManage}
       />
 
       <Card className="mt-4">

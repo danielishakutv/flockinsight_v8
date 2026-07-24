@@ -98,7 +98,10 @@ export function PeopleSnapshot({ data }: { data: MemberBreakdown }) {
             color="var(--chart-3)"
           />
           <p className="text-muted-foreground border-t pt-3 text-xs">
-            Reachable: {data.withPhone.toLocaleString()} by SMS ·{" "}
+            {data.adults.toLocaleString()} adult
+            {data.adults === 1 ? "" : "s"} · {data.children.toLocaleString()}{" "}
+            child{data.children === 1 ? "" : "ren"}. Reachable:{" "}
+            {data.withPhone.toLocaleString()} by SMS ·{" "}
             {data.withEmail.toLocaleString()} by email.{" "}
             <Link href="/members" className="text-primary font-medium underline">
               Manage members

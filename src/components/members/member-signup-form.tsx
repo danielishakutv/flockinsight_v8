@@ -25,10 +25,13 @@ export type SignupConfig = {
   collectBirthday: boolean;
   collectAddress: boolean;
   collectAnniversary: boolean;
+  collectChildren: boolean;
   allowGroupSelect: boolean;
 };
 
 export type SignupGroup = { id: string; name: string; type: string };
+
+type Child = { firstName: string; gender: "male" | "female" | ""; dateOfBirth: string };
 
 type Values = {
   firstName: string;
@@ -42,6 +45,7 @@ type Values = {
   city: string;
   state: string;
   groupIds: string[];
+  children: Child[];
 };
 
 const empty: Values = {
@@ -56,6 +60,7 @@ const empty: Values = {
   city: "",
   state: "",
   groupIds: [],
+  children: [],
 };
 
 export function MemberSignupForm({
@@ -83,6 +88,23 @@ export function MemberSignupForm({
         ? p.groupIds.filter((x) => x !== id)
         : [...p.groupIds, id],
     }));
+  }
+  function addChild() {
+    setValues((p) =>
+      p.children.length >= 15
+        ? p
+        : { ...p, children: [...p.children, { firstName: "", gender: "", dateOfBirth: "" }] },
+    );
+  }
+  function setChild(i: number, patch: Partial<Child>) {
+    setValues((p) => {
+      const children = [...p.children];
+      children[i] = { ...children[i], ...patch };
+      return { ...p, children };
+    });
+  }
+  function removeChild(i: number) {
+    setValues((p) => ({ ...p, children: p.children.filter((_, j) => j !== i) }));
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -266,6 +288,63 @@ export function MemberSignupForm({
           </Field>
         </div>
       </Section>
+
+      {config.collectChildren && (
+        <Section
+          title="Your children"
+          hint="Optional — add your children so they're part of the family and celebrated too."
+        >
+          <div className="space-y-3">
+            {values.children.map((c, i) => (
+              <div key={i} className="rounded-xl border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Child {i + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() => removeChild(i)}
+                    className="text-muted-foreground hover:text-destructive text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="First name">
+                    <Input
+                      value={c.firstName}
+                      onChange={(e) => setChild(i, { firstName: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Gender">
+                    <Select
+                      value={c.gender || undefined}
+                      onValueChange={(v) => setChild(i, { gender: v as Child["gender"] })}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Date of birth" hint="Year optional">
+                    <BirthdayInput
+                      value={c.dateOfBirth}
+                      onChange={(v) => setChild(i, { dateOfBirth: v })}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ))}
+            {values.children.length < 15 && (
+              <Button type="button" variant="outline" onClick={addChild}>
+                + Add a child
+              </Button>
+            )}
+          </div>
+        </Section>
+      )}
 
       {config.collectAnniversary && (
         <Section title="Milestones" hint="Optional — so we can celebrate with you.">

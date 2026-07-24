@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   primaryKey,
   customType,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 /** Raw binary column (Postgres bytea) — used to store uploaded media bytes. */
@@ -443,6 +444,17 @@ export const member = pgTable(
     status: memberStatusEnum().notNull().default("active"),
     joinedAt: date(),
     photoUrl: text(),
+    // ----- Children / guardians -----
+    // A minor (child) is a full member — counted with everyone else — but
+    // usually has no contact details of their own. `guardianId` links them to
+    // the parent member who registered them; it's set null on guardian delete
+    // so a child is never removed alongside their parent. `relationship` is a
+    // free label of the child to the guardian (e.g. "son", "daughter", "ward").
+    isMinor: boolean().notNull().default(false),
+    guardianId: uuid().references((): AnyPgColumn => member.id, {
+      onDelete: "set null",
+    }),
+    relationship: text(),
     // ----- Milestones / anniversaries -----
     weddingDate: date(),
     baptized: boolean().notNull().default(false),
@@ -479,6 +491,8 @@ export const member = pgTable(
     index("member_church_idx").on(t.churchId),
     // A login links to at most one member per church.
     uniqueIndex("member_church_user_idx").on(t.churchId, t.userId),
+    // Look up a guardian's children quickly.
+    index("member_guardian_idx").on(t.guardianId),
   ],
 );
 
@@ -1438,6 +1452,8 @@ export const memberSignup = pgTable("member_signup", {
   collectAnniversary: boolean().notNull().default(true),
   // Let people tick the ministries/departments/groups they belong to.
   allowGroupSelect: boolean().notNull().default(true),
+  // Let a parent add their children (registered as members under them).
+  collectChildren: boolean().notNull().default(true),
   // Notify church managers on each new/updated self-registration.
   notifyInApp: boolean().notNull().default(true),
   notifyEmail: boolean().notNull().default(true),

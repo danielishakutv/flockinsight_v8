@@ -22,6 +22,9 @@ export const MEMBER_CSV_HEADERS = [
   "State",
   "Country",
   "Notes",
+  "Child",
+  "Guardian",
+  "Relationship",
 ] as const;
 
 /** One illustrative row shown in the downloadable template. */
@@ -41,6 +44,9 @@ export const MEMBER_CSV_SAMPLE: string[] = [
   "Yola North",
   "Adamawa",
   "Nigeria",
+  "",
+  "",
+  "",
   "",
 ];
 
@@ -164,10 +170,32 @@ export async function getMemberExportRows(
       state: member.state,
       country: member.country,
       notes: member.notes,
+      isMinor: member.isMinor,
+      relationship: member.relationship,
+      guardianId: member.guardianId,
     })
     .from(member)
     .where(scope)
     .orderBy(asc(member.firstName), asc(member.lastName));
+
+  // Resolve guardian names for the children in this export (a small extra
+  // lookup, keyed by id → full name).
+  const guardianIds = [
+    ...new Set(rows.map((r) => r.guardianId).filter((v): v is string => !!v)),
+  ];
+  const guardianName = new Map<string, string>();
+  if (guardianIds.length > 0) {
+    const gs = await db
+      .select({
+        id: member.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+      })
+      .from(member)
+      .where(and(eq(member.churchId, churchId), inArray(member.id, guardianIds)));
+    for (const g of gs)
+      guardianName.set(g.id, [g.firstName, g.lastName].filter(Boolean).join(" "));
+  }
 
   return rows.map((m) => [
     m.firstName,
@@ -186,5 +214,8 @@ export async function getMemberExportRows(
     m.state,
     m.country,
     m.notes,
+    m.isMinor ? "Yes" : "",
+    m.isMinor && m.guardianId ? guardianName.get(m.guardianId) ?? null : null,
+    m.isMinor ? m.relationship : null,
   ]);
 }
