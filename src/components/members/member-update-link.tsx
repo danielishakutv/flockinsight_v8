@@ -106,7 +106,8 @@ export function MemberUpdateLink({
         <p className="text-muted-foreground text-sm">
           A personal link that opens this member&apos;s details pre-filled so
           they can review, correct and add to them — including their children.
-          It&apos;s private to them; regenerate it to revoke.
+          It&apos;s private to them and works <strong>once</strong>: after they
+          save, generate a new link to let them update again.
         </p>
         {url && (
           <div className="bg-muted flex min-w-0 items-center rounded-xl border px-3 py-2 font-mono text-xs">

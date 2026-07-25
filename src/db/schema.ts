@@ -1531,6 +1531,9 @@ export const memberSignup = pgTable("member_signup", {
   allowGroupSelect: boolean().notNull().default(true),
   // Let a parent add their children (registered as members under them).
   collectChildren: boolean().notNull().default(true),
+  // Require a one-time code (to the member's email/phone) before a personal
+  // self-update link (/m/<token>) applies any change.
+  requireUpdateOtp: boolean().notNull().default(false),
   // Notify church managers on each new/updated self-registration.
   notifyInApp: boolean().notNull().default(true),
   notifyEmail: boolean().notNull().default(true),

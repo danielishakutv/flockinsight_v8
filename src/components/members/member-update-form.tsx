@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Baby, CheckCircle2, Loader2 } from "lucide-react";
+import { Baby, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { submitMemberUpdate } from "@/app/m/[token]/actions";
+import { submitMemberUpdate, verifyMemberUpdate } from "@/app/m/[token]/actions";
 import type { MemberUpdateData } from "@/lib/member-update";
 import { BirthdayInput } from "@/components/members/birthday-input";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
   });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [otp, setOtp] = useState<{ otpId: string; channel: string; masked: string } | null>(null);
+  const [code, setCode] = useState("");
 
   function set<K extends keyof Values>(k: K, v: Values[K]) {
     setValues((p) => ({ ...p, [k]: v }));
@@ -92,8 +94,42 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       toast.error(res.error);
       return;
     }
+    if ("needsOtp" in res) {
+      setOtp({ otpId: res.otpId, channel: res.channel, masked: res.masked });
+      setCode("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setDone(res.message);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function onVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (!otp) return;
+    setBusy(true);
+    const res = await verifyMemberUpdate({ token: data.token, otpId: otp.otpId, code });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    if ("done" in res) {
+      setDone(res.message);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  async function resend() {
+    setBusy(true);
+    const res = await submitMemberUpdate({ token: data.token, values });
+    setBusy(false);
+    if (!res.ok) return void toast.error(res.error);
+    if ("needsOtp" in res) {
+      setOtp({ otpId: res.otpId, channel: res.channel, masked: res.masked });
+      setCode("");
+      toast.success("A new code is on its way.");
+    }
   }
 
   if (done) {
@@ -101,7 +137,57 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       <div className="bg-card rounded-2xl border p-8 text-center">
         <CheckCircle2 className="text-success mx-auto mb-3 size-10" />
         <p className="text-lg font-semibold">{done}</p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          This link has now been used. If you need to change something again,
+          please ask your church for a fresh link.
+        </p>
       </div>
+    );
+  }
+
+  if (otp) {
+    return (
+      <form onSubmit={onVerify} className="bg-card space-y-4 rounded-2xl border p-6">
+        <div className="flex items-start gap-3">
+          <div className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold">Confirm it&apos;s you</h2>
+            <p className="text-muted-foreground text-sm">
+              We sent a 6-digit code to <b>{otp.masked}</b> ({otp.channel}). Enter
+              it to save your changes.
+            </p>
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="otp-code" className="mb-1 block">
+            Verification code
+          </Label>
+          <Input
+            id="otp-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            placeholder="000000"
+            className="text-center text-2xl tracking-[0.4em]"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" size="lg" disabled={busy || code.length !== 6}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            Confirm &amp; save
+          </Button>
+          <Button type="button" variant="ghost" onClick={resend} disabled={busy}>
+            Resend code
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setOtp(null)} disabled={busy}>
+            Back
+          </Button>
+        </div>
+      </form>
     );
   }
 

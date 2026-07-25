@@ -316,6 +316,13 @@
       "when": 1784980221465,
       "tag": "0044_update_token_and_giving_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1784985350424,
+      "tag": "0045_self_update_require_otp",
+      "breakpoints": true
     }
   ]
 }

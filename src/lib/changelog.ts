@@ -29,6 +29,21 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.54.0",
+    date: "2026-07-25",
+    summary:
+      "Self-update links are now single-use, with an optional verification step.",
+    changes: {
+      Improved: [
+        "A member's self-update link now works only once — after they save, generate a fresh link from their profile to let them update again.",
+        "A used or expired link now shows a friendly note instead of an error.",
+      ],
+      Added: [
+        "New toggle in Settings → Sign-up link: require a member to enter a one-time code (sent to their email/phone on file) before their self-update is saved.",
+      ],
+    },
+  },
+  {
     version: "0.53.0",
     date: "2026-07-25",
     summary:

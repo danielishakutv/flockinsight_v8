@@ -52,6 +52,17 @@ export async function ensureMemberUpdateToken(
   return null;
 }
 
+/** Consume the token after a successful update so the link works only once. */
+export async function consumeMemberUpdateToken(
+  churchId: string,
+  memberId: string,
+): Promise<void> {
+  await db
+    .update(member)
+    .set({ updateToken: null })
+    .where(and(eq(member.id, memberId), eq(member.churchId, churchId)));
+}
+
 /** Issue a brand-new token (invalidates any previously shared link). */
 export async function regenerateMemberUpdateToken(
   churchId: string,
@@ -81,6 +92,7 @@ const DEFAULT_COLLECT = {
   collectAnniversary: true,
   collectChildren: true,
   allowGroupSelect: true,
+  requireVerification: false,
   successMessage: "Thank you! Your details have been updated.",
 } as const;
 
@@ -106,6 +118,7 @@ export type MemberUpdateData = {
     collectAnniversary: boolean;
     collectChildren: boolean;
     allowGroupSelect: boolean;
+    requireVerification: boolean;
     successMessage: string;
   };
   member: MemberUpdatePrefill;
@@ -167,6 +180,7 @@ export async function getMemberByUpdateToken(
         collectAnniversary: signup.collectAnniversary,
         collectChildren: signup.collectChildren,
         allowGroupSelect: signup.allowGroupSelect,
+        requireVerification: signup.requireUpdateOtp,
         successMessage: signup.successMessage,
       }
     : { ...DEFAULT_COLLECT };

@@ -1,0 +1,1 @@
+ALTER TABLE "member_signup" ADD COLUMN "require_update_otp" boolean DEFAULT false NOT NULL;

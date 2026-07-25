@@ -32,6 +32,7 @@ export default async function SignupSettingsPage() {
         collectAnniversary: s.collectAnniversary,
         collectChildren: s.collectChildren,
         allowGroupSelect: s.allowGroupSelect,
+        requireUpdateOtp: s.requireUpdateOtp,
         notifyInApp: s.notifyInApp,
         notifyEmail: s.notifyEmail,
         confirmEmail: s.confirmEmail,

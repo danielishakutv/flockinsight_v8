@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { LinkIcon } from "lucide-react";
 import { getMemberByUpdateToken } from "@/lib/member-update";
 import { MemberUpdateForm } from "@/components/members/member-update-form";
 
@@ -17,7 +17,25 @@ export default async function MemberUpdatePage({
 }) {
   const { token } = await params;
   const data = await getMemberByUpdateToken(token);
-  if (!data) notFound();
+
+  // A single-use link that's already been used (or was regenerated) resolves to
+  // nothing — show a friendly note rather than a bare 404.
+  if (!data) {
+    return (
+      <div className="bg-muted/40 grid min-h-dvh place-items-center px-4">
+        <div className="bg-card w-full max-w-md rounded-2xl border p-8 text-center">
+          <div className="bg-muted text-muted-foreground mx-auto mb-3 grid size-12 place-items-center rounded-xl">
+            <LinkIcon className="size-6" />
+          </div>
+          <h1 className="text-lg font-bold">This link is no longer active</h1>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Update links can only be used once. If you still need to update your
+            details, please ask your church to send you a fresh link.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const c = data.church;
 
@@ -44,6 +62,10 @@ export default async function MemberUpdatePage({
             We&apos;ve filled in what we already have for you at{" "}
             <strong>{c.name}</strong>. Review it, correct anything, add your
             children, and save.
+            {data.config.requireVerification
+              ? " We'll send you a quick code to confirm it's you."
+              : ""}{" "}
+            This link can be used once.
           </p>
         </div>
 

@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Link as LinkIcon,
   Loader2,
   MailCheck,
   RefreshCw,
@@ -343,6 +344,28 @@ export function SignupForm({
               &ldquo;your details have been updated&rdquo; note instead.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <LinkIcon className="text-primary size-5" /> Self-update links
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground text-sm">
+            From any member&apos;s profile you can share a personal link that
+            opens their details pre-filled to review and correct. Each link can
+            be used <strong>once</strong> — after they save, generate a new one
+            to let them update again.
+          </p>
+          <ToggleRow
+            title="Require verification before update"
+            desc="Send the member a one-time code (to their email/phone on file) that they must enter before their changes are saved."
+            checked={f.requireUpdateOtp}
+            onChange={(v) => set({ requireUpdateOtp: v })}
+          />
         </CardContent>
       </Card>
 
