@@ -8,12 +8,15 @@ import { group, groupMembership, household, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { householdOptions } from "@/lib/households";
+import { siteUrl } from "@/lib/site";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MemberProfile } from "@/components/members/member-profile";
 import { MemberFamily } from "@/components/members/member-family";
+import { MemberUpdateLink } from "@/components/members/member-update-link";
 
 export const metadata = { title: "Member" };
 
@@ -58,6 +61,7 @@ export default async function MemberDetailPage({
       country: member.country,
       notes: member.notes,
       userId: member.userId,
+      updateToken: member.updateToken,
     })
     .from(member)
     .where(and(eq(member.id, id), eq(member.churchId, church.id)))
@@ -189,6 +193,16 @@ export default async function MemberDetailPage({
         householdId={m.householdId}
         households={households}
       />
+
+      {canManage && (
+        <MemberUpdateLink
+          memberId={m.id}
+          initialUrl={m.updateToken ? `${siteUrl()}/m/${m.updateToken}` : null}
+          hasPhone={!!m.phone}
+          hasEmail={!!m.email}
+          smsAvailable={smsAvailableForCountry(church.country)}
+        />
+      )}
 
       {m.householdId && householdName && (
         <Card className="mt-4">

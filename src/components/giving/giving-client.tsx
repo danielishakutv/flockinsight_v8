@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -98,6 +99,7 @@ type FormState = {
   giverName: string;
   method: string;
   note: string;
+  sendReceipt: boolean;
 };
 
 export function GivingClient({
@@ -112,6 +114,7 @@ export function GivingClient({
   allTimeTotal,
   breakdown,
   year,
+  receiptsEnabled = false,
 }: {
   canManage: boolean;
   currency: string;
@@ -124,6 +127,7 @@ export function GivingClient({
   allTimeTotal: number;
   breakdown: { name: string; total: number }[];
   year: number;
+  receiptsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -141,6 +145,9 @@ export function GivingClient({
       giverName: "",
       method: NONE,
       note: "",
+      // Default to on when the church has receipts enabled, so a gift recorded
+      // against a member notifies them unless the recorder opts out.
+      sendReceipt: receiptsEnabled,
     };
   }
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -168,6 +175,8 @@ export function GivingClient({
       giverName: r.memberId ? "" : (r.giverName ?? ""),
       method: r.method ?? NONE,
       note: r.note ?? "",
+      // Editing an existing record never re-sends a receipt.
+      sendReceipt: false,
     });
     setOpen(true);
   }
@@ -183,6 +192,9 @@ export function GivingClient({
         giverName: form.memberId === NONE ? form.giverName : "",
         method: form.method === NONE ? "" : form.method,
         note: form.note,
+        // Only meaningful for a new gift tied to a member.
+        sendReceipt:
+          !form.id && form.memberId !== NONE && form.sendReceipt,
       };
       const res = await recordGiving(input);
       if (!res.ok) {
@@ -517,6 +529,26 @@ export function GivingClient({
                   />
                 )}
               </div>
+
+              {/* Receipt: only for a new gift tied to a member, when the church
+                  has receipts turned on. */}
+              {receiptsEnabled && !form.id && form.memberId !== NONE && (
+                <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      Send receipt &amp; blessing
+                    </span>
+                    <span className="text-muted-foreground block text-xs">
+                      Email/SMS the giver to acknowledge this gift (per Settings →
+                      Giving).
+                    </span>
+                  </span>
+                  <Switch
+                    checked={form.sendReceipt}
+                    onCheckedChange={(v) => set({ sendReceipt: v })}
+                  />
+                </label>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="note">Note</Label>

@@ -11,6 +11,13 @@ import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
 import { recordAction } from "@/lib/analytics";
 import { createHousehold, householdInChurch } from "@/lib/households";
+import {
+  ensureMemberUpdateToken,
+  regenerateMemberUpdateToken,
+} from "@/lib/member-update";
+import { siteUrl } from "@/lib/site";
+import { sendChurchSms } from "@/lib/church-sms";
+import { sendEmail, emailLayout } from "@/lib/mailer";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -199,6 +206,103 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     console.error("saveMember failed", e);
     return { ok: false, error: "Could not save member." };
   }
+}
+
+/* ---------------------- Personal self-update link ---------------------- */
+
+export type LinkResult =
+  | { ok: true; url: string }
+  | { ok: false; error: string };
+
+function updateUrl(token: string): string {
+  return `${siteUrl()}/m/${token}`;
+}
+
+/** Get (creating if needed) a member's personal self-update link. */
+export async function ensureMemberUpdateLink(
+  memberId: string,
+): Promise<LinkResult> {
+  if (!z.string().uuid().safeParse(memberId).success)
+    return { ok: false, error: "Invalid id." };
+  const { church } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+  const token = await ensureMemberUpdateToken(church.id, memberId);
+  if (!token) return { ok: false, error: "Member not found." };
+  return { ok: true, url: updateUrl(token) };
+}
+
+/** Issue a fresh link, invalidating any previously shared one. */
+export async function regenerateMemberUpdateLink(
+  memberId: string,
+): Promise<LinkResult> {
+  if (!z.string().uuid().safeParse(memberId).success)
+    return { ok: false, error: "Invalid id." };
+  const { church } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+  const token = await regenerateMemberUpdateToken(church.id, memberId);
+  if (!token) return { ok: false, error: "Member not found." };
+  revalidatePath(`/members/${memberId}`);
+  return { ok: true, url: updateUrl(token) };
+}
+
+export type SendLinkResult =
+  | { ok: true; channel: "email" | "sms" }
+  | { ok: false; error: string };
+
+/** Text or email a member their personal self-update link. */
+export async function sendMemberUpdateLink(
+  memberId: string,
+  channel: "email" | "sms",
+): Promise<SendLinkResult> {
+  if (!z.string().uuid().safeParse(memberId).success)
+    return { ok: false, error: "Invalid id." };
+  const { church, user } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+
+  const [m] = await db
+    .select({ firstName: member.firstName, phone: member.phone, email: member.email })
+    .from(member)
+    .where(and(eq(member.id, memberId), eq(member.churchId, church.id)))
+    .limit(1);
+  if (!m) return { ok: false, error: "Member not found." };
+
+  const token = await ensureMemberUpdateToken(church.id, memberId);
+  if (!token) return { ok: false, error: "Could not create the link." };
+  const url = updateUrl(token);
+
+  if (channel === "sms") {
+    if (!m.phone)
+      return { ok: false, error: "This member has no phone number on file." };
+    const res = await sendChurchSms({
+      churchId: church.id,
+      to: m.phone,
+      message: `${church.name}: please review & update your details here: ${url}`,
+      userId: user.id,
+      reason: "Member self-update link",
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, channel: "sms" };
+  }
+
+  if (!m.email)
+    return { ok: false, error: "This member has no email address on file." };
+  const ok = await sendEmail({
+    to: m.email,
+    subject: `Update your details — ${church.name}`,
+    html: emailLayout(
+      "Update your details",
+      `Hi ${m.firstName || "there"},<br><br>Please take a moment to review and update your details with <b>${church.name}</b>. You can also add your children.`,
+      { label: "Update my details", url },
+    ),
+    text: `Update your details with ${church.name}: ${url}`,
+    fromName: church.name,
+  }).catch(() => false);
+  if (!ok)
+    return { ok: false, error: "Couldn't send the email. Please try again." };
+  return { ok: true, channel: "email" };
 }
 
 export type BulkResult =

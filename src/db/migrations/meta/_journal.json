@@ -309,6 +309,13 @@
       "when": 1784929296352,
       "tag": "0043_households_and_event_forms",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1784980221465,
+      "tag": "0044_update_token_and_giving_receipts",
+      "breakpoints": true
     }
   ]
 }

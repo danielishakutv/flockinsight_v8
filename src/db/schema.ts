@@ -460,6 +460,9 @@ export const member = pgTable(
     householdId: uuid().references((): AnyPgColumn => household.id, {
       onDelete: "set null",
     }),
+    // Unguessable token for this member's personal self-update link (/m/<token>).
+    // Null until a manager generates/shares one; can be regenerated to revoke.
+    updateToken: text().unique(),
     // ----- Milestones / anniversaries -----
     weddingDate: date(),
     baptized: boolean().notNull().default(false),
@@ -757,6 +760,38 @@ export const giving = pgTable(
     index("giving_category_idx").on(t.categoryId),
   ],
 );
+
+/* ============================================================
+ * FlockInsight domain — giving receipts
+ * When a church records a gift for a member, optionally email/SMS the giver an
+ * acknowledgement + a blessing. Off by default; templates are editable.
+ * Placeholders: {name} {amount} {category} {church} {date} {method}
+ * ========================================================== */
+export const givingReceiptSetting = pgTable("giving_receipt_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  email: boolean().notNull().default(true),
+  sms: boolean().notNull().default(false),
+  emailSubject: text()
+    .notNull()
+    .default("Thank you for your {category} — {church}"),
+  emailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nWe joyfully acknowledge your {category} of {amount} received on {date}. Thank you for your faithfulness and generosity to God's work.\n\nMay the Lord bless you and keep you; may He make His face shine upon you and be gracious to you. \"Bring the whole tithe into the storehouse... and see if I will not throw open the floodgates of heaven and pour out so much blessing that there will not be room enough to store it.\" (Malachi 3:10)\n\nWith gratitude,\n{church}",
+    ),
+  smsBody: text()
+    .notNull()
+    .default(
+      "Dear {name}, we acknowledge your {category} of {amount} on {date}. Thank you & may God bless you richly! — {church}",
+    ),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
 
 /* ============================================================
  * FlockInsight platform — notifications & web push

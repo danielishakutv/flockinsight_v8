@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { giving, givingCategory, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
+import { getGivingReceiptSetting } from "@/lib/giving-receipts";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
 import { GivingDataMenu } from "@/components/giving/giving-data-menu";
@@ -125,6 +126,8 @@ export default async function GivingPage() {
     total: Number(b.total),
   }));
 
+  const receipt = await getGivingReceiptSetting(church.id);
+
   return (
     <PageContainer>
       <PageHeader
@@ -146,6 +149,7 @@ export default async function GivingPage() {
         allTimeTotal={Number(allAgg?.total ?? 0)}
         breakdown={breakdown}
         year={yyyy}
+        receiptsEnabled={receipt.enabled}
       />
     </PageContainer>
   );

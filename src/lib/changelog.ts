@@ -29,6 +29,20 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.53.0",
+    date: "2026-07-25",
+    summary:
+      "Give members a personal link to update their own details, and thank givers with an automatic receipt & blessing.",
+    changes: {
+      Added: [
+        "Every member now has a personal, pre-filled self-update link. Share it (copy, email or text it from their profile) and they can review and correct what you already have on file — and add their children — with no account needed.",
+        "The link is private to each member and can be regenerated at any time to revoke an old one.",
+        "Giving receipts: when you record a tithe, offering or donation for a member, you can automatically email/SMS them a thank-you and a blessing. Turn it on and edit the wording in Settings → Giving.",
+        "Each gift has a “Send receipt & blessing” toggle so you stay in control per entry, and every receipt shows up in your message history.",
+      ],
+    },
+  },
+  {
     version: "0.52.0",
     date: "2026-07-24",
     summary:

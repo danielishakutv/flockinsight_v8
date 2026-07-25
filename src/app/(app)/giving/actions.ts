@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { giving, givingCategory, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { sendGivingReceipt } from "@/lib/giving-receipts";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -39,6 +40,9 @@ const givingSchema = z.object({
   giverName: z.preprocess(emptyToNull, z.string().trim().max(160).nullable()),
   method: z.preprocess(emptyToNull, z.enum(METHODS).nullable()),
   note: z.preprocess(emptyToNull, z.string().trim().max(500).nullable()),
+  // Send an acknowledgement + blessing to the giver (only for a new gift tied
+  // to a member with contact details; also gated by the church's receipt setting).
+  sendReceipt: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
 });
 
 export type GivingInput = z.input<typeof givingSchema>;
@@ -54,9 +58,10 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
     return { ok: false, error: "You don't have permission to manage giving." };
 
   // Category, if given, must belong to this church.
+  let categoryName: string | null = null;
   if (d.categoryId) {
     const [cat] = await db
-      .select({ id: givingCategory.id })
+      .select({ id: givingCategory.id, name: givingCategory.name })
       .from(givingCategory)
       .where(
         and(
@@ -66,16 +71,25 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       )
       .limit(1);
     if (!cat) return { ok: false, error: "That category doesn't exist." };
+    categoryName = cat.name;
   }
 
   // Member, if given, must belong to this church.
+  let giver: { firstName: string; phone: string | null; email: string | null } | null =
+    null;
   if (d.memberId) {
     const [m] = await db
-      .select({ id: member.id })
+      .select({
+        id: member.id,
+        firstName: member.firstName,
+        phone: member.phone,
+        email: member.email,
+      })
       .from(member)
       .where(and(eq(member.id, d.memberId), eq(member.churchId, church.id)))
       .limit(1);
     if (!m) return { ok: false, error: "That giver isn't in your congregation." };
+    giver = { firstName: m.firstName, phone: m.phone, email: m.email };
   }
 
   const fields = {
@@ -105,8 +119,26 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       .values({ churchId: church.id, ...fields, recordedBy: user.id })
       .returning({ id: giving.id });
 
+    // Thank the giver + speak a blessing, if requested and possible. The helper
+    // re-checks the church's receipt setting and is best-effort (never throws).
+    if (d.sendReceipt && giver) {
+      await sendGivingReceipt({
+        churchId: church.id,
+        churchName: church.name,
+        currency: church.currency,
+        firstName: giver.firstName,
+        phone: giver.phone,
+        email: giver.email,
+        amount: d.amount,
+        categoryName,
+        method: d.method,
+        date: d.date,
+      });
+    }
+
     revalidatePath("/giving");
     revalidatePath("/dashboard");
+    revalidatePath("/communication/history");
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("recordGiving failed", e);

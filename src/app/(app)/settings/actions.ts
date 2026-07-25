@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, givingCategory, service } from "@/db/schema";
+import { church, givingCategory, givingReceiptSetting, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, canAny } from "@/lib/permissions";
 
@@ -271,6 +271,39 @@ export async function deleteGivingCategory(id: string): Promise<ActionResult> {
     .where(and(eq(givingCategory.id, id), eq(givingCategory.churchId, c.id)))
     .returning({ id: givingCategory.id });
   if (!row) return { ok: false, error: "Category not found." };
+
+  revalidatePath("/settings/giving");
+  revalidatePath("/giving");
+  return { ok: true };
+}
+
+/* --------------------------- Giving receipts ----------------------------- */
+
+const receiptSchema = z.object({
+  enabled: z.boolean(),
+  email: z.boolean(),
+  sms: z.boolean(),
+  emailSubject: z.string().trim().min(1, "Add an email subject").max(160),
+  emailBody: z.string().trim().min(1, "Add an email message").max(2000),
+  smsBody: z.string().trim().min(1, "Add an SMS message").max(480),
+});
+
+export type GivingReceiptInput = z.input<typeof receiptSchema>;
+
+export async function saveGivingReceiptSettings(
+  input: GivingReceiptInput,
+): Promise<ActionResult> {
+  const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
+  const parsed = receiptSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  const d = parsed.data;
+
+  await db
+    .insert(givingReceiptSetting)
+    .values({ churchId: c.id, ...d })
+    .onConflictDoUpdate({ target: givingReceiptSetting.churchId, set: d });
 
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
