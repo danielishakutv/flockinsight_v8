@@ -2,9 +2,9 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { giving, givingCategory, member } from "@/db/schema";
+import { giving, givingCategory, member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendGivingReceipt } from "@/lib/giving-receipts";
@@ -40,6 +40,9 @@ const givingSchema = z.object({
   giverName: z.preprocess(emptyToNull, z.string().trim().max(160).nullable()),
   method: z.preprocess(emptyToNull, z.enum(METHODS).nullable()),
   note: z.preprocess(emptyToNull, z.string().trim().max(500).nullable()),
+  // Fundraising: a gift toward a project, and/or a payment against a pledge.
+  projectId: z.preprocess(emptyToNull, z.string().uuid().nullable()).default(null),
+  pledgeId: z.preprocess(emptyToNull, z.string().uuid().nullable()).default(null),
   // Send an acknowledgement + blessing to the giver (only for a new gift tied
   // to a member with contact details; also gated by the church's receipt setting).
   sendReceipt: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
@@ -92,6 +95,28 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
     giver = { firstName: m.firstName, phone: m.phone, email: m.email };
   }
 
+  // Pledge, if given, must belong to this church. A pledge payment implies its
+  // project, so derive projectId from the pledge when not supplied explicitly.
+  let projectId = d.projectId;
+  if (d.pledgeId) {
+    const [pl] = await db
+      .select({ id: pledge.id, projectId: pledge.projectId })
+      .from(pledge)
+      .where(and(eq(pledge.id, d.pledgeId), eq(pledge.churchId, church.id)))
+      .limit(1);
+    if (!pl) return { ok: false, error: "That pledge doesn't exist." };
+    projectId = pl.projectId;
+  }
+  // Project, if given (directly or via pledge), must belong to this church.
+  if (projectId) {
+    const [pr] = await db
+      .select({ id: project.id })
+      .from(project)
+      .where(and(eq(project.id, projectId), eq(project.churchId, church.id)))
+      .limit(1);
+    if (!pr) return { ok: false, error: "That project doesn't exist." };
+  }
+
   const fields = {
     categoryId: d.categoryId,
     amount: d.amount,
@@ -100,13 +125,21 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
     giverName: d.giverName,
     method: d.method,
     note: d.note,
+    projectId,
+    pledgeId: d.pledgeId,
   };
 
   try {
     if (d.id) {
+      // Editing an existing record never changes its project/pledge link (those
+      // are set when a payment is recorded from a project). This keeps edits
+      // from the general giving list from silently unlinking a pledge payment.
+      const { projectId: _p, pledgeId: _pl, ...editable } = fields;
+      void _p;
+      void _pl;
       const [row] = await db
         .update(giving)
-        .set(fields)
+        .set(editable)
         .where(and(eq(giving.id, d.id), eq(giving.churchId, church.id)))
         .returning({ id: giving.id });
       if (!row) return { ok: false, error: "Giving record not found." };
@@ -118,6 +151,9 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       .insert(giving)
       .values({ churchId: church.id, ...fields, recordedBy: user.id })
       .returning({ id: giving.id });
+
+    // Auto-complete a pledge once it's fully paid (best-effort, never blocks).
+    if (d.pledgeId) await maybeCompletePledge(church.id, d.pledgeId);
 
     // Thank the giver + speak a blessing, if requested and possible. The helper
     // re-checks the church's receipt setting and is best-effort (never throws).
@@ -139,10 +175,37 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
     revalidatePath("/giving");
     revalidatePath("/dashboard");
     revalidatePath("/communication/history");
+    if (projectId) revalidatePath(`/giving/projects/${projectId}`);
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("recordGiving failed", e);
     return { ok: false, error: "Could not save the giving record." };
+  }
+}
+
+/** Mark a still-active pledge complete once payments cover its amount. */
+async function maybeCompletePledge(churchId: string, pledgeId: string): Promise<void> {
+  try {
+    const [pl] = await db
+      .select({ amount: pledge.amount, status: pledge.status })
+      .from(pledge)
+      .where(and(eq(pledge.id, pledgeId), eq(pledge.churchId, churchId)))
+      .limit(1);
+    if (!pl || pl.status !== "active") return;
+
+    const [sum] = await db
+      .select({ paid: sql<number>`coalesce(sum(${giving.amount}), 0)` })
+      .from(giving)
+      .where(eq(giving.pledgeId, pledgeId));
+
+    if (Number(sum?.paid ?? 0) >= Number(pl.amount)) {
+      await db
+        .update(pledge)
+        .set({ status: "completed" })
+        .where(and(eq(pledge.id, pledgeId), eq(pledge.churchId, churchId)));
+    }
+  } catch (e) {
+    console.error("maybeCompletePledge failed", e);
   }
 }
 

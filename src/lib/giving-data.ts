@@ -1,7 +1,7 @@
 import "server-only";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { giving, givingCategory, member } from "@/db/schema";
+import { giving, givingCategory, member, project } from "@/db/schema";
 import { normalizeHeader } from "@/lib/members-data";
 
 /** CSV column order for export and the template. */
@@ -12,6 +12,7 @@ export const GIVING_CSV_HEADERS = [
   "Giver",
   "Method",
   "Note",
+  "Project",
 ] as const;
 
 /** One illustrative row shown in the downloadable template. */
@@ -21,6 +22,7 @@ export const GIVING_CSV_SAMPLE: string[] = [
   "5000",
   "John Doe",
   "cash",
+  "",
   "",
 ];
 
@@ -108,10 +110,12 @@ export async function getGivingExportRows(
       giverName: giving.giverName,
       memberFirst: member.firstName,
       memberLast: member.lastName,
+      projectName: project.name,
     })
     .from(giving)
     .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
     .leftJoin(member, eq(member.id, giving.memberId))
+    .leftJoin(project, eq(project.id, giving.projectId))
     .where(eq(giving.churchId, churchId))
     .orderBy(desc(giving.date), desc(giving.createdAt));
 
@@ -124,6 +128,7 @@ export async function getGivingExportRows(
       "",
     r.method ?? "",
     r.note ?? "",
+    r.projectName ?? "",
   ]);
 }
 

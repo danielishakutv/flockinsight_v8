@@ -29,6 +29,20 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.55.0",
+    date: "2026-07-27",
+    summary:
+      "Fundraising projects & pledges — run a building fund, track each member's pledge, and record payments to completion.",
+    changes: {
+      Added: [
+        "Giving → Projects: create a fundraising project (e.g. a building fund) with an optional target, and watch a live progress bar as money comes in.",
+        "Add a pledge for any member (or a named non-member) — a total amount plus how they'll give: lump sum, or weekly / monthly / quarterly / yearly (with a custom option so the frequency is fully editable).",
+        "Record each payment toward a pledge; every payment is a normal giving record, so it flows into your giving totals, receipts and reports — while the pledge shows paid vs outstanding and auto-completes when fully paid.",
+        "Giving records that belong to a project now carry a project badge, and the CSV export includes a Project column.",
+      ],
+    },
+  },
+  {
     version: "0.54.0",
     date: "2026-07-25",
     summary:

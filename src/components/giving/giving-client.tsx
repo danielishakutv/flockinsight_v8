@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
@@ -8,6 +9,7 @@ import {
   Check,
   Coins,
   HandCoins,
+  HardHat,
   Loader2,
   Pencil,
   Plus,
@@ -67,6 +69,8 @@ export type GivingRow = {
   categoryName: string | null;
   memberId: string | null;
   giverName: string | null;
+  projectId: string | null;
+  projectName: string | null;
 };
 
 type Option = { id: string; name: string };
@@ -370,6 +374,14 @@ export function GivingClient({
                   </Badge>
                   {r.method && (
                     <Badge variant="outline">{METHOD_LABEL[r.method]}</Badge>
+                  )}
+                  {r.projectId && (
+                    <Link href={`/giving/projects/${r.projectId}`}>
+                      <Badge variant="default" className="gap-1">
+                        <HardHat className="size-3" />
+                        {r.projectName ?? "Project"}
+                      </Badge>
+                    </Link>
                   )}
                 </div>
                 <p className="text-muted-foreground truncate text-xs">

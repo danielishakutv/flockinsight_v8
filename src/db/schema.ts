@@ -408,6 +408,28 @@ export const groupTypeEnum = pgEnum("group_type", [
   "class",
 ]);
 
+// Fundraising project lifecycle.
+export const projectStatusEnum = pgEnum("project_status", [
+  "active",
+  "completed",
+  "archived",
+]);
+// How often a member pays down their pledge. "custom" pairs with a free-text
+// label on the pledge so the unit stays editable (e.g. "every service").
+export const pledgeCadenceEnum = pgEnum("pledge_cadence", [
+  "one_time",
+  "weekly",
+  "monthly",
+  "quarterly",
+  "yearly",
+  "custom",
+]);
+export const pledgeStatusEnum = pgEnum("pledge_status", [
+  "active",
+  "completed",
+  "cancelled",
+]);
+
 // How a gift was given. Optional on each giving record.
 export const givingMethodEnum = pgEnum("giving_method", [
   "cash",
@@ -747,6 +769,15 @@ export const giving = pgTable(
     method: givingMethodEnum(),
     date: date().notNull(),
     note: text(),
+    // Fundraising dimensions. A gift can be toward a project (with or without a
+    // formal pledge); a pledge payment sets both. Set null on delete so the
+    // money record always survives the project/pledge being removed.
+    projectId: uuid().references((): AnyPgColumn => project.id, {
+      onDelete: "set null",
+    }),
+    pledgeId: uuid().references((): AnyPgColumn => pledge.id, {
+      onDelete: "set null",
+    }),
     recordedBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true })
@@ -758,6 +789,78 @@ export const giving = pgTable(
     index("giving_church_idx").on(t.churchId),
     index("giving_date_idx").on(t.date),
     index("giving_category_idx").on(t.categoryId),
+    index("giving_project_idx").on(t.projectId),
+    index("giving_pledge_idx").on(t.pledgeId),
+  ],
+);
+
+/* ============================================================
+ * FlockInsight domain — fundraising projects & pledges
+ * A project is a campaign (e.g. "Building Project") members pledge toward.
+ * Each pledge is one person's commitment; payments toward it are ordinary
+ * `giving` rows tagged with pledgeId (and projectId), so all money stays in one
+ * ledger. Progress is computed as SUMs of those rows — nothing denormalised.
+ * ========================================================== */
+export const project = pgTable(
+  "project",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    description: text(),
+    // Fundraising goal (optional — some projects just collect open-endedly).
+    targetAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    status: projectStatusEnum().notNull().default("active"),
+    startDate: date(),
+    endDate: date(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("project_church_idx").on(t.churchId)],
+);
+
+export const pledge = pgTable(
+  "pledge",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    projectId: uuid()
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    // A member pledge, or a named non-member (giverName). memberId set null on
+    // member delete but giverName keeps the label.
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    giverName: text(),
+    // Total committed (e.g. 50,000).
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    cadence: pledgeCadenceEnum().notNull().default("one_time"),
+    // Editable unit label when cadence is "custom" (e.g. "every service").
+    cadenceLabel: text(),
+    // Optional per-payment hint (e.g. 5,000 / month); progress is still driven
+    // by actual payments, not this.
+    installmentAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    startDate: date(),
+    status: pledgeStatusEnum().notNull().default("active"),
+    note: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("pledge_church_idx").on(t.churchId),
+    index("pledge_project_idx").on(t.projectId),
+    index("pledge_member_idx").on(t.memberId),
   ],
 );
 

@@ -1,10 +1,13 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { giving, givingCategory, member } from "@/db/schema";
+import { giving, givingCategory, member, project } from "@/db/schema";
+import Link from "next/link";
+import { HardHat } from "lucide-react";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { getGivingReceiptSetting } from "@/lib/giving-receipts";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
+import { Button } from "@/components/ui/button";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
 import { GivingDataMenu } from "@/components/giving/giving-data-menu";
 
@@ -68,10 +71,13 @@ export default async function GivingPage() {
         memberFirst: member.firstName,
         memberLast: member.lastName,
         giverName: giving.giverName,
+        projectId: giving.projectId,
+        projectName: project.name,
       })
       .from(giving)
       .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
       .leftJoin(member, eq(member.id, giving.memberId))
+      .leftJoin(project, eq(project.id, giving.projectId))
       .where(eq(giving.churchId, church.id))
       .orderBy(desc(giving.date), desc(giving.createdAt))
       .limit(100),
@@ -114,6 +120,8 @@ export default async function GivingPage() {
       [r.memberFirst, r.memberLast].filter(Boolean).join(" ") ||
       r.giverName ||
       null,
+    projectId: r.projectId,
+    projectName: r.projectName,
   }));
 
   const memberOptions = members.map((m) => ({
@@ -134,7 +142,15 @@ export default async function GivingPage() {
         title="Giving"
         description="Record offerings, tithes, donations and project gifts."
         action={
-          <GivingDataMenu hasData={rows.length > 0} canManage={canManage} />
+          <>
+            <Button asChild variant="outline">
+              <Link href="/giving/projects">
+                <HardHat className="size-4" />
+                <span className="hidden sm:inline">Projects</span>
+              </Link>
+            </Button>
+            <GivingDataMenu hasData={rows.length > 0} canManage={canManage} />
+          </>
         }
       />
       <GivingClient
