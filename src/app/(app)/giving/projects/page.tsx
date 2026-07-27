@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ListChecks } from "lucide-react";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { listProjects } from "@/lib/projects";
@@ -27,6 +27,14 @@ export default async function ProjectsPage() {
       <PageHeader
         title="Projects & pledges"
         description="Run building funds and other campaigns — track pledges and payments to completion."
+        action={
+          <Button asChild variant="outline">
+            <Link href="/giving/projects/report">
+              <ListChecks className="size-4" />
+              <span className="hidden sm:inline">Outstanding</span>
+            </Link>
+          </Button>
+        }
       />
       <ProjectsManager
         projects={projects}

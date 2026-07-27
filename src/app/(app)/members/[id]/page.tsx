@@ -2,16 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { ArrowLeft, ChevronRight, Home, UsersRound } from "lucide-react";
+import { ArrowLeft, ChevronRight, HandCoins, Home, UsersRound } from "lucide-react";
 import { db } from "@/db";
 import { group, groupMembership, household, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { householdOptions } from "@/lib/households";
+import { getMemberPledges, cadenceLabel } from "@/lib/projects";
+import { formatMoney } from "@/lib/money";
 import { siteUrl } from "@/lib/site";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MemberProfile } from "@/components/members/member-profile";
@@ -69,8 +72,15 @@ export default async function MemberDetailPage({
 
   if (!m) notFound();
 
-  const [memberGroups, children, guardianOptions, households, householdRow, householdSiblings] =
-    await Promise.all([
+  const [
+    memberGroups,
+    children,
+    guardianOptions,
+    households,
+    householdRow,
+    householdSiblings,
+    memberPledges,
+  ] = await Promise.all([
       // Groups / ministries this member belongs to.
       db
         .select({
@@ -138,6 +148,8 @@ export default async function MemberDetailPage({
             )
             .orderBy(asc(member.firstName), asc(member.lastName))
         : Promise.resolve([]),
+      // This member's pledges across projects (their statement).
+      getMemberPledges(church.id, id),
     ]);
 
   const name = [m.firstName, m.middleName, m.lastName]
@@ -285,6 +297,49 @@ export default async function MemberDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {memberPledges.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <HandCoins className="text-primary size-5" />
+              Pledges
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {memberPledges.map((pl) => (
+              <Link
+                key={pl.id}
+                href={`/giving/projects/${pl.projectId}`}
+                className="hover:bg-accent flex items-center gap-3 rounded-xl border p-3 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-semibold">{pl.projectName}</span>
+                    {pl.status === "completed" || pl.paid >= pl.amount ? (
+                      <Badge variant="success">Fulfilled</Badge>
+                    ) : pl.status === "cancelled" ? (
+                      <Badge variant="outline">Cancelled</Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        {cadenceLabel(pl.cadence, pl.cadenceLabel)}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {formatMoney(pl.paid, church.currency)} of{" "}
+                    {formatMoney(pl.amount, church.currency)} paid
+                    {pl.outstanding > 0 && pl.status === "active"
+                      ? ` · ${formatMoney(pl.outstanding, church.currency)} outstanding`
+                      : ""}
+                  </p>
+                </div>
+                <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </PageContainer>
   );
 }

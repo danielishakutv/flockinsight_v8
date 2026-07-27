@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { giving, member, pledge, project } from "@/db/schema";
 import type {
@@ -182,4 +182,168 @@ export async function activeProjectOptions(
     .from(project)
     .where(and(eq(project.churchId, churchId), eq(project.status, "active")))
     .orderBy(asc(project.name));
+}
+
+/** Sum of payments per pledge id, as a plain map (avoids correlated subqueries). */
+export async function paidByPledge(
+  churchId: string,
+  pledgeIds: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (pledgeIds.length === 0) return map;
+  const rows = await db
+    .select({
+      pledgeId: giving.pledgeId,
+      paid: sql<number>`coalesce(sum(${giving.amount}), 0)`,
+    })
+    .from(giving)
+    .where(and(eq(giving.churchId, churchId), inArray(giving.pledgeId, pledgeIds)))
+    .groupBy(giving.pledgeId);
+  for (const r of rows) if (r.pledgeId) map.set(r.pledgeId, Number(r.paid));
+  return map;
+}
+
+export type OutstandingPledge = {
+  id: string;
+  memberId: string | null;
+  name: string;
+  projectId: string;
+  projectName: string;
+  amount: number;
+  paid: number;
+  outstanding: number;
+  cadence: PledgeCadence;
+  cadenceLabel: string | null;
+  status: PledgeStatus;
+};
+
+export type PledgeReport = {
+  rows: OutstandingPledge[];
+  totalPledged: number;
+  totalPaid: number;
+  totalOutstanding: number;
+};
+
+/**
+ * Church-wide pledges with what's still owed. By default only active pledges
+ * with a balance remaining; pass `includeSettled` for everything. Optionally
+ * scope to one project.
+ */
+export async function getOutstandingPledges(
+  churchId: string,
+  opts: { projectId?: string; includeSettled?: boolean } = {},
+): Promise<PledgeReport> {
+  const where = [eq(pledge.churchId, churchId)];
+  if (opts.projectId) where.push(eq(pledge.projectId, opts.projectId));
+  if (!opts.includeSettled) where.push(eq(pledge.status, "active"));
+
+  const rows = await db
+    .select({
+      id: pledge.id,
+      memberId: pledge.memberId,
+      giverName: pledge.giverName,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      projectId: pledge.projectId,
+      projectName: project.name,
+      amount: pledge.amount,
+      cadence: pledge.cadence,
+      cadenceLabel: pledge.cadenceLabel,
+      status: pledge.status,
+      createdAt: pledge.createdAt,
+    })
+    .from(pledge)
+    .innerJoin(project, eq(project.id, pledge.projectId))
+    .leftJoin(member, eq(member.id, pledge.memberId))
+    .where(and(...where))
+    .orderBy(asc(project.name), desc(pledge.createdAt));
+
+  const paid = await paidByPledge(
+    churchId,
+    rows.map((r) => r.id),
+  );
+
+  let all: OutstandingPledge[] = rows.map((r) => {
+    const paidAmt = paid.get(r.id) ?? 0;
+    return {
+      id: r.id,
+      memberId: r.memberId,
+      name:
+        [r.firstName, r.lastName].filter(Boolean).join(" ") ||
+        r.giverName ||
+        "Unnamed",
+      projectId: r.projectId,
+      projectName: r.projectName,
+      amount: Number(r.amount),
+      paid: paidAmt,
+      outstanding: Math.max(0, Number(r.amount) - paidAmt),
+      cadence: r.cadence,
+      cadenceLabel: r.cadenceLabel,
+      status: r.status,
+    };
+  });
+
+  // Default view: only those still owing.
+  if (!opts.includeSettled) all = all.filter((r) => r.outstanding > 0);
+
+  return {
+    rows: all,
+    totalPledged: all.reduce((a, r) => a + r.amount, 0),
+    totalPaid: all.reduce((a, r) => a + r.paid, 0),
+    totalOutstanding: all.reduce((a, r) => a + r.outstanding, 0),
+  };
+}
+
+export type MemberPledge = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  amount: number;
+  paid: number;
+  outstanding: number;
+  cadence: PledgeCadence;
+  cadenceLabel: string | null;
+  status: PledgeStatus;
+};
+
+/** All of one member's pledges across projects (their personal statement). */
+export async function getMemberPledges(
+  churchId: string,
+  memberId: string,
+): Promise<MemberPledge[]> {
+  const rows = await db
+    .select({
+      id: pledge.id,
+      projectId: pledge.projectId,
+      projectName: project.name,
+      amount: pledge.amount,
+      cadence: pledge.cadence,
+      cadenceLabel: pledge.cadenceLabel,
+      status: pledge.status,
+      createdAt: pledge.createdAt,
+    })
+    .from(pledge)
+    .innerJoin(project, eq(project.id, pledge.projectId))
+    .where(and(eq(pledge.churchId, churchId), eq(pledge.memberId, memberId)))
+    .orderBy(asc(pledge.status), desc(pledge.createdAt));
+
+  const paid = await paidByPledge(
+    churchId,
+    rows.map((r) => r.id),
+  );
+
+  return rows.map((r) => {
+    const paidAmt = paid.get(r.id) ?? 0;
+    return {
+      id: r.id,
+      projectId: r.projectId,
+      projectName: r.projectName,
+      amount: Number(r.amount),
+      paid: paidAmt,
+      outstanding: Math.max(0, Number(r.amount) - paidAmt),
+      cadence: r.cadence,
+      cadenceLabel: r.cadenceLabel,
+      status: r.status,
+    };
+  });
 }

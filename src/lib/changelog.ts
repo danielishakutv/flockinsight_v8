@@ -29,6 +29,19 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.56.0",
+    date: "2026-07-27",
+    summary:
+      "See who still owes on their pledges, view each member's pledges, and auto-remind members with an outstanding balance.",
+    changes: {
+      Added: [
+        "Giving → Projects → Outstanding: a report of every pledge with a balance still to give — filter by project, see totals pledged / received / outstanding, and download it as a CSV.",
+        "Each member's profile now shows a Pledges card — their commitments across projects with paid vs outstanding.",
+        "Pledge reminders: turn on a gentle nudge (email/SMS, with editable wording and a blessing) to members who still owe on a pledge — sent once per period (weekly / monthly / quarterly / yearly) until it's paid off. Manage it in Settings → Giving.",
+      ],
+    },
+  },
+  {
     version: "0.55.0",
     date: "2026-07-27",
     summary:

@@ -330,6 +330,13 @@
       "when": 1785134693849,
       "tag": "0046_projects_and_pledges",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785137124069,
+      "tag": "0047_pledge_reminders",
+      "breakpoints": true
     }
   ]
 }

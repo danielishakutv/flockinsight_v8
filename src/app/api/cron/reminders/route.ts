@@ -177,8 +177,17 @@ export async function GET(request: Request) {
     console.error("[cron/reminders] sender-id checks failed", e);
   }
 
+  // Nudge members with an outstanding pledge, once per cadence period.
+  let pledges: Awaited<ReturnType<typeof import("@/lib/pledge-reminders").runPledgeReminders>> | null = null;
+  try {
+    const { runPledgeReminders } = await import("@/lib/pledge-reminders");
+    pledges = await runPledgeReminders();
+  } catch (e) {
+    console.error("[cron/reminders] pledge reminders failed", e);
+  }
+
   return new Response(
-    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers, senderIds }),
+    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers, senderIds, pledges }),
     { headers: { "Content-Type": "application/json" } },
   );
 }

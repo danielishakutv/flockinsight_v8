@@ -4,7 +4,13 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, givingCategory, givingReceiptSetting, service } from "@/db/schema";
+import {
+  church,
+  givingCategory,
+  givingReceiptSetting,
+  pledgeReminderSetting,
+  service,
+} from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, canAny } from "@/lib/permissions";
 
@@ -307,5 +313,37 @@ export async function saveGivingReceiptSettings(
 
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
+  return { ok: true };
+}
+
+/* ----------------------- Pledge installment reminders --------------------- */
+
+const pledgeReminderSchema = z.object({
+  enabled: z.boolean(),
+  email: z.boolean(),
+  sms: z.boolean(),
+  emailSubject: z.string().trim().min(1, "Add an email subject").max(160),
+  emailBody: z.string().trim().min(1, "Add an email message").max(2000),
+  smsBody: z.string().trim().min(1, "Add an SMS message").max(480),
+});
+
+export type PledgeReminderInput = z.input<typeof pledgeReminderSchema>;
+
+export async function savePledgeReminderSettings(
+  input: PledgeReminderInput,
+): Promise<ActionResult> {
+  const { church: c } = await requireChurch();
+  if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
+  const parsed = pledgeReminderSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  const d = parsed.data;
+
+  await db
+    .insert(pledgeReminderSetting)
+    .values({ churchId: c.id, ...d })
+    .onConflictDoUpdate({ target: pledgeReminderSetting.churchId, set: d });
+
+  revalidatePath("/settings/giving");
   return { ok: true };
 }

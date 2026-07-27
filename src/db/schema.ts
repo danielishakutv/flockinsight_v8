@@ -865,6 +865,58 @@ export const pledge = pgTable(
 );
 
 /* ============================================================
+ * FlockInsight domain — pledge installment reminders
+ * Optional per-church nudge to members with an outstanding pledge, once per
+ * cadence period (weekly/monthly/quarterly/yearly), until it's paid off.
+ * Placeholders: {name} {project} {amount} {paid} {outstanding} {cadence} {church}
+ * ========================================================== */
+export const pledgeReminderSetting = pgTable("pledge_reminder_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  email: boolean().notNull().default(true),
+  sms: boolean().notNull().default(false),
+  emailSubject: text()
+    .notNull()
+    .default("A note about your {project} pledge — {church}"),
+  emailBody: text()
+    .notNull()
+    .default(
+      "Dear {name},\n\nThank you for your pledge of {amount} toward {project}. So far {paid} has been received, leaving {outstanding} outstanding. Whenever you're able to give your {cadence} portion, it's a great blessing to the work.\n\n\"Each of you should give what you have decided in your heart to give, not reluctantly or under compulsion, for God loves a cheerful giver.\" (2 Corinthians 9:7)\n\nGod bless you,\n{church}",
+    ),
+  smsBody: text()
+    .notNull()
+    .default(
+      "Dear {name}, thank you for your {project} pledge. {paid} received, {outstanding} outstanding. God bless you! — {church}",
+    ),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// One reminder per pledge per cadence period — a re-run is a no-op.
+export const pledgeReminderRun = pgTable(
+  "pledge_reminder_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    pledgeId: uuid()
+      .notNull()
+      .references(() => pledge.id, { onDelete: "cascade" }),
+    // e.g. "monthly:20" — cadence + period index since the pledge started.
+    periodKey: text().notNull(),
+    sentEmail: integer().notNull().default(0),
+    sentSms: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("pledge_reminder_run_unique").on(t.pledgeId, t.periodKey)],
+);
+
+/* ============================================================
  * FlockInsight domain — giving receipts
  * When a church records a gift for a member, optionally email/SMS the giver an
  * acknowledgement + a blessing. Off by default; templates are editable.
