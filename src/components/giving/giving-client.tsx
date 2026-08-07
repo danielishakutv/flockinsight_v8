@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import {
   CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   HandCoins,
   HardHat,
   Loader2,
   Pencil,
   Plus,
+  SearchX,
   Sparkles,
   Trash2,
   TrendingUp,
@@ -27,6 +30,10 @@ import {
   type GivingInput,
 } from "@/app/(app)/giving/actions";
 import { createGivingCategories } from "@/app/(app)/settings/actions";
+import {
+  GivingFilters,
+  type GivingFilterState,
+} from "@/components/giving/giving-filters";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +117,7 @@ export function GivingClient({
   canManage,
   currency,
   categories,
+  projects,
   members,
   records,
   today,
@@ -119,11 +127,20 @@ export function GivingClient({
   breakdown,
   year,
   receiptsEnabled = false,
+  filters,
+  filtered,
+  resultCount,
+  resultTotal,
+  page,
+  pageSize,
+  hasAnyRecords,
 }: {
   canManage: boolean;
   currency: string;
   categories: Option[];
+  projects: Option[];
   members: Option[];
+  /** The current page of the ledger, already filtered on the server. */
   records: GivingRow[];
   today: string;
   monthTotal: number;
@@ -132,10 +149,18 @@ export function GivingClient({
   breakdown: { name: string; total: number }[];
   year: number;
   receiptsEnabled?: boolean;
+  filters: GivingFilterState;
+  /** Whether any search/filter is narrowing the ledger. */
+  filtered: boolean;
+  /** Count and sum of every match, not just this page. */
+  resultCount: number;
+  resultTotal: number;
+  page: number;
+  pageSize: number;
+  hasAnyRecords: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [filter, setFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -158,12 +183,24 @@ export function GivingClient({
   const set = (patch: Partial<FormState>) =>
     setForm((f) => ({ ...f, ...patch }));
 
-  const filtered = useMemo(() => {
-    if (filter === "all") return records;
-    if (filter === "uncategorised")
-      return records.filter((r) => !r.categoryId);
-    return records.filter((r) => r.categoryId === filter);
-  }, [records, filter]);
+  const pageCount = Math.max(1, Math.ceil(resultCount / pageSize));
+  const firstShown = resultCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastShown = (page - 1) * pageSize + records.length;
+
+  function goToPage(next: number) {
+    const sp = new URLSearchParams();
+    if (filters.q) sp.set("q", filters.q);
+    if (filters.categoryId) sp.set("cat", filters.categoryId);
+    if (filters.method) sp.set("method", filters.method);
+    if (filters.projectId) sp.set("project", filters.projectId);
+    if (filters.from) sp.set("from", filters.from);
+    if (filters.to) sp.set("to", filters.to);
+    if (next > 1) sp.set("page", String(next));
+    const qs = sp.toString();
+    startTransition(() => {
+      router.push(`/giving${qs ? `?${qs}` : ""}`);
+    });
+  }
 
   function openAdd() {
     setForm(emptyForm());
@@ -256,10 +293,7 @@ export function GivingClient({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-muted-foreground text-sm">
-          {records.length} record{records.length === 1 ? "" : "s"}
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {canManage &&
           (noCategories ? (
             <Button onClick={() => setSetupOpen(true)} size="lg">
@@ -308,41 +342,39 @@ export function GivingClient({
         </Card>
       )}
 
-      {/* Filters */}
-      {categories.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterChip
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-            label="All"
-          />
-          {categories.map((c) => (
-            <FilterChip
-              key={c.id}
-              active={filter === c.id}
-              onClick={() => setFilter(c.id)}
-              label={c.name}
-            />
-          ))}
-        </div>
+      {/* Search & filters — applied in the database, so they reach every
+          gift ever recorded, not just the page on screen. */}
+      {hasAnyRecords && (
+        <GivingFilters
+          value={filters}
+          categories={categories}
+          projects={projects}
+          today={today}
+          resultCount={resultCount}
+          resultTotalLabel={formatMoney(resultTotal, currency)}
+        />
       )}
 
       {/* Records */}
-      {filtered.length === 0 ? (
+      {records.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
             <div className="bg-primary/10 text-primary grid size-14 place-items-center rounded-2xl">
-              <HandCoins className="size-7" />
+              {filtered ? (
+                <SearchX className="size-7" />
+              ) : (
+                <HandCoins className="size-7" />
+              )}
             </div>
             <p className="text-muted-foreground">
-              {records.length === 0
-                ? noCategories
+              {filtered
+                ? "No giving matches these filters."
+                : noCategories
                   ? "Set up your giving categories to start recording."
-                  : "No giving recorded yet."
-                : "No records in this category."}
+                  : "No giving recorded yet."}
             </p>
             {canManage &&
-              records.length === 0 &&
+              !filtered &&
               (noCategories ? (
                 <Button onClick={() => setSetupOpen(true)}>
                   <Sparkles className="size-5" /> Add giving categories
@@ -356,7 +388,7 @@ export function GivingClient({
         </Card>
       ) : (
         <div className="space-y-2">
-          {filtered.map((r) => (
+          {records.map((r) => (
             <div
               key={r.id}
               className="bg-card flex items-center gap-3 rounded-2xl border p-3 shadow-sm"
@@ -427,6 +459,37 @@ export function GivingClient({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {pageCount > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <p className="text-muted-foreground text-sm">
+            Showing {firstShown}–{lastShown} of {resultCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page - 1)}
+              disabled={page <= 1 || pending}
+            >
+              <ChevronLeft className="size-4" />
+              Prev
+            </Button>
+            <span className="text-muted-foreground text-sm tabular-nums">
+              {page} / {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= pageCount || pending}
+            >
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -837,28 +900,5 @@ function CategorySetupDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        active
-          ? "bg-primary text-primary-foreground rounded-full px-3 py-1.5 text-sm font-semibold"
-          : "bg-muted text-muted-foreground hover:bg-muted/70 rounded-full px-3 py-1.5 text-sm font-semibold"
-      }
-    >
-      {label}
-    </button>
   );
 }

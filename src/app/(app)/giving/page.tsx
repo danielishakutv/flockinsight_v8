@@ -6,6 +6,12 @@ import { HardHat } from "lucide-react";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { getGivingReceiptSetting } from "@/lib/giving-receipts";
+import {
+  GIVING_PAGE_SIZE,
+  getGivingList,
+  hasGivingFilters,
+  parseGivingFilters,
+} from "@/lib/giving-data";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
@@ -13,10 +19,17 @@ import { GivingDataMenu } from "@/components/giving/giving-data-menu";
 
 export const metadata = { title: "Giving" };
 
-export default async function GivingPage() {
+export default async function GivingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { church } = await requireChurch();
   await requireCan("giving.view");
   const canManage = await can("giving.manage");
+
+  const filters = parseGivingFilters(await searchParams);
+  const filtered = hasGivingFilters(filters);
 
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -29,8 +42,9 @@ export default async function GivingPage() {
 
   const [
     categories,
+    projects,
     members,
-    records,
+    list,
     [monthAgg],
     [yearAgg],
     [allAgg],
@@ -47,6 +61,12 @@ export default async function GivingPage() {
         ),
       )
       .orderBy(asc(givingCategory.sortOrder), asc(givingCategory.name)),
+    // Projects, for the "toward a project" filter.
+    db
+      .select({ id: project.id, name: project.name })
+      .from(project)
+      .where(eq(project.churchId, church.id))
+      .orderBy(asc(project.name)),
     // Congregation for the optional giver picker.
     db
       .select({
@@ -57,30 +77,8 @@ export default async function GivingPage() {
       .from(member)
       .where(eq(member.churchId, church.id))
       .orderBy(asc(member.firstName), asc(member.lastName)),
-    // Most recent records.
-    db
-      .select({
-        id: giving.id,
-        amount: giving.amount,
-        date: giving.date,
-        method: giving.method,
-        note: giving.note,
-        categoryId: giving.categoryId,
-        categoryName: givingCategory.name,
-        memberId: giving.memberId,
-        memberFirst: member.firstName,
-        memberLast: member.lastName,
-        giverName: giving.giverName,
-        projectId: giving.projectId,
-        projectName: project.name,
-      })
-      .from(giving)
-      .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
-      .leftJoin(member, eq(member.id, giving.memberId))
-      .leftJoin(project, eq(project.id, giving.projectId))
-      .where(eq(giving.churchId, church.id))
-      .orderBy(desc(giving.date), desc(giving.createdAt))
-      .limit(100),
+    // The matching page of the ledger + the count/sum of every match.
+    getGivingList(church.id, filters),
     db
       .select({ total: sumAmount })
       .from(giving)
@@ -90,7 +88,7 @@ export default async function GivingPage() {
       .from(giving)
       .where(and(eq(giving.churchId, church.id), gte(giving.date, startOfYear))),
     db
-      .select({ total: sumAmount })
+      .select({ total: sumAmount, count: sql<number>`count(*)::int` })
       .from(giving)
       .where(eq(giving.churchId, church.id)),
     // This-year totals per category, biggest first.
@@ -107,7 +105,7 @@ export default async function GivingPage() {
       .orderBy(desc(sumAmount)),
   ]);
 
-  const rows: GivingRow[] = records.map((r) => ({
+  const rows: GivingRow[] = list.rows.map((r) => ({
     id: r.id,
     amount: Number(r.amount),
     date: r.date,
@@ -134,6 +132,9 @@ export default async function GivingPage() {
     total: Number(b.total),
   }));
 
+  // Distinguishes "nothing recorded yet" from "nothing matches the filters".
+  const hasAnyRecords = Number(allAgg?.count ?? 0) > 0;
+
   const receipt = await getGivingReceiptSetting(church.id);
 
   return (
@@ -149,7 +150,7 @@ export default async function GivingPage() {
                 <span className="hidden sm:inline">Projects</span>
               </Link>
             </Button>
-            <GivingDataMenu hasData={rows.length > 0} canManage={canManage} />
+            <GivingDataMenu hasData={hasAnyRecords} canManage={canManage} />
           </>
         }
       />
@@ -157,6 +158,7 @@ export default async function GivingPage() {
         canManage={canManage}
         currency={church.currency}
         categories={categories}
+        projects={projects}
         members={memberOptions}
         records={rows}
         today={today}
@@ -166,6 +168,20 @@ export default async function GivingPage() {
         breakdown={breakdown}
         year={yyyy}
         receiptsEnabled={receipt.enabled}
+        filters={{
+          q: filters.q,
+          categoryId: filters.categoryId,
+          method: filters.method,
+          projectId: filters.projectId,
+          from: filters.from,
+          to: filters.to,
+        }}
+        filtered={filtered}
+        resultCount={list.count}
+        resultTotal={list.total}
+        page={filters.page}
+        pageSize={GIVING_PAGE_SIZE}
+        hasAnyRecords={hasAnyRecords}
       />
     </PageContainer>
   );
