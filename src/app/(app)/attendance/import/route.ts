@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";

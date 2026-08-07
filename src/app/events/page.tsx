@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, eq, gte, ilike, or, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
-import { CalendarDays, Clock, MapPin } from "lucide-react";
+import { CalendarDays, MapPin } from "lucide-react";
 import { db } from "@/db";
 import { church, event } from "@/db/schema";
 import { EventsSearch } from "@/components/public/events-search";

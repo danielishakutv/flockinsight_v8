@@ -28,7 +28,6 @@ import {
   church,
   member,
   staff,
-  user,
   payment,
   supportTicket,
   attendanceSession,
@@ -71,7 +70,6 @@ export default async function SuperadminOverviewPage() {
   const [
     [{ churches }],
     [{ suspended }],
-    [{ users }],
     [{ members }],
     [{ staffCount }],
     [{ sessions }],
@@ -89,7 +87,6 @@ export default async function SuperadminOverviewPage() {
   ] = await Promise.all([
     db.select({ churches: count() }).from(church),
     db.select({ suspended: count() }).from(church).where(eq(church.status, "suspended")),
-    db.select({ users: count() }).from(user),
     db.select({ members: count() }).from(member),
     db.select({ staffCount: count() }).from(staff),
     db.select({ sessions: count() }).from(attendanceSession),

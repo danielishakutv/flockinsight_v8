@@ -459,7 +459,8 @@ export function CommunicationClient({
                           onClick={() =>
                             setSelected((p) => {
                               const n = new Set(p);
-                              n.has(m.id) ? n.delete(m.id) : n.add(m.id);
+                              if (n.has(m.id)) n.delete(m.id);
+                              else n.add(m.id);
                               return n;
                             })
                           }

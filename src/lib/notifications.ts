@@ -6,7 +6,6 @@ import {
   church,
   notification,
   notificationRead,
-  notificationTarget,
   staff,
   user,
 } from "@/db/schema";

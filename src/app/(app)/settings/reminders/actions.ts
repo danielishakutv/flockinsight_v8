@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { reminderSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";

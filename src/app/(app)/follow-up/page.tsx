@@ -1,6 +1,6 @@
 import { and, count, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { followUpInteraction, member, staff, user } from "@/db/schema";
+import { followUpInteraction, member, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";

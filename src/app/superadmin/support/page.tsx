@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import { ChevronRight } from "lucide-react";
 import { db } from "@/db";

@@ -20,7 +20,11 @@ export function EventsSearch({
     const sp = new URLSearchParams(params.toString());
     if (q.trim()) sp.set("q", q.trim());
     else sp.delete("q");
-    if (extra) for (const [k, v] of Object.entries(extra)) v ? sp.set(k, v) : sp.delete(k);
+    if (extra)
+      for (const [k, v] of Object.entries(extra)) {
+        if (v) sp.set(k, v);
+        else sp.delete(k);
+      }
     router.push(`/events?${sp.toString()}`);
   }
 

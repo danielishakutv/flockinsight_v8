@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { saveEvent, deleteEvent, type EventInput } from "@/app/(app)/my-events/actions";
+import { saveEvent, deleteEvent } from "@/app/(app)/my-events/actions";
 import {
   EventGuestsDialog,
   type Guest,

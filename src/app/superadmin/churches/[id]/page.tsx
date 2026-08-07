@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, count, desc, eq, max, sql } from "drizzle-orm";
+import { asc, count, desc, eq, max, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft,

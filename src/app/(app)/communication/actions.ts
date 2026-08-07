@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  church,
   communicationLog,
   groupMembership,
   member,
