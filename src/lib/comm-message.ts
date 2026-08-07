@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { communicationLog, communicationRecipient, user } from "@/db/schema";
 import {
@@ -29,14 +30,11 @@ const STATUS_GROUPS: Record<
   skipped: ["skipped"],
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** The message itself, or null if there's no such message for this church.
  *  A malformed id is simply "not found" — Postgres would otherwise reject the
  *  uuid cast and turn a stale link into a server error. */
 export async function getMessage(churchId: string, id: string) {
-  if (!UUID_RE.test(id)) return null;
+  if (!z.string().uuid().safeParse(id).success) return null;
   const [row] = await db
     .select({
       id: communicationLog.id,

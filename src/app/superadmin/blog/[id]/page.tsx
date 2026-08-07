@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { blogPost } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
@@ -15,6 +16,9 @@ export default async function BlogEditorPage({
 }) {
   await requireSuperAdmin();
   const { id } = await params;
+  // A malformed id is "not found", not a server error — Postgres rejects the
+  // uuid cast outright.
+  if (!z.string().uuid().safeParse(id).success) notFound();
 
   const [post] = await db
     .select()

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/db";
 import { supportTicket, supportMessage } from "@/db/schema";
@@ -21,6 +22,10 @@ export default async function ChurchTicketPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // A malformed id is "not found", not a server error — Postgres rejects the
+  // uuid cast outright.
+  if (!z.string().uuid().safeParse(id).success) notFound();
+
   const { church } = await requireChurch();
 
   const [ticket] = await db
