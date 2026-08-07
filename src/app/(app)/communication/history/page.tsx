@@ -226,9 +226,10 @@ export default async function CommunicationHistoryPage({
                 const meta = CHANNEL_META[r.channel];
                 const Icon = meta?.icon ?? Send;
                 return (
-                  <div
+                  <Link
                     key={r.id}
-                    className="flex items-start gap-3 rounded-xl border p-3"
+                    href={`/communication/history/${r.id}`}
+                    className="hover:border-primary/40 hover:bg-accent/40 flex items-start gap-3 rounded-xl border p-3 transition-colors"
                   >
                     <div className="bg-primary/10 text-primary grid size-9 shrink-0 place-items-center rounded-lg">
                       <Icon className="size-4" />
@@ -241,6 +242,9 @@ export default async function CommunicationHistoryPage({
                           <Badge variant="destructive">
                             {r.failed} failed
                           </Badge>
+                        )}
+                        {r.skipped > 0 && (
+                          <Badge variant="outline">{r.skipped} skipped</Badge>
                         )}
                       </div>
                       {r.subject && (
@@ -257,7 +261,8 @@ export default async function CommunicationHistoryPage({
                         {r.sentBy ? ` · by ${r.sentBy}` : ""}
                       </p>
                     </div>
-                  </div>
+                    <ChevronRight className="text-muted-foreground mt-1 size-5 shrink-0" />
+                  </Link>
                 );
               })}
             </CardContent>

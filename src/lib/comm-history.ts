@@ -130,6 +130,7 @@ export type HistoryRow = {
   recipients: number;
   sent: number;
   failed: number;
+  skipped: number;
   units: number;
   cost: number;
   sentBy: string | null;
@@ -145,6 +146,7 @@ const rowCols = {
   recipients: communicationLog.recipients,
   sent: communicationLog.sent,
   failed: communicationLog.failed,
+  skipped: communicationLog.skipped,
   units: communicationLog.units,
   cost: communicationLog.cost,
   sentBy: user.name,
@@ -160,6 +162,7 @@ type RawRow = {
   recipients: number;
   sent: number;
   failed: number;
+  skipped: number;
   units: number;
   cost: number;
   sentBy: string | null;
@@ -207,6 +210,7 @@ export const HISTORY_CSV_HEADERS = [
   "Recipients",
   "Sent",
   "Failed",
+  "Skipped",
   "SMS units",
   "Cost",
   "Sent by",
@@ -236,6 +240,7 @@ export async function getHistoryExportRows(
       r.recipients,
       r.sent,
       r.failed,
+      r.skipped,
       r.units,
       r.cost,
       r.sentBy ?? "",

@@ -87,8 +87,25 @@ export async function sendChurchSms(opts: {
   return { ok: true, cost, balance: newBalance };
 }
 
+/** What happened to one phone number in a batch. `phone` is the number as it
+ *  was given to us, so the caller can match it back to a person. */
+export type SmsOutcome = {
+  phone: string;
+  status: "sent" | "failed" | "skipped";
+  error?: string;
+};
+
 export type BatchSmsResult =
-  | { ok: true; sent: number; failed: number; cost: number; balance: number }
+  | {
+      ok: true;
+      sent: number;
+      failed: number;
+      /** Numbers we never attempted because they weren't usable. */
+      skipped: number;
+      cost: number;
+      balance: number;
+      outcomes: SmsOutcome[];
+    }
   | { ok: false; error: string };
 
 /**
@@ -121,10 +138,23 @@ export async function sendChurchSmsBatch(opts: {
       error: "Your SMS sender ID isn't approved yet. Apply in Settings → SMS.",
     };
 
-  // Normalise + drop invalid numbers.
-  const valid = opts.recipients
-    .map((r) => ({ phone: normalizePhone(r.phone), message: r.message }))
-    .filter((r): r is { phone: string; message: string } => !!r.phone);
+  // Normalise. An unusable number is reported back as "skipped" rather than
+  // silently dropped — otherwise a send to 120 quietly becomes a send to 116
+  // and nobody can tell which four were left out.
+  const outcomes: SmsOutcome[] = [];
+  const valid: { phone: string; original: string; message: string }[] = [];
+  for (const r of opts.recipients) {
+    const phone = normalizePhone(r.phone);
+    if (!phone) {
+      outcomes.push({
+        phone: r.phone,
+        status: "skipped",
+        error: "Not a usable phone number",
+      });
+      continue;
+    }
+    valid.push({ phone, original: r.phone, message: r.message });
+  }
   if (valid.length === 0)
     return { ok: false, error: "No valid phone numbers to send to." };
 
@@ -139,23 +169,33 @@ export async function sendChurchSmsBatch(opts: {
     };
 
   // Group identical messages → one gateway call each.
-  const groups = new Map<string, string[]>();
+  const groups = new Map<string, { phone: string; original: string }[]>();
   for (const r of valid) {
     const arr = groups.get(r.message) ?? [];
-    arr.push(r.phone);
+    arr.push({ phone: r.phone, original: r.original });
     groups.set(r.message, arr);
   }
 
   let sent = 0;
   let failed = 0;
   let spent = 0;
-  for (const [message, phones] of groups) {
-    const res = await sendSms({ to: phones, message, senderId: c.senderId });
+  for (const [message, people] of groups) {
+    const res = await sendSms({
+      to: people.map((p) => p.phone),
+      message,
+      senderId: c.senderId,
+    });
     if (res.ok) {
-      sent += phones.length;
-      spent += price * smsPages(message) * phones.length;
+      sent += people.length;
+      spent += price * smsPages(message) * people.length;
+      // One call covers the whole group, so the gateway's verdict applies to
+      // every number in it.
+      for (const p of people)
+        outcomes.push({ phone: p.original, status: "sent" });
     } else {
-      failed += phones.length;
+      failed += people.length;
+      for (const p of people)
+        outcomes.push({ phone: p.original, status: "failed", error: res.error });
     }
   }
   spent = +spent.toFixed(2);
@@ -181,5 +221,13 @@ export async function sendChurchSmsBatch(opts: {
   }
 
   if (sent > 0) await recordUsage("sms", opts.churchId, sent);
-  return { ok: true, sent, failed, cost: spent, balance: newBalance };
+  return {
+    ok: true,
+    sent,
+    failed,
+    skipped: outcomes.filter((o) => o.status === "skipped").length,
+    cost: spent,
+    balance: newBalance,
+    outcomes,
+  };
 }

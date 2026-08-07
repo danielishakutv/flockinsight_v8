@@ -69,6 +69,28 @@ export const communicationChannelEnum = pgEnum("communication_channel", [
   "notification",
 ]);
 
+/**
+ * Per-recipient outcome of one send.
+ *
+ *   skipped   – never attempted: no phone/email on file, or the number was
+ *               unusable. The commonest reason a "bulk send to 120" reaches
+ *               fewer than 120 people.
+ *   failed    – attempted, but the gateway/mailer rejected it.
+ *   sent      – handed to the gateway and accepted.
+ *   delivered – confirmed delivered to the handset by a delivery receipt.
+ *   undelivered – the carrier told us it never landed (DND, unreachable…).
+ *
+ * `sent` is as far as we can currently know for SMS; `delivered`/`undelivered`
+ * exist so Termii delivery reports can upgrade a row without a migration.
+ */
+export const deliveryStatusEnum = pgEnum("delivery_status", [
+  "skipped",
+  "failed",
+  "sent",
+  "delivered",
+  "undelivered",
+]);
+
 /* ============================================================
  * Better Auth — core tables
  * Property names are camelCase to match Better Auth field names;
@@ -1251,10 +1273,57 @@ export const communicationLog = pgTable(
     cost: numeric({ precision: 14, scale: 2, mode: "number" })
       .notNull()
       .default(0),
+    // Never attempted — no phone/email on file, or an unusable number. Kept
+    // separate from `failed` so `recipients` always reconciles as
+    // sent + failed + skipped.
+    skipped: integer().notNull().default(0),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("comm_log_church_idx").on(t.churchId)],
+);
+
+/**
+ * One row per person per send — the answer to "who actually got it?".
+ *
+ * The aggregate counts on communication_log say 117 of 120 delivered; this
+ * table says which three didn't and why. Rows are kept even if the member is
+ * later deleted (memberId goes null), because `name` and `destination`
+ * preserve a readable record of what was attempted.
+ */
+export const communicationRecipient = pgTable(
+  "communication_recipient",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    logId: uuid()
+      .notNull()
+      .references(() => communicationLog.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    // Snapshot of who this was, so the log still reads correctly later.
+    name: text(),
+    // The phone number or email address actually used. Null when the reason
+    // for skipping is that there was none.
+    destination: text(),
+    status: deliveryStatusEnum().notNull(),
+    // Why it didn't work, in words a church admin can act on.
+    error: text(),
+    // Gateway's id for this message, for reconciling delivery reports later.
+    providerMessageId: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("comm_recipient_log_idx").on(t.logId),
+    index("comm_recipient_church_idx").on(t.churchId),
+    index("comm_recipient_member_idx").on(t.memberId),
+    index("comm_recipient_status_idx").on(t.status),
+  ],
 );
 
 /* ============================================================

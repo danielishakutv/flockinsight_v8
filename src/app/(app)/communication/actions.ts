@@ -17,6 +17,11 @@ import {
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
+import {
+  recordRecipients,
+  tally,
+  type RecipientOutcome,
+} from "@/lib/comm-recipients";
 import { normalizePhone, smsPages } from "@/lib/sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
@@ -44,6 +49,14 @@ type Recipient = {
   phone: string | null;
   email: string | null;
 };
+
+/**
+ * Hand-typed contacts get a synthetic `contact:<value>` id — they aren't
+ * members, so they must not be written to the member foreign key.
+ */
+function memberIdOf(r: Recipient): string | null {
+  return r.id.startsWith("contact:") ? null : r.id;
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -192,9 +205,23 @@ export async function sendCommunication(
     return { ok: false, error: "No recipients matched your selection." };
 
   if (d.channel === "sms") {
-    const list = recipients
-      .filter((r) => r.phone)
-      .map((r) => ({ phone: r.phone as string, message: fill(d.body, r.name, c.name) }));
+    // People with no number on file are part of the story — they're recorded
+    // as skipped rather than quietly vanishing from the count.
+    const reachable = recipients.filter((r) => r.phone);
+    const outcomes: RecipientOutcome[] = recipients
+      .filter((r) => !r.phone)
+      .map((r) => ({
+        memberId: memberIdOf(r),
+        name: r.name,
+        destination: null,
+        status: "skipped" as const,
+        error: "No phone number on file",
+      }));
+
+    const list = reachable.map((r) => ({
+      phone: r.phone as string,
+      message: fill(d.body, r.name, c.name),
+    }));
     if (list.length === 0)
       return {
         ok: false,
@@ -212,19 +239,44 @@ export async function sendCommunication(
     });
     if (!res.ok) return res;
 
+    // Match each gateway outcome back to the person it belongs to. Outcomes
+    // come back keyed by the number exactly as we supplied it.
+    const byPhone = new Map<string, Recipient[]>();
+    for (const r of reachable) {
+      const arr = byPhone.get(r.phone as string) ?? [];
+      arr.push(r);
+      byPhone.set(r.phone as string, arr);
+    }
+    for (const o of res.outcomes) {
+      const person = byPhone.get(o.phone)?.shift();
+      outcomes.push({
+        memberId: person ? memberIdOf(person) : null,
+        name: person?.name ?? null,
+        destination: o.phone,
+        status: o.status,
+        error: o.error ?? null,
+      });
+    }
+
+    const counts = tally(outcomes);
     const units = smsPages(d.body) * res.sent;
-    await db.insert(communicationLog).values({
-      churchId: c.id,
-      channel: "sms",
-      audience: d.audienceLabel,
-      body: d.body,
-      recipients: list.length,
-      sent: res.sent,
-      failed: res.failed,
-      units,
-      cost: res.cost,
-      createdBy: u.id,
-    });
+    const [log] = await db
+      .insert(communicationLog)
+      .values({
+        churchId: c.id,
+        channel: "sms",
+        audience: d.audienceLabel,
+        body: d.body,
+        recipients: counts.recipients,
+        sent: counts.sent,
+        failed: counts.failed,
+        skipped: counts.skipped,
+        units,
+        cost: res.cost,
+        createdBy: u.id,
+      })
+      .returning({ id: communicationLog.id });
+    await recordRecipients(log.id, c.id, outcomes);
     try {
       await recordAction({
         churchId: c.id,
@@ -252,6 +304,16 @@ export async function sendCommunication(
           : "None of those members have an email address.",
     };
 
+  const outcomes: RecipientOutcome[] = recipients
+    .filter((r) => !r.email)
+    .map((r) => ({
+      memberId: memberIdOf(r),
+      name: r.name,
+      destination: null,
+      status: "skipped" as const,
+      error: "No email address on file",
+    }));
+
   const subjectBase = d.subject || `A message from ${c.name}`;
   const results = await Promise.allSettled(
     list.map((r) => {
@@ -264,34 +326,56 @@ export async function sendCommunication(
       return sendEmail({ to: r.email as string, subject: subj, html, text, fromName: c.name });
     }),
   );
-  const sent = results.filter((x) => x.status === "fulfilled" && x.value).length;
-  if (sent > 0) await recordUsage("email", c.id, sent);
-
-  await db.insert(communicationLog).values({
-    churchId: c.id,
-    channel: "email",
-    audience: d.audienceLabel,
-    subject: d.subject || null,
-    body: d.body,
-    recipients: list.length,
-    sent,
-    failed: list.length - sent,
-    createdBy: u.id,
+  // results[i] lines up with list[i], so each address keeps its own verdict.
+  results.forEach((x, i) => {
+    const r = list[i];
+    const ok = x.status === "fulfilled" && x.value;
+    outcomes.push({
+      memberId: memberIdOf(r),
+      name: r.name,
+      destination: r.email,
+      status: ok ? "sent" : "failed",
+      error: ok
+        ? null
+        : x.status === "rejected"
+          ? String((x.reason as Error)?.message ?? x.reason).slice(0, 300)
+          : "The mail server did not accept this address",
+    });
   });
+
+  const counts = tally(outcomes);
+  if (counts.sent > 0) await recordUsage("email", c.id, counts.sent);
+
+  const [log] = await db
+    .insert(communicationLog)
+    .values({
+      churchId: c.id,
+      channel: "email",
+      audience: d.audienceLabel,
+      subject: d.subject || null,
+      body: d.body,
+      recipients: counts.recipients,
+      sent: counts.sent,
+      failed: counts.failed,
+      skipped: counts.skipped,
+      createdBy: u.id,
+    })
+    .returning({ id: communicationLog.id });
+  await recordRecipients(log.id, c.id, outcomes);
   try {
     await recordAction({
       churchId: c.id,
       userId: u.id,
       name: "email.sent",
       plan: c.plan,
-      props: { sent },
+      props: { sent: counts.sent },
     });
   } catch {
     /* best-effort */
   }
   revalidatePath("/communication");
   revalidatePath("/communication/history");
-  return { ok: true, sent, failed: list.length - sent };
+  return { ok: true, sent: counts.sent, failed: counts.failed };
 }
 
 const staffSchema = z.object({
@@ -365,17 +449,33 @@ export async function notifyStaff(
     emailSent = results.filter((x) => x.status === "fulfilled" && x.value).length;
   }
 
-  await db.insert(communicationLog).values({
-    churchId: c.id,
-    channel: "notification",
-    audience: "All staff",
-    subject: d.title,
-    body: d.body,
-    recipients: userIds.length,
-    sent: userIds.length,
-    failed: 0,
-    createdBy: u.id,
-  });
+  const [log] = await db
+    .insert(communicationLog)
+    .values({
+      churchId: c.id,
+      channel: "notification",
+      audience: "All staff",
+      subject: d.title,
+      body: d.body,
+      recipients: userIds.length,
+      sent: userIds.length,
+      failed: 0,
+      createdBy: u.id,
+    })
+    .returning({ id: communicationLog.id });
+  // An in-app notice always lands for every staff member — there's no
+  // per-person failure mode — but recording them keeps the detail view
+  // consistent across all three channels.
+  await recordRecipients(
+    log.id,
+    c.id,
+    staffRows.map((s) => ({
+      memberId: null,
+      name: s.email,
+      destination: s.email,
+      status: "sent" as const,
+    })),
+  );
   revalidatePath("/communication");
   revalidatePath("/communication/history");
   revalidatePath("/notifications");

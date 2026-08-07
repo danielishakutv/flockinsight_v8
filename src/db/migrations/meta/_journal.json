@@ -337,6 +337,13 @@
       "when": 1785137124069,
       "tag": "0047_pledge_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1786088946678,
+      "tag": "0048_communication_recipients",
+      "breakpoints": true
     }
   ]
 }
