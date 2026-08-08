@@ -3,9 +3,18 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, usageStat } from "@/db/schema";
 
+/**
+ * What a usage row counts.
+ *
+ * `sms` counts *recipients* (one per message delivered) and `sms_pages` counts
+ * billable 160-character pages. They differ for any message over 160 chars,
+ * and only `sms_pages` can be reconciled against what Termii charges us.
+ */
+export type UsageMetric = "email" | "sms" | "sms_pages";
+
 /** Increment a daily usage counter for a church. Never throws. */
 export async function recordUsage(
-  metric: "email" | "sms",
+  metric: UsageMetric,
   churchId: string,
   n = 1,
 ): Promise<void> {
@@ -26,7 +35,7 @@ export async function recordUsage(
 
 /** Platform-wide total for a metric, optionally since a day (YYYY-MM-DD). */
 export async function metricTotal(
-  metric: "email" | "sms",
+  metric: UsageMetric,
   sinceDay?: string,
 ): Promise<number> {
   const where = sinceDay
@@ -74,7 +83,7 @@ export async function churchUsageSince(
 
 /** Top churches by a metric (all time). */
 export async function topChurchesByMetric(
-  metric: "email" | "sms",
+  metric: UsageMetric,
   limit = 5,
 ): Promise<{ name: string; total: number }[]> {
   const rows = await db

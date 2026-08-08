@@ -84,6 +84,13 @@ export async function sendChurchSms(opts: {
   });
 
   await recordUsage("sms", opts.churchId, recipients.length);
+  // Pages, not recipients — a 300-character message is 2 pages per recipient,
+  // and only the page count reconciles against what Termii charges us.
+  await recordUsage(
+    "sms_pages",
+    opts.churchId,
+    smsPages(opts.message) * recipients.length,
+  );
   return { ok: true, cost, balance: newBalance };
 }
 
@@ -179,6 +186,7 @@ export async function sendChurchSmsBatch(opts: {
   let sent = 0;
   let failed = 0;
   let spent = 0;
+  let pagesSent = 0;
   for (const [message, people] of groups) {
     const res = await sendSms({
       to: people.map((p) => p.phone),
@@ -188,6 +196,7 @@ export async function sendChurchSmsBatch(opts: {
     if (res.ok) {
       sent += people.length;
       spent += price * smsPages(message) * people.length;
+      pagesSent += smsPages(message) * people.length;
       // One call covers the whole group, so the gateway's verdict applies to
       // every number in it.
       for (const p of people)
@@ -221,6 +230,7 @@ export async function sendChurchSmsBatch(opts: {
   }
 
   if (sent > 0) await recordUsage("sms", opts.churchId, sent);
+  if (pagesSent > 0) await recordUsage("sms_pages", opts.churchId, pagesSent);
   return {
     ok: true,
     sent,
