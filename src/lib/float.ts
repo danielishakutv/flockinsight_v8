@@ -230,15 +230,30 @@ async function buildFloatOverview(): Promise<FloatOverview> {
   };
 }
 
+const cachedFloat = unstable_cache(buildFloatOverview, ["float-overview"], {
+  revalidate: 300,
+  tags: ["float"],
+});
+
 /**
- * Cached for 5 minutes and tagged so the Refresh button can bust it on demand
- * via `revalidateTag("float")`.
+ * Cached for 5 minutes and tagged so Refresh can bust it on demand.
+ *
+ * `unstable_cache` round-trips through JSON, so Dates arrive as strings on a
+ * cache hit and as Dates on a miss. They are revived here — without this the
+ * float panel breaks intermittently depending only on cache state.
  */
-export const getFloatOverview = unstable_cache(
-  buildFloatOverview,
-  ["float-overview"],
-  { revalidate: 300, tags: ["float"] },
-);
+export async function getFloatOverview(): Promise<FloatOverview> {
+  const f = await cachedFloat();
+  return {
+    ...f,
+    fetchedAt: f.fetchedAt ? new Date(f.fetchedAt) : null,
+    runsDryAt: f.runsDryAt ? new Date(f.runsDryAt) : null,
+    history: f.history.map((h) => ({
+      fetchedAt: new Date(h.fetchedAt),
+      balance: h.balance,
+    })),
+  };
+}
 
 /** Uncached — used by the alert cron, which must never act on stale numbers. */
 export const getFloatOverviewFresh = buildFloatOverview;

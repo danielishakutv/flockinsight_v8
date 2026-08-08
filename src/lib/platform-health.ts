@@ -63,11 +63,24 @@ async function loadChurchSignals(): Promise<ChurchSignal[]> {
   }));
 }
 
-export const getChurchSignals = unstable_cache(
-  loadChurchSignals,
-  ["church-signals"],
-  { revalidate: 60, tags: ["platform-stats"] },
-);
+const cachedSignals = unstable_cache(loadChurchSignals, ["church-signals"], {
+  revalidate: 60,
+  tags: ["platform-stats"],
+});
+
+/**
+ * NOTE: `unstable_cache` round-trips through JSON, so Dates come back as
+ * strings on a cache hit and as Dates on a miss. Every cached accessor in this
+ * file revives them, otherwise callers get an intermittent
+ * "toISOString is not a function" depending purely on cache state.
+ */
+export async function getChurchSignals(): Promise<ChurchSignal[]> {
+  const rows = await cachedSignals();
+  return rows.map((r) => ({
+    ...r,
+    lastSeenAt: r.lastSeenAt ? new Date(r.lastSeenAt) : null,
+  }));
+}
 
 export type FunnelRow = { churchId: string; flags: FunnelFlags; completed: number };
 
@@ -201,11 +214,20 @@ async function loadChurchHealth(): Promise<ChurchHealthRow[]> {
   });
 }
 
-export const getChurchHealth = unstable_cache(
-  loadChurchHealth,
-  ["church-health"],
-  { revalidate: 60, tags: ["platform-stats"] },
-);
+const cachedHealth = unstable_cache(loadChurchHealth, ["church-health"], {
+  revalidate: 60,
+  tags: ["platform-stats"],
+});
+
+/** Revives Dates lost to the cache's JSON round-trip (see note above). */
+export async function getChurchHealth(): Promise<ChurchHealthRow[]> {
+  const rows = await cachedHealth();
+  return rows.map((r) => ({
+    ...r,
+    createdAt: new Date(r.createdAt),
+    lastSeenAt: r.lastSeenAt ? new Date(r.lastSeenAt) : null,
+  }));
+}
 
 export type HealthCounts = Record<ChurchHealth, number>;
 
