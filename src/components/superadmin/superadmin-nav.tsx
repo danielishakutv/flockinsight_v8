@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   Database,
+  HeartPulse,
   Image as ImageIcon,
   LayoutDashboard,
   LifeBuoy,
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 const tabs: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Overview", href: "/superadmin", icon: LayoutDashboard },
+  { label: "Health", href: "/superadmin/health", icon: HeartPulse },
   { label: "Usage", href: "/superadmin/usage", icon: BarChart3 },
   { label: "Churches", href: "/superadmin/churches", icon: Building2 },
   { label: "Users", href: "/superadmin/users", icon: Users },
