@@ -1954,6 +1954,70 @@ export const analyticsEvent = pgTable(
 );
 
 /* ============================================================
+ * Platform health & the Termii master wallet ("the float")
+ * ========================================================== */
+
+/**
+ * One row per cron execution. Without this there is no way to tell a job that
+ * ran and had nothing to do from a job that never ran at all — which is
+ * exactly the failure mode of a lost crontab after a reboot.
+ */
+export const cronRun = pgTable(
+  "cron_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    job: text().notNull(), // "reminders" | "storage" | "platform-health" | ...
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp({ withTimezone: true }),
+    ok: boolean(),
+    durationMs: integer(),
+    error: text(),
+    meta: jsonb().$type<Record<string, unknown>>(),
+  },
+  (t) => [index("cron_run_job_idx").on(t.job, t.startedAt)],
+);
+
+/**
+ * A reading of the Termii master account balance. Written on every check,
+ * success or failure — the failure rows are what prove the gateway is
+ * unreachable, and the successful ones give the burn-rate history that
+ * runway is computed from. `balance` is null when the fetch failed.
+ */
+export const termiiSnapshot = pgTable(
+  "termii_snapshot",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    balance: numeric({ precision: 14, scale: 2, mode: "number" }),
+    currency: text(),
+    ok: boolean().notNull(),
+    error: text(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("termii_snapshot_fetched_idx").on(t.fetchedAt)],
+);
+
+/**
+ * Open/resolved platform problems. `key` is unique and upserted so a condition
+ * that stays true neither duplicates rows nor re-notifies; the operator is
+ * told once when it opens and once when it recovers. Rows are never deleted —
+ * the history is the audit trail.
+ */
+export const platformAlert = pgTable(
+  "platform_alert",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    key: text().notNull().unique(), // "float.runway.critical", "cron.storage.overdue"
+    severity: text().notNull(), // "info" | "warning" | "critical"
+    state: text().notNull().default("open"), // "open" | "resolved"
+    message: text().notNull(),
+    openedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp({ withTimezone: true }),
+    lastNotifiedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("platform_alert_state_idx").on(t.state, t.severity)],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
@@ -1998,4 +2062,7 @@ export type FirstTimerSetting = typeof firstTimerSetting.$inferSelect;
 export type BlogPost = typeof blogPost.$inferSelect;
 export type NewBlogPost = typeof blogPost.$inferInsert;
 export type AnalyticsEvent = typeof analyticsEvent.$inferSelect;
+export type CronRun = typeof cronRun.$inferSelect;
+export type TermiiSnapshot = typeof termiiSnapshot.$inferSelect;
+export type PlatformAlert = typeof platformAlert.$inferSelect;
 export type EventGuest = typeof eventGuest.$inferSelect;
