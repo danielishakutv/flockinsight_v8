@@ -119,14 +119,9 @@ async function KeyNumbers() {
     getFloatOverview(),
   ]);
 
-  // A runway in days is abstract; a date is not. Show when it actually runs dry.
-  const dryDate =
-    float.runwayDays !== null
-      ? format(
-          new Date(Date.now() + float.runwayDays * 86_400_000),
-          "EEE d MMM",
-        )
-      : null;
+  // A runway in days is abstract; a date is not. Computed in lib/float.ts so
+  // no impure clock call happens during render.
+  const dryDate = float.runsDryAt ? format(float.runsDryAt, "EEE d MMM") : null;
 
   const runwayValue =
     float.runwayDays === null

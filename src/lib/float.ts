@@ -49,6 +49,11 @@ export type FloatOverview = {
   consecutiveFailures: number;
   dailyBurn: number | null;
   runwayDays: number | null;
+  /**
+   * When the balance is projected to hit zero. A date is concrete in a way
+   * "12 days" is not — and computing it here keeps `Date.now()` out of render.
+   */
+  runsDryAt: Date | null;
   coverage: number | null;
   liabilityPages: number;
   liabilityValue: number;
@@ -184,6 +189,11 @@ async function buildFloatOverview(): Promise<FloatOverview> {
   const stale =
     latest === null || now.getTime() - latest.fetchedAt.getTime() > STALE_AFTER_MS;
 
+  const runway =
+    balance === null || dailyBurn === null
+      ? null
+      : runwayDays({ balance, dailyBurn });
+
   return {
     configured: isTermiiConfigured(),
     balance,
@@ -192,10 +202,9 @@ async function buildFloatOverview(): Promise<FloatOverview> {
     stale,
     consecutiveFailures: failures,
     dailyBurn,
-    runwayDays:
-      balance === null || dailyBurn === null
-        ? null
-        : runwayDays({ balance, dailyBurn }),
+    runwayDays: runway,
+    runsDryAt:
+      runway === null ? null : new Date(now.getTime() + runway * 86_400_000),
     coverage:
       balance === null || unitCost === null
         ? null

@@ -5,6 +5,10 @@ import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
 import { Logo } from "@/components/brand";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import { SuperadminNav } from "@/components/superadmin/superadmin-nav";
+import {
+  CommandPalette,
+  CommandPaletteHint,
+} from "@/components/superadmin/command-palette";
 
 export const metadata = { title: "Platform Admin" };
 
@@ -32,6 +36,7 @@ export default async function SuperadminLayout({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <CommandPaletteHint />
             <Link
               href="/dashboard"
               className="text-muted-foreground hover:text-foreground hidden items-center gap-1 text-sm font-medium sm:inline-flex"
@@ -49,6 +54,8 @@ export default async function SuperadminLayout({
       <main className="mx-auto max-w-6xl px-4 py-6 lg:px-8 lg:py-8">
         {children}
       </main>
+
+      <CommandPalette />
     </div>
   );
 }

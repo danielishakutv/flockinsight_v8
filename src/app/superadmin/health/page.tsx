@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Database, HardDrive } from "lucide-react";
 import { db } from "@/db";
@@ -72,6 +72,7 @@ async function Float() {
   const view: FloatView = {
     ...f,
     fetchedAt: f.fetchedAt ? f.fetchedAt.toISOString() : null,
+    runsDryAt: f.runsDryAt ? f.runsDryAt.toISOString() : null,
     history: f.history.map((h) => ({
       fetchedAt: h.fetchedAt.toISOString(),
       balance: h.balance,
@@ -118,6 +119,16 @@ async function Integrations() {
   return <IntegrationTable items={items} />;
 }
 
+const BACKUP_MAX_AGE_MS = 48 * 3_600_000;
+
+/**
+ * Outside the component on purpose: reading the clock during render is impure,
+ * and the lint rule that catches it is right to.
+ */
+function isStale(newestMtime: number | null): boolean {
+  return newestMtime === null || Date.now() - newestMtime > BACKUP_MAX_AGE_MS;
+}
+
 async function DataAndBackups() {
   const [sizeRow, counts, backups] = await Promise.all([
     db.execute(sql`select pg_size_pretty(pg_database_size(current_database())) as size`),
@@ -137,6 +148,7 @@ async function DataAndBackups() {
     events?: string;
   };
   const newest = backups.length > 0 ? Math.max(...backups.map((b) => b.mtime)) : null;
+  const backupIsStale = isStale(newest);
 
   const storage = await db
     .select({
@@ -175,11 +187,7 @@ async function DataAndBackups() {
               ? formatDistanceToNowStrict(new Date(newest), { addSuffix: true })
               : "None found"
           }
-          tone={
-            newest === null || Date.now() - newest > 48 * 3_600_000
-              ? "bad"
-              : undefined
-          }
+          tone={backupIsStale ? "bad" : undefined}
         />
       </CardContent>
     </Card>

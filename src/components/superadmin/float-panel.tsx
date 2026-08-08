@@ -28,6 +28,8 @@ export type FloatView = {
   consecutiveFailures: number;
   dailyBurn: number | null;
   runwayDays: number | null;
+  /** Projected zero date, precomputed server-side (ISO). */
+  runsDryAt: string | null;
   coverage: number | null;
   liabilityPages: number;
   liabilityValue: number;
@@ -110,11 +112,10 @@ export function FloatPanel({
           ? "warn"
           : "good";
 
-  // A date is concrete in a way "12 days" is not.
-  const dryDate =
-    float.runwayDays !== null
-      ? format(new Date(Date.now() + float.runwayDays * 86_400_000), "EEE d MMM")
-      : null;
+  // A date is concrete in a way "12 days" is not. Computed server-side.
+  const dryDate = float.runsDryAt
+    ? format(new Date(float.runsDryAt), "EEE d MMM")
+    : null;
 
   return (
     <Card>
