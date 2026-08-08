@@ -25,6 +25,13 @@ import {
   setChurchStatus,
 } from "@/app/superadmin/actions";
 import { formatMoney } from "@/lib/money";
+import { HEALTH_LABELS, type ChurchHealth } from "@/lib/health-rules";
+import {
+  FunnelDots,
+  HealthBadge,
+  LastSeen,
+} from "@/components/superadmin/health-badge";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,9 +59,40 @@ export type ChurchRow = {
   memberCount: number;
   groupCount: number;
   sessionCount: number;
-  lastActivity: string | null;
+  /** Newest activity across every module, ISO. Null = genuinely never used. */
+  lastSeenAt: string | null;
+  health: ChurchHealth;
+  funnelCompleted: number;
   totalGiving: number;
+  /** Payments + wallet top-ups, all time. */
+  revenue: number;
+  /** SMS pages + storage add-ons, all time. */
+  cost: number;
 };
+
+type FilterKey = "all" | ChurchHealth;
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "healthy", label: "Healthy" },
+  { key: "idle", label: "Idle" },
+  { key: "at_risk", label: "At risk" },
+  { key: "never_activated", label: "Never activated" },
+  { key: "dormant", label: "Dormant" },
+  { key: "suspended", label: "Suspended" },
+];
+
+type SortKey = "recent" | "members" | "revenue" | "joined";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "recent", label: "Last active" },
+  { key: "members", label: "Members" },
+  { key: "revenue", label: "Revenue" },
+  { key: "joined", label: "Joined" },
+];
+
+/** Churches past this count get paged so the list stays fast. */
+const PAGE_SIZE = 100;
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
@@ -72,19 +110,55 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [sort, setSort] = useState<SortKey>("recent");
+  const [page, setPage] = useState(0);
 
   // Delete confirmation state.
   const [deleteTarget, setDeleteTarget] = useState<ChurchRow | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const [deleting, startDelete] = useTransition();
 
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: churches.length };
+    for (const row of churches) c[row.health] = (c[row.health] ?? 0) + 1;
+    return c;
+  }, [churches]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return churches;
-    return churches.filter((c) =>
-      [c.name, c.slug].some((v) => v.toLowerCase().includes(q)),
-    );
-  }, [churches, query]);
+    const rows = churches.filter((c) => {
+      if (filter !== "all" && c.health !== filter) return false;
+      if (!q) return true;
+      // Owner email matters: it is how you actually reach someone.
+      return [c.name, c.slug, c.ownerEmail ?? ""].some((v) =>
+        v.toLowerCase().includes(q),
+      );
+    });
+
+    const at = (c: ChurchRow) =>
+      c.lastSeenAt ? Date.parse(c.lastSeenAt) : 0;
+
+    return [...rows].sort((a, b) => {
+      switch (sort) {
+        case "members":
+          return b.memberCount - a.memberCount;
+        case "revenue":
+          return b.revenue - a.revenue;
+        case "joined":
+          return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        default:
+          return at(b) - at(a);
+      }
+    });
+  }, [churches, query, filter, sort]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(
+    safePage * PAGE_SIZE,
+    safePage * PAGE_SIZE + PAGE_SIZE,
+  );
 
   const [enteringId, setEnteringId] = useState<string | null>(null);
   function enter(c: ChurchRow) {
@@ -148,25 +222,79 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-md">
-        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search churches"
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1 sm:max-w-md">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
+            placeholder="Search by name, URL or owner email"
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground text-xs font-semibold">
+            Sort
+          </span>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setSort(s.key)}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs font-bold transition",
+                sort === s.key
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Health buckets, with counts — the shape of the platform at a glance. */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {FILTERS.map((f) => {
+          const n = counts[f.key] ?? 0;
+          if (f.key !== "all" && n === 0) return null;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => {
+                setFilter(f.key);
+                setPage(0);
+              }}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
+                filter === f.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {f.label}
+              <span className="tabular-nums opacity-70">{n}</span>
+            </button>
+          );
+        })}
       </div>
 
       {filtered.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="text-muted-foreground py-10 text-center">
-            No churches found.
+            {filter === "all"
+              ? "No churches found."
+              : `No churches are ${HEALTH_LABELS[filter as ChurchHealth].toLowerCase()}.`}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {filtered.map((c) => {
+          {visible.map((c) => {
             const suspended = c.status === "suspended";
             const busy = busyId === c.id && pending;
             return (
@@ -183,12 +311,7 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                       <p className="group-hover:text-primary truncate font-bold transition-colors">
                         {c.name}
                       </p>
-                      <Badge
-                        variant={suspended ? "destructive" : "success"}
-                        className="capitalize"
-                      >
-                        {c.status}
-                      </Badge>
+                      <HealthBadge health={c.health} />
                       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                     </div>
                     <p className="text-muted-foreground truncate text-xs">
@@ -264,15 +387,58 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                     </p>
                   </div>
                 </div>
-                <p className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-xs">
-                  <UsersRound className="size-3.5" />
-                  {c.lastActivity
-                    ? `Last activity ${format(parseISO(c.lastActivity), "MMM d, yyyy")}`
-                    : "No activity recorded yet"}
-                </p>
+                <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    <UsersRound className="size-3.5" />
+                    <LastSeen at={c.lastSeenAt} />
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <FunnelDots completed={c.funnelCompleted} />
+                    <span>{c.funnelCompleted}/5 set up</span>
+                  </span>
+                  {c.revenue > 0 && (
+                    <span
+                      title="Payments and wallet top-ups, minus SMS and storage costs"
+                      className={cn(
+                        "font-semibold",
+                        c.revenue - c.cost < 0 && "text-destructive",
+                      )}
+                    >
+                      {formatMoney(c.revenue - c.cost, "NGN")} net
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <p className="text-muted-foreground text-xs">
+            Showing {safePage * PAGE_SIZE + 1}–
+            {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of{" "}
+            {filtered.length}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
 
