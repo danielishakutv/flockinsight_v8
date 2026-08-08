@@ -1,4 +1,5 @@
 import { runFirstTimers } from "@/lib/first-timers";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,8 +19,10 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const result = await runFirstTimers();
-  return new Response(JSON.stringify({ ok: true, ...result }), {
-    headers: { "Content-Type": "application/json" },
+  return withCronRun("first-timers", async () => {
+    const result = await runFirstTimers();
+    return new Response(JSON.stringify({ ok: true, ...result }), {
+      headers: { "Content-Type": "application/json" },
+    });
   });
 }

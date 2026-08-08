@@ -1,4 +1,5 @@
 import { runServiceReminders } from "@/lib/service-reminders";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,9 +20,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runServiceReminders();
-    return new Response(JSON.stringify({ ok: true, ...summary }), {
-      headers: { "Content-Type": "application/json" },
+    return await withCronRun("service-reminders", async () => {
+      const summary = await runServiceReminders();
+      return new Response(JSON.stringify({ ok: true, ...summary }), {
+        headers: { "Content-Type": "application/json" },
+      });
     });
   } catch (e) {
     console.error("[cron] service-reminders failed", e);

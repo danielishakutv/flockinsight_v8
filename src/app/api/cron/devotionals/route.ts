@@ -2,6 +2,7 @@ import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { devotional } from "@/db/schema";
 import { sendDevotional } from "@/lib/devotionals";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
   if (!secret || key !== secret)
     return new Response("Unauthorized", { status: 401 });
 
+  return withCronRun("devotionals", async () => {
   const due = await db
     .select({ id: devotional.id })
     .from(devotional)
@@ -41,5 +43,6 @@ export async function GET(request: Request) {
 
   return new Response(JSON.stringify({ ok: true, processed: due.length, sent, recipients }), {
     headers: { "Content-Type": "application/json" },
+  });
   });
 }

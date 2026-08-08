@@ -2,6 +2,7 @@ import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { broadcast } from "@/db/schema";
 import { deliverBroadcast } from "@/lib/broadcasts";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  return withCronRun("broadcasts", async () => {
   const due = await db
     .select()
     .from(broadcast)
@@ -68,4 +70,5 @@ export async function GET(request: Request) {
     JSON.stringify({ ok: true, delivered, emails, push }),
     { headers: { "Content-Type": "application/json" } },
   );
+  });
 }

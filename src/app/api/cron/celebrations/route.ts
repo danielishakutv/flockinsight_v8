@@ -1,4 +1,5 @@
 import { runCelebrations } from "@/lib/celebrations";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,10 +17,14 @@ export async function GET(request: Request) {
   if (!secret || key !== secret) {
     return new Response("Unauthorized", { status: 401 });
   }
+  // The throw must reach withCronRun so the failure is recorded, so it is
+  // caught outside the heartbeat rather than inside it.
   try {
-    const summary = await runCelebrations();
-    return new Response(JSON.stringify({ ok: true, ...summary }), {
-      headers: { "Content-Type": "application/json" },
+    return await withCronRun("celebrations", async () => {
+      const summary = await runCelebrations();
+      return new Response(JSON.stringify({ ok: true, ...summary }), {
+        headers: { "Content-Type": "application/json" },
+      });
     });
   } catch (e) {
     console.error("[cron] celebrations failed", e);

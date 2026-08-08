@@ -4,6 +4,7 @@ import { church, staff, user } from "@/db/schema";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
     url.searchParams.get("key");
   if (!secret || key !== secret) return new Response("Unauthorized", { status: 401 });
 
+  return withCronRun("trial-reminders", async () => {
   const now = new Date();
   const due = await db
     .select({
@@ -97,5 +99,6 @@ export async function GET(request: Request) {
 
   return new Response(JSON.stringify({ ok: true, reminded: sent }), {
     headers: { "Content-Type": "application/json" },
+  });
   });
 }

@@ -16,6 +16,7 @@ import {
   weekendRecordEmail,
 } from "@/lib/reminder-emails";
 import { runFirstTimers } from "@/lib/first-timers";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  return withCronRun("reminders", async () => {
   // Owners of active churches.
   const owners = await db
     .select({
@@ -190,4 +192,5 @@ export async function GET(request: Request) {
     JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers, senderIds, pledges }),
     { headers: { "Content-Type": "application/json" } },
   );
+  });
 }

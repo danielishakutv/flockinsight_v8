@@ -4,6 +4,7 @@ import { church } from "@/db/schema";
 import { debitWallet } from "@/lib/wallet";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
+import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  return withCronRun("storage", async () => {
   const now = new Date();
   const due = await db
     .select({
@@ -86,5 +88,6 @@ export async function GET(request: Request) {
 
   return new Response(JSON.stringify({ ok: true, renewed, lapsed }), {
     headers: { "Content-Type": "application/json" },
+  });
   });
 }
