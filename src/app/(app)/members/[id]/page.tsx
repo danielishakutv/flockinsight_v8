@@ -4,7 +4,16 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { ArrowLeft, ChevronRight, HandCoins, Home, UsersRound } from "lucide-react";
 import { db } from "@/db";
-import { group, groupMembership, household, member } from "@/db/schema";
+import {
+  group,
+  groupMembership,
+  household,
+  invitation,
+  member,
+  role,
+  staff,
+  staffInvite,
+} from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { householdOptions } from "@/lib/households";
@@ -20,6 +29,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MemberProfile } from "@/components/members/member-profile";
 import { MemberFamily } from "@/components/members/member-family";
 import { MemberUpdateLink } from "@/components/members/member-update-link";
+import {
+  MemberAccessCard,
+  type MemberAccess,
+} from "@/components/members/member-access-card";
 
 export const metadata = { title: "Member" };
 
@@ -173,6 +186,56 @@ export default async function MemberDetailPage({
   }));
   const householdName = householdRow[0]?.name ?? null;
 
+  // App access: can this person sign in, are they mid-invitation, or neither?
+  // Only loaded for admins, since only they can act on it.
+  const canManageTeam = await can("team.manage");
+  let access: MemberAccess = { state: "none" };
+  let accessRoles: { id: string; name: string; description: string | null }[] = [];
+
+  if (canManageTeam) {
+    if (m.userId) {
+      const [s] = await db
+        .select({ orgRole: staff.role, roleName: role.name })
+        .from(staff)
+        .leftJoin(role, eq(role.id, staff.roleId))
+        .where(
+          and(eq(staff.organizationId, church.id), eq(staff.userId, m.userId)),
+        )
+        .limit(1);
+      access = {
+        state: "active",
+        roleName: s?.roleName ?? null,
+        isOwner: s?.orgRole === "owner",
+      };
+    } else {
+      const [inv] = await db
+        .select({ id: invitation.id, email: invitation.email })
+        .from(staffInvite)
+        .innerJoin(invitation, eq(invitation.id, staffInvite.invitationId))
+        .where(
+          and(
+            eq(staffInvite.memberId, id),
+            eq(invitation.organizationId, church.id),
+            eq(invitation.status, "pending"),
+          ),
+        )
+        .limit(1);
+      if (inv) {
+        access = { state: "invited", email: inv.email, invitationId: inv.id };
+      }
+    }
+
+    accessRoles = await db
+      .select({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+      })
+      .from(role)
+      .where(and(eq(role.churchId, church.id), eq(role.isSystem, false)))
+      .orderBy(asc(role.name));
+  }
+
   return (
     <PageContainer className="max-w-2xl">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
@@ -185,6 +248,16 @@ export default async function MemberDetailPage({
       <p className="text-muted-foreground mb-6 mt-1">
         {m.isMinor ? "Child profile" : "Member profile"}
       </p>
+      {canManageTeam && !m.isMinor && (
+        <div className="mb-4">
+          <MemberAccessCard
+            member={{ id: m.id, name, email: m.email }}
+            access={access}
+            roles={accessRoles}
+          />
+        </div>
+      )}
+
       <MemberProfile
         member={m}
         canManage={canManage}
