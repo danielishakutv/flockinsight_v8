@@ -1,10 +1,17 @@
 "use server";
 
 import { headers } from "next/headers";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { church, invitation, staff, user } from "@/db/schema";
+import {
+  church,
+  invitation,
+  member,
+  staff,
+  staffInvite,
+  user,
+} from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { ensureMemberForUser } from "@/lib/member-link";
@@ -53,6 +60,15 @@ async function isMember(organizationId: string, userId: string) {
 }
 
 async function joinChurch(inv: LoadedInvitation, userId: string) {
+  // Set when this invitation was raised against a specific congregation member
+  // with a chosen church role (see lib/staff-access.ts and the members access
+  // actions). Absent for a plain invite-by-email.
+  const [side] = await db
+    .select({ memberId: staffInvite.memberId, roleId: staffInvite.roleId })
+    .from(staffInvite)
+    .where(eq(staffInvite.invitationId, inv.id))
+    .limit(1);
+
   const wasMember = await isMember(inv.organizationId, userId);
   if (!wasMember) {
     await db.insert(staff).values({
@@ -60,6 +76,9 @@ async function joinChurch(inv: LoadedInvitation, userId: string) {
       organizationId: inv.organizationId,
       userId,
       role: inv.role ?? "member",
+      // They arrive with the role they were invited as, instead of running on
+      // fallback permissions until someone remembers to assign one.
+      roleId: side?.roleId ?? null,
     });
   }
   await db
@@ -68,7 +87,28 @@ async function joinChurch(inv: LoadedInvitation, userId: string) {
     .where(eq(invitation.id, inv.id));
 
   // Link (or create) this person's member profile so we don't duplicate them.
-  if (!wasMember) await ensureMemberForUser(inv.organizationId, userId);
+  if (!wasMember) {
+    let linked = false;
+    if (side?.memberId) {
+      // Link by id, not by email: editing an email between invite and
+      // acceptance must never attach the login to the wrong person.
+      const res = await db
+        .update(member)
+        .set({ userId })
+        .where(
+          and(
+            eq(member.id, side.memberId),
+            eq(member.churchId, inv.organizationId),
+            isNull(member.userId),
+          ),
+        )
+        .returning({ id: member.id });
+      linked = res.length > 0;
+    }
+    // No side row, or that member was deleted or already linked meanwhile.
+    // Joining must never fail over this.
+    if (!linked) await ensureMemberForUser(inv.organizationId, userId);
+  }
 
   // Notify the church's managers that someone joined (in-app only).
   if (!wasMember) {
