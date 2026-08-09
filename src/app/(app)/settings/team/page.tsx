@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { staff, user, invitation, role, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -51,8 +51,10 @@ export default async function TeamSettingsPage() {
     .filter((r) => !r.isSystem)
     .map((r) => ({ id: r.id, name: r.name }));
 
-  // Members who have an email and aren't yet linked to a login — these can be
-  // invited as staff without creating a duplicate person.
+  // Members not yet linked to a login — they can be invited as staff without
+  // creating a duplicate person. Members with no email are included: the invite
+  // captures one and saves it to their profile, rather than silently hiding
+  // them from this list with no explanation.
   const invitableRows = await db
     .select({
       id: member.id,
@@ -61,21 +63,14 @@ export default async function TeamSettingsPage() {
       email: member.email,
     })
     .from(member)
-    .where(
-      and(
-        eq(member.churchId, church.id),
-        isNull(member.userId),
-        isNotNull(member.email),
-        ne(sql`trim(${member.email})`, sql`''`),
-      ),
-    )
+    .where(and(eq(member.churchId, church.id), isNull(member.userId)))
     .orderBy(asc(member.firstName))
     .limit(500);
 
   const invitableMembers = invitableRows.map((m) => ({
     id: m.id,
     name: [m.firstName, m.lastName].filter(Boolean).join(" "),
-    email: m.email as string,
+    email: m.email?.trim() ? m.email : null,
   }));
 
   return (

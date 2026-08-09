@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Home } from "lucide-react";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { member } from "@/db/schema";
+import { member, role } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { ensureSignup, signupUrl } from "@/lib/member-signup";
@@ -63,11 +63,20 @@ export default async function MembersPage() {
   const children = rows.filter((r) => r.isMinor).length;
 
   // The public self-registration link + household options (only for managers).
-  const [signup, households] = await Promise.all([
+  const canManageTeam = await can("team.manage");
+  const [signup, households, accessRoles] = await Promise.all([
     canManage
       ? ensureSignup({ id: church.id, name: church.name, handle: church.handle })
       : Promise.resolve(null),
     canManage ? householdOptions(church.id) : Promise.resolve([]),
+    // Roles offered when granting app access in bulk.
+    canManageTeam
+      ? db
+          .select({ id: role.id, name: role.name })
+          .from(role)
+          .where(and(eq(role.churchId, church.id), eq(role.isSystem, false)))
+          .orderBy(asc(role.name))
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -90,6 +99,8 @@ export default async function MembersPage() {
         signupUrl={signup ? signupUrl(signup.slug) : undefined}
         signupEnabled={signup?.enabled ?? false}
         households={households}
+        canManageTeam={canManageTeam}
+        accessRoles={accessRoles}
       />
     </PageContainer>
   );

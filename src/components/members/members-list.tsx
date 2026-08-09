@@ -12,12 +12,14 @@ import {
   Loader2,
   Plus,
   Search,
+  ShieldCheck,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { saveMember, deleteMember, deleteMembers } from "@/app/(app)/members/actions";
+import { inviteMembersAsStaff } from "@/app/(app)/members/access-actions";
 import { track } from "@/lib/track";
 import {
   MemberFormFields,
@@ -37,10 +39,19 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 export type MemberRow = {
   id: string;
@@ -101,16 +112,23 @@ export function MembersList({
   signupUrl,
   signupEnabled = false,
   households = [],
+  canManageTeam = false,
+  accessRoles = [],
 }: {
   members: MemberRow[];
   canManage?: boolean;
   signupUrl?: string;
   signupEnabled?: boolean;
   households?: HouseholdOption[];
+  /** Whether the viewer may grant app access (team.manage). */
+  canManageTeam?: boolean;
+  accessRoles?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
+  const [bulkAccessOpen, setBulkAccessOpen] = useState(false);
+  const [bulkRoleId, setBulkRoleId] = useState("__none__");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<MemberFormState>(emptyMember);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -169,6 +187,38 @@ export function MembersList({
         return;
       }
       toast.success(`${res.deleted} member${res.deleted === 1 ? "" : "s"} removed`);
+      clearSel();
+      router.refresh();
+    });
+  }
+
+  function bulkGiveAccess() {
+    startTransition(async () => {
+      const res = await inviteMembersAsStaff({
+        memberIds: [...selected],
+        roleId: bulkRoleId === "__none__" ? null : bulkRoleId,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.invited > 0) {
+        toast.success(
+          `${res.invited} invitation${res.invited === 1 ? "" : "s"} sent`,
+        );
+      }
+      // Say exactly who was left out and why, rather than a silent partial run.
+      if (res.skipped.length > 0) {
+        toast.warning(
+          `${res.skipped.length} skipped — ${res.skipped
+            .slice(0, 3)
+            .map((s) => `${s.name}: ${s.reason}`)
+            .join("; ")}${res.skipped.length > 3 ? "…" : ""}`,
+          { duration: 10000 },
+        );
+      }
+      setBulkAccessOpen(false);
+      setBulkRoleId("__none__");
       clearSel();
       router.refresh();
     });
@@ -272,6 +322,15 @@ export function MembersList({
             {allSelected ? "Unselect all" : `Select all ${filtered.length}`}
           </button>
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {canManageTeam && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBulkAccessOpen(true)}
+              >
+                <ShieldCheck className="size-4" /> Give app access
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -437,6 +496,57 @@ export function MembersList({
             <Button onClick={save} disabled={pending || !form.firstName.trim()}>
               {pending && <Loader2 className="animate-spin" />}
               Add member
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk: give app access to everyone selected, with one role. */}
+      <Dialog open={bulkAccessOpen} onOpenChange={setBulkAccessOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="bg-primary/10 text-primary mb-1 grid size-11 place-items-center rounded-full">
+              <ShieldCheck className="size-5" />
+            </div>
+            <DialogTitle>
+              Give app access to {selected.size} member
+              {selected.size === 1 ? "" : "s"}
+            </DialogTitle>
+            <DialogDescription>
+              Each one gets an email invitation to create a login. Anyone who
+              already has access, or has no email on file, is skipped and
+              reported back.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="bulk-role">Role for everyone selected</Label>
+            <Select value={bulkRoleId} onValueChange={setBulkRoleId}>
+              <SelectTrigger id="bulk-role" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No role yet</SelectItem>
+                {accessRoles.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkAccessOpen(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={bulkGiveAccess} disabled={pending}>
+              {pending && <Loader2 className="animate-spin" />}
+              Send {selected.size} invitation{selected.size === 1 ? "" : "s"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,7 @@ import { Copy, Loader2, Lock, Mail, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { organization } from "@/lib/auth-client";
 import { assignRole } from "@/app/(app)/settings/roles/actions";
+import { inviteMemberAsStaff } from "@/app/(app)/members/access-actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ type Invite = { id: string; email: string; role: string | null };
 type Role = { id: string; name: string };
 
 const NO_ROLE = "__none__";
+const NO_MEMBER = "__nomember__";
 
 function initials(name: string) {
   return name
@@ -54,16 +56,41 @@ export function TeamManager({
   invites: Invite[];
   roles: Role[];
   currentUserId: string;
-  invitableMembers?: { id: string; name: string; email: string }[];
+  invitableMembers?: { id: string; name: string; email: string | null }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
+  // Set when inviting an existing congregation member, so the invitation
+  // carries who they are and which church role to apply on acceptance.
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [churchRoleId, setChurchRoleId] = useState(NO_ROLE);
 
   function invite(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
+      // Existing member: go through our own action so the church role is
+      // applied on acceptance and the member is linked by id.
+      if (selectedMemberId) {
+        const res = await inviteMemberAsStaff({
+          memberId: selectedMemberId,
+          roleId: churchRoleId === NO_ROLE ? null : churchRoleId,
+          email: email.trim() || undefined,
+        });
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(`Invitation sent to ${email.trim()}`);
+        setEmail("");
+        setSelectedMemberId(null);
+        setChurchRoleId(NO_ROLE);
+        router.refresh();
+        return;
+      }
+
+      // Plain email invite for someone who isn't a member yet.
       const { error } = await organization.inviteMember({
         email: email.trim(),
         role: inviteRole as "member" | "admin",
@@ -139,22 +166,57 @@ export function TeamManager({
                   </span>
                 </Label>
                 <Select
+                  value={selectedMemberId ?? NO_MEMBER}
                   onValueChange={(v) => {
+                    if (v === NO_MEMBER) {
+                      setSelectedMemberId(null);
+                      setEmail("");
+                      return;
+                    }
                     const m = invitableMembers.find((x) => x.id === v);
-                    if (m) setEmail(m.email);
+                    setSelectedMemberId(v);
+                    setEmail(m?.email ?? "");
                   }}
                 >
                   <SelectTrigger id="invite-member" className="w-full">
-                    <SelectValue placeholder="Pick a member to fill in their email" />
+                    <SelectValue placeholder="Pick a member to invite" />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
+                    <SelectItem value={NO_MEMBER}>
+                      Someone who isn&apos;t a member yet
+                    </SelectItem>
                     {invitableMembers.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
-                        {m.name} · {m.email}
+                        {m.name}
+                        {m.email ? ` · ${m.email}` : " · no email on file"}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Church role is only meaningful for the member path — the plain
+                email invite still uses Better Auth's member/admin below. */}
+            {selectedMemberId && roles.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="invite-church-role">Role</Label>
+                <Select value={churchRoleId} onValueChange={setChurchRoleId}>
+                  <SelectTrigger id="invite-church-role" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_ROLE}>No role yet</SelectItem>
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-xs">
+                  Applied as soon as they accept — no second step.
+                </p>
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
