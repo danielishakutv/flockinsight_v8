@@ -1953,6 +1953,31 @@ export const analyticsEvent = pgTable(
   ],
 );
 
+/**
+ * Links a Better Auth invitation to the congregation member it was sent for
+ * and the church role they should receive on acceptance.
+ *
+ * Deliberately NOT columns on `invitation`: Better Auth owns that schema, and a
+ * missing column on it has already broken this app once. `roleId` is nullable
+ * so deleting a role between invite and acceptance cannot stop someone joining.
+ */
+export const staffInvite = pgTable(
+  "staff_invite",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    invitationId: text()
+      .notNull()
+      .unique()
+      .references(() => invitation.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    roleId: uuid().references(() => role.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("staff_invite_member_idx").on(t.memberId)],
+);
+
 /* ============================================================
  * Platform health & the Termii master wallet ("the float")
  * ========================================================== */
@@ -2062,6 +2087,7 @@ export type FirstTimerSetting = typeof firstTimerSetting.$inferSelect;
 export type BlogPost = typeof blogPost.$inferSelect;
 export type NewBlogPost = typeof blogPost.$inferInsert;
 export type AnalyticsEvent = typeof analyticsEvent.$inferSelect;
+export type StaffInvite = typeof staffInvite.$inferSelect;
 export type CronRun = typeof cronRun.$inferSelect;
 export type TermiiSnapshot = typeof termiiSnapshot.$inferSelect;
 export type PlatformAlert = typeof platformAlert.$inferSelect;
