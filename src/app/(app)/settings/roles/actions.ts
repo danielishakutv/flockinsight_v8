@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { role, staff } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { ALL_PERMISSIONS, can } from "@/lib/permissions";
+import { betterAuthRoleFor } from "@/lib/staff-access";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -130,30 +131,56 @@ export async function assignRole(
   if (error) return { ok: false, error };
 
   const [member] = await db
-    .select({ id: staff.id, role: staff.role })
+    .select({ id: staff.id, role: staff.role, userId: staff.userId })
     .from(staff)
     .where(and(eq(staff.id, staffId), eq(staff.organizationId, ctx.church.id)))
     .limit(1);
   if (!member) return { ok: false, error: "Team member not found." };
+  // Owner guard stays first, so the owner can never be demoted by this action.
   if (member.role === "owner")
     return { ok: false, error: "The owner's access can't be changed." };
 
+  let permissions: string[] | null = null;
   if (roleId) {
     const [r] = await db
-      .select({ isSystem: role.isSystem })
+      .select({ isSystem: role.isSystem, permissions: role.permissions })
       .from(role)
       .where(and(eq(role.id, roleId), eq(role.churchId, ctx.church.id)))
       .limit(1);
     if (!r) return { ok: false, error: "Role not found." };
     if (r.isSystem)
       return { ok: false, error: "The Owner role can't be assigned." };
+    permissions = r.permissions ?? [];
   }
 
-  // Only set roleId — leave the Better Auth org role (owner/admin/member)
-  // untouched so org membership semantics and owner detection stay correct.
+  // Now that this also writes staff.role, someone could demote themselves out
+  // of team management entirely — recoverable only by the owner. Refuse it.
+  if (
+    permissions !== null &&
+    member.userId === ctx.user.id &&
+    betterAuthRoleFor(permissions) !== "admin"
+  ) {
+    return {
+      ok: false,
+      error:
+        "You can't remove your own team management access — ask the church owner to change your role.",
+    };
+  }
+
+  // The church role is the source of truth for both systems: a role granting
+  // "Manage team" must also carry the Better Auth org role, or the Team page
+  // lets them in and Better Auth then rejects their invite.
+  //
+  // Clearing a role deliberately leaves staff.role alone — writing "member"
+  // would silently demote a legacy admin who has no church role and depends on
+  // the full-access fallback in lib/permissions.ts.
   await db
     .update(staff)
-    .set({ roleId })
+    .set(
+      permissions === null
+        ? { roleId: null }
+        : { roleId, role: betterAuthRoleFor(permissions) },
+    )
     .where(and(eq(staff.id, staffId), eq(staff.organizationId, ctx.church.id)));
   revalidatePath("/settings/team");
   return { ok: true };

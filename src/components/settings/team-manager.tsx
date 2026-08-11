@@ -306,9 +306,13 @@ export function TeamManager({
 
       {/* Members */}
       <div>
-        <h2 className="text-muted-foreground mb-2 px-1 text-xs font-bold tracking-wider uppercase">
+        <h2 className="text-muted-foreground mb-1 px-1 text-xs font-bold tracking-wider uppercase">
           Team members ({members.length})
         </h2>
+        <p className="text-muted-foreground mb-2 px-1 text-xs">
+          Roles that include &ldquo;Manage team&rdquo; can also invite and remove
+          people.
+        </p>
         <div className="space-y-2">
           {members.map((m) => {
             const isOwner = m.role === "owner";
