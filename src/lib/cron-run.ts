@@ -12,22 +12,13 @@ import { cronRun } from "@/db/schema";
  * lived through. Every execution writes a row; liveness is then a query.
  */
 
-export const CRON_JOBS = {
-  reminders: { label: "Inactivity reminders", intervalMinutes: 60 },
-  "service-reminders": { label: "Service reminders", intervalMinutes: 60 },
-  celebrations: { label: "Birthdays & anniversaries", intervalMinutes: 60 },
-  storage: { label: "Storage add-on billing", intervalMinutes: 60 },
-  broadcasts: { label: "Scheduled broadcasts", intervalMinutes: 60 },
-  devotionals: { label: "Devotional delivery", intervalMinutes: 60 },
-  "first-timers": { label: "First-timer follow-up", intervalMinutes: 60 },
-  "trial-reminders": { label: "Trial ending reminders", intervalMinutes: 60 },
-  "platform-health": { label: "Platform health & float", intervalMinutes: 30 },
-} as const;
+// The registry and the lateness rule live in a pure module so they can be
+// unit-tested without a database. Imported for use here, and re-exported so
+// existing importers of CRON_JOBS / CronJob keep working.
+import { CRON_JOBS, isCronOverdue, type CronJob } from "@/lib/cron-schedule";
 
-export type CronJob = keyof typeof CRON_JOBS;
-
-/** A job counts as overdue once it has missed two full intervals. */
-const OVERDUE_MULTIPLIER = 2;
+export { CRON_JOBS, isCronOverdue };
+export type { CronJob };
 
 /**
  * Run a cron job's body, recording start, outcome and duration.
@@ -109,16 +100,13 @@ export async function getCronLiveness(): Promise<CronLiveness[]> {
     .orderBy(cronRun.job, desc(cronRun.startedAt));
 
   const latest = new Map(rows.map((r) => [r.job, r]));
-  const now = Date.now();
+  const now = new Date();
 
   return (Object.keys(CRON_JOBS) as CronJob[]).map((job) => {
     const meta = CRON_JOBS[job];
     const row = latest.get(job);
     const lastRunAt = row?.startedAt ?? null;
-    const overdue =
-      lastRunAt === null ||
-      now - lastRunAt.getTime() >
-        meta.intervalMinutes * OVERDUE_MULTIPLIER * 60_000;
+    const overdue = isCronOverdue(lastRunAt, meta.intervalMinutes, now);
 
     return {
       job,
