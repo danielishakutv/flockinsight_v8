@@ -23,7 +23,13 @@ export function RecipientFilters({
   messageId: string;
   status: RecipientStatusFilter;
   q: string;
-  counts: { all: number; sent: number; failed: number; skipped: number };
+  counts: {
+    all: number;
+    sent: number;
+    delivered: number;
+    failed: number;
+    skipped: number;
+  };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();

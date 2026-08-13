@@ -22,7 +22,7 @@ import {
   type RecipientOutcome,
 } from "@/lib/comm-recipients";
 import { normalizePhone, smsPages } from "@/lib/sms";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, sendEmailWithId, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { recordAction } from "@/lib/analytics";
 import { sendPushToUsers } from "@/lib/push";
@@ -254,6 +254,7 @@ export async function sendCommunication(
         destination: o.phone,
         status: o.status,
         error: o.error ?? null,
+        providerMessageId: o.providerMessageId ?? null,
       });
     }
 
@@ -322,7 +323,8 @@ export async function sendCommunication(
         escapeHtml(subj),
         `<p>${escapeHtml(text).replace(/\n/g, "<br/>")}</p>`,
       );
-      return sendEmail({ to: r.email as string, subject: subj, html, text, fromName: c.name });
+      // WithId so a Resend delivery report can be tied back to this person.
+      return sendEmailWithId({ to: r.email as string, subject: subj, html, text, fromName: c.name });
     }),
   );
   // results[i] lines up with list[i], so each address keeps its own verdict.

@@ -100,6 +100,8 @@ export type SmsOutcome = {
   phone: string;
   status: "sent" | "failed" | "skipped";
   error?: string;
+  /** Termii's id for this message, so a delivery report can be matched to it. */
+  providerMessageId?: string | null;
 };
 
 export type BatchSmsResult =
@@ -198,9 +200,15 @@ export async function sendChurchSmsBatch(opts: {
       spent += price * smsPages(message) * people.length;
       pagesSent += smsPages(message) * people.length;
       // One call covers the whole group, so the gateway's verdict applies to
-      // every number in it.
-      for (const p of people)
-        outcomes.push({ phone: p.original, status: "sent" });
+      // every number in it. Termii returns its ids in the same order we sent
+      // the numbers — an assumption, so a missing id is left null and the
+      // delivery webhook falls back to matching on the phone number.
+      for (const [i, p] of people.entries())
+        outcomes.push({
+          phone: p.original,
+          status: "sent",
+          providerMessageId: res.ids[i] ?? null,
+        });
     } else {
       failed += people.length;
       for (const p of people)

@@ -7,8 +7,9 @@ export const RECIPIENT_PAGE_SIZE = 100;
 /** The status tabs on the message detail screen. */
 export const RECIPIENT_STATUS_FILTERS = [
   { id: "all", label: "Everyone" },
+  { id: "delivered", label: "Delivered" },
   { id: "failed", label: "Not delivered" },
-  { id: "sent", label: "Delivered" },
+  { id: "sent", label: "Awaiting report" },
   { id: "skipped", label: "Skipped" },
 ] as const;
 export type RecipientStatusFilter =

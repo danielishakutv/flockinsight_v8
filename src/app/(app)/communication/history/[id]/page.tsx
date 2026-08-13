@@ -44,9 +44,15 @@ const CHANNEL_META = {
   notification: { label: "Staff notice", icon: Users },
 } as const;
 
-/** How each stored status is presented. */
+/**
+ * How each stored status is presented.
+ *
+ * "Sent" and "Delivered" are deliberately different now: `sent` means the
+ * gateway accepted it, `delivered` means the network confirmed it reached the
+ * handset. Calling both "Delivered" would overstate what we actually know.
+ */
 const STATUS_META = {
-  sent: { label: "Delivered", variant: "success", icon: CheckCircle2 },
+  sent: { label: "Sent", variant: "secondary", icon: Send },
   delivered: { label: "Delivered", variant: "success", icon: CheckCircle2 },
   failed: { label: "Not delivered", variant: "destructive", icon: TriangleAlert },
   undelivered: {
@@ -140,13 +146,24 @@ export default async function MessageDetailPage({
       </Card>
 
       {/* Outcome summary */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className={noDetail ? "mt-4 grid grid-cols-3 gap-3" : "mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"}>
+        {/* Older messages have no per-recipient rows, and nothing can ever
+            report on them — so their count is labelled "Sent", not
+            "Delivered", rather than claiming knowledge we don't have. */}
         <Tile
-          label="Delivered"
-          value={noDetail ? message.sent : totals.sent}
+          label={noDetail ? "Sent" : "Delivered"}
+          value={noDetail ? message.sent : totals.delivered}
           tone="good"
-          icon={CheckCircle2}
+          icon={noDetail ? Send : CheckCircle2}
         />
+        {!noDetail && (
+          <Tile
+            label="Awaiting report"
+            value={totals.sent}
+            tone="flat"
+            icon={Send}
+          />
+        )}
         <Tile
           label="Not delivered"
           value={noDetail ? message.failed : totals.failed}

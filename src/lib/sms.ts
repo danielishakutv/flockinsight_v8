@@ -15,7 +15,16 @@ export function termiiBase(): string {
   return (process.env.TERMII_BASE_URL || "https://v3.api.termii.com").replace(/\/$/, "");
 }
 
-export type SmsResult = { ok: true } | { ok: false; error: string };
+/**
+ * `ids` are Termii's message ids, aligned index-for-index with the normalised
+ * recipient list (invalid numbers already filtered out). Kept so delivery
+ * reports can be attributed to the right person later. May be shorter than the
+ * recipient list, or empty — the webhook falls back to matching on the
+ * recipient's phone number.
+ */
+export type SmsResult =
+  | { ok: true; ids: string[] }
+  | { ok: false; error: string };
 
 export function isSmsConfigured(): boolean {
   return !!(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID);
@@ -99,7 +108,18 @@ export async function sendSms(opts: {
         (Array.isArray(data.message_id_list) && data.message_id_list.length > 0) ||
         data.code === "ok" ||
         /success/i.test(String(data.message ?? "")));
-    if (res.ok && success) return { ok: true };
+    if (res.ok && success) {
+      // Bulk returns a list, single returns one id. Termii does not document
+      // whether the list's order matches the `to` array, so this is an
+      // assumption — the delivery webhook falls back to matching on the
+      // recipient's phone number when an id doesn't line up.
+      const ids = Array.isArray(data?.message_id_list)
+        ? data.message_id_list.filter((v): v is string => typeof v === "string")
+        : data?.message_id
+          ? [data.message_id]
+          : [];
+      return { ok: true, ids };
+    }
 
     return {
       ok: false,

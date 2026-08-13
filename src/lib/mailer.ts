@@ -62,7 +62,7 @@ export function buildFrom(fromName?: string | null): string {
   return `${name} <${fromAddress()}>`;
 }
 
-export async function sendEmail(opts: {
+export type SendEmailOptions = {
   to: string;
   subject: string;
   html: string;
@@ -72,13 +72,27 @@ export async function sendEmail(opts: {
   /** Display name for the sender (e.g. the church's name). Domain stays ours. */
   fromName?: string | null;
   attachments?: EmailAttachment[];
-}): Promise<boolean> {
+};
+
+/**
+ * Send an email and return the provider's id alongside the outcome, so a
+ * delivery report can be attributed to this recipient later.
+ *
+ * Most callers want `sendEmail` below instead. This variant exists only for
+ * the communication sends that record per-recipient results — deliberately a
+ * separate function rather than a changed return type, because `sendEmail` has
+ * dozens of call sites of the form `const ok = await sendEmail(...)`, and an
+ * object return would make `if (ok)` always true without TypeScript objecting.
+ */
+export async function sendEmailWithId(
+  opts: SendEmailOptions,
+): Promise<{ ok: boolean; id: string | null }> {
   const from = buildFrom(opts.fromName);
 
   // Preferred: Resend API (uses RESEND_API_KEY).
   const resend = getResend();
   if (resend) {
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: opts.to,
       subject: opts.subject,
@@ -98,9 +112,9 @@ export async function sendEmail(opts: {
     });
     if (error) {
       console.error(`[mailer] Resend error for "${opts.subject}":`, error);
-      return false;
+      return { ok: false, id: null };
     }
-    return true;
+    return { ok: true, id: data?.id ?? null };
   }
 
   // Fallback: SMTP.
@@ -109,7 +123,7 @@ export async function sendEmail(opts: {
     console.warn(
       `[mailer] No email provider configured — skipped "${opts.subject}" to ${opts.to}`,
     );
-    return false;
+    return { ok: false, id: null };
   }
   await t.sendMail({
     from,
@@ -129,7 +143,19 @@ export async function sendEmail(opts: {
         }
       : {}),
   });
-  return true;
+  // SMTP has no provider id we can reconcile against.
+  return { ok: true, id: null };
+}
+
+/**
+ * Send an email, reporting only whether it went out.
+ *
+ * Thin wrapper so there is one implementation. Keeps the boolean return that
+ * dozens of call sites depend on.
+ */
+export async function sendEmail(opts: SendEmailOptions): Promise<boolean> {
+  const res = await sendEmailWithId(opts);
+  return res.ok;
 }
 
 /** Minimal branded HTML wrapper for transactional emails. */

@@ -25,8 +25,11 @@ const STATUS_GROUPS: Record<
   Exclude<RecipientStatusFilter, "all">,
   ("skipped" | "failed" | "sent" | "delivered" | "undelivered")[]
 > = {
+  // Confirmed by the network, versus merely handed to the gateway. Kept apart
+  // now that delivery reports tell us the difference.
+  delivered: ["delivered"],
   failed: ["failed", "undelivered"],
-  sent: ["sent", "delivered"],
+  sent: ["sent"],
   skipped: ["skipped"],
 };
 
@@ -119,13 +122,16 @@ export async function getRecipientTotals(logId: string) {
     .where(eq(communicationRecipient.logId, logId))
     .groupBy(communicationRecipient.status);
 
-  const totals = { sent: 0, failed: 0, skipped: 0, all: 0 };
+  // `sent` counts only those still awaiting a delivery report; `delivered` is
+  // network-confirmed. Splitting them is the whole point of delivery reports.
+  const totals = { sent: 0, delivered: 0, failed: 0, skipped: 0, all: 0 };
   for (const r of rows) {
     const n = Number(r.count);
     totals.all += n;
     if (r.status === "skipped") totals.skipped += n;
     else if (r.status === "failed" || r.status === "undelivered")
       totals.failed += n;
+    else if (r.status === "delivered") totals.delivered += n;
     else totals.sent += n;
   }
   return totals;
