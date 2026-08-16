@@ -188,3 +188,37 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* ============================================================
+ * Searchable dropdowns (components/ui/select.tsx)
+ * ========================================================== */
+
+/* Radix hides the option list's scrollbar; give it a slim one back so long
+   lists (members, countries…) show they can be scrolled. Doubled attribute
+   selector so it beats Radix's own injected rule. */
+[data-slot="select-viewport"][data-radix-select-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+[data-slot="select-viewport"][data-radix-select-viewport]::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+[data-slot="select-viewport"][data-radix-select-viewport]::-webkit-scrollbar-thumb {
+  background-clip: padding-box;
+  background-color: var(--border);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+[data-slot="select-viewport"][data-radix-select-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The selected option's label is mirrored into the trigger, so strip the
+   search highlight there — it belongs in the list, not on the closed field. */
+[data-slot="select-value"] mark {
+  background: transparent;
+  color: inherit;
+  font-weight: inherit;
+}

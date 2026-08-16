@@ -3,6 +3,16 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Loader2, MapPin, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+/** Radix selects can't hold an empty value, so "all countries" gets a sentinel. */
+const ANY_COUNTRY = "__any__";
 
 export function DirectorySearch({
   countries,
@@ -69,18 +79,26 @@ export function DirectorySearch({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <select
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-          className="bg-background h-10 rounded-lg border px-3 text-sm"
+        <Select
+          value={country || ANY_COUNTRY}
+          onValueChange={(v) => setCountry(v === ANY_COUNTRY ? "" : v)}
         >
-          <option value="">All countries</option>
-          {countries.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            size="sm"
+            aria-label="Country"
+            className="bg-background h-10 w-auto min-w-40 rounded-lg text-sm"
+          >
+            <SelectValue placeholder="All countries" />
+          </SelectTrigger>
+          <SelectContent searchPlaceholder="Search countries…">
+            <SelectItem value={ANY_COUNTRY}>All countries</SelectItem>
+            {countries.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <input
           value={denom}
           onChange={(e) => setDenom(e.target.value)}

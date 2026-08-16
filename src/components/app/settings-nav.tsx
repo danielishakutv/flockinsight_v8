@@ -19,6 +19,15 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type Need = "settings" | "team";
@@ -88,21 +97,26 @@ export function SettingsNav({
         <label className="text-muted-foreground mb-1.5 block text-xs font-semibold uppercase">
           Settings
         </label>
-        <select
-          value={active}
-          onChange={(e) => router.push(e.target.value)}
-          className="border-input bg-background h-11 w-full rounded-xl border px-3 text-sm font-medium shadow-sm focus:outline-none"
-        >
-          {groups.map((g) => (
-            <optgroup key={g.title} label={g.title}>
-              {g.items.map((i) => (
-                <option key={i.href} value={i.href}>
-                  {i.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        <Select value={active} onValueChange={(href) => router.push(href)}>
+          <SelectTrigger
+            aria-label="Settings section"
+            className="bg-background w-full rounded-xl font-medium"
+          >
+            <SelectValue placeholder="Choose a section" />
+          </SelectTrigger>
+          <SelectContent searchPlaceholder="Search settings…">
+            {groups.map((g) => (
+              <SelectGroup key={g.title}>
+                <SelectLabel>{g.title}</SelectLabel>
+                {g.items.map((i) => (
+                  <SelectItem key={i.href} value={i.href}>
+                    {i.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Desktop: grouped vertical nav */}
