@@ -226,6 +226,9 @@ export default async function LandingPage() {
                 </Link>
               </Button>
               <Button asChild size="xl" variant="outline">
+                <Link href="/demo">Book a free walkthrough</Link>
+              </Button>
+              <Button asChild size="xl" variant="ghost">
                 <Link href="/login">Login to Dashboard</Link>
               </Button>
             </div>

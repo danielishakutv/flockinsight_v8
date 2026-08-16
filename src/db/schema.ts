@@ -2043,9 +2043,158 @@ export const platformAlert = pgTable(
 );
 
 /* ============================================================
+ * Growth — sales pipeline and platform outreach
+ *
+ * A `lead` is a church that isn't on FlockInsight yet (or a person deciding
+ * for one). It moves through the pipeline until it either converts — at which
+ * point `convertedChurchId` ties it to the real church row — or is marked
+ * lost. Rows are never deleted: "lost" is a status, so the history of who was
+ * approached, when, and what came of it stays intact.
+ * ========================================================== */
+
+export const leadStatusEnum = pgEnum("lead_status", [
+  "new",
+  "contacted",
+  "interested",
+  "demo",
+  "trial",
+  "converted",
+  "lost",
+]);
+
+/** What happened with a lead. `status` rows are written automatically. */
+export const leadActivityKindEnum = pgEnum("lead_activity_kind", [
+  "note",
+  "call",
+  "email",
+  "sms",
+  "whatsapp",
+  "meeting",
+  "status",
+]);
+
+export const lead = pgTable(
+  "lead",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchName: text().notNull(),
+    contactName: text(),
+    role: text(), // "Pastor", "Admin", "Secretary"…
+    email: text(),
+    phone: text(),
+    whatsapp: text(),
+    country: text().notNull().default("Nigeria"),
+    state: text(),
+    city: text(),
+    denomination: text(),
+    // Rough congregation size — the single best signal for who to call first.
+    size: integer(),
+    status: leadStatusEnum().notNull().default("new"),
+    // Where this lead came from: "manual", "website", "referral", "directory",
+    // "event", "instagram", "whatsapp", "import"…  Free text so a new channel
+    // never needs a migration.
+    source: text().notNull().default("manual"),
+    notes: text(),
+    nextFollowUpAt: timestamp({ withTimezone: true }),
+    lastContactedAt: timestamp({ withTimezone: true }),
+    convertedChurchId: text().references(() => church.id, {
+      onDelete: "set null",
+    }),
+    convertedAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("lead_status_idx").on(t.status),
+    index("lead_follow_up_idx").on(t.nextFollowUpAt),
+    index("lead_email_idx").on(t.email),
+    index("lead_phone_idx").on(t.phone),
+    index("lead_created_idx").on(t.createdAt),
+  ],
+);
+
+export const leadActivity = pgTable(
+  "lead_activity",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    leadId: uuid()
+      .notNull()
+      .references(() => lead.id, { onDelete: "cascade" }),
+    kind: leadActivityKindEnum().notNull().default("note"),
+    body: text().notNull(),
+    actorUserId: text().references(() => user.id, { onDelete: "set null" }),
+    actorName: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_activity_lead_idx").on(t.leadId, t.createdAt)],
+);
+
+/**
+ * One platform-level send (marketing email or SMS) to churches or leads.
+ * The church-scoped equivalent is communication_log; this one is ours, and is
+ * paid for out of the platform's own Termii float rather than a church wallet.
+ */
+export const outreachCampaign = pgTable(
+  "outreach_campaign",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    channel: communicationChannelEnum().notNull(),
+    // "churches" | "leads" — which side of the house was addressed.
+    audienceKind: text().notNull(),
+    audienceLabel: text().notNull(), // human summary, e.g. "Leads · interested"
+    subject: text(), // email only
+    body: text().notNull(),
+    recipients: integer().notNull().default(0),
+    sent: integer().notNull().default(0),
+    failed: integer().notNull().default(0),
+    skipped: integer().notNull().default(0),
+    units: integer().notNull().default(0), // SMS pages
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("outreach_campaign_created_idx").on(t.createdAt)],
+);
+
+export const outreachRecipient = pgTable(
+  "outreach_recipient",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    campaignId: uuid()
+      .notNull()
+      .references(() => outreachCampaign.id, { onDelete: "cascade" }),
+    leadId: uuid().references(() => lead.id, { onDelete: "set null" }),
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    name: text(),
+    destination: text(),
+    status: deliveryStatusEnum().notNull(),
+    error: text(),
+    providerMessageId: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("outreach_recipient_campaign_idx").on(t.campaignId),
+    index("outreach_recipient_status_idx").on(t.status),
+    index("outreach_recipient_provider_idx").on(t.providerMessageId),
+  ],
+);
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
+export type Lead = typeof lead.$inferSelect;
+export type NewLead = typeof lead.$inferInsert;
+export type LeadActivity = typeof leadActivity.$inferSelect;
+export type OutreachCampaign = typeof outreachCampaign.$inferSelect;
+export type OutreachRecipient = typeof outreachRecipient.$inferSelect;
 export type Member = typeof member.$inferSelect;
 export type NewMember = typeof member.$inferInsert;
 export type Service = typeof service.$inferSelect;

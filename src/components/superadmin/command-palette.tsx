@@ -26,6 +26,8 @@ const NAV_ENTRIES: PaletteEntry[] = [
   { id: "nav-health", label: "Platform health", sub: "Float, crons, integrations", href: "/superadmin/health", kind: "church" },
   { id: "nav-churches", label: "Churches", sub: "All churches", href: "/superadmin/churches", kind: "church" },
   { id: "nav-users", label: "Users", sub: "All users", href: "/superadmin/users", kind: "church" },
+  { id: "nav-growth", label: "Growth", sub: "Leads and the sales pipeline", href: "/superadmin/growth", kind: "church" },
+  { id: "nav-outreach", label: "Outreach", sub: "Email and SMS campaigns", href: "/superadmin/growth/outreach", kind: "church" },
   { id: "nav-sms", label: "SMS", sub: "Sender IDs and wallets", href: "/superadmin/sms", kind: "church" },
   { id: "nav-support", label: "Support", sub: "Tickets", href: "/superadmin/support", kind: "church" },
   { id: "nav-pricing", label: "Pricing", sub: "Plans and prices", href: "/superadmin/pricing", kind: "church" },

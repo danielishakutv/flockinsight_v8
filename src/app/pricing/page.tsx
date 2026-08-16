@@ -27,6 +27,9 @@ export default async function PricingPage() {
             <Link href="/churches">Find a church</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
+            <Link href="/demo">Book a demo</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link href="/login">Log in</Link>
           </Button>
           <Button asChild size="sm">
