@@ -10,10 +10,10 @@ export default async function SuperadminBannersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Banners & ads
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           Promo/ad banners shown on the public church directory and events pages.
         </p>
       </div>

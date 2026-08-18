@@ -222,3 +222,46 @@ input[type="number"] {
   color: inherit;
   font-weight: inherit;
 }
+
+/* ============================================================
+ * Platform admin density
+ *
+ * The church-facing app is deliberately big and friendly — people use it on a
+ * phone, in a hurry, often in poor light. The admin is the opposite: one
+ * operator, a large screen, wanting as much on it as possible. Rather than
+ * fork the shared components, everything under `data-admin` is tightened here.
+ * ========================================================== */
+
+[data-admin] {
+  --radius: 0.6rem;
+}
+
+[data-admin] [data-slot="card"] {
+  gap: 1rem;
+  padding-block: 1.125rem;
+  box-shadow: none;
+}
+[data-admin] [data-slot="card-header"],
+[data-admin] [data-slot="card-content"],
+[data-admin] [data-slot="card-footer"] {
+  padding-inline: 1.125rem;
+}
+[data-admin] [data-slot="card-title"] {
+  font-size: 0.875rem;
+}
+[data-admin] [data-slot="card-description"] {
+  font-size: 0.8125rem;
+}
+
+/* Controls sit closer to the text they act on. Buttons keep their own sizes —
+   only the default one is trimmed, so `size="lg"` still means large. */
+[data-admin] [data-slot="select-trigger"][data-size="default"] {
+  height: 2.25rem;
+}
+[data-admin] [data-slot="button"].h-10 {
+  height: 2.25rem;
+  font-size: 0.8125rem;
+}
+[data-admin] [data-slot="button"].h-9 {
+  font-size: 0.8125rem;
+}

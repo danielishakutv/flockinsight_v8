@@ -39,12 +39,14 @@ import {
 
 type ChurchOption = { id: string; name: string; plan: string };
 
-type ChurchFilter = "all" | "plan" | "country" | "status" | "picked";
+type ChurchFilter =
+  "all" | "plan" | "country" | "status" | "denomination" | "picked";
 type LeadFilter = "all" | "open" | "status" | "source" | "picked";
 
 export function OutreachComposer({
   churches,
   countries,
+  denominations,
   sources,
   leadCounts,
   openLeads,
@@ -54,6 +56,7 @@ export function OutreachComposer({
 }: {
   churches: ChurchOption[];
   countries: string[];
+  denominations: { id: string; name: string; churches: number }[];
   sources: string[];
   leadCounts: Record<LeadStatus, number>;
   openLeads: number;
@@ -70,7 +73,12 @@ export function OutreachComposer({
   const [churchFilter, setChurchFilter] = useState<ChurchFilter>("all");
   const [plan, setPlan] = useState("starter");
   const [country, setCountry] = useState(countries[0] ?? "Nigeria");
-  const [churchStatus, setChurchStatus] = useState<"active" | "suspended">("active");
+  const [churchStatus, setChurchStatus] = useState<"active" | "suspended">(
+    "active",
+  );
+  const [denominationId, setDenominationId] = useState(
+    denominations[0]?.id ?? "",
+  );
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [churchQuery, setChurchQuery] = useState("");
 
@@ -85,7 +93,9 @@ export function OutreachComposer({
 
   const filteredChurches = useMemo(() => {
     const q = churchQuery.trim().toLowerCase();
-    return q ? churches.filter((c) => c.name.toLowerCase().includes(q)) : churches;
+    return q
+      ? churches.filter((c) => c.name.toLowerCase().includes(q))
+      : churches;
   }, [churches, churchQuery]);
 
   /** Rough reach, from what the page already knows — the server is the truth. */
@@ -95,6 +105,10 @@ export function OutreachComposer({
       if (churchFilter === "plan")
         return churches.filter((c) => c.plan === plan).length;
       if (churchFilter === "picked") return picked.size;
+      if (churchFilter === "denomination")
+        return (
+          denominations.find((d) => d.id === denominationId)?.churches ?? 0
+        );
       return null; // country / status need a query
     }
     if (leadFilter === "all") return totalLeads;
@@ -107,6 +121,8 @@ export function OutreachComposer({
     churches,
     plan,
     picked,
+    denominations,
+    denominationId,
     leadFilter,
     leadStatus,
     leadCounts,
@@ -140,6 +156,10 @@ export function OutreachComposer({
             plan,
             country,
             status: churchStatus,
+            denominationId: denominationId || undefined,
+            denominationLabel: denominations.find(
+              (d) => d.id === denominationId,
+            )?.name,
             ids: [...picked],
           }
         : {
@@ -210,7 +230,11 @@ export function OutreachComposer({
               {(
                 [
                   { id: "leads", label: "Leads", icon: Users },
-                  { id: "churches", label: "Churches on FlockInsight", icon: Building2 },
+                  {
+                    id: "churches",
+                    label: "Churches on FlockInsight",
+                    icon: Building2,
+                  },
                 ] as const
               ).map((s) => (
                 <button
@@ -251,7 +275,10 @@ export function OutreachComposer({
                   value={churchFilter}
                   onValueChange={(v) => setChurchFilter(v as ChurchFilter)}
                 >
-                  <SelectTrigger className="w-full" aria-label="Church audience">
+                  <SelectTrigger
+                    className="w-full"
+                    aria-label="Church audience"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -259,6 +286,12 @@ export function OutreachComposer({
                     <SelectItem value="plan">On a plan</SelectItem>
                     <SelectItem value="country">In a country</SelectItem>
                     <SelectItem value="status">By account status</SelectItem>
+                    <SelectItem
+                      value="denomination"
+                      disabled={denominations.length === 0}
+                    >
+                      In a denomination
+                    </SelectItem>
                     <SelectItem value="picked">Pick them myself</SelectItem>
                   </SelectContent>
                 </Select>
@@ -297,14 +330,39 @@ export function OutreachComposer({
                   </Select>
                 </div>
               )}
+              {churchFilter === "denomination" && (
+                <div className="space-y-2">
+                  <Label>Denomination</Label>
+                  <Select
+                    value={denominationId}
+                    onValueChange={setDenominationId}
+                  >
+                    <SelectTrigger className="w-full" aria-label="Denomination">
+                      <SelectValue placeholder="Choose a denomination" />
+                    </SelectTrigger>
+                    <SelectContent searchPlaceholder="Search denominations…">
+                      {denominations.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name} ({d.churches})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {churchFilter === "status" && (
                 <div className="space-y-2">
                   <Label>Account status</Label>
                   <Select
                     value={churchStatus}
-                    onValueChange={(v) => setChurchStatus(v as "active" | "suspended")}
+                    onValueChange={(v) =>
+                      setChurchStatus(v as "active" | "suspended")
+                    }
                   >
-                    <SelectTrigger className="w-full" aria-label="Account status">
+                    <SelectTrigger
+                      className="w-full"
+                      aria-label="Account status"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -327,7 +385,9 @@ export function OutreachComposer({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="open">Still open ({openLeads})</SelectItem>
+                    <SelectItem value="open">
+                      Still open ({openLeads})
+                    </SelectItem>
                     <SelectItem value="status">At one stage</SelectItem>
                     <SelectItem value="source">From one source</SelectItem>
                     <SelectItem value="all">Everyone ({totalLeads})</SelectItem>
@@ -403,7 +463,9 @@ export function OutreachComposer({
                     }
                     className={cn(
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors",
-                      on ? "bg-primary/10 text-primary font-semibold" : "hover:bg-accent",
+                      on
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "hover:bg-accent",
                     )}
                   >
                     {c.name}
@@ -455,8 +517,8 @@ export function OutreachComposer({
             ))}
             {channel === "sms" && body && (
               <span className="text-muted-foreground ml-auto text-xs">
-                {body.length} characters · {pages} page{pages === 1 ? "" : "s"} per
-                recipient
+                {body.length} characters · {pages} page{pages === 1 ? "" : "s"}{" "}
+                per recipient
               </span>
             )}
           </div>

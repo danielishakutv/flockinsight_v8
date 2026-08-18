@@ -22,10 +22,10 @@ export default async function AuditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Audit log
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           A record of actions taken in the platform admin.
         </p>
       </div>

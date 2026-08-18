@@ -54,7 +54,7 @@ function Stat({
         <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
           {label}
         </p>
-        <p className="text-2xl font-extrabold tabular-nums">{value}</p>
+        <p className="text-xl font-bold tabular-nums">{value}</p>
         {sub && <p className="text-muted-foreground text-xs">{sub}</p>}
       </div>
     </CardContent>
@@ -131,7 +131,7 @@ export function PipelineHeader({
               <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
                 This month&rsquo;s goal
               </p>
-              <p className="text-3xl font-extrabold tabular-nums">
+              <p className="text-2xl font-bold tabular-nums">
                 {done}
                 <span className="text-muted-foreground text-lg font-bold">
                   {" "}

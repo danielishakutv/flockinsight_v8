@@ -31,7 +31,7 @@ function Stat({
         <p className="text-muted-foreground text-sm font-medium">{label}</p>
         <Icon className="text-primary size-5" />
       </div>
-      <p className="mt-2 text-3xl font-extrabold tabular-nums">{value.toLocaleString()}</p>
+      <p className="mt-1.5 text-2xl font-bold tabular-nums">{value.toLocaleString()}</p>
       <p className="text-muted-foreground mt-1 text-xs">{sub}</p>
     </Card>
   );

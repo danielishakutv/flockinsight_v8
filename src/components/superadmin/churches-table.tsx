@@ -299,7 +299,7 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
             return (
               <div
                 key={c.id}
-                className="bg-card rounded-2xl border p-3 shadow-sm sm:p-4"
+                className="bg-card rounded-xl border p-3 sm:p-3.5"
               >
                 <div className="flex flex-wrap items-start gap-3">
                   <Link

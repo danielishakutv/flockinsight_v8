@@ -89,10 +89,10 @@ export default async function SuperadminChurchesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Churches
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           {rows.length} church{rows.length === 1 ? "" : "es"} · {active} active
           this week
           {attention > 0 ? ` · ${attention} need attention` : ""}.

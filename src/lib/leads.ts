@@ -57,17 +57,21 @@ function leadWhere(f: LeadFilters): SQL | undefined {
   if (f.source !== "all") parts.push(eq(lead.source, f.source));
 
   if (f.q) {
-    const like = `%${f.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
-    parts.push(
-      or(
-        ilike(lead.churchName, like),
-        ilike(lead.contactName, like),
-        ilike(lead.email, like),
-        ilike(lead.phone, like),
-        ilike(lead.city, like),
-        ilike(lead.state, like),
-      ),
-    );
+    // Every word must appear somewhere, in any order: "grace yola" finds
+    // "Grace Chapel" in Yola, and a stray middle word doesn't break the search.
+    for (const word of f.q.split(/\s+/).filter(Boolean).slice(0, 6)) {
+      const like = `%${word.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+      parts.push(
+        or(
+          ilike(lead.churchName, like),
+          ilike(lead.contactName, like),
+          ilike(lead.email, like),
+          ilike(lead.phone, like),
+          ilike(lead.city, like),
+          ilike(lead.state, like),
+        ),
+      );
+    }
   }
   return parts.length ? and(...parts) : undefined;
 }

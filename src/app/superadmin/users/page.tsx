@@ -35,8 +35,8 @@ export default async function SuperadminUsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">Users</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-xl font-semibold tracking-tight">Users</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
           {users.length} account{users.length === 1 ? "" : "s"}. Reset passwords
           for locked-out users or manage admins.
         </p>

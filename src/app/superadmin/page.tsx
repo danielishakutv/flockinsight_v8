@@ -48,10 +48,10 @@ export default function SuperadminOverviewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Command centre
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           Everything happening across FlockInsight, and anything that needs you.
         </p>
       </div>

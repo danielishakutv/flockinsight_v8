@@ -151,7 +151,7 @@ export function UserDetail({
       </Button>
 
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight">{user.name}</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{user.name}</h1>
         {user.isSuperAdmin && (
           <Badge className="gap-1">
             <Shield className="size-3" /> Admin

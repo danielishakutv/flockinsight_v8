@@ -7,13 +7,16 @@ import { Button } from "@/components/ui/button";
 
 export function SignOutButton({
   variant = "outline",
+  size,
 }: {
   variant?: "outline" | "ghost" | "default";
+  size?: "sm" | "default" | "lg";
 }) {
   const router = useRouter();
   return (
     <Button
       variant={variant}
+      size={size}
       onClick={async () => {
         await signOut();
         router.push("/login");

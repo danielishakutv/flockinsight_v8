@@ -26,8 +26,8 @@ export default async function SuperadminBlogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">Blog</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-xl font-semibold tracking-tight">Blog</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
           Write and publish articles on the FlockInsight website for SEO &amp;
           sharing.
         </p>

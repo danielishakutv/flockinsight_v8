@@ -1,0 +1,1 @@
+CREATE INDEX "church_denomination_idx" ON "church" USING btree ("denomination_id");

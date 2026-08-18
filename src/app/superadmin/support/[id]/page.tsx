@@ -63,7 +63,7 @@ export default async function AdminTicketPage({
       </Button>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight">
+        <h1 className="text-lg font-semibold tracking-tight">
           {ticket.subject}
         </h1>
         <TicketStatusBadge status={ticket.status} audience="admin" />

@@ -1,9 +1,34 @@
 /** Small dependency-free CSV helpers (RFC 4180-ish). */
 
+/**
+ * Characters that make a spreadsheet treat a cell as a formula. A member named
+ * `=HYPERLINK("http://evil","Click")` would otherwise become a live formula in
+ * whatever Excel opens the export with, so those cells are prefixed with an
+ * apostrophe — Excel then shows the text and keeps it inert.
+ */
+const FORMULA_START = /^[=+\-@\t\r]/;
+/** Plain numbers are left alone: `-500` must stay a number Excel can sum. */
+const PLAIN_NUMBER = /^[-+]?\d+(\.\d+)?$/;
+
+function neutralize(s: string): string {
+  return FORMULA_START.test(s) && !PLAIN_NUMBER.test(s) ? `'${s}` : s;
+}
+
 /** Serialize a cell, quoting only when needed. */
 function cell(value: string | number | null): string {
-  const s = String(value ?? "");
+  // Numbers come from us, not from typed input — never worth neutralizing.
+  const s = typeof value === "number" ? String(value) : neutralize(String(value ?? ""));
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Undo the apostrophe `toCsv` adds, so a file we exported can be edited in a
+ * spreadsheet and imported straight back.
+ */
+export function unescapeCsvCell(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1))
+    ? value.slice(1)
+    : value;
 }
 
 /** Rows → CSV text with CRLF line endings. */

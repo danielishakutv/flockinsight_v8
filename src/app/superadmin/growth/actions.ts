@@ -9,7 +9,7 @@ import { requireSuperAdmin } from "@/lib/session";
 import { recordAudit } from "@/lib/audit";
 import { existingLeadKeys, logLeadActivity } from "@/lib/leads";
 import { sendOutreach, type Audience } from "@/lib/outreach";
-import { parseCsv } from "@/lib/csv";
+import { parseCsv, unescapeCsvCell } from "@/lib/csv";
 import { headerToLeadField, leadStatusMeta } from "@/lib/growth-shared";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -288,7 +288,9 @@ export async function setFollowUp(
 const MAX_IMPORT_ROWS = 5000;
 
 function clip(v: string | undefined, max: number): string | null {
-  const s = (v ?? "").trim();
+  // Undo the apostrophe our own export adds in front of "+234…" and friends,
+  // so an exported file can be edited in a spreadsheet and imported back.
+  const s = unescapeCsvCell((v ?? "").trim()).trim();
   return s ? s.slice(0, max) : null;
 }
 
@@ -388,10 +390,12 @@ export async function importLeads(
 const audienceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("churches"),
-    filter: z.enum(["all", "plan", "country", "status", "picked"]),
+    filter: z.enum(["all", "plan", "country", "status", "denomination", "picked"]),
     plan: z.string().trim().max(40).optional(),
     country: z.string().trim().max(80).optional(),
     status: z.enum(["active", "suspended"]).optional(),
+    denominationId: z.string().uuid().optional(),
+    denominationLabel: z.string().trim().max(120).optional(),
     ids: z.array(z.string()).default([]),
   }),
   z.object({
@@ -424,6 +428,15 @@ function toAudience(a: z.infer<typeof audienceSchema>): Audience | string {
       return a.status
         ? { kind: "churches", filter: "status", status: a.status }
         : "Choose a status.";
+    if (a.filter === "denomination")
+      return a.denominationId
+        ? {
+            kind: "churches",
+            filter: "denomination",
+            denominationId: a.denominationId,
+            label: a.denominationLabel || "a denomination",
+          }
+        : "Choose a denomination.";
     if (a.filter === "picked")
       return a.ids.length
         ? { kind: "churches", filter: "picked", ids: a.ids }

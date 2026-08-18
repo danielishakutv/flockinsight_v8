@@ -78,7 +78,7 @@ export function PricingAdmin({
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Pricing
         </h1>
         <p className="text-muted-foreground mt-1">

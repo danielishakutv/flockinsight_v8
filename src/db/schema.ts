@@ -155,6 +155,37 @@ export const verification = pgTable("verification", {
 });
 
 /* ============================================================
+ * Denominations — the group a church belongs to (RCCG, Anglican, …)
+ *
+ * `church.denomination` stays as the free-text label the church types on its
+ * own public page; this table is the platform's tidy version of the same idea,
+ * so churches can be grouped, counted and addressed together. Assigning a
+ * church copies the name into that text column, so public pages and the
+ * directory keep working unchanged.
+ *
+ * Rows are never deleted: merging one into another moves its churches and
+ * marks the empty one archived, which keeps historical names readable.
+ * ========================================================== */
+
+export const denomination = pgTable(
+  "denomination",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull().unique(),
+    abbreviation: text(), // "RCCG", "COCIN"
+    notes: text(),
+    archived: boolean().notNull().default(false),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("denomination_archived_idx").on(t.archived)],
+);
+
+/* ============================================================
  * Better Auth — organization plugin
  * organization -> `church` (the tenant)
  * member       -> `staff`  (login users + their role per church)
@@ -223,6 +254,11 @@ export const church = pgTable("church", {
   // Whether the church is listed in the public directory & its page is live.
   publicEnabled: boolean().notNull().default(true),
   denomination: text(),
+  // Platform-managed grouping (see the denomination table). The text column
+  // above stays the church's own wording; this is the tidy one we group by.
+  denominationId: uuid().references(() => denomination.id, {
+    onDelete: "set null",
+  }),
   tagline: text(),
   about: text(),
   coverUrl: text(),
@@ -249,7 +285,9 @@ export const church = pgTable("church", {
     .default(sql`'{}'::jsonb`),
   // Highlighted in the public directory by the platform.
   featured: boolean().notNull().default(false),
-});
+},
+  (t) => [index("church_denomination_idx").on(t.denominationId)],
+);
 
 /* ============================================================
  * FlockInsight domain — promo banners / ad slots (platform-managed)
@@ -2190,6 +2228,7 @@ export const outreachRecipient = pgTable(
  * Type helpers
  * ========================================================== */
 
+export type Denomination = typeof denomination.$inferSelect;
 export type Lead = typeof lead.$inferSelect;
 export type NewLead = typeof lead.$inferInsert;
 export type LeadActivity = typeof leadActivity.$inferSelect;

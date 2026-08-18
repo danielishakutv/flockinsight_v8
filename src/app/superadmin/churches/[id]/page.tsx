@@ -37,7 +37,9 @@ import { planName } from "@/lib/plans";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 import { computeStanding } from "@/lib/trial";
+import { denominationOptions } from "@/lib/denominations";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
+import { ChurchDenomination } from "@/components/superadmin/church-denomination";
 import { ChurchDataTools } from "@/components/superadmin/church-data-tools";
 import { ChurchTrialControls } from "@/components/superadmin/church-trial-controls";
 import { StatCard } from "@/components/app/stat-card";
@@ -66,7 +68,10 @@ export default async function SuperadminChurchPage({
 }) {
   const { id } = await params;
 
-  const [c] = await db.select().from(church).where(eq(church.id, id)).limit(1);
+  const [[c], denominations] = await Promise.all([
+    db.select().from(church).where(eq(church.id, id)).limit(1),
+    denominationOptions(),
+  ]);
   if (!c) notFound();
 
   const [
@@ -214,7 +219,7 @@ export default async function SuperadminChurchPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+            <h1 className="text-xl font-semibold tracking-tight">
               {c.name}
             </h1>
             <Badge
@@ -282,6 +287,13 @@ export default async function SuperadminChurchPage({
           icon={Mail}
         />
       </div>
+
+      <ChurchDenomination
+        churchId={c.id}
+        current={c.denominationId}
+        typedLabel={c.denomination}
+        options={denominations}
+      />
 
       <AdminBilling
         churchId={c.id}

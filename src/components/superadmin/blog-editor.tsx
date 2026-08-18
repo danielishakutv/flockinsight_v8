@@ -253,7 +253,7 @@ function ArticlePreview({ post }: { post: PostState }) {
               ))}
             </div>
           )}
-          <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+          <h1 className="text-xl font-semibold tracking-tight">
             {post.title || "Untitled post"}
           </h1>
           <p className="text-muted-foreground mt-3 text-sm">

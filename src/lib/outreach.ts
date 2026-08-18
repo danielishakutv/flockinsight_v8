@@ -30,6 +30,7 @@ export type ChurchAudience =
   | { kind: "churches"; filter: "plan"; plan: string }
   | { kind: "churches"; filter: "country"; country: string }
   | { kind: "churches"; filter: "status"; status: "active" | "suspended" }
+  | { kind: "churches"; filter: "denomination"; denominationId: string; label: string }
   | { kind: "churches"; filter: "picked"; ids: string[] };
 
 export type LeadAudience =
@@ -58,6 +59,7 @@ export function audienceLabel(a: Audience): string {
     if (a.filter === "plan") return `Churches · ${a.plan} plan`;
     if (a.filter === "country") return `Churches · ${a.country}`;
     if (a.filter === "status") return `Churches · ${a.status}`;
+    if (a.filter === "denomination") return `Churches · ${a.label}`;
     return `Churches · ${a.ids.length} picked`;
   }
   if (a.filter === "all") return "Leads · everyone";
@@ -126,9 +128,11 @@ export async function resolveTargets(
           ? eq(church.country, a.country)
           : a.filter === "status"
             ? eq(church.status, a.status)
-            : a.ids.length
-              ? inArray(church.id, a.ids)
-              : sql`false`;
+            : a.filter === "denomination"
+              ? eq(church.denominationId, a.denominationId)
+              : a.ids.length
+                ? inArray(church.id, a.ids)
+                : sql`false`;
 
   if (channel === "sms") {
     const rows = await db

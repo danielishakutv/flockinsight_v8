@@ -52,10 +52,10 @@ export default async function SuperadminSupportPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="text-xl font-semibold tracking-tight">
           Support
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           {openCount} ticket{openCount === 1 ? "" : "s"} need a reply.
         </p>
       </div>

@@ -33,10 +33,8 @@ export default async function GrowthPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
-            Growth
-          </h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-xl font-semibold tracking-tight">Pipeline</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             Every church you&rsquo;re talking to, and what you owe them next.
           </p>
         </div>

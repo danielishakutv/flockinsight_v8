@@ -54,7 +54,7 @@ export function StatusLine({ items }: { items: QueueItem[] }) {
 
   if (total === 0) {
     return (
-      <div className="text-success bg-success/10 border-success/20 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold">
+      <div className="text-success bg-success/10 border-success/20 flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold">
         <CheckCircle2 className="size-5 shrink-0" />
         All systems normal
       </div>
@@ -64,7 +64,7 @@ export function StatusLine({ items }: { items: QueueItem[] }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold",
+        "flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold",
         critical > 0
           ? "border-destructive/30 bg-destructive/10 text-destructive"
           : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -87,7 +87,7 @@ export function ActionQueue({ items }: { items: QueueItem[] }) {
     // An empty queue is the goal, so it points somewhere useful rather than
     // being a dead end.
     return (
-      <div className="bg-card rounded-2xl border p-6 text-center">
+      <div className="bg-card rounded-xl border p-6 text-center">
         <CheckCircle2 className="text-success mx-auto size-8" />
         <p className="mt-2 font-bold">Nothing needs you right now</p>
         <p className="text-muted-foreground mt-1 text-sm">
@@ -120,7 +120,7 @@ export function ActionQueue({ items }: { items: QueueItem[] }) {
             key={item.key}
             href={item.href}
             className={cn(
-              "group flex items-center gap-3 rounded-2xl border p-3.5 transition sm:p-4",
+              "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition",
               s.wrap,
             )}
           >

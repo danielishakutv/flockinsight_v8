@@ -209,7 +209,7 @@ export function LeadDetail({
           <CardContent className="space-y-4 py-5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h1 className="text-2xl font-extrabold tracking-tight">
+                <h1 className="text-lg font-semibold tracking-tight">
                   {lead.churchName}
                 </h1>
                 <p className="text-muted-foreground text-sm">

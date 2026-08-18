@@ -62,7 +62,7 @@ function Stat({
       </p>
       <p
         className={cn(
-          "mt-1 truncate text-xl font-extrabold tabular-nums",
+          "mt-1 truncate text-lg font-bold tabular-nums",
           tone === "bad" && "text-destructive",
           tone === "warn" && "text-amber-600 dark:text-amber-400",
           tone === "good" && "text-success",
@@ -166,7 +166,7 @@ export function FloatPanel({
         ) : (
           <>
             <div className="flex flex-wrap items-end gap-3">
-              <p className="text-4xl font-extrabold tabular-nums">
+              <p className="text-2xl font-bold tabular-nums">
                 {float.balance === null
                   ? "—"
                   : formatMoney(float.balance, float.currency)}
