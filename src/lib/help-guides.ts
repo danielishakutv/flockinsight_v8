@@ -54,6 +54,7 @@ export const GUIDES: Guide[] = [
           "The dashboard shows key numbers, upcoming birthdays & anniversaries, and a to-do list.",
           "Everything is in the left menu (or the More menu on mobile): Attendance, Analytics, Members, Groups, Giving, Follow-up, Communication, Media, Forms and Devotionals.",
           "Settings is now a clean, grouped menu (Church, Engagement, Billing, People) — no more sideways scrolling.",
+          "Any dropdown with more than a handful of choices has a search box: open it and start typing. It ignores accents and lets you type words in any order, so “john doe” finds “Doe, John”.",
         ],
       },
     ],
@@ -580,6 +581,77 @@ export const GUIDES: Guide[] = [
       { label: "Roles", href: "/settings/roles" },
     ],
     keywords: ["team", "staff", "role", "permission", "invite", "access"],
+  },
+  {
+    slug: "branches",
+    title: "Running several churches (branches)",
+    category: "account",
+    icon: "network",
+    summary:
+      "Link your branches to a headquarters and see one report across all of them.",
+    minutes: 4,
+    sections: [
+      {
+        title: "How a church network works",
+        body: [
+          "Every branch stays a normal, separate church on FlockInsight: its own members, its own attendance, its own giving, its own team and its own plan. Nothing is shared automatically.",
+          "Linking a branch to a headquarters does one thing: it lets the headquarters see roll-up numbers — attendance, membership and giving totals per branch. The headquarters never sees a branch's member records, giving entries or messages.",
+          "Both sides can leave the network at any time, from Branches.",
+        ],
+      },
+      {
+        title: "Add a branch",
+        body: [
+          "Each branch needs its own FlockInsight account first. If a branch hasn't signed up yet, ask them to create one — then link it.",
+          "From the headquarters, go to Branches → Add a branch, search for the church by name, add a short note and send the invitation.",
+          "The branch sees the invitation on their own Branches page and accepts or declines it. Nothing changes until they accept, so a headquarters can never help itself to another church's data.",
+        ],
+      },
+      {
+        title: "Zones, states and cities",
+        body: [
+          "Group branches into zones (North Zone, Lagos Region, a province or district — whatever you call them). Tick the branches on the Branches table, type the zone name and set it.",
+          "The dashboard filters by zone, state, city and country, plus a date range — last 30 or 90 days, this month, this year, or the last 12 months.",
+          "Filters live in the page address, so you can bookmark a view (for example, one zone's numbers this month) or send the link to a zonal pastor.",
+        ],
+      },
+      {
+        title: "Read the report",
+        body: [
+          "The four boxes at the top are the whole network for the range you chose: branches, members, average attendance and giving.",
+          "The table below breaks it down per branch, ending with when each branch last recorded anything. A branch that has recorded nothing in the range is flagged in red — that column is usually the reason to open this page.",
+          "Export gives you the current filtered view as a spreadsheet, totals included, for a board meeting or a printed report.",
+        ],
+      },
+      {
+        title: "Get it emailed to you",
+        body: [
+          "Branches → Automatic reports. Turn it on and choose weekly or monthly.",
+          "It goes to everyone with a login at the headquarters, plus any extra addresses you add — a bishop, an overseer, a board member who doesn't use the app.",
+          "The email leads with the totals, then names the branches that recorded nothing, then lists every branch.",
+        ],
+      },
+    ],
+    links: [{ label: "Branches", href: "/branches" }],
+    tip: "A branch that stops recording is the first sign of a problem. The weekly email names those branches so you can call before a month goes by.",
+    keywords: [
+      "branch",
+      "branches",
+      "network",
+      "headquarters",
+      "hq",
+      "mega church",
+      "multi-site",
+      "campus",
+      "zone",
+      "region",
+      "province",
+      "district",
+      "diocese",
+      "parish",
+      "denomination",
+      "group of churches",
+    ],
   },
   {
     slug: "contact-support",

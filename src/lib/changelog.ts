@@ -29,6 +29,29 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.57.0",
+    date: "2026-08-18",
+    summary:
+      "Run several churches from one place: link your branches to a headquarters and get one report across all of them — on screen, as a spreadsheet, or emailed to you every week.",
+    changes: {
+      Added: [
+        "Branches: link the churches you run to a headquarters and see them together. Every branch stays a separate church with its own members, giving, team and plan — the headquarters only ever sees roll-up totals, never a branch's records.",
+        "Linking needs consent: the headquarters invites, the branch accepts or declines, and either side can leave whenever they want.",
+        "The branch dashboard totals members, average attendance and giving, filters by zone, state, city, country and date range, and flags any branch that hasn't recorded anything in the period.",
+        "Group branches into zones — North Zone, a province, a district — and filter the whole report by them. Any filtered view can be bookmarked, shared, or exported as a spreadsheet.",
+        "Automatic branch reports by email, weekly or monthly, to your team plus any extra addresses (a bishop, an overseer, a board member who doesn't use the app).",
+      ],
+      Improved: [
+        "Every dropdown with more than a handful of options now has a search box — members, countries, states, categories, timezones, roles and the rest. It ignores accents and capitals, accepts words in any order, and matches phone numbers however they're punctuated.",
+        "Faster, quieter platform admin for the FlockInsight team, so support answers arrive sooner.",
+      ],
+      Security: [
+        "CSV exports are now hardened against spreadsheet formula injection — a mischievous name in your data can no longer become a live formula in Excel. Amounts still export as numbers you can sum.",
+        "Updated the framework and login system to the latest patched releases.",
+      ],
+    },
+  },
+  {
     version: "0.56.0",
     date: "2026-07-27",
     summary:

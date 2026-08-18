@@ -21,6 +21,7 @@ import {
   Wallet,
   HardDrive,
   PartyPopper,
+  Network,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   celebrations: PartyPopper,
   wallet: Wallet,
   storage: HardDrive,
+  network: Network,
   default: BookOpen,
 };
 

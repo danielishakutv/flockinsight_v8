@@ -38,8 +38,8 @@ export function WhatsNewBanner() {
         <div className="min-w-0 flex-1 text-sm">
           <span className="font-semibold">FlockInsight just got an update. </span>
           <span className="text-muted-foreground">
-            Bulk member tools, a wallet &amp; messaging dashboard card, event
-            speakers/guests &amp; more.
+            Branches for churches that run several campuses, and a search box
+            in every long dropdown.
           </span>{" "}
           <Link
             href="/changelog"
