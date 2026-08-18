@@ -16,6 +16,7 @@ export const CRON_JOBS = {
   storage: { label: "Storage add-on billing", intervalMinutes: 1440 },
   "first-timers": { label: "First-timer follow-up", intervalMinutes: 1440 },
   "trial-reminders": { label: "Trial ending reminders", intervalMinutes: 1440 },
+  "branch-reports": { label: "Branch roll-up reports", intervalMinutes: 1440 },
 
   // Hourly.
   "service-reminders": { label: "Service reminders", intervalMinutes: 60 },

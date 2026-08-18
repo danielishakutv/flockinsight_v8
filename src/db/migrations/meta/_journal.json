@@ -379,6 +379,13 @@
       "when": 1787011973018,
       "tag": "0053_church_denomination_index",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1787035855131,
+      "tag": "0054_church_networks",
+      "breakpoints": true
     }
   ]
 }

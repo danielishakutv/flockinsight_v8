@@ -285,8 +285,20 @@ export const church = pgTable("church", {
     .default(sql`'{}'::jsonb`),
   // Highlighted in the public directory by the platform.
   featured: boolean().notNull().default(false),
+  /* ----- Church networks (mega church → branches) -----
+   * A branch points at its headquarters. Both are ordinary, standalone
+   * churches with their own plan, data and logins; the link only grants the
+   * HQ read-only reporting across its branches. */
+  parentChurchId: text().references((): AnyPgColumn => church.id, {
+    onDelete: "set null",
+  }),
+  // Free-text grouping the HQ controls, e.g. "North Zone", "Lagos Region".
+  zone: text(),
 },
-  (t) => [index("church_denomination_idx").on(t.denominationId)],
+  (t) => [
+    index("church_denomination_idx").on(t.denominationId),
+    index("church_parent_idx").on(t.parentChurchId),
+  ],
 );
 
 /* ============================================================
@@ -2225,10 +2237,72 @@ export const outreachRecipient = pgTable(
 );
 
 /* ============================================================
+ * Church networks — a headquarters and its branches
+ *
+ * Linking an existing church needs its consent, so an HQ sends a request and
+ * the branch's owner accepts it. Requests are kept after the answer: the
+ * record of who asked whom, and what they said, is the audit trail.
+ * ========================================================== */
+
+export const branchRequestStatusEnum = pgEnum("branch_request_status", [
+  "pending",
+  "accepted",
+  "declined",
+  "cancelled",
+]);
+
+export const branchRequest = pgTable(
+  "branch_request",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    parentChurchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    // Which church is being invited. Null while we only know their email.
+    childChurchId: text().references(() => church.id, { onDelete: "cascade" }),
+    // How the HQ addressed them, when the church isn't on FlockInsight yet.
+    inviteEmail: text(),
+    status: branchRequestStatusEnum().notNull().default("pending"),
+    message: text(),
+    requestedBy: text().references(() => user.id, { onDelete: "set null" }),
+    respondedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("branch_request_parent_idx").on(t.parentChurchId),
+    index("branch_request_child_idx").on(t.childChurchId, t.status),
+  ],
+);
+
+/** How often a headquarters wants the branch roll-up in its inbox. */
+export const hqReportFrequencyEnum = pgEnum("hq_report_frequency", [
+  "weekly",
+  "monthly",
+]);
+
+export const hqReportSetting = pgTable("hq_report_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  frequency: hqReportFrequencyEnum().notNull().default("weekly"),
+  // Extra addresses beyond the church's own owners.
+  recipients: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  lastSentAt: timestamp({ withTimezone: true }),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/* ============================================================
  * Type helpers
  * ========================================================== */
 
 export type Denomination = typeof denomination.$inferSelect;
+export type BranchRequest = typeof branchRequest.$inferSelect;
+export type HqReportSetting = typeof hqReportSetting.$inferSelect;
 export type Lead = typeof lead.$inferSelect;
 export type NewLead = typeof lead.$inferInsert;
 export type LeadActivity = typeof leadActivity.$inferSelect;

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, Clock, Lightbulb, MessageCircle } from "lucide-react";
 import { getGuide, GUIDES } from "@/lib/help-guides";
-import { helpIcon } from "@/components/help/icons";
+import { HELP_ICONS } from "@/components/help/icons";
 import { Button } from "@/components/ui/button";
 
 export function generateStaticParams() {
@@ -30,7 +30,7 @@ export default async function GuidePage({
   const { slug } = await params;
   const g = getGuide(slug);
   if (!g) notFound();
-  const Icon = helpIcon(g.icon);
+  const Icon = HELP_ICONS[g.icon] ?? HELP_ICONS.default;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 lg:px-8">

@@ -303,7 +303,7 @@ function Subscribers({
         </div>
         {subscribers.length > 0 && (
           <Button asChild variant="outline" size="sm">
-            <a href="/devotionals/subscribers/export">
+            <a href="/devotionals/subscribers/export" download>
               <Download className="size-4" /> Export CSV
             </a>
           </Button>

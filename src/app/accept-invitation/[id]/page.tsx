@@ -9,6 +9,11 @@ import {
 
 export const metadata = { title: "Church invitation" };
 
+/** Whether an invitation's deadline has passed, as of this request. */
+function hasExpired(expiresAt: Date | string): boolean {
+  return new Date(expiresAt).getTime() < Date.now();
+}
+
 export default async function AcceptInvitationPage({
   params,
 }: {
@@ -57,7 +62,7 @@ export default async function AcceptInvitationPage({
         .limit(1);
       alreadyMember = !!m;
     }
-    const expired = new Date(inv.expiresAt).getTime() < Date.now();
+    const expired = hasExpired(inv.expiresAt);
     const matches =
       !!sessionEmail && sessionEmail.toLowerCase() === inv.email.toLowerCase();
 

@@ -145,3 +145,79 @@ export async function extendTrial(id: string, weeks: number): Promise<ActionResu
   revalidatePath(`/superadmin/churches/${id}`);
   return { ok: true };
 }
+
+/* ============================================================
+ * Church networks
+ * ========================================================== */
+
+const parentSchema = z.object({
+  churchId: z.string().min(1),
+  parentChurchId: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.string().nullable(),
+  ),
+});
+
+/**
+ * Point a church at its headquarters (or detach it), from the platform side.
+ * Churches normally arrange this between themselves under Branches; this is
+ * the operator's override for fixing a mistake or setting one up on request.
+ */
+export async function setChurchParent(
+  input: z.input<typeof parentSchema>,
+): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const parsed = parentSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  const { churchId, parentChurchId } = parsed.data;
+
+  if (parentChurchId === churchId)
+    return { ok: false, error: "A church cannot be its own headquarters." };
+
+  if (parentChurchId) {
+    // Networks stay one level deep, so reporting has a single, obvious shape.
+    const [parent] = await db
+      .select({ id: church.id, parentChurchId: church.parentChurchId })
+      .from(church)
+      .where(eq(church.id, parentChurchId))
+      .limit(1);
+    if (!parent) return { ok: false, error: "That headquarters no longer exists." };
+    if (parent.parentChurchId)
+      return {
+        ok: false,
+        error: "That church is itself a branch — pick its headquarters instead.",
+      };
+
+    const [ownBranch] = await db
+      .select({ id: church.id })
+      .from(church)
+      .where(eq(church.parentChurchId, churchId))
+      .limit(1);
+    if (ownBranch)
+      return {
+        ok: false,
+        error: "This church already has branches, so it cannot become one.",
+      };
+  }
+
+  await db
+    .update(church)
+    .set({ parentChurchId, ...(parentChurchId ? {} : { zone: null }) })
+    .where(eq(church.id, churchId));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: parentChurchId ? "church_linked_to_hq" : "church_unlinked_from_hq",
+    summary: parentChurchId
+      ? "Linked a church to a headquarters"
+      : "Detached a church from its headquarters",
+    targetType: "church",
+    targetId: churchId,
+  });
+
+  revalidatePath(`/superadmin/churches/${churchId}`);
+  revalidatePath("/superadmin/churches");
+  return { ok: true };
+}

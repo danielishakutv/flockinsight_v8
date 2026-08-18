@@ -7,6 +7,7 @@ import {
   savePushSubscription,
   removePushSubscription,
 } from "@/app/(app)/notifications/actions";
+import { useMounted } from "@/lib/client-state";
 import { Button } from "@/components/ui/button";
 
 const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -21,23 +22,32 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export function PushToggle() {
-  const [supported, setSupported] = useState(false);
+  const mounted = useMounted();
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Whether push works here is a fact about the browser, known as soon as we
+  // are running in one — no state, no extra render.
+  const supported =
+    mounted &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    !!VAPID;
+
+  // Whether this device is already subscribed only the service worker knows.
   useEffect(() => {
-    const ok =
-      typeof window !== "undefined" &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      !!VAPID;
-    setSupported(ok);
-    if (!ok) return;
+    if (!supported) return;
+    let cancelled = false;
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setSubscribed(!!sub))
+      .then((sub) => {
+        if (!cancelled) setSubscribed(!!sub);
+      })
       .catch(() => {});
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [supported]);
 
   if (!supported) return null;
 

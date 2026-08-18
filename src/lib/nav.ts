@@ -16,6 +16,7 @@ import {
   FileText,
   BookOpen,
   PartyPopper,
+  Network,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,6 +68,12 @@ export const mainNav: NavItem[] = [
     href: "/devotionals",
     icon: BookOpen,
     perm: "devotionals.view",
+  },
+  {
+    label: "Branches",
+    href: "/branches",
+    icon: Network,
+    perm: ["settings.manage", "analytics.view"],
   },
   { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
@@ -226,6 +233,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: Bell,
         description: "Updates from FlockInsight",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
+      },
+      {
+        label: "Branches",
+        href: "/branches",
+        icon: Network,
+        description: "Your church network at a glance",
+        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+        perm: ["settings.manage", "analytics.view"],
       },
       {
         label: "Settings",

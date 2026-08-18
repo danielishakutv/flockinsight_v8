@@ -9,6 +9,7 @@ import {
   pushSupported,
   subscribeToPush,
 } from "@/lib/push-client";
+import { useStoredValue, writeStoredValue } from "@/lib/client-state";
 import { Button } from "@/components/ui/button";
 
 export type Notice = {
@@ -20,39 +21,43 @@ export type Notice = {
 
 const KEY = "fi-dismissed-notices";
 
-function loadDismissed(): Set<string> {
+/** The dismissed-notice ids stored on this device. */
+function parseDismissed(raw: string | null): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(KEY) || "[]"));
+    const parsed: unknown = JSON.parse(raw || "[]");
+    return new Set(Array.isArray(parsed) ? (parsed as string[]) : []);
   } catch {
     return new Set();
   }
 }
 
 export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  // Read straight from storage rather than copying it into state on mount:
+  // one render instead of two, and dismissing updates every reader at once.
+  const dismissed = parseDismissed(useStoredValue(KEY));
   const [showPush, setShowPush] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [ready, setReady] = useState(false);
 
+  // Whether this browser already has a push subscription is a question only
+  // the service worker can answer, and only asynchronously.
   useEffect(() => {
-    setDismissed(loadDismissed());
+    let cancelled = false;
     (async () => {
-      if (pushSupported() && !(await isPushSubscribed())) setShowPush(true);
+      const offer = pushSupported() && !(await isPushSubscribed());
+      if (cancelled) return;
+      setShowPush(offer);
       setReady(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function dismiss(id: string) {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      try {
-        localStorage.setItem(KEY, JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    const next = new Set(dismissed);
+    next.add(id);
+    writeStoredValue(KEY, JSON.stringify([...next]));
     if (id === "push") setShowPush(false);
   }
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
+import { useStoredValue, writeStoredValue } from "@/lib/client-state";
 
 const KEY = "fi_seen_version";
 
@@ -13,32 +14,20 @@ const KEY = "fi_seen_version";
  * Brand-new users (no stored version) are not nagged. No DB, no network.
  */
 export function WhatsNewBanner() {
-  const [show, setShow] = useState(false);
+  const seen = useStoredValue(KEY);
 
+  // First visit on this device: record the version silently rather than
+  // greeting a brand-new user with "there's an update".
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem(KEY);
-      if (!seen) {
-        // First visit on this device — record silently, don't nag.
-        localStorage.setItem(KEY, APP_VERSION);
-        return;
-      }
-      if (seen !== APP_VERSION) setShow(true);
-    } catch {
-      /* localStorage unavailable — skip */
-    }
-  }, []);
+    if (seen === null) writeStoredValue(KEY, APP_VERSION);
+  }, [seen]);
 
   function dismiss() {
-    try {
-      localStorage.setItem(KEY, APP_VERSION);
-    } catch {
-      /* ignore */
-    }
-    setShow(false);
+    writeStoredValue(KEY, APP_VERSION);
   }
 
-  if (!show) return null;
+  // `null` means either SSR or a first visit — neither should show the banner.
+  if (seen === null || seen === APP_VERSION) return null;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pt-4 lg:px-8">

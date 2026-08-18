@@ -40,6 +40,7 @@ import { computeStanding } from "@/lib/trial";
 import { denominationOptions } from "@/lib/denominations";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
 import { ChurchDenomination } from "@/components/superadmin/church-denomination";
+import { ChurchNetwork } from "@/components/superadmin/church-network";
 import { ChurchDataTools } from "@/components/superadmin/church-data-tools";
 import { ChurchTrialControls } from "@/components/superadmin/church-trial-controls";
 import { StatCard } from "@/components/app/stat-card";
@@ -68,9 +69,19 @@ export default async function SuperadminChurchPage({
 }) {
   const { id } = await params;
 
-  const [[c], denominations] = await Promise.all([
+  const [[c], denominations, networkChurches] = await Promise.all([
     db.select().from(church).where(eq(church.id, id)).limit(1),
     denominationOptions(),
+    // Everything we need to show and edit this church's place in a network.
+    db
+      .select({
+        id: church.id,
+        name: church.name,
+        parentChurchId: church.parentChurchId,
+        zone: church.zone,
+      })
+      .from(church)
+      .orderBy(asc(church.name)),
   ]);
   if (!c) notFound();
 
@@ -287,6 +298,17 @@ export default async function SuperadminChurchPage({
           icon={Mail}
         />
       </div>
+
+      <ChurchNetwork
+        churchId={c.id}
+        parentId={c.parentChurchId}
+        branches={networkChurches
+          .filter((n) => n.parentChurchId === c.id)
+          .map((n) => ({ id: n.id, name: n.name, zone: n.zone }))}
+        candidates={networkChurches
+          .filter((n) => n.id !== c.id && n.parentChurchId === null)
+          .map((n) => ({ id: n.id, name: n.name }))}
+      />
 
       <ChurchDenomination
         churchId={c.id}
