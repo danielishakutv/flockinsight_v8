@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { giving, member, pledge, project } from "@/db/schema";
 import type {
@@ -29,41 +29,63 @@ export type ProjectListItem = {
   pledgeCount: number;
 };
 
-/** All projects for a church with raised/pledged rollups. */
+/**
+ * All projects for a church with raised/pledged rollups.
+ *
+ * The rollups are grouped queries joined in JS rather than correlated
+ * subqueries, for the reason recorded on `paidByPledge` below: inside a raw
+ * `sql` template in a SELECT-field position, drizzle renders `${table.column}`
+ * WITHOUT its table qualifier. `where ${giving.projectId} = ${project.id}`
+ * became `where "project_id" = "id"`, and Postgres resolved both names against
+ * the inner table — so every project silently reported zero raised, zero
+ * pledged and zero pledges.
+ */
 export async function listProjects(churchId: string): Promise<ProjectListItem[]> {
-  const rows = await db
-    .select({
-      id: project.id,
-      name: project.name,
-      status: project.status,
-      targetAmount: project.targetAmount,
-      createdAt: project.createdAt,
-      raised: sql<number>`coalesce((
-        select sum(${giving.amount}) from ${giving}
-        where ${giving.projectId} = ${project.id}
-      ), 0)`,
-      pledged: sql<number>`coalesce((
-        select sum(${pledge.amount}) from ${pledge}
-        where ${pledge.projectId} = ${project.id} and ${pledge.status} <> 'cancelled'
-      ), 0)`,
-      pledgeCount: sql<number>`(
-        select count(*) from ${pledge}
-        where ${pledge.projectId} = ${project.id} and ${pledge.status} <> 'cancelled'
-      )`,
-    })
-    .from(project)
-    .where(eq(project.churchId, churchId))
-    // Active first, then most recent.
-    .orderBy(asc(project.status), desc(project.createdAt));
+  const [rows, raisedRows, pledgedRows] = await Promise.all([
+    db
+      .select({
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        targetAmount: project.targetAmount,
+        createdAt: project.createdAt,
+      })
+      .from(project)
+      .where(eq(project.churchId, churchId))
+      // Active first, then most recent.
+      .orderBy(asc(project.status), desc(project.createdAt)),
+    db
+      .select({
+        projectId: giving.projectId,
+        total: sql<number>`coalesce(sum(${giving.amount}), 0)`,
+      })
+      .from(giving)
+      .where(eq(giving.churchId, churchId))
+      .groupBy(giving.projectId),
+    db
+      .select({
+        projectId: pledge.projectId,
+        total: sql<number>`coalesce(sum(${pledge.amount}), 0)`,
+        n: count(),
+      })
+      .from(pledge)
+      .where(and(eq(pledge.churchId, churchId), ne(pledge.status, "cancelled")))
+      .groupBy(pledge.projectId),
+  ]);
+
+  const raisedOf = new Map(raisedRows.map((r) => [r.projectId, Number(r.total)]));
+  const pledgedOf = new Map(
+    pledgedRows.map((r) => [r.projectId, { total: Number(r.total), n: Number(r.n) }]),
+  );
 
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     status: r.status,
     targetAmount: r.targetAmount,
-    raised: Number(r.raised),
-    pledged: Number(r.pledged),
-    pledgeCount: Number(r.pledgeCount),
+    raised: raisedOf.get(r.id) ?? 0,
+    pledged: pledgedOf.get(r.id)?.total ?? 0,
+    pledgeCount: pledgedOf.get(r.id)?.n ?? 0,
   }));
 }
 
@@ -122,15 +144,18 @@ export async function getProject(
       startDate: pledge.startDate,
       note: pledge.note,
       createdAt: pledge.createdAt,
-      paid: sql<number>`coalesce((
-        select sum(${giving.amount}) from ${giving}
-        where ${giving.pledgeId} = ${pledge.id}
-      ), 0)`,
     })
     .from(pledge)
     .leftJoin(member, eq(member.id, pledge.memberId))
     .where(and(eq(pledge.projectId, id), eq(pledge.churchId, churchId)))
     .orderBy(asc(pledge.status), desc(pledge.createdAt));
+
+  // Same reason as listProjects: a correlated subquery here reported every
+  // pledge as unpaid. `paidByPledge` groups instead, so it cannot misbind.
+  const paidOf = await paidByPledge(
+    churchId,
+    pledges.map((r) => r.id),
+  );
 
   const [totals] = await db
     .select({
@@ -148,7 +173,7 @@ export async function getProject(
       r.giverName ||
       "Unnamed",
     amount: Number(r.amount),
-    paid: Number(r.paid),
+    paid: paidOf.get(r.id) ?? 0,
     cadence: r.cadence,
     cadenceLabel: r.cadenceLabel,
     installmentAmount: r.installmentAmount,
@@ -184,7 +209,16 @@ export async function activeProjectOptions(
     .orderBy(asc(project.name));
 }
 
-/** Sum of payments per pledge id, as a plain map (avoids correlated subqueries). */
+/**
+ * Sum of payments per pledge id, as a plain map.
+ *
+ * Grouped rather than correlated on purpose. A correlated subquery written as
+ * a raw `sql` template in a SELECT-field position loses its table qualifier —
+ * drizzle renders `${giving.pledgeId} = ${pledge.id}` as `"pledge_id" = "id"`,
+ * both of which Postgres then resolves against `giving`, so the condition is
+ * never true and every total comes back zero. Grouping has no outer reference
+ * to lose.
+ */
 export async function paidByPledge(
   churchId: string,
   pledgeIds: string[],

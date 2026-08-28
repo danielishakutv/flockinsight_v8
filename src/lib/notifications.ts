@@ -29,6 +29,12 @@ export type NotificationItem = {
 
 /** SQL predicate: notifications whose audience includes this church. */
 function audienceFilter(ctx: NotificationCtx): SQL {
+  // sql-qualified-ok: this template is used as a WHERE predicate, and in that
+  // position drizzle renders the column fully qualified — the generated SQL is
+  // `nt.notification_id = "notification"."id"`, so the outer reference
+  // survives. The same template in a SELECT-field position would render a bare
+  // `"id"` and silently bind it to `nt` instead; see lib/sql-safety.test.ts.
+  // `${ctx.churchId}` is a bound parameter, not a column, so it is unaffected.
   const targeted = sql`exists (select 1 from notification_target nt where nt.notification_id = ${notification.id} and nt.church_id = ${ctx.churchId})`;
   return or(
     eq(notification.audience, "all"),
