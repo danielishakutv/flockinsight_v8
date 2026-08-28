@@ -533,6 +533,67 @@ export const GUIDES: Guide[] = [
     keywords: ["wallet", "balance", "top up", "storage", "upgrade", "gigabyte", "quota", "paystack"],
   },
   {
+    slug: "verification",
+    title: "Verifying your church",
+    category: "account",
+    icon: "verification",
+    summary:
+      "Confirm your email address and phone number to earn your church's verification tick.",
+    minutes: 3,
+    sections: [
+      {
+        title: "Why verify",
+        body: [
+          "Verification proves that the email address and phone number on your church's account really belong to you. It means we can always reach you about your account — a payment, a suspension, an SMS sender ID decision — and that nobody can quietly change those details behind your back.",
+          "Once both are confirmed, a blue verification tick appears beside your church's name on your public page and in the church directory. Visitors looking for a church can see at a glance that yours is a real, contactable congregation.",
+          "Until you verify, a reminder sits at the top of your dashboard. It doesn't limit anything you can do — it's simply a job that needs finishing.",
+        ],
+      },
+      {
+        title: "How to verify",
+        body: [
+          "Go to Settings → Verification. You'll see your account email address and phone number, each with its own Verify button.",
+          "Press Verify. We send a 6-digit code — to the address by email, or to the number by SMS — and you type it in. That's it.",
+          "Codes last 10 minutes. If one expires or doesn't arrive, just start again and we'll send a fresh one. Check your spam folder for email codes.",
+          "The SMS code comes from FlockInsight and costs you nothing — it does not use your wallet balance and does not need your own sender ID approved.",
+        ],
+      },
+      {
+        title: "Changing your email address or phone number",
+        body: [
+          "Use the same page: press Change, type the new address or number, and enter the code we send to it.",
+          "Nothing is saved until that code comes back. This is deliberate — it's what stops someone typing in an address they don't own, and it means your tick always refers to details somebody actually proved.",
+          "Changing a detail clears its tick until the new one is confirmed.",
+          "These account contacts are separate from the email and phone shown on your public page (Settings → Public page), and separate from the email each person logs in with. You can make them the same if you like.",
+        ],
+      },
+      {
+        title: "What comes next: ID check (KYC)",
+        body: [
+          "After verification there's a second step, where we'll ask a church leader for an ID document to fully confirm the church. It isn't open yet — there's nothing for you to send us now, and we'll get in touch when it is.",
+        ],
+      },
+    ],
+    links: [
+      { label: "Verification", href: "/settings/verification" },
+      { label: "Public page", href: "/settings/public" },
+    ],
+    tip: "Verify the church office's address and number rather than one person's — they outlast whoever currently holds the role.",
+    keywords: [
+      "verify",
+      "verification",
+      "verified",
+      "tick",
+      "badge",
+      "kyc",
+      "otp",
+      "code",
+      "confirm",
+      "change email",
+      "change phone",
+    ],
+  },
+  {
     slug: "billing",
     title: "Plans & billing",
     category: "account",

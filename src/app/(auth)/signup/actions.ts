@@ -103,6 +103,10 @@ export async function createChurchAccount(input: {
           name: churchName,
           slug,
           handle: slug,
+          // Seed the account contact so the verification page opens pre-filled.
+          // Left unverified: Better Auth verifies the PERSON's login email,
+          // which is a different claim from the CHURCH owning this address.
+          contactEmail: email.toLowerCase(),
           // Start the "first 7 Sundays free" trial from today.
           trialEndsAt: trialEndDate(new Date()),
         });

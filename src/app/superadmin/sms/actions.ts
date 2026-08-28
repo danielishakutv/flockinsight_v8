@@ -19,6 +19,7 @@ import {
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
+import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -507,14 +508,27 @@ export async function adjustWallet(
       createdBy: admin.id,
     });
   });
-  await notifyChurchManagers({
+  await notifyChurchOfAdminAction({
     churchId,
-    title: kind === "credit" ? "Wallet credited" : "Wallet adjusted",
+    title: kind === "credit" ? "Your wallet was credited" : "Your wallet was adjusted",
+    subject:
+      kind === "credit"
+        ? `${formatMoney(amount, c.currency)} added to your FlockInsight wallet`
+        : `A deduction from your FlockInsight wallet`,
     body:
       kind === "credit"
-        ? `Your wallet was credited with ${formatMoney(amount, c.currency)}. New balance: ${formatMoney(newBalance, c.currency)}.`
-        : `${formatMoney(amount, c.currency)} was deducted from your wallet. New balance: ${formatMoney(newBalance, c.currency)}.`,
+        ? "The FlockInsight team added funds to your wallet. You can spend it on SMS and storage add-ons right away."
+        : "The FlockInsight team deducted funds from your wallet.",
+    details: [
+      {
+        label: kind === "credit" ? "Amount added" : "Amount deducted",
+        value: formatMoney(amount, c.currency),
+      },
+      { label: "New balance", value: formatMoney(newBalance, c.currency) },
+    ],
+    note: note?.trim() ? note.trim().slice(0, 200) : null,
     linkUrl: "/settings/wallet",
+    ctaLabel: "Open your wallet",
   });
   await recordAudit({
     actorUserId: admin.id,

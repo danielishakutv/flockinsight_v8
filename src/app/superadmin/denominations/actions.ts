@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church, denomination } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { recordAudit } from "@/lib/audit";
+import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 import {
   assignChurches,
   getDenomination,
@@ -153,6 +154,19 @@ export async function setChurchDenomination(
   } else {
     await unassignChurches([churchId]);
   }
+
+  await notifyChurchOfAdminAction({
+    churchId,
+    title: denominationId
+      ? "Your denomination was updated"
+      : "Your denomination was removed",
+    subject: "A change to your church's public profile",
+    body: denominationId
+      ? "The FlockInsight team recorded your church's denomination, so people can find you when they browse the directory by denomination. It shows on your public page."
+      : "The FlockInsight team removed the denomination recorded for your church. You can set your own wording on your public page at any time.",
+    linkUrl: "/settings/public",
+    ctaLabel: "Edit your public page",
+  });
 
   await recordAudit({
     actorUserId: admin.id,

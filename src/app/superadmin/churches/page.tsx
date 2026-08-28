@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { church, giving, group, staff, user } from "@/db/schema";
 import { getChurchHealth } from "@/lib/platform-health";
 import { getChurchPnl } from "@/lib/platform-stats";
+import { isChurchVerified } from "@/lib/verification-shared";
 import {
   ChurchesTable,
   type ChurchRow,
@@ -21,6 +22,10 @@ export default async function SuperadminChurchesPage() {
         id: church.id,
         currency: church.currency,
         featured: church.featured,
+        contactEmail: church.contactEmail,
+        contactPhone: church.contactPhone,
+        emailVerifiedAt: church.emailVerifiedAt,
+        phoneVerifiedAt: church.phoneVerifiedAt,
       })
       .from(church),
     db
@@ -67,6 +72,7 @@ export default async function SuperadminChurchesPage() {
       currency: extra?.currency ?? "NGN",
       createdAt: c.createdAt.toISOString(),
       featured: extra?.featured ?? false,
+      verified: extra ? isChurchVerified(extra) : false,
       ownerEmail: ownerMap.get(c.churchId) ?? null,
       staffCount: staffMap.get(c.churchId) ?? 0,
       memberCount: c.memberCount,

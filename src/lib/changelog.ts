@@ -29,6 +29,28 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.58.0",
+    date: "2026-08-28",
+    summary:
+      "Verify your church with a code, get a verification tick, and hear from us by email whenever we change something on your account.",
+    changes: {
+      Added: [
+        "Church verification: confirm your account email address and phone number with a 6-digit code (Settings → Verification). Verified churches carry a blue tick beside their name on their public page and in the church directory.",
+        "Change your church's account email or phone number yourself — the new one only takes effect once you enter the code we send to it, so nobody can change your details without access to them.",
+        "A reminder on your dashboard until both are verified, with a one-tap link to finish the job.",
+        "Verification codes are sent by FlockInsight and cost you nothing — they don't touch your wallet balance and don't need your own SMS sender ID approved.",
+      ],
+      Improved: [
+        "You now get an email whenever the FlockInsight team changes something on your account: a trial extended, a plan moved, your wallet credited, your church suspended or reactivated, your data reset, a denomination set, or your church linked to a headquarters. Each one says what changed, when, and how to reach us if it looks wrong.",
+        "A suspended church is now told by email — previously the only notice was in an app they could no longer sign into.",
+        "If support sets a new password on your account, you're emailed about it, so an unexpected change can't go unnoticed.",
+      ],
+      Security: [
+        "Codes expire after 10 minutes, are stored only as a hash, lock after five wrong guesses, and are limited to three live codes per destination — the same protections already used for member self-service.",
+      ],
+    },
+  },
+  {
     version: "0.57.0",
     date: "2026-08-18",
     summary:

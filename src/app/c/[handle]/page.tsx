@@ -23,6 +23,8 @@ import { ShareButton } from "@/components/public/share-button";
 import { NewsletterSignup } from "@/components/public/newsletter-signup";
 import { PublicThemeToggle } from "@/components/public/public-theme-toggle";
 import { JsonLd } from "@/components/seo/json-ld";
+import { VerifiedTick } from "@/components/app/verified-tick";
+import { isChurchVerified } from "@/lib/verification-shared";
 
 export const revalidate = 3600;
 
@@ -215,8 +217,14 @@ export default async function ChurchPublicPage({
             </div>
           </div>
 
-          <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-white drop-shadow-sm sm:text-6xl">
+          <h1 className="mt-5 flex flex-wrap items-center gap-2 text-4xl font-extrabold tracking-tight text-white drop-shadow-sm sm:text-6xl">
             {c.name}
+            {isChurchVerified(c) && (
+              <VerifiedTick
+                className="size-6 fill-white text-[var(--brand)] sm:size-8"
+                label={`${c.name} is a verified church on FlockInsight`}
+              />
+            )}
           </h1>
           {c.tagline && (
             <p className="mt-2 max-w-2xl text-lg text-white/90 sm:text-xl">

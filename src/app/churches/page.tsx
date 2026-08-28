@@ -7,6 +7,8 @@ import { church } from "@/db/schema";
 import { COUNTRIES } from "@/lib/geo";
 import { DirectorySearch } from "@/components/public/directory-search";
 import { BannerSlot } from "@/components/public/banner-slot";
+import { VerifiedTick } from "@/components/app/verified-tick";
+import { isChurchVerified } from "@/lib/verification-shared";
 
 export const metadata: Metadata = {
   title: "Find a church · FlockInsight",
@@ -86,6 +88,10 @@ export default async function ChurchDirectoryPage({
       logo: church.logo,
       coverUrl: church.coverUrl,
       featured: church.featured,
+      contactEmail: church.contactEmail,
+      contactPhone: church.contactPhone,
+      emailVerifiedAt: church.emailVerifiedAt,
+      phoneVerifiedAt: church.phoneVerifiedAt,
       city: church.city,
       state: church.state,
       country: church.country,
@@ -165,6 +171,7 @@ export default async function ChurchDirectoryPage({
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1.5 truncate font-bold group-hover:text-violet-600">
                     {c.name}
+                    {isChurchVerified(c) && <VerifiedTick className="size-3.5" />}
                     {c.featured && (
                       <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />
                     )}

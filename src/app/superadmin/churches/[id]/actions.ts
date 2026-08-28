@@ -8,6 +8,7 @@ import { church } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { resetChurch, restoreChurchAsNew, type ChurchBackup } from "@/lib/church-data";
 import { recordAudit } from "@/lib/audit";
+import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -37,6 +38,16 @@ export async function resetChurchAction(
     return { ok: false, error: "The name you typed doesn't match. Nothing was changed." };
 
   await resetChurch(id);
+
+  await notifyChurchOfAdminAction({
+    churchId: id,
+    title: "Your church data was reset",
+    subject: "Your FlockInsight data has been reset",
+    body:
+      "At your request, we cleared this church's records — members, attendance, giving, groups, follow-up, forms, devotionals, subscribers, events and media. Your account, team, roles, services, giving categories and settings are untouched, so you can start recording again straight away.",
+    linkUrl: "/dashboard",
+    ctaLabel: "Open your dashboard",
+  });
 
   await recordAudit({
     actorUserId: admin.id,
@@ -97,6 +108,19 @@ export async function setPaymentWaived(
 
   await db.update(church).set({ paymentWaived: waived }).where(eq(church.id, id));
 
+  await notifyChurchOfAdminAction({
+    churchId: id,
+    title: waived ? "Your subscription is on us 🎁" : "Complimentary access ended",
+    subject: waived
+      ? "FlockInsight is free for your church"
+      : "A change to your FlockInsight billing",
+    body: waived
+      ? "The FlockInsight team has waived payment for your church. You have full access to your plan at no cost, and you won't be asked to pay or be blocked when a trial ends."
+      : "The payment waiver on your church has been removed, so your account now follows the normal plan and billing rules again.",
+    linkUrl: "/settings/billing",
+    ctaLabel: "View billing",
+  });
+
   await recordAudit({
     actorUserId: admin.id,
     actorName: admin.name,
@@ -132,6 +156,19 @@ export async function extendTrial(id: string, weeks: number): Promise<ActionResu
     .update(church)
     .set({ trialEndsAt: newEnd, trialReminderStage: 0 })
     .where(eq(church.id, id));
+
+  await notifyChurchOfAdminAction({
+    churchId: id,
+    title: "Your free trial was extended 🎉",
+    subject: `Your FlockInsight trial now runs to ${newEnd.toDateString()}`,
+    body: `Good news — the FlockInsight team has extended your free trial by ${w} week${w === 1 ? "" : "s"}. Everything stays open, and there is nothing you need to do.`,
+    details: [
+      { label: "Extended by", value: `${w} week${w === 1 ? "" : "s"}` },
+      { label: "New trial end date", value: newEnd.toDateString() },
+    ],
+    linkUrl: "/settings/billing",
+    ctaLabel: "View billing",
+  });
 
   await recordAudit({
     actorUserId: admin.id,
@@ -205,6 +242,21 @@ export async function setChurchParent(
     .update(church)
     .set({ parentChurchId, ...(parentChurchId ? {} : { zone: null }) })
     .where(eq(church.id, churchId));
+
+  await notifyChurchOfAdminAction({
+    churchId,
+    title: parentChurchId
+      ? "Your church was linked to a headquarters"
+      : "Your church was detached from its headquarters",
+    subject: parentChurchId
+      ? "Your church is now part of a network"
+      : "Your church is no longer part of a network",
+    body: parentChurchId
+      ? "Your church has been linked to its headquarters as a branch. Your data, plan and logins are unchanged and stay yours — the link only lets your headquarters see reports across its branches."
+      : "Your church has been detached from its headquarters. Your data, plan and logins are unchanged; your headquarters no longer sees your church in its branch reports.",
+    linkUrl: "/branches",
+    ctaLabel: "Open Branches",
+  });
 
   await recordAudit({
     actorUserId: admin.id,

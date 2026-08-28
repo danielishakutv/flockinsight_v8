@@ -22,6 +22,7 @@ import {
   HardDrive,
   PartyPopper,
   Network,
+  BadgeCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   wallet: Wallet,
   storage: HardDrive,
   network: Network,
+  verification: BadgeCheck,
   default: BookOpen,
 };
 

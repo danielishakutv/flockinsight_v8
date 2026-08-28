@@ -143,6 +143,29 @@ export async function purgeExpiredOtps(): Promise<number> {
   return res.length;
 }
 
+/**
+ * Read an OTP's owner WITHOUT consuming it.
+ *
+ * `verifyOtp` marks a correct code used the moment it matches, so any check
+ * that could reject the attempt on other grounds — "is this code even for your
+ * church?" — has to happen first, or a valid code is burned by a request that
+ * was never going to succeed.
+ */
+export async function peekOtp(id: string) {
+  const [row] = await db
+    .select({
+      churchId: otpCode.churchId,
+      purpose: otpCode.purpose,
+      channel: otpCode.channel,
+      destination: otpCode.destination,
+      consumedAt: otpCode.consumedAt,
+    })
+    .from(otpCode)
+    .where(eq(otpCode.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Latest active OTP id for a destination+purpose (used to resend). */
 export async function latestActiveOtp(destination: string, purpose: string) {
   const [row] = await db

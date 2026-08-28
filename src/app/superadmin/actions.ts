@@ -9,7 +9,10 @@ import { church, payment, session, staff } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
-import { notifyChurchManagers } from "@/lib/notifications";
+import {
+  emailChurchBeforeDeletion,
+  notifyChurchOfAdminAction,
+} from "@/lib/admin-notify";
 import { planName } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
 
@@ -134,11 +137,21 @@ export async function adminSetBilling(input: {
     paidAt: new Date(),
   });
 
-  await notifyChurchManagers({
+  await notifyChurchOfAdminAction({
     churchId,
-    title: "Plan updated",
-    body: `Your plan was set to ${planName(plan)}${disc ? ` (${disc}% off)` : ""} by FlockInsight.`,
+    title: "Your plan was updated",
+    subject: `Your FlockInsight plan is now ${planName(plan)}`,
+    body: `The FlockInsight team has set your church to the ${planName(plan)} plan${months ? `, paid up for ${months} month${months === 1 ? "" : "s"}` : ""}. The features on that plan are available immediately.`,
+    details: [
+      { label: "Plan", value: planName(plan) },
+      ...(disc ? [{ label: "Discount", value: `${disc}% off` }] : []),
+      ...(months
+        ? [{ label: "Period", value: `${months} month${months === 1 ? "" : "s"}` }]
+        : []),
+    ],
+    note: input.note?.trim() ? input.note.trim().slice(0, 200) : null,
     linkUrl: "/settings/billing",
+    ctaLabel: "View billing",
   });
   await recordAudit({
     actorUserId: admin.id,
@@ -163,6 +176,15 @@ export async function setChurchPlan(
   if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
 
   await db.update(church).set({ plan }).where(eq(church.id, id));
+  await notifyChurchOfAdminAction({
+    churchId: id,
+    title: "Your plan was updated",
+    subject: `Your FlockInsight plan is now ${planName(plan)}`,
+    body: `The FlockInsight team has moved your church onto the ${planName(plan)} plan.`,
+    details: [{ label: "Plan", value: planName(plan) }],
+    linkUrl: "/settings/billing",
+    ctaLabel: "View billing",
+  });
   revalidatePath("/superadmin/churches");
   revalidatePath(`/superadmin/churches/${id}`);
   return { ok: true };
@@ -193,16 +215,23 @@ export async function setChurchStatus(
     return { ok: false, error: "Invalid status" };
 
   await db.update(church).set({ status }).where(eq(church.id, id));
-  // Only the reactivation is worth notifying — a suspended church can't see
-  // in-app notifications anyway.
-  if (status === "active") {
-    await notifyChurchManagers({
-      churchId: id,
-      title: "Church reactivated",
-      body: "Your church account has been reactivated. Welcome back!",
-      linkUrl: "/dashboard",
-    });
-  }
+  // A suspended church can't read an in-app notice — which is exactly why the
+  // email matters. `notifyChurchOfAdminAction` sends both; the in-app copy is
+  // simply waiting for them when access is restored.
+  await notifyChurchOfAdminAction({
+    churchId: id,
+    title: status === "suspended" ? "Your church has been suspended" : "Your church is active again",
+    subject:
+      status === "suspended"
+        ? "Your FlockInsight account has been suspended"
+        : "Your FlockInsight account has been reactivated",
+    body:
+      status === "suspended"
+        ? "Your church account has been suspended, so nobody on your team can sign in for now. Your data is safe and untouched — get in touch and we'll work out how to restore access."
+        : "Your church account has been reactivated. Your whole team can sign in again and everything is exactly where you left it. Welcome back!",
+    linkUrl: status === "suspended" ? null : "/dashboard",
+    ctaLabel: "Open your dashboard",
+  });
   await recordAudit({
     actorUserId: admin.id,
     actorName: admin.name,
@@ -243,6 +272,10 @@ export async function deleteChurch(
   if (confirmName.trim() !== target.name) {
     return { ok: false, error: "The name you typed doesn't match the church." };
   }
+
+  // Ordered deliberately: the cascade removes every staff row, so the only
+  // moment we can still find someone to tell is before the delete runs.
+  await emailChurchBeforeDeletion({ churchId: id, churchName: target.name });
 
   await db.transaction(async (tx) => {
     // `session.activeOrganizationId` has no FK, so clear any dangling pointers

@@ -197,6 +197,21 @@ export const churchStatusEnum = pgEnum("church_status", [
   "suspended",
 ]);
 
+/**
+ * Know-Your-Customer state for a church.
+ *
+ * Verification (email + phone, below) is step one and is live. KYC — asking a
+ * church to submit an ID document — is step two and is not built yet; the
+ * column exists so a church's place in the queue is recorded from the start
+ * and the UI can say honestly where they stand.
+ */
+export const kycStatusEnum = pgEnum("kyc_status", [
+  "not_started",
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 export const church = pgTable("church", {
   id: text().primaryKey(),
   name: text().notNull(),
@@ -247,6 +262,22 @@ export const church = pgTable("church", {
     .notNull()
     .default(0),
   storageRenewsAt: timestamp({ withTimezone: true }),
+  /* ----- Account verification -----
+   * The church's OWN contact details, as distinct from `publicEmail` /
+   * `publicPhone` (which are what visitors see on the public page) and from
+   * any one person's login email. This is the address and number FlockInsight
+   * uses to reach the church about its account, and the pair a church proves
+   * it owns with a one-time code.
+   *
+   * A value and its `…VerifiedAt` stamp move together: changing either detail
+   * clears its stamp until the new one is confirmed, so a verified tick always
+   * refers to the value shown beside it. Both stamps set = verified church. */
+  contactEmail: text(),
+  contactPhone: text(),
+  emailVerifiedAt: timestamp({ withTimezone: true }),
+  phoneVerifiedAt: timestamp({ withTimezone: true }),
+  // Step two, after verification. Not yet collected — see kycStatusEnum.
+  kycStatus: kycStatusEnum().notNull().default("not_started"),
   // ----- Public profile / directory -----
   // Public URL username (e.g. /c/grace-chapel). Defaults to `slug` on create,
   // editable by the church. Unique so links are stable & unambiguous.

@@ -104,42 +104,47 @@ Run more than one church? Link your **branches** to a headquarters and see them 
 
 **How it helps:** A general overseer, bishop or senior pastor sees every branch at a glance without phone calls and WhatsApp spreadsheets — and finds out which branch has gone quiet before a month has passed.
 
-### 16. Roles, permissions & team
+### 16. Church verification & account alerts
+Confirm your church's account email address and phone number with a 6-digit code, and your church earns a **blue verification tick** beside its name on your public page and in the church directory. Changing either detail works the same way — the new address or number only takes effect once you enter the code sent to it, so account contacts can never be changed by someone who doesn't have access to them. Verification codes come from FlockInsight and cost you nothing. And whenever the FlockInsight team changes something on your account — a trial extended, a plan moved, your wallet credited, an account suspended or reactivated — you get an email saying exactly what changed and how to reach us. An ID check (KYC) follows in a later release.
+
+**How it helps:** Newcomers browsing the directory can tell a real, contactable church at a glance — and you are never surprised by a change to your own account, because you hear about it the moment it happens.
+
+### 17. Roles, permissions & team
 Invite your team by email and control exactly what each person can see and do with custom roles (e.g. Usher, Finance, Pastor). The church owner always has full access; everyone else gets precisely the access you grant.
 
 **How it helps:** Delegate confidently. Finance sees giving, ushers record attendance, pastors see everything — with sensitive data protected.
 
-### 17. Wallet, plans & billing
+### 18. Wallet, plans & billing
 A single church **wallet** funds SMS and storage upgrades — top up once via card or transfer. Choose a subscription **plan** that fits your size (with a free Starter tier), upgrade as you grow, and view your full payment history. Payments are handled securely through Paystack.
 
 **How it helps:** Predictable, pay-as-you-grow pricing with no surprises, and one simple balance for all your usage-based features.
 
-### 18. Mobile app experience (PWA)
+### 19. Mobile app experience (PWA)
 FlockInsight installs on phones and computers like a native app, works **offline**, and has a thumb-friendly mobile layout with a fast "Record attendance" button always within reach.
 
 **How it helps:** Ushers and leaders use it comfortably on their phones in the service — even with patchy network.
 
-### 19. Reports & exports
+### 20. Reports & exports
 Export attendance to CSV or a branded PDF report, export members, giving, form responses and subscribers to CSV — all ready for Excel, Google Sheets, board meetings or audits.
 
 **How it helps:** Your data is never locked in. Produce clean reports for leadership and records in one click.
 
-### 20. Help & support
+### 21. Help & support
 Built-in, step-by-step guides for every feature, plus a direct support ticket system that reaches a real human by email.
 
 **How it helps:** Your team is never stuck — answers are inside the app, and help is one message away.
 
-### 21. Security, reliability & data ownership
+### 22. Security, reliability & data ownership
 Each church's data is isolated and secured, with role-based access, rate-limited logins, hardened HTTP security headers (HSTS, anti-clickjacking, MIME-sniffing protection) and SSL end-to-end behind Cloudflare. The whole platform database is **backed up daily, encrypted, on-site and off-site**.
 
 **How it helps:** Member information is protected and recoverable — peace of mind for pastors and members alike.
 
-### 22. Backups, restore & recovery (never lose data)
+### 23. Backups, restore & recovery (never lose data)
 Beyond the automatic daily platform backups, each church's complete data can be **exported to a single backup file** at any time. If the worst happens, a backup can be **restored as a brand-new church** — the restore never overwrites live data, so recovery is always safe. Administrative resets require a fresh backup and a typed confirmation, and every sensitive action is written to an **audit log**.
 
 **How it helps:** A church's records — years of attendance, giving and member history — are safe, portable and recoverable. Data loss simply isn't on the table.
 
-### 23. Found on Google (SEO & discoverability)
+### 24. Found on Google (SEO & discoverability)
 Every public church page is search-optimised out of the box: clean titles and descriptions, social share previews, canonical links, and rich **structured data** so churches can appear as proper results (with logo, address and contact) on Google. Public church pages and upcoming events are automatically added to the site's sitemap.
 
 **How it helps:** Newcomers searching for "a church near me" can actually find your church — a free front door that keeps working around the clock.

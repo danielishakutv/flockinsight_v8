@@ -90,6 +90,13 @@ export async function notifyChurchManagers(opts: {
   excludeUserId?: string;
   /** Also email them. `true` uses `title` as the subject. */
   email?: boolean | { subject: string };
+  /** Replaces the default email body. Ignored unless `email` is set. */
+  emailHtml?: string;
+  /**
+   * Extra addresses to copy, deduped against the managers' own — e.g. the
+   * church's verified account email, which may belong to nobody's login.
+   */
+  alsoEmail?: (string | null | undefined)[];
 }): Promise<void> {
   try {
     const rows = await db
@@ -133,8 +140,14 @@ export async function notifyChurchManagers(opts: {
     const cta = opts.linkUrl
       ? { label: "Open FlockInsight", url: `${siteUrl()}${opts.linkUrl}` }
       : undefined;
-    const html = emailLayout(opts.title, opts.body, cta);
-    const emails = [...new Set(managers.map((r) => r.email).filter(Boolean))];
+    const html = opts.emailHtml ?? emailLayout(opts.title, opts.body, cta);
+    const emails = [
+      ...new Set(
+        [...managers.map((r) => r.email), ...(opts.alsoEmail ?? [])]
+          .filter((e): e is string => !!e && e.includes("@"))
+          .map((e) => e.trim().toLowerCase()),
+      ),
+    ];
     const sent = await Promise.allSettled(
       emails.map((to) => sendEmail({ to, subject, html, text: opts.body })),
     );

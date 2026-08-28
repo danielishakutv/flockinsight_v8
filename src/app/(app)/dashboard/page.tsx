@@ -45,6 +45,7 @@ import { PageContainer } from "@/components/app/page-header";
 import { DateTime } from "@/components/app/date-time";
 import { StatCard } from "@/components/app/stat-card";
 import { SetupNotices, type Notice } from "@/components/dashboard/setup-notices";
+import { VerifyBanner } from "@/components/dashboard/verify-banner";
 import { MiniTodo } from "@/components/dashboard/mini-todo";
 import { ModuleHighlights } from "@/components/dashboard/module-highlights";
 import { PeopleSnapshot } from "@/components/dashboard/people-snapshot";
@@ -194,6 +195,9 @@ export default async function DashboardPage() {
 
   return (
     <PageContainer>
+      {/* Above the dismissible notices, and not dismissible itself — an
+          unverified account is a standing condition, not a suggestion. */}
+      <VerifyBanner church={church} canManage={canSettings} />
       <SetupNotices notices={notices} />
 
       <div className="mb-5">

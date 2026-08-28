@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, count, desc, eq, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, max, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft,
@@ -43,6 +43,10 @@ import { ChurchDenomination } from "@/components/superadmin/church-denomination"
 import { ChurchNetwork } from "@/components/superadmin/church-network";
 import { ChurchDataTools } from "@/components/superadmin/church-data-tools";
 import { ChurchTrialControls } from "@/components/superadmin/church-trial-controls";
+import { ChurchTeam } from "@/components/superadmin/church-team";
+import { ChurchVerificationCard } from "@/components/superadmin/church-verification-card";
+import { VerifiedTick } from "@/components/app/verified-tick";
+import { isChurchVerified } from "@/lib/verification-shared";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -147,10 +151,14 @@ export default async function SuperadminChurchPage({
       .where(eq(giving.churchId, id))
       .groupBy(givingCategory.name)
       .orderBy(desc(sql`sum(${giving.amount})`)),
+    // A staff login carries no phone number of its own — it lives on the
+    // member record the login is linked to, one per church. Left-joined so a
+    // login without a member profile still shows up, just without a number.
     db
       .select({
         name: user.name,
         email: user.email,
+        phone: member.phone,
         baseRole: staff.role,
         customRole: role.name,
         createdAt: staff.createdAt,
@@ -158,6 +166,10 @@ export default async function SuperadminChurchPage({
       .from(staff)
       .innerJoin(user, eq(user.id, staff.userId))
       .leftJoin(role, eq(role.id, staff.roleId))
+      .leftJoin(
+        member,
+        and(eq(member.churchId, id), eq(member.userId, staff.userId)),
+      )
       .where(eq(staff.organizationId, id))
       .orderBy(asc(staff.createdAt)),
     db
@@ -233,6 +245,7 @@ export default async function SuperadminChurchPage({
             <h1 className="text-xl font-semibold tracking-tight">
               {c.name}
             </h1>
+            {isChurchVerified(c) && <VerifiedTick className="size-5" />}
             <Badge
               variant={c.status === "suspended" ? "destructive" : "success"}
               className="capitalize"
@@ -308,6 +321,18 @@ export default async function SuperadminChurchPage({
         candidates={networkChurches
           .filter((n) => n.id !== c.id && n.parentChurchId === null)
           .map((n) => ({ id: n.id, name: n.name }))}
+      />
+
+      <ChurchVerificationCard
+        contactEmail={c.contactEmail}
+        contactPhone={c.contactPhone}
+        emailVerifiedAt={
+          c.emailVerifiedAt ? c.emailVerifiedAt.toISOString() : null
+        }
+        phoneVerifiedAt={
+          c.phoneVerifiedAt ? c.phoneVerifiedAt.toISOString() : null
+        }
+        kycStatus={c.kycStatus}
       />
 
       <ChurchDenomination
@@ -433,37 +458,16 @@ export default async function SuperadminChurchPage({
           </CardContent>
         </Card>
 
-        {/* Team */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <UserCog className="text-primary size-5" /> Team ({team.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {team.map((t, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{t.name}</p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {t.email}
-                  </p>
-                </div>
-                <Badge
-                  variant={t.baseRole === "owner" ? "default" : "secondary"}
-                  className="shrink-0 capitalize"
-                >
-                  {t.baseRole === "owner"
-                    ? "Owner"
-                    : (t.customRole ?? t.baseRole)}
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <ChurchTeam
+          team={team.map((t) => ({
+            name: t.name,
+            email: t.email,
+            phone: t.phone,
+            baseRole: t.baseRole,
+            customRole: t.customRole,
+            joinedAt: t.createdAt ? t.createdAt.toISOString() : null,
+          }))}
+        />
       </div>
 
       <ChurchTrialControls

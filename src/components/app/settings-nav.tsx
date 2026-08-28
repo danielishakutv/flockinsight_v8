@@ -16,6 +16,7 @@ import {
   CreditCard,
   Users,
   ShieldCheck,
+  BadgeCheck,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -39,6 +40,7 @@ const GROUPS: Group[] = [
     title: "Church",
     items: [
       { label: "General", href: "/settings", need: "settings", icon: Building2 },
+      { label: "Verification", href: "/settings/verification", need: "settings", icon: BadgeCheck },
       { label: "Public page", href: "/settings/public", need: "settings", icon: Globe },
       { label: "Services", href: "/settings/services", need: "settings", icon: ListChecks },
       { label: "Giving", href: "/settings/giving", need: "settings", icon: HandCoins },

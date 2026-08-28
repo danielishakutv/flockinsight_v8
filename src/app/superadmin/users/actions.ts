@@ -200,6 +200,31 @@ export async function setUserPasswordAction(
     .update(user)
     .set({ mustChangePassword: forceChange, emailVerified: true, updatedAt: new Date() })
     .where(eq(user.id, userId));
+
+  // Somebody else changing your password is exactly the kind of thing you want
+  // to hear about — even (especially) if you didn't ask for it. The new
+  // password itself is never emailed; they were told it another way.
+  const [target] = await db
+    .select({ email: user.email, name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  if (target?.email) {
+    await sendEmail({
+      to: target.email,
+      subject: "Your FlockInsight password was changed",
+      html: emailLayout(
+        "Your password was changed",
+        `<p>Hi ${target.name || "there"},</p>` +
+          `<p>FlockInsight support set a new password on your account at your request.` +
+          `${forceChange ? " You'll be asked to choose your own password the next time you log in." : ""}</p>` +
+          `<p>If you didn't ask for this, contact us immediately — someone else may have access to your account.</p>`,
+        { label: "Log in", url: `${siteUrl()}/login` },
+      ),
+      text: "FlockInsight support set a new password on your account. If you didn't ask for this, contact us immediately.",
+    }).catch(() => false);
+  }
+
   await recordAudit({
     actorUserId: admin.id,
     actorName: admin.name,

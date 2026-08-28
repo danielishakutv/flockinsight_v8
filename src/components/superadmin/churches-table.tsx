@@ -31,6 +31,7 @@ import {
   HealthBadge,
   LastSeen,
 } from "@/components/superadmin/health-badge";
+import { VerifiedTick } from "@/components/app/verified-tick";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +54,8 @@ export type ChurchRow = {
   currency: string;
   createdAt: string;
   featured: boolean;
+  /** Both account email and phone confirmed — shows a tick beside the name. */
+  verified: boolean;
   ownerEmail: string | null;
   staffCount: number;
   memberCount: number;
@@ -310,6 +313,7 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                       <p className="group-hover:text-primary truncate font-bold transition-colors">
                         {c.name}
                       </p>
+                      {c.verified && <VerifiedTick />}
                       <HealthBadge health={c.health} />
                       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                     </div>
