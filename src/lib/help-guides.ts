@@ -715,6 +715,77 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
+    slug: "reports",
+    title: "Downloading your data for analysis",
+    category: "account",
+    icon: "reports",
+    summary:
+      "Export any part of your church's records as a spreadsheet or PDF — or take everything in one file.",
+    minutes: 4,
+    sections: [
+      {
+        title: "Where to find it",
+        body: [
+          "Reports in the main menu. Everything FlockInsight holds for your church is listed there, grouped into People, Attendance, Giving, Groups, Engagement, Communication, and Account & operations.",
+          "You only see what your role allows. Someone without access to giving won't see the giving reports, and won't be able to download them even with a direct link.",
+        ],
+      },
+      {
+        title: "Three ways to download",
+        body: [
+          "CSV — a spreadsheet of one dataset. Opens in Excel, Google Sheets or Numbers by double-clicking. This is the complete data, and what you want for any real analysis.",
+          "PDF — the same dataset laid out to read and circulate. Long or wide datasets are trimmed to what fits a page, and the PDF says so; the CSV is always the full picture.",
+          "Full export — one ZIP containing a spreadsheet for every dataset you can see, arranged in folders by category, plus a data dictionary and a README.",
+        ],
+      },
+      {
+        title: "Choosing a period",
+        body: [
+          "Set a From and To date, or use a preset — this month, last three months, this year, last year.",
+          "The range applies to each dataset's own main date, which is the sensible one in each case: a member's join date, a gift's date, a service's date, a message's send date. Each report card tells you which date it filters on.",
+          "Reference lists — giving categories, projects, groups, services, roles, your team — have no date to filter on, so they always come out in full. That's deliberate: you need the whole list to make sense of the rows that point at it.",
+        ],
+      },
+      {
+        title: "Joining the files together",
+        body: [
+          "This is what makes the export useful rather than just readable. Every row starts with its own id, and carries the ids of whatever it relates to alongside the readable name.",
+          "For example, group-memberships.csv has group_id, group_name, member_id and member_name. To count attendance by ministry, join group-memberships to members on member_id, and to groups on group_id.",
+          "Always join on the id, never on the name. Two people are called John Doe, and a category can be renamed tomorrow — the id never changes.",
+          "data-dictionary.csv, included in the full export, lists every file, what one row means, which date it filters on, and exactly which columns join to which.",
+        ],
+      },
+      {
+        title: "A word on privacy",
+        body: [
+          "These files contain real personal data — names, phone numbers, email addresses, home addresses and giving records. Once downloaded they're outside FlockInsight and outside its access controls.",
+          "Keep them somewhere access-controlled, share them only with people who need them, and delete your copy when the analysis is finished.",
+        ],
+      },
+    ],
+    links: [
+      { label: "Reports", href: "/reports" },
+      { label: "Analytics", href: "/analytics" },
+    ],
+    tip: "For a board meeting, the Summary report (PDF) gives you the headline numbers and a plain-English guide to everything else in one document.",
+    keywords: [
+      "report",
+      "reports",
+      "export",
+      "download",
+      "csv",
+      "excel",
+      "spreadsheet",
+      "pdf",
+      "data",
+      "analysis",
+      "analytics",
+      "backup",
+      "zip",
+      "dictionary",
+    ],
+  },
+  {
     slug: "contact-support",
     title: "Contacting support",
     category: "account",

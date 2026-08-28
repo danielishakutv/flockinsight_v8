@@ -29,6 +29,25 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.59.0",
+    date: "2026-08-28",
+    summary:
+      "A new Reports section: download any part of your church's data as a spreadsheet or PDF, or take everything in one file for analysis.",
+    changes: {
+      Added: [
+        "Reports: 28 downloadable datasets covering everything FlockInsight holds for you — members, households, services, every headcount, individual check-ins, giving, categories, projects, pledges, groups and their membership, follow-up, events and guests, forms and responses, devotionals, subscribers, every message and its per-recipient outcome, your team, roles, wallet, payments, media and daily usage.",
+        "Each dataset downloads as a CSV for analysis or a PDF to read and circulate.",
+        "Full export: one ZIP with a spreadsheet for every dataset you can see, filed into folders by category, plus a data dictionary and a README explaining how the files fit together.",
+        "Summary report (PDF): your headline numbers and a plain-English guide to every dataset — the one to hand to a board or a trustee.",
+        "Filter any report by date, or use a preset: this month, last three months, this year, last year. Each report tells you which date it filters on, so a period means the same obvious thing everywhere.",
+        "Built for joining: every row leads with its own id and carries the ids of whatever it relates to alongside the readable name, so the files can be combined in Excel, Google Sheets, Power BI or pandas.",
+      ],
+      Security: [
+        "Reports respect your roles exactly. Someone without access to giving sees no giving reports, and a direct download link is refused rather than merely hidden — the permission is checked again on every download.",
+      ],
+    },
+  },
+  {
     version: "0.58.0",
     date: "2026-08-28",
     summary:

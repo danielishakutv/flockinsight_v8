@@ -124,10 +124,10 @@ FlockInsight installs on phones and computers like a native app, works **offline
 
 **How it helps:** Ushers and leaders use it comfortably on their phones in the service — even with patchy network.
 
-### 20. Reports & exports
-Export attendance to CSV or a branded PDF report, export members, giving, form responses and subscribers to CSV — all ready for Excel, Google Sheets, board meetings or audits.
+### 20. Reports & data exports
+Download **any part of your church's data** as a spreadsheet (CSV) or a PDF, from a single Reports section: members, households, services, every headcount, individual check-ins, giving, categories, projects, pledges, groups and who belongs to them, follow-up, events and guests, forms and responses, devotionals, subscribers, every message sent and what happened to each recipient, your team, roles, wallet, payments, media and daily usage. Filter by any date range. Take the lot in **one ZIP**, filed into folders by category with a data dictionary that explains how the files join — every row carries its own id and the ids of whatever it relates to, so the files can be combined in Excel, Google Sheets, Power BI or pandas. A **Summary report PDF** gives your headline numbers plus a plain-English guide to everything else. Downloads respect your roles exactly: no access to giving means no giving reports, checked again on every download. Individual modules also export on the spot (members, giving, attendance with a designed PDF, form responses, subscribers, communication history, branch reports).
 
-**How it helps:** Your data is never locked in. Produce clean reports for leadership and records in one click.
+**How it helps:** Your data is genuinely yours — analyse it however you like, in whatever tool you like, without asking anyone. And when a board, a denomination or an auditor asks for numbers, you produce them in one click instead of an afternoon.
 
 ### 21. Help & support
 Built-in, step-by-step guides for every feature, plus a direct support ticket system that reaches a real human by email.

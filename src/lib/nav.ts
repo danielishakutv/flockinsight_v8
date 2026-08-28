@@ -17,6 +17,7 @@ import {
   BookOpen,
   PartyPopper,
   Network,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,6 +41,25 @@ export function navAllowed(
 }
 
 const SETTINGS_PERMS = ["settings.manage", "team.manage"];
+
+/**
+ * Anyone who can view any module has something to download. The reports page
+ * and every download route re-check per dataset, so this list only decides
+ * whether the link is worth showing.
+ */
+const REPORT_PERMS = [
+  "members.view",
+  "attendance.view",
+  "giving.view",
+  "groups.view",
+  "followup.view",
+  "communication.view",
+  "forms.view",
+  "devotionals.view",
+  "media.view",
+  "settings.manage",
+  "team.manage",
+];
 
 /** Full navigation (desktop sidebar). */
 export const mainNav: NavItem[] = [
@@ -75,6 +95,7 @@ export const mainNav: NavItem[] = [
     icon: Network,
     perm: ["settings.manage", "analytics.view"],
   },
+  { label: "Reports", href: "/reports", icon: Database, perm: REPORT_PERMS },
   { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
@@ -123,6 +144,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         icon: BarChart3,
         description: "Trends & breakdowns",
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+      },
+      {
+        label: "Reports",
+        href: "/reports",
+        icon: Database,
+        description: "Download your data as CSV or PDF",
+        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+        perm: REPORT_PERMS,
       },
     ],
   },

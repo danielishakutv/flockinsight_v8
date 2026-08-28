@@ -23,6 +23,7 @@ import {
   PartyPopper,
   Network,
   BadgeCheck,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   storage: HardDrive,
   network: Network,
   verification: BadgeCheck,
+  reports: Database,
   default: BookOpen,
 };
 
