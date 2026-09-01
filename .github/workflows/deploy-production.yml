@@ -1,0 +1,85 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [production]
+  # So you can re-run the last release, or deploy after fixing something on the
+  # box, without an empty commit.
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one midway: a half-finished release
+# would leave the symlink and PM2 disagreeing about which build is live.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and release on the VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Check out the commit being deployed
+        uses: actions/checkout@v4
+
+      - name: Load the SSH key
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            # Pinned host key: the runner will refuse to talk to anything else.
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS is not set — trusting the key the host offers."
+            ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          APP_ROOT: ${{ secrets.APP_ROOT }}
+        run: |
+          # The script is piped from this commit, so the deploy always runs the
+          # version of deploy.sh that ships with the code being released.
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
+            -o BatchMode=yes -o ServerAliveInterval=30 \
+            "$SSH_USER@$SSH_HOST" \
+            "APP_ROOT='$APP_ROOT' DEPLOY_SHA='$GITHUB_SHA' DEPLOY_BRANCH='${GITHUB_REF_NAME}' bash -s" \
+            < deploy/deploy.sh
+
+      # The box reporting 200 on 127.0.0.1 while the world sees 522 is exactly
+      # how a whole day of downtime went unnoticed once. Check from outside.
+      - name: Verify the public site is serving this commit
+        env:
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+        run: |
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "::warning::PUBLIC_URL is not set — skipping the external check."
+            exit 0
+          fi
+          for attempt in $(seq 1 20); do
+            body="$(curl -fsS --max-time 10 "$PUBLIC_URL/api/health" || true)"
+            case "$body" in
+              *"\"deployment\":\"$GITHUB_SHA\""*)
+                echo "$PUBLIC_URL is serving ${GITHUB_SHA:0:7}"
+                exit 0
+                ;;
+            esac
+            echo "attempt $attempt: $PUBLIC_URL not on ${GITHUB_SHA:0:7} yet"
+            sleep 6
+          done
+          echo "::error::$PUBLIC_URL never reported ${GITHUB_SHA:0:7}."
+          echo "The deploy script verified the app locally and rolled back on failure,"
+          echo "so suspect Apache, DNS or Cloudflare rather than the release itself."
+          exit 1

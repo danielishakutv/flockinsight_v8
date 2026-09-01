@@ -1,0 +1,8 @@
+# Normalise line endings in the repository.
+* text=auto
+
+# Anything the Linux server executes must arrive with LF endings — a stray
+# CR makes bash fail with "bad interpreter" or "command not found".
+*.sh text eol=lf
+*.conf text eol=lf
+ecosystem.config.cjs text eol=lf

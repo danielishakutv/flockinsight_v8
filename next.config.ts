@@ -21,6 +21,11 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Don't advertise the framework/version.
   poweredByHeader: false,
+  // Version-skew protection for rolling deploys: the deploy script sets this
+  // to the commit being released, so a browser still holding the previous
+  // build asks for its chunks with a stale ?dpl= and gets a hard navigation
+  // instead of a missing-chunk crash. Empty locally, which disables it.
+  deploymentId: process.env.DEPLOYMENT_ID,
   // Let Node resolve these at runtime instead of Turbopack bundling them.
   // Avoids deep ESM export-resolution errors in better-auth's optional
   // kysely adapter (which we don't use — we use the Drizzle adapter).
