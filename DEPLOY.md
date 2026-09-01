@@ -135,23 +135,28 @@ restart, and Apache answers 502 while Next boots.
 
 ### One-time server migration
 
-Run once, on the VPS. It renames your current install aside (nothing is
-deleted) and builds the first release without touching PM2:
+Do this **before** the `production` branch exists, so creating that branch
+later doesn't fire a deploy at a box that isn't ready. Build from `main` for
+the migration:
 
 ```bash
 cd ~/apps/flockinsight
-bash deploy/setup-releases.sh
+DEPLOY_BRANCH=main bash deploy/setup-releases.sh
 ```
 
-Look over what it staged, then cut over — this is the only outage, a single
-Next.js boot:
+It renames your current install aside (nothing is deleted) and builds the first
+release without touching PM2, so the site carries on serving from the old one
+throughout. Look over what it staged, then cut over — this is the only outage,
+a single Next.js boot:
 
 ```bash
-CONFIRM_CUTOVER=yes bash ~/apps/flockinsight/releases/<newest>/deploy/setup-releases.sh
+RELEASE=~/apps/flockinsight/releases/<newest>
+CONFIRM_CUTOVER=yes DEPLOY_BRANCH=main bash $RELEASE/deploy/setup-releases.sh
 ```
 
 Your previous install stays at `~/apps/flockinsight.pre-releases.<date>` until
-you remove it yourself.
+you remove it yourself. Roll back to it at any point with
+`pm2 delete flockinsight` and a `pm2 start` from that directory.
 
 ### GitHub secrets
 

@@ -17,6 +17,12 @@
 # The site is down for one Next.js boot — a few seconds — at the cutover at the
 # end, and never again after that.
 #
+# The branch it builds from must already exist on the remote. Migrate off main
+# before the production branch exists, so that creating that branch later does
+# not fire a deploy at a box that is not ready:
+#
+#   DEPLOY_BRANCH=main bash deploy/setup-releases.sh
+#
 #   bash deploy/setup-releases.sh              # prepare and stage, no cutover
 #   CONFIRM_CUTOVER=yes bash deploy/setup-releases.sh   # ... and switch PM2 over
 set -Eeuo pipefail
@@ -27,6 +33,7 @@ DEPLOY_REPO="${DEPLOY_REPO:-https://github.com/danielishakutv/flockinsight_v8.gi
 PM2_APP="${PM2_APP:-flockinsight}"
 
 SHARED="$APP_ROOT/shared"
+CURRENT="$APP_ROOT/current"
 RELEASES="$APP_ROOT/releases"
 MIRROR="$APP_ROOT/repo.git"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,6 +59,13 @@ if [ -e "$APP_ROOT" ]; then
   note "$APP_ROOT  →  $OLD"
   note "the running process is unaffected: its working directory follows the rename"
   mv "$APP_ROOT" "$OLD"
+  # ...which just moved this script too. Bash carries on from the open file,
+  # but HERE now names a directory that no longer exists.
+  case "$HERE" in
+    "$APP_ROOT"/*) HERE="$OLD${HERE#$APP_ROOT}" ;;
+  esac
+  [ -f "$HERE/deploy.sh" ] || die "lost track of deploy.sh after the rename (looked in $HERE)"
+  note "scripts now read from $HERE"
 fi
 
 mkdir -p "$SHARED" "$RELEASES"
@@ -96,7 +110,7 @@ if [ "${CONFIRM_CUTOVER:-}" != "yes" ]; then
   log "Staged, not yet live"
   note "The site is still served by the old install. When you are ready:"
   note ""
-  note "  CONFIRM_CUTOVER=yes bash $HERE/setup-releases.sh"
+  note "  CONFIRM_CUTOVER=yes bash $(readlink -f "$CURRENT")/deploy/setup-releases.sh"
   note ""
   note "or do it by hand (a few seconds of downtime):"
   note "  pm2 delete $PM2_APP && pm2 start $SHARED/ecosystem.config.cjs && pm2 save"
