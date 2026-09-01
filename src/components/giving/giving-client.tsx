@@ -587,7 +587,11 @@ export function GivingClient({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Anonymous / general" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-72">
+                  <SelectContent
+                    className="max-h-72"
+                    searchPlaceholder="Search members…"
+                    emptyMessage="No member by that name"
+                  >
                     <SelectItem value={NONE}>Anonymous / general</SelectItem>
                     {members.map((m) => (
                       <SelectItem key={m.id} value={m.id}>

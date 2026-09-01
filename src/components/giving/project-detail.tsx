@@ -441,7 +441,11 @@ function PledgeDialog({
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choose a member" />
               </SelectTrigger>
-              <SelectContent className="max-h-72">
+              <SelectContent
+                className="max-h-72"
+                searchPlaceholder="Search members…"
+                emptyMessage="No member by that name"
+              >
                 <SelectItem value={NONE}>Someone not in the list…</SelectItem>
                 {members.map((m) => (
                   <SelectItem key={m.id} value={m.id}>

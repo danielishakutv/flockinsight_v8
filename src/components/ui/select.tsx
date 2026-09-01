@@ -17,6 +17,7 @@ import {
   searchTokens,
   splitOnMatches,
 } from "@/lib/option-search";
+import { claimsKeyForSearch } from "@/lib/select-keys";
 
 /** Layout effect on the client, no-op during SSR. */
 const useIsomorphicLayoutEffect =
@@ -75,6 +76,15 @@ function visibleItems(root: HTMLElement | null): HTMLElement[] {
   );
 }
 
+/** The search field's slot name, used to spot it as the focused element. */
+const SEARCH_SLOT = "select-search";
+
+/** True while the caret sits in a dropdown's own search field. */
+function searchFieldHasFocus() {
+  if (typeof document === "undefined") return false;
+  return document.activeElement?.getAttribute("data-slot") === SEARCH_SLOT;
+}
+
 /** Select an item the same way a real Enter key press on it would. */
 function activateItem(item: HTMLElement) {
   item.focus({ preventScroll: true });
@@ -94,13 +104,30 @@ function Select({
   );
   const isOpen = open ?? uncontrolledOpen;
 
+  // Radix closes the dropdown on any window resize. On a phone, tapping the
+  // search field raises the on-screen keyboard — which resizes the window — so
+  // the list vanished the moment you reached for it. The root has been mounted
+  // since the page loaded, long before Radix adds its own resize listener when
+  // the content opens, so this flag is already set when Radix asks to close.
+  const resizedAt = React.useRef(0);
+  React.useEffect(() => {
+    const mark = () => {
+      resizedAt.current = Date.now();
+    };
+    window.addEventListener("resize", mark);
+    return () => window.removeEventListener("resize", mark);
+  }, []);
+
   return (
     <SelectOpenContext.Provider value={isOpen}>
       <SelectPrimitive.Root
         data-slot="select"
-        open={open}
-        defaultOpen={defaultOpen}
+        // Owned here rather than inside Radix, so a close can be turned down.
+        open={isOpen}
         onOpenChange={(next) => {
+          const keyboardResize =
+            Date.now() - resizedAt.current < 100 && searchFieldHasFocus();
+          if (!next && keyboardResize) return;
           setUncontrolledOpen(next);
           onOpenChange?.(next);
         }}
@@ -165,7 +192,6 @@ function SelectContent({
   searchPlaceholder = "Search…",
   emptyMessage = "No matches found",
   searchThreshold = AUTO_SEARCH_THRESHOLD,
-  onKeyDown,
   onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content> & {
@@ -270,34 +296,35 @@ function SelectContent({
     first?.setAttribute("data-active-option", "");
   }, [enabled, searchKey, visibleCount]);
 
-  // Typing while an option has focus (mouse hover moves focus onto options)
-  // should go to the search field rather than Radix's typeahead.
-  function handleContentKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    onKeyDown?.(event);
+  // Typing while an option has focus (hovering with the mouse moves focus onto
+  // options) belongs to the search field, not to Radix's typeahead.
+  //
+  // Capture phase, because an option's own key handler runs before anything
+  // bubbles up to us: Radix reads Space as "pick this option", so a space in
+  // the middle of a name used to select whatever the pointer happened to be
+  // over and shut the list.
+  function handleContentKeyDownCapture(
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) {
     const input = inputRef.current;
     if (!enabled || !input || event.defaultPrevented) return;
     if (event.target === input) return;
 
+    /** Take the key for the search field, out of reach of the option. */
+    const claim = () => {
+      event.preventDefault();
+      event.stopPropagation();
+      input.focus({ preventScroll: true });
+    };
+
     if (event.key === "ArrowUp") {
       const [first] = visibleItems(contentRef.current);
-      if (first && first === event.target) {
-        event.preventDefault();
-        input.focus({ preventScroll: true });
-      }
+      if (first && first === event.target) claim();
       return;
     }
-    if (event.key === "Backspace") {
-      event.preventDefault();
-      setQuery((q) => q.slice(0, -1));
-      input.focus({ preventScroll: true });
-      return;
-    }
-    const isModified = event.ctrlKey || event.altKey || event.metaKey;
-    if (!isModified && event.key.length === 1 && event.key !== " ") {
-      event.preventDefault();
-      setQuery((q) => q + event.key);
-      input.focus({ preventScroll: true });
-    }
+    if (!claimsKeyForSearch(event, query)) return;
+    claim();
+    setQuery((q) => (event.key === "Backspace" ? q.slice(0, -1) : q + event.key));
   }
 
   // First Escape clears the search, a second one closes the dropdown.
@@ -347,7 +374,7 @@ function SelectContent({
               className,
             )}
             position={position}
-            onKeyDown={handleContentKeyDown}
+            onKeyDownCapture={handleContentKeyDownCapture}
             onEscapeKeyDown={handleEscapeKeyDown}
             {...props}
           >
@@ -426,6 +453,7 @@ function SelectSearchField({
         <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2.5 size-4" />
         <input
           ref={ref}
+          data-slot={SEARCH_SLOT}
           value={value}
           onChange={(event) => onValueChange(event.target.value)}
           onKeyDown={onKeyDown}
