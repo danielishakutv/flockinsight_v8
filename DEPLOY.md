@@ -170,11 +170,16 @@ Repository → Settings → Secrets and variables → Actions:
 | `SSH_PORT` | optional, defaults to `22` |
 | `APP_ROOT` | e.g. `/home/LINUXUSER/apps/flockinsight` |
 | `PUBLIC_URL` | e.g. `https://flockinsight.yourdomain.com` — checked from outside after the deploy |
-| `SSH_KNOWN_HOSTS` | optional but worth setting: `ssh-keyscan -H your.vps.ip`. Without it the runner trusts whatever key answers. |
+| `SSH_KNOWN_HOSTS` | **required** — the output of `ssh-keyscan -H your.vps.ip`. The deploy refuses to run without it, rather than trusting whatever key answers on that address. |
 
 GitHub's runners have rotating IPs, so port 22 has to be reachable from the
 internet. Keep fail2ban's escalating bans on, and give the deploy key
 `command=`/`from=` restrictions in `authorized_keys` if you want it tighter.
+
+The app itself listens on `127.0.0.1` only — Apache proxies from loopback, so
+binding wider would publish it on the VPS's public IP, answering without TLS,
+without the security headers from `next.config.ts`, and without Cloudflare in
+front. The same goes for the release being smoke-tested on port 3987.
 
 ### Turning it on
 

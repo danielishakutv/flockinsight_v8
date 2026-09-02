@@ -33,7 +33,11 @@ module.exports = {
       // worker, so a reload after the swap picks up the new release.
       cwd: CURRENT,
       script: "node_modules/next/dist/bin/next",
-      args: `start -p ${PORT}`,
+      // Loopback only. Apache proxies to 127.0.0.1:PORT, so binding wider
+      // just publishes the app on the VPS's public IP, where it answers
+      // without TLS, without the security headers Apache adds, and without
+      // Cloudflare in front of it.
+      args: `start -p ${PORT} -H 127.0.0.1`,
       interpreter: "node",
       exec_mode: "cluster",
       instances: 2,

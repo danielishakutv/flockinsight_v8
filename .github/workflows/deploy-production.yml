@@ -7,6 +7,11 @@ on:
   # box, without an empty commit.
   workflow_dispatch:
 
+# This job only reads the repo and talks to the VPS over SSH; it never needs to
+# write back. The default token is broader than that, so narrow it.
+permissions:
+  contents: read
+
 # One deploy at a time, and never cancel one midway: a half-finished release
 # would leave the symlink and PM2 disagreeing about which build is live.
 concurrency:
@@ -22,26 +27,29 @@ jobs:
 
     steps:
       - name: Check out the commit being deployed
-        uses: actions/checkout@v4
+        # Pinned to a commit, not a tag: a tag can be moved, and this step runs
+        # with the SSH key that can reach production in the same job.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Load the SSH key
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
+          if [ -z "$SSH_KNOWN_HOSTS" ]; then
+            echo "::error::SSH_KNOWN_HOSTS is not set."
+            echo "Without a pinned host key the runner would trust whatever answers"
+            echo "on that address and hand it a deploy. Generate one with:"
+            echo "    ssh-keyscan -H <your.vps.ip>"
+            echo "and paste the output into the SSH_KNOWN_HOSTS secret."
+            exit 1
+          fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          if [ -n "$SSH_KNOWN_HOSTS" ]; then
-            # Pinned host key: the runner will refuse to talk to anything else.
-            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            echo "::warning::SSH_KNOWN_HOSTS is not set — trusting the key the host offers."
-            ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          fi
-          chmod 600 ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
 
       - name: Deploy
         env:
@@ -50,12 +58,29 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           APP_ROOT: ${{ secrets.APP_ROOT }}
         run: |
+          # These end up inside a command string that a shell on the production
+          # server parses, so refuse anything that could close a quote and run
+          # something of its own.
+          case "$APP_ROOT" in
+            "") echo "::error::APP_ROOT is not set"; exit 1 ;;
+            *[!A-Za-z0-9._/-]*) echo "::error::APP_ROOT has characters that are not allowed in a path"; exit 1 ;;
+          esac
+          case "$GITHUB_SHA" in
+            "" | *[!0-9a-f]*) echo "::error::GITHUB_SHA is not a plain hex commit id"; exit 1 ;;
+          esac
+          case "$SSH_PORT" in
+            "" | *[!0-9]*) echo "::error::SSH_PORT is not a number"; exit 1 ;;
+          esac
+
           # The script is piped from this commit, so the deploy always runs the
-          # version of deploy.sh that ships with the code being released.
+          # version of deploy.sh that ships with the code being released. The
+          # branch name is deliberately not passed on: DEPLOY_SHA already says
+          # exactly what to build, and a branch name is attacker-shaped input
+          # on workflow_dispatch.
           ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
             -o BatchMode=yes -o ServerAliveInterval=30 \
             "$SSH_USER@$SSH_HOST" \
-            "APP_ROOT='$APP_ROOT' DEPLOY_SHA='$GITHUB_SHA' DEPLOY_BRANCH='${GITHUB_REF_NAME}' bash -s" \
+            "APP_ROOT='$APP_ROOT' DEPLOY_SHA='$GITHUB_SHA' bash -s" \
             < deploy/deploy.sh
 
       # The box reporting 200 on 127.0.0.1 while the world sees 522 is exactly

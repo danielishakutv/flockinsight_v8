@@ -101,8 +101,11 @@ log "Building"
 # --------------------------------------------------------------- smoke test
 # Prove the new build boots and answers before anything points at it. This is
 # what stops a broken release from ever reaching the public.
+#
+# Bound to loopback: next start listens on every interface by default, which
+# would put an unreleased build on the public IP for the length of the check.
 log "Smoke-testing on port $SMOKE_PORT"
-( cd "$RELEASE" && PORT="$SMOKE_PORT" exec node node_modules/next/dist/bin/next start -p "$SMOKE_PORT" ) \
+( cd "$RELEASE" && PORT="$SMOKE_PORT" exec node node_modules/next/dist/bin/next start -p "$SMOKE_PORT" -H 127.0.0.1 ) \
   > "$RELEASE/smoke.log" 2>&1 &
 SMOKE_PID=$!
 
