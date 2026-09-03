@@ -131,6 +131,28 @@ export const auth = betterAuth({
     max: 60, // requests/window/IP (auth routes get stricter built-in limits)
   },
 
+  advanced: {
+    ipAddress: {
+      // Without this the limit above is not per-IP at all: Better Auth cannot
+      // resolve a client address, warns, and drops every caller into one
+      // shared bucket per path — so one noisy client can lock every church out
+      // of signing in, and an attacker gets the whole allowance to themselves.
+      //
+      // It will not read x-forwarded-for here, and it is right not to: the
+      // leftmost entry is whatever the client sent, and Apache appends its own
+      // hop to Cloudflare's, so the header arrives with two values. A
+      // multi-value forwarded header is only trustworthy if every proxy in the
+      // chain is listed in trustedProxies, and Cloudflare's ranges change.
+      //
+      // cf-connecting-ip has neither problem: Cloudflare sets it to the true
+      // client address and overwrites anything the caller put there, and
+      // Apache passes it through untouched. If a request ever arrives without
+      // it, Better Auth resolves nothing and falls back to the shared bucket —
+      // exactly what happens today, so this cannot make things worse.
+      ipAddressHeaders: ["cf-connecting-ip"],
+    },
+  },
+
   databaseHooks: {
     session: {
       create: {
