@@ -64,6 +64,19 @@ else
   git -C "$MIRROR" fetch --prune origin "+refs/heads/*:refs/heads/*"
 fi
 
+# Say plainly which branch is missing, rather than letting rev-parse fail
+# with "unknown revision" — which reads like a broken clone. Deploying by
+# hand from main before a production branch exists is the normal case here,
+# not a mistake.
+if [ -z "${DEPLOY_SHA:-}" ] &&
+   ! git -C "$MIRROR" show-ref --verify --quiet "refs/heads/$DEPLOY_BRANCH"; then
+  note "Branches on the remote:"
+  git -C "$MIRROR" for-each-ref --format='      %(refname:short)' refs/heads/ >&2
+  note ""
+  note "Deploy from one of those, e.g.:  DEPLOY_BRANCH=main bash deploy/deploy.sh"
+  die "branch '$DEPLOY_BRANCH' does not exist on the remote"
+fi
+
 SHA="${DEPLOY_SHA:-$(git -C "$MIRROR" rev-parse "$DEPLOY_BRANCH")}"
 git -C "$MIRROR" cat-file -e "${SHA}^{commit}" 2>/dev/null || die "commit $SHA is not in the mirror"
 SHORT="${SHA:0:7}"
