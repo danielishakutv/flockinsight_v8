@@ -1,6 +1,7 @@
 import "server-only";
 import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { outstandingOn } from "@/lib/pledge-status";
 import { giving, member, pledge, project } from "@/db/schema";
 import type {
   PledgeCadence,
@@ -310,7 +311,7 @@ export async function getOutstandingPledges(
       projectName: r.projectName,
       amount: Number(r.amount),
       paid: paidAmt,
-      outstanding: Math.max(0, Number(r.amount) - paidAmt),
+      outstanding: outstandingOn(Number(r.amount), paidAmt),
       cadence: r.cadence,
       cadenceLabel: r.cadenceLabel,
       status: r.status,

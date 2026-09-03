@@ -10,6 +10,7 @@ import {
   project,
 } from "@/db/schema";
 import { paidByPledge, cadenceLabel } from "@/lib/projects";
+import { outstandingOn } from "@/lib/pledge-status";
 import type { PledgeCadence } from "@/lib/projects-shared";
 import { sendChurchSms } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
@@ -177,7 +178,9 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
 
       const amount = Number(r.amount);
       const paidAmt = paid.get(r.id) ?? 0;
-      const outstanding = amount - paidAmt;
+      // Settled means settled: a pledge left a fraction of a kobo short by
+      // float drift must not keep texting someone who has finished paying.
+      const outstanding = outstandingOn(amount, paidAmt);
       if (outstanding <= 0) continue;
 
       const start = r.startDate || r.createdAt.toISOString().slice(0, 10);

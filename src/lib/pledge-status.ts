@@ -39,3 +39,15 @@ export function nextPledgeStatus(
     : "active";
   return next === current ? null : next;
 }
+
+/**
+ * What is still owed on a pledge.
+ *
+ * Rounded to the currency's smallest unit and floored at zero, so a pledge
+ * that has been paid off reads as settled rather than owing a fraction of a
+ * kobo that no one can pay. Anything still open is reported to the cent.
+ */
+export function outstandingOn(amount: number, paid: number): number {
+  if (isPledgeCovered(amount, paid)) return 0;
+  return Math.round((amount - paid) * 100) / 100;
+}

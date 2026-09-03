@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isPledgeCovered, nextPledgeStatus } from "@/lib/pledge-status";
+import {
+  isPledgeCovered,
+  nextPledgeStatus,
+  outstandingOn,
+} from "@/lib/pledge-status";
 
 describe("isPledgeCovered", () => {
   it("is true once payments reach the pledged amount", () => {
@@ -42,5 +46,25 @@ describe("nextPledgeStatus", () => {
     // Someone cancelled this on purpose; payments must not revive it.
     expect(nextPledgeStatus("cancelled", 50000, 50000)).toBeNull();
     expect(nextPledgeStatus("cancelled", 50000, 0)).toBeNull();
+  });
+});
+
+describe("outstandingOn", () => {
+  it("reports what is genuinely still owed", () => {
+    expect(outstandingOn(50000, 30000)).toBe(20000);
+    expect(outstandingOn(1000.5, 250.25)).toBe(750.25);
+  });
+
+  it("settles a pledge that float drift left a sliver short", () => {
+    // Regression: this residue is > 0, so the pledge stayed on the outstanding
+    // report for ever and the reminder cron kept texting a member who had
+    // finished paying — "0.00 outstanding" — at the church's expense.
+    const paid = [333.4, 333.4, 333.4].reduce((a, b) => a + b, 0);
+    expect(1000.2 - paid).toBeGreaterThan(0); // the naive sum still owes
+    expect(outstandingOn(1000.2, paid)).toBe(0); // this does not
+  });
+
+  it("never reports a negative balance when someone overpays", () => {
+    expect(outstandingOn(50000, 60000)).toBe(0);
   });
 });

@@ -23,6 +23,7 @@ import {
 } from "@/app/(app)/giving/projects/actions";
 import { recordGiving } from "@/app/(app)/giving/actions";
 import type { PledgeRow, ProjectDetail as Detail } from "@/lib/projects";
+import { outstandingOn } from "@/lib/pledge-status";
 import { CADENCES, cadenceLabel } from "@/lib/projects-shared";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -88,7 +89,7 @@ export function ProjectDetail({
     () =>
       p.pledges
         .filter((pl) => pl.status !== "cancelled")
-        .reduce((a, pl) => a + Math.max(0, pl.amount - pl.paid), 0),
+        .reduce((a, pl) => a + outstandingOn(pl.amount, pl.paid), 0),
     [p.pledges],
   );
 
