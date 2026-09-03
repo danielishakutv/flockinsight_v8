@@ -9,6 +9,8 @@
 // there is never a moment with no process on the port. In fork mode `reload`
 // is just a restart, and Apache answers 502 for the few seconds Next takes to
 // boot.
+// PM2 loads this file itself, as CommonJS — require is the only option here.
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -23,7 +25,29 @@ if (!fs.existsSync(CURRENT)) {
   );
 }
 
-const PORT = process.env.FLOCKINSIGHT_PORT || "3001";
+/**
+ * The port Apache proxies to.
+ *
+ * It has to come from somewhere that survives a reload. PM2 re-reads this file
+ * on every deploy, so a value that depended on an environment variable being
+ * set in that particular shell would quietly fall back to the default and move
+ * the app out from under Apache — a 502 for the whole site, from a deploy that
+ * otherwise looked fine.
+ *
+ * shared/.env is the same file the app itself reads, so the two cannot drift.
+ */
+function portFromSharedEnv() {
+  try {
+    const env = fs.readFileSync(path.join(APP_ROOT, "shared", ".env"), "utf8");
+    const match = env.match(/^\s*PORT\s*=\s*["']?(\d+)["']?/m);
+    return match ? match[1] : null;
+  } catch {
+    /* no shared/.env yet, or no PORT in it — fall through to the default */
+    return null;
+  }
+}
+
+const PORT = process.env.FLOCKINSIGHT_PORT || portFromSharedEnv() || "3001";
 
 module.exports = {
   apps: [
