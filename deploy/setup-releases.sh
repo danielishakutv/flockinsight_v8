@@ -42,13 +42,70 @@ log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 die() { printf '\n\033[1;31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
 
+# The port Apache proxies to, resolved the same way ecosystem.config.cjs does:
+# an explicit override, else PORT in shared/.env, else 3001. One source, so the
+# cutover cannot verify a different port from the one the app was told to use.
+resolve_port() {
+  if [ -n "${FLOCKINSIGHT_PORT:-}" ]; then
+    printf '%s' "$FLOCKINSIGHT_PORT"
+    return
+  fi
+  local found
+  found="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' "$SHARED/.env" 2>/dev/null | head -1 | tr -dc '0-9')"
+  printf '%s' "${found:-3001}"
+}
+
+# Swap PM2 onto the release layout. A function, and separate from the migration
+# above, so it can be run on its own: staging and going live are two decisions,
+# and the second usually happens later.
+cutover() {
+  local port
+  port="$(resolve_port)"
+
+  log "Cutting PM2 over to the release layout"
+  note "this is the one short outage — a single Next.js boot"
+  note "the app will listen on 127.0.0.1:$port"
+  pm2 delete "$PM2_APP" 2>/dev/null || note "no existing '$PM2_APP' process to remove"
+  pm2 start "$SHARED/ecosystem.config.cjs"
+  pm2 save --force >/dev/null
+
+  log "Verifying on port $port"
+  local ok=""
+  for _ in $(seq 1 60); do
+    if curl -fsS --max-time 3 "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; then
+      ok=yes
+      break
+    fi
+    sleep 1
+  done
+  if [ -z "$ok" ]; then
+    note "Roll back with:"
+    note "  pm2 delete $PM2_APP"
+    note "  cd <your previous install> && pm2 start ecosystem.config.cjs && pm2 save"
+    die "nothing answered on 127.0.0.1:$port — check: pm2 logs $PM2_APP"
+  fi
+
+  log "Done"
+  note "deploys from here: DEPLOY_BRANCH=$DEPLOY_BRANCH bash $APP_ROOT/current/deploy/deploy.sh"
+}
+
 log "Preflight"
 for cmd in git node pnpm pm2 curl openssl tar; do
   command -v "$cmd" >/dev/null 2>&1 || die "$cmd is not on PATH"
 done
 [ -f "$HERE/deploy.sh" ] || die "deploy.sh must sit next to this script"
 if [ -d "$RELEASES" ]; then
-  die "$RELEASES already exists — this box is already migrated, just run deploy.sh"
+  # Already migrated. The only thing left here is the cutover, so allow that
+  # and refuse the rest — re-running the migration would rename a live install
+  # aside a second time.
+  if [ "${CONFIRM_CUTOVER:-}" = "yes" ]; then
+    [ -L "$CURRENT" ] || die "no release staged at $CURRENT — run deploy.sh first"
+    cutover
+    exit 0
+  fi
+  note "To go live now:  CONFIRM_CUTOVER=yes APP_ROOT=$APP_ROOT bash $0"
+  note "To deploy:       DEPLOY_BRANCH=$DEPLOY_BRANCH bash $APP_ROOT/current/deploy/deploy.sh"
+  die "$RELEASES already exists — this box is already migrated"
 fi
 
 # ------------------------------------------------- move the old install aside
@@ -117,24 +174,5 @@ if [ "${CONFIRM_CUTOVER:-}" != "yes" ]; then
   exit 0
 fi
 
-log "Cutting PM2 over to the release layout"
-note "this is the one short outage — a single Next.js boot"
-pm2 delete "$PM2_APP" 2>/dev/null || note "no existing '$PM2_APP' process to remove"
-pm2 start "$SHARED/ecosystem.config.cjs"
-pm2 save --force >/dev/null
-
-PORT="${FLOCKINSIGHT_PORT:-3001}"
-log "Verifying on port $PORT"
-ok=""
-for _ in $(seq 1 60); do
-  if curl -fsS --max-time 3 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
-    ok=yes
-    break
-  fi
-  sleep 1
-done
-[ -n "$ok" ] || die "nothing answered on $PORT — pm2 logs $PM2_APP, and $OLD is still intact"
-
-log "Done"
+cutover
 note "old install kept at $OLD — remove it yourself once you are happy"
-note "from here on, deploys are: bash deploy/deploy.sh (or a push to $DEPLOY_BRANCH)"
