@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notificationRead, pushSubscription } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -83,10 +83,16 @@ export async function removePushSubscription(
   endpoint: string,
 ): Promise<ActionResult> {
   if (!endpoint) return { ok: false, error: "Missing endpoint" };
-  await ctx();
-  // Endpoint is globally unique; clearing it stops pushes to that device.
+  const { user } = await ctx();
+  // Scoped to the caller: an endpoint is unguessable in practice, but it is
+  // still someone else's device, and nothing else here deletes on a bare id.
   await db
     .delete(pushSubscription)
-    .where(eq(pushSubscription.endpoint, endpoint));
+    .where(
+      and(
+        eq(pushSubscription.endpoint, endpoint),
+        eq(pushSubscription.userId, user.id),
+      ),
+    );
   return { ok: true };
 }

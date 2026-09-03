@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { nextPledgeStatus } from "@/lib/pledge-status";
 import { giving, givingCategory, member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -141,9 +142,19 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
         .update(giving)
         .set(editable)
         .where(and(eq(giving.id, d.id), eq(giving.churchId, church.id)))
-        .returning({ id: giving.id });
+        .returning({
+          id: giving.id,
+          projectId: giving.projectId,
+          pledgeId: giving.pledgeId,
+        });
       if (!row) return { ok: false, error: "Giving record not found." };
+      // The amount may have moved in either direction, so the pledge it pays
+      // can now be finished or unfinished. The link itself is untouched above,
+      // so read it back from the row rather than the submitted fields.
+      if (row.pledgeId) await syncPledgeStatus(church.id, row.pledgeId);
       revalidatePath("/giving");
+      revalidatePath("/dashboard");
+      if (row.projectId) revalidatePath(`/giving/projects/${row.projectId}`);
       return { ok: true, id: row.id };
     }
 
@@ -152,8 +163,8 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       .values({ churchId: church.id, ...fields, recordedBy: user.id })
       .returning({ id: giving.id });
 
-    // Auto-complete a pledge once it's fully paid (best-effort, never blocks).
-    if (d.pledgeId) await maybeCompletePledge(church.id, d.pledgeId);
+    // Close the pledge if this payment finishes it (best-effort, never blocks).
+    if (d.pledgeId) await syncPledgeStatus(church.id, d.pledgeId);
 
     // Thank the giver + speak a blessing, if requested and possible. The helper
     // re-checks the church's receipt setting and is best-effort (never throws).
@@ -183,29 +194,41 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
   }
 }
 
-/** Mark a still-active pledge complete once payments cover its amount. */
-async function maybeCompletePledge(churchId: string, pledgeId: string): Promise<void> {
+/**
+ * Keep a pledge's status in step with what has actually been paid against it,
+ * after a payment is recorded, edited or removed.
+ *
+ * Moves only between "active" and "completed" — a cancelled pledge is left
+ * alone (see nextPledgeStatus). Best-effort: the payment is already saved, and
+ * failing to relabel the pledge must never undo that.
+ */
+async function syncPledgeStatus(churchId: string, pledgeId: string): Promise<void> {
   try {
     const [pl] = await db
       .select({ amount: pledge.amount, status: pledge.status })
       .from(pledge)
       .where(and(eq(pledge.id, pledgeId), eq(pledge.churchId, churchId)))
       .limit(1);
-    if (!pl || pl.status !== "active") return;
+    if (!pl) return;
 
     const [sum] = await db
       .select({ paid: sql<number>`coalesce(sum(${giving.amount}), 0)` })
       .from(giving)
-      .where(eq(giving.pledgeId, pledgeId));
+      .where(and(eq(giving.pledgeId, pledgeId), eq(giving.churchId, churchId)));
 
-    if (Number(sum?.paid ?? 0) >= Number(pl.amount)) {
-      await db
-        .update(pledge)
-        .set({ status: "completed" })
-        .where(and(eq(pledge.id, pledgeId), eq(pledge.churchId, churchId)));
-    }
+    const next = nextPledgeStatus(
+      pl.status,
+      Number(pl.amount),
+      Number(sum?.paid ?? 0),
+    );
+    if (!next) return;
+
+    await db
+      .update(pledge)
+      .set({ status: next })
+      .where(and(eq(pledge.id, pledgeId), eq(pledge.churchId, churchId)));
   } catch (e) {
-    console.error("maybeCompletePledge failed", e);
+    console.error("syncPledgeStatus failed", e);
   }
 }
 
@@ -219,9 +242,21 @@ export async function deleteGiving(id: string): Promise<ActionResult> {
     const [row] = await db
       .delete(giving)
       .where(and(eq(giving.id, id), eq(giving.churchId, church.id)))
-      .returning({ id: giving.id });
+      .returning({
+        id: giving.id,
+        projectId: giving.projectId,
+        pledgeId: giving.pledgeId,
+      });
     if (!row) return { ok: false, error: "Giving record not found." };
+    // Taking a payment away can leave a pledge marked complete that no longer
+    // is, which would drop it out of the outstanding report for good.
+    if (row.pledgeId) await syncPledgeStatus(church.id, row.pledgeId);
+    // A gift feeds the dashboard totals and its project's progress too, so
+    // refresh the same views recording one does — otherwise they keep showing
+    // money that is no longer there.
     revalidatePath("/giving");
+    revalidatePath("/dashboard");
+    if (row.projectId) revalidatePath(`/giving/projects/${row.projectId}`);
     return { ok: true, id: row.id };
   } catch (e) {
     console.error("deleteGiving failed", e);
