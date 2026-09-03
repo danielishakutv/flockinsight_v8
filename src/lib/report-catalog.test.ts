@@ -39,6 +39,17 @@ describe("the dataset catalogue", () => {
   });
 });
 
+describe("every catalogued dataset can actually be built", () => {
+  // The catalogue and the builders are two lists that must stay in step. A
+  // dataset offered on the page with no builder behind it is a 500 at the
+  // moment someone clicks download, which is the worst place to find out.
+  it("has a builder for every dataset, and no builder without one", async () => {
+    const { BUILDABLE_IDS } = await import("@/lib/report-data");
+    const catalogued = DATASETS.map((d) => d.id).sort();
+    expect([...BUILDABLE_IDS].sort()).toEqual(catalogued);
+  });
+});
+
 describe("permission gating", () => {
   const members = getDataset("members")!;
 

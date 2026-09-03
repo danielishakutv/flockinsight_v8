@@ -6,6 +6,7 @@ import {
   UsersRound,
   HeartHandshake,
   HandCoins,
+  Wallet,
   MessagesSquare,
   Bell,
   Settings,
@@ -51,6 +52,7 @@ const REPORT_PERMS = [
   "members.view",
   "attendance.view",
   "giving.view",
+  "finance.view",
   "groups.view",
   "followup.view",
   "communication.view",
@@ -75,6 +77,7 @@ export const mainNav: NavItem[] = [
   { label: "Groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
   { label: "Celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
   { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
+  { label: "Finance", href: "/finance", icon: Wallet, perm: "finance.view" },
   {
     label: "Follow-up",
     href: "/follow-up",
@@ -173,6 +176,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Offerings, tithes & donations",
         tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         perm: "giving.view",
+      },
+      {
+        label: "Finance",
+        href: "/finance",
+        icon: Wallet,
+        description: "Income, expenses & accounts",
+        tile: "bg-lime-500/15 text-lime-600 dark:text-lime-400",
+        perm: "finance.view",
       },
       {
         label: "Events",

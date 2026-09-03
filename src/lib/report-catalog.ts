@@ -17,6 +17,7 @@ export type CategoryKey =
   | "people"
   | "attendance"
   | "giving"
+  | "finance"
   | "groups"
   | "engagement"
   | "communication"
@@ -43,6 +44,12 @@ export const CATEGORIES: Category[] = [
     key: "giving",
     label: "Giving",
     description: "Every entry, plus categories, projects and pledges.",
+  },
+  {
+    key: "finance",
+    label: "Finance",
+    description:
+      "Income and expense records, the accounts they sit in, and what each category came to.",
   },
   {
     key: "groups",
@@ -173,6 +180,39 @@ export const DATASETS: Dataset[] = [
       { column: "project_id", target: "projects.project_id" },
       { column: "pledge_id", target: "pledges.pledge_id" },
     ],
+  },
+  /* ------------------------------ Finance ----------------------------- */
+  {
+    id: "finance-transactions",
+    label: "Income & expenses",
+    description:
+      "Every finance record with its amount, direction, account, category, payee and reference.",
+    category: "finance",
+    perm: "finance.view",
+    grain: "One row per record",
+    dateColumn: "date",
+    joins: [
+      { column: "account_id", target: "finance-accounts.account_id" },
+      { column: "category_id", target: "finance-categories.category_id" },
+    ],
+  },
+  {
+    id: "finance-accounts",
+    label: "Finance accounts",
+    description:
+      "Each account with its opening balance, what has gone in and out, and the balance today.",
+    category: "finance",
+    perm: "finance.view",
+    grain: "One row per account",
+  },
+  {
+    id: "finance-categories",
+    label: "Finance categories",
+    description:
+      "Your income and expense categories with the number of records and total in each.",
+    category: "finance",
+    perm: "finance.view",
+    grain: "One row per category",
   },
   {
     id: "giving-categories",

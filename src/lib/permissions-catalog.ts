@@ -30,6 +30,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "finance",
+    label: "Finance",
+    description:
+      "Income and expense records, accounts and categories — the church's books.",
+    perms: [
+      { key: "finance.view", label: "View" },
+      { key: "finance.manage", label: "Manage" },
+    ],
+  },
+  {
     key: "members",
     label: "Members",
     description: "The church congregation.",

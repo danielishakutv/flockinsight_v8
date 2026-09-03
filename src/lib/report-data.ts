@@ -32,9 +32,14 @@ import {
   usageStat,
   user,
   walletTxn,
+  financeAccount,
+  financeCategory,
+  financeTransaction,
 } from "@/db/schema";
 import { DATASETS, getDataset, type Dataset } from "@/lib/report-catalog";
 import type { ReportRange } from "@/lib/report-range";
+import { listAccounts, listCategories } from "@/lib/finance-data";
+import { signedAmount } from "@/lib/finance-shared";
 
 /**
  * Builds the rows behind every downloadable dataset.
@@ -628,6 +633,135 @@ const BUILDERS: Record<string, Builder> = {
         g.recordedById,
         g.recordedByName,
         ts(g.createdAt),
+      ]),
+    };
+  },
+
+  /* ------------------------------ Finance ----------------------------- */
+
+  "finance-transactions": async (churchId, range) => {
+    const recorder = alias(user, "finrecorder");
+    const rows = await db
+      .select({
+        id: financeTransaction.id,
+        date: financeTransaction.date,
+        kind: financeTransaction.kind,
+        amount: financeTransaction.amount,
+        accountId: financeTransaction.accountId,
+        accountName: financeAccount.name,
+        categoryId: financeTransaction.categoryId,
+        categoryName: financeCategory.name,
+        party: financeTransaction.party,
+        method: financeTransaction.method,
+        reference: financeTransaction.reference,
+        note: financeTransaction.note,
+        recordedById: financeTransaction.recordedBy,
+        recordedByName: recorder.name,
+        createdAt: financeTransaction.createdAt,
+      })
+      .from(financeTransaction)
+      .leftJoin(financeAccount, eq(financeAccount.id, financeTransaction.accountId))
+      .leftJoin(financeCategory, eq(financeCategory.id, financeTransaction.categoryId))
+      .leftJoin(recorder, eq(recorder.id, financeTransaction.recordedBy))
+      .where(
+        and(
+          eq(financeTransaction.churchId, churchId),
+          ...rangeWhere(financeTransaction.date, range, "date"),
+        ),
+      )
+      .orderBy(desc(financeTransaction.date));
+
+    return {
+      columns: [
+        "transaction_id",
+        "date",
+        "type",
+        "amount",
+        "signed_amount",
+        "account_id",
+        "account_name",
+        "category_id",
+        "category_name",
+        "party",
+        "method",
+        "reference",
+        "note",
+        "recorded_by_id",
+        "recorded_by_name",
+        "created_at",
+      ],
+      rows: rows.map((t) => [
+        t.id,
+        t.date,
+        t.kind,
+        Number(t.amount),
+        // Signed as well as absolute, so a spreadsheet can just sum the column.
+        signedAmount(t.kind, Number(t.amount)),
+        t.accountId,
+        t.accountName,
+        t.categoryId,
+        t.categoryName,
+        t.party,
+        t.method,
+        t.reference,
+        t.note,
+        t.recordedById,
+        t.recordedByName,
+        ts(t.createdAt),
+      ]),
+    };
+  },
+
+  "finance-accounts": async (churchId) => {
+    const accounts = await listAccounts(churchId);
+    return {
+      columns: [
+        "account_id",
+        "name",
+        "type",
+        "institution",
+        "account_number",
+        "opening_balance",
+        "total_in",
+        "total_out",
+        "balance",
+        "record_count",
+        "is_open",
+      ],
+      rows: accounts.map((a) => [
+        a.id,
+        a.name,
+        a.type,
+        a.institution,
+        a.accountNumber,
+        a.openingBalance,
+        a.income,
+        a.expense,
+        a.balance,
+        a.transactionCount,
+        a.isActive ? "yes" : "no",
+      ]),
+    };
+  },
+
+  "finance-categories": async (churchId) => {
+    const categories = await listCategories(churchId);
+    return {
+      columns: [
+        "category_id",
+        "name",
+        "type",
+        "record_count",
+        "total",
+        "is_in_use",
+      ],
+      rows: categories.map((c) => [
+        c.id,
+        c.name,
+        c.kind,
+        c.transactionCount,
+        c.total,
+        c.isActive ? "yes" : "no",
       ]),
     };
   },

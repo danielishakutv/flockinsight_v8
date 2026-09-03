@@ -2385,3 +2385,142 @@ export type CronRun = typeof cronRun.$inferSelect;
 export type TermiiSnapshot = typeof termiiSnapshot.$inferSelect;
 export type PlatformAlert = typeof platformAlert.$inferSelect;
 export type EventGuest = typeof eventGuest.$inferSelect;
+
+/* ============================================================
+ * FlockInsight domain — finance (income & expense ledger)
+ *
+ * The church's books: what came in, what went out, which account it sat in
+ * and what it was for. Deliberately separate from `giving`, which answers a
+ * different question — who gave, and toward what. Money a member gives is a
+ * giving row; the electricity bill, the rent, a hall-hire fee or a grant is a
+ * finance row. Nothing is copied between them, so a total is never counted
+ * twice.
+ *
+ * Amounts are always stored positive; `kind` carries the direction. An account
+ * balance is its opening balance plus income minus expense, computed from the
+ * rows rather than denormalised, so a corrected entry cannot leave a stale
+ * total behind.
+ * ========================================================== */
+export const financeKindEnum = pgEnum("finance_kind", ["income", "expense"]);
+
+export const financeAccountTypeEnum = pgEnum("finance_account_type", [
+  "bank",
+  "cash",
+  "mobile_money",
+  "other",
+]);
+
+export const financeMethodEnum = pgEnum("finance_method", [
+  "cash",
+  "transfer",
+  "card",
+  "cheque",
+  "online",
+  "other",
+]);
+
+/** Where the money sits: a bank account, the offering box, a mobile wallet. */
+export const financeAccount = pgTable(
+  "finance_account",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    type: financeAccountTypeEnum().notNull().default("bank"),
+    /** Bank or wallet name, e.g. "First Bank". */
+    institution: text(),
+    /** A label for humans, not a payment rail — formats vary by country. */
+    accountNumber: text(),
+    /**
+     * What the account held before the first row recorded here, so a church
+     * that joins mid-year starts from the truth instead of zero.
+     */
+    openingBalance: numeric({ precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    /** Closed accounts stay for their history but drop out of the pickers. */
+    isActive: boolean().notNull().default(true),
+    note: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("finance_account_church_idx").on(t.churchId),
+    uniqueIndex("finance_account_name_idx").on(t.churchId, t.name),
+  ],
+);
+
+/** What the money was for. Scoped to one side of the books. */
+export const financeCategory = pgTable(
+  "finance_category",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    kind: financeKindEnum().notNull(),
+    isActive: boolean().notNull().default(true),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("finance_category_church_idx").on(t.churchId),
+    // "Rent" can be both an income and an expense line, so the kind is part of
+    // what makes a name unique.
+    uniqueIndex("finance_category_name_idx").on(t.churchId, t.kind, t.name),
+  ],
+);
+
+/** One movement of money, in or out. */
+export const financeTransaction = pgTable(
+  "finance_transaction",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    kind: financeKindEnum().notNull(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    date: date().notNull(),
+    // Both set null rather than cascade: deleting an account or a category must
+    // never take the church's money records with it.
+    accountId: uuid().references(() => financeAccount.id, {
+      onDelete: "set null",
+    }),
+    categoryId: uuid().references(() => financeCategory.id, {
+      onDelete: "set null",
+    }),
+    /** Who it came from, or who it went to. */
+    party: text(),
+    /** Cheque number, teller number, invoice reference. */
+    reference: text(),
+    method: financeMethodEnum(),
+    note: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("finance_txn_church_idx").on(t.churchId),
+    index("finance_txn_date_idx").on(t.date),
+    index("finance_txn_account_idx").on(t.accountId),
+    index("finance_txn_category_idx").on(t.categoryId),
+    // The ledger is always read newest-first within a church, and the summary
+    // splits by kind over a date range.
+    index("finance_txn_church_date_idx").on(t.churchId, t.date),
+    index("finance_txn_church_kind_idx").on(t.churchId, t.kind),
+  ],
+);
