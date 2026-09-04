@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  FileText,
   Loader2,
   Pencil,
   Plus,
@@ -300,15 +301,28 @@ export function FinanceClient({
           </Link>
         </Button>
         {hasAnyRecords && (
-          <Button asChild variant="ghost" className="ml-auto">
-            <Link
-              href={`/finance/export${exportQuery ? `?${exportQuery}` : ""}`}
-              prefetch={false}
-            >
-              <Download className="size-4" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </Link>
-          </Button>
+          <div className="ml-auto flex gap-1">
+            {/* Two shapes for two jobs: the PDF is the statement you print and
+                hand over, the CSV is the complete record for a spreadsheet. */}
+            <Button asChild variant="ghost">
+              <Link
+                href={`/finance/export/pdf${exportQuery ? `?${exportQuery}` : ""}`}
+                prefetch={false}
+              >
+                <FileText className="size-4" />
+                <span className="hidden sm:inline">PDF</span>
+              </Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link
+                href={`/finance/export${exportQuery ? `?${exportQuery}` : ""}`}
+                prefetch={false}
+              >
+                <Download className="size-4" />
+                <span className="hidden sm:inline">CSV</span>
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
 
