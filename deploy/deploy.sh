@@ -12,10 +12,28 @@
 # Nothing here deletes: superseded releases are moved to releases/.trash/.
 set -Eeuo pipefail
 
-APP_ROOT="${APP_ROOT:-$HOME/apps/flockinsight}"
+# Where the release layout lives.
+#
+# Run as a file it is <root>/releases/<stamp>/deploy/deploy.sh, so the root is
+# three levels up — meaning a manual deploy needs no environment at all. Piped
+# over SSH there is no script path to read, and the caller passes APP_ROOT.
+default_app_root() {
+  local src="${BASH_SOURCE[0]:-}"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    local dir root
+    dir="$(cd "$(dirname "$src")" && pwd)"
+    root="$(cd "$dir/../../.." 2>/dev/null && pwd)" || root=""
+    if [ -n "$root" ] && [ -d "$root/releases" ] && [ -d "$root/shared" ]; then
+      printf '%s' "$root"
+      return
+    fi
+  fi
+  printf '%s' "$HOME/apps/flockinsight"
+}
+
+APP_ROOT="${APP_ROOT:-$(default_app_root)}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-production}"
 DEPLOY_REPO="${DEPLOY_REPO:-https://github.com/danielishakutv/flockinsight_v8.git}"
-PORT="${FLOCKINSIGHT_PORT:-3001}"
 SMOKE_PORT="${SMOKE_PORT:-3987}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 PM2_APP="${PM2_APP:-flockinsight}"
@@ -28,6 +46,22 @@ MIRROR="$APP_ROOT/repo.git"
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 die() { printf '\n\033[1;31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# The port Apache proxies to, resolved the way ecosystem.config.cjs does it:
+# an explicit override, else PORT in shared/.env, else 3001. Verifying a
+# different port from the one the app was told to listen on is how a good
+# deploy reports failure — or a bad one reports success against another app.
+resolve_port() {
+  if [ -n "${FLOCKINSIGHT_PORT:-}" ]; then
+    printf '%s' "$FLOCKINSIGHT_PORT"
+    return
+  fi
+  local found
+  found="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' "$SHARED/.env" 2>/dev/null | head -1 | tr -dc '0-9')"
+  printf '%s' "${found:-3001}"
+}
+
+PORT="$(resolve_port)"
 
 SMOKE_PID=""
 cleanup() {
