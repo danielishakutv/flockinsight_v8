@@ -266,3 +266,75 @@ export function parseAmount(input: string): number | null {
   if (n >= 1e12) return null;
   return roundMoney(n);
 }
+
+/* ============================================================
+ * Fund accounts linked to a giving category
+ *
+ * A linked account is the fund for one giving category. Money enters it one
+ * way only — someone actually gave — so every gift in that category writes an
+ * income row automatically, and editing or removing the gift follows through.
+ *
+ * Money leaving is ordinary. The fund can be spent from, and it can be
+ * transferred out of, so Finance shows what is genuinely left. What it cannot
+ * do is take money in by hand: a payment into it would be money nobody gave,
+ * and the balance would stop meaning anything.
+ *
+ * The giving records never change either way. They record what was given, not
+ * what remains.
+ * ========================================================== */
+
+/** The shape these rules need. Anything with a link is a fund account. */
+export type LinkableAccount = {
+  id: string;
+  isActive: boolean;
+  givingCategoryId: string | null;
+};
+
+export function isFundAccount(account: LinkableAccount): boolean {
+  return account.givingCategoryId !== null;
+}
+
+/**
+ * Can money be moved OUT of this account?
+ *
+ * Yes for any open account, fund or not — spending a building fund down is
+ * exactly what a building fund is for.
+ */
+export function canTransferFrom(account: LinkableAccount): boolean {
+  return account.isActive;
+}
+
+/**
+ * Can money be moved INTO this account?
+ *
+ * Not for a fund account. Its balance is the arithmetic of real gifts less
+ * what has been spent; paying into it by hand would break that.
+ */
+export function canTransferTo(account: LinkableAccount): boolean {
+  return account.isActive && !isFundAccount(account);
+}
+
+/** Income is recorded against a fund by giving, never by hand. */
+export function canRecordIncomeInto(account: LinkableAccount): boolean {
+  return account.isActive && !isFundAccount(account);
+}
+
+/** Expenses are ordinary everywhere — a fund is spent from like any other. */
+export function canRecordExpenseFrom(account: LinkableAccount): boolean {
+  return account.isActive;
+}
+
+/** Why a transfer is not allowed, or null when it is. */
+export function transferProblem(
+  from: LinkableAccount | undefined,
+  to: LinkableAccount | undefined,
+): string | null {
+  if (!from || !to) return "Pick both accounts.";
+  if (from.id === to.id) return "Pick two different accounts.";
+  if (!from.isActive) return "That source account is closed.";
+  if (!to.isActive) return "That destination account is closed.";
+  if (!canTransferTo(to)) {
+    return "You can't pay into a giving fund by hand — it only receives money through giving. Pick a different destination.";
+  }
+  return null;
+}

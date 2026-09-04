@@ -12,6 +12,8 @@ import {
   service,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { fundAccountFor } from "@/lib/finance-giving-sync";
+import { createFundForCategory } from "@/app/(app)/finance/actions";
 import { can, canAny } from "@/lib/permissions";
 
 export type ActionResult =
@@ -172,6 +174,7 @@ const givingCategorySchema = z.object({
 export async function createGivingCategory(input: {
   name: string;
   description: string | null;
+  autoFinanceAccount?: boolean;
 }): Promise<ActionResult> {
   const parsed = givingCategorySchema.safeParse(input);
   if (!parsed.success)
@@ -184,15 +187,28 @@ export async function createGivingCategory(input: {
     .from(givingCategory)
     .where(eq(givingCategory.churchId, c.id));
 
-  await db.insert(givingCategory).values({
-    churchId: c.id,
-    name: parsed.data.name,
-    description: parsed.data.description,
-    sortOrder: existing.length,
-  });
+  const autoFinanceAccount = input.autoFinanceAccount ?? true;
+
+  const [created] = await db
+    .insert(givingCategory)
+    .values({
+      churchId: c.id,
+      name: parsed.data.name,
+      description: parsed.data.description,
+      sortOrder: existing.length,
+      autoFinanceAccount,
+    })
+    .returning({ id: givingCategory.id });
+
+  // A brand new category has no giving yet, so there is nothing to backfill —
+  // the fund simply starts empty and fills as gifts come in.
+  if (autoFinanceAccount && created) {
+    await createFundForCategory(created.id);
+  }
 
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
+  revalidatePath("/finance");
   return { ok: true };
 }
 
@@ -272,6 +288,19 @@ export async function deleteGivingCategory(id: string): Promise<ActionResult> {
 
   const { church: c } = await requireChurch();
   if (!(await canAny(["settings.manage", "giving.manage"]))) return NO_GIVING;
+
+  // A fund account hanging off this category holds real financial records.
+  // Deleting the category would set the link null and silently turn the fund
+  // into an ordinary account — a change to the books nobody asked for. Refuse,
+  // and let them unlink deliberately from Finance first.
+  const fund = await fundAccountFor(c.id, id);
+  if (fund) {
+    return {
+      ok: false,
+      error: `"${fund.name}" in Finance is this category's fund account. Unlink it there first — that keeps every record it holds.`,
+    };
+  }
+
   const [row] = await db
     .delete(givingCategory)
     .where(and(eq(givingCategory.id, id), eq(givingCategory.churchId, c.id)))

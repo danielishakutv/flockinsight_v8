@@ -12,6 +12,9 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.db-check.ts"],
     setupFiles: ["./src/test/db-env.ts"],
+    // One database, shared by every file here — running them at the same time
+    // means one file's fixtures land in another file's counts.
+    fileParallelism: false,
   },
   resolve: {
     alias: {

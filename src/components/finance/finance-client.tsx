@@ -30,6 +30,7 @@ import {
   FinanceFilters,
 } from "@/components/finance/finance-filters";
 import {
+  canRecordIncomeInto,
   financeFilterQuery,
   FINANCE_METHODS,
   KIND_LABEL,
@@ -79,6 +80,10 @@ export type TransactionRow = {
 
 type Option = { id: string; name: string };
 type CategoryOption = Option & { kind: FinanceKind };
+type AccountOption = Option & {
+  isActive: boolean;
+  givingCategoryId: string | null;
+};
 
 const NONE = "__none__";
 
@@ -112,7 +117,7 @@ export function FinanceClient({
 }: {
   canManage: boolean;
   currency: string;
-  accounts: Option[];
+  accounts: AccountOption[];
   categories: CategoryOption[];
   rows: TransactionRow[];
   today: string;
@@ -222,6 +227,10 @@ export function FinanceClient({
 
   // Only categories on the same side of the books as the record being written.
   const categoriesForKind = categories.filter((c) => c.kind === form.kind);
+  // A giving fund fills up from giving alone, so it is not offered as a place
+  // to type income into. Spending from one is ordinary, so expenses see them all.
+  const accountsForKind =
+    form.kind === "income" ? accounts.filter(canRecordIncomeInto) : accounts;
   const exportQuery = financeFilterQuery(filters);
   const topCategories = summary.byCategory.filter((c) => c.total > 0).slice(0, 6);
   const biggest = topCategories[0]?.total ?? 0;
@@ -606,13 +615,20 @@ export function FinanceClient({
                     searchPlaceholder="Search accounts…"
                   >
                     <SelectItem value={NONE}>Not specified</SelectItem>
-                    {accounts.map((a) => (
+                    {accountsForKind.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {form.kind === "income" &&
+                  accountsForKind.length < accounts.length && (
+                    <p className="text-muted-foreground text-xs">
+                      Giving funds aren&apos;t listed — they receive income from
+                      giving only. Record the gift in Giving instead.
+                    </p>
+                  )}
               </div>
             </div>
 

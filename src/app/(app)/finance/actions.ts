@@ -2,19 +2,24 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccount,
   financeCategory,
   financeTransaction,
+  financeTransfer,
+  givingCategory,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
 import {
   defaultCategoriesFor,
   isIsoDate,
   parseAmount,
+  transferProblem,
+  canRecordIncomeInto,
   type FinanceKind,
 } from "@/lib/finance-shared";
 
@@ -402,7 +407,12 @@ export async function saveTransaction(
   const accountId = d.accountId && uuid.safeParse(d.accountId).success ? d.accountId : null;
   if (accountId) {
     const [a] = await db
-      .select({ id: financeAccount.id })
+      .select({
+        id: financeAccount.id,
+        name: financeAccount.name,
+        isActive: financeAccount.isActive,
+        givingCategoryId: financeAccount.givingCategoryId,
+      })
       .from(financeAccount)
       .where(
         and(
@@ -412,6 +422,15 @@ export async function saveTransaction(
       )
       .limit(1);
     if (!a) return { ok: false, error: "That account no longer exists." };
+    // A fund fills up one way only — someone gave. Money typed straight in
+    // would be money nobody gave, and the balance would stop meaning anything.
+    // Spending from it is ordinary and stays allowed.
+    if (d.kind === "income" && !canRecordIncomeInto(a)) {
+      return {
+        ok: false,
+        error: `"${a.name}" is a giving fund — income reaches it through giving, not by hand. Record the gift in Giving instead.`,
+      };
+    }
   }
 
   const categoryId =
@@ -511,4 +530,224 @@ function isUniqueViolation(e: unknown): boolean {
     "code" in e &&
     (e as { code?: string }).code === "23505"
   );
+}
+
+/* ============================================================
+ * Fund accounts linked to a giving category
+ * ========================================================== */
+
+/**
+ * Create the fund account for a giving category and pull its history in.
+ *
+ * Every gift already recorded in that category becomes an income row, so the
+ * balance reflects everything ever given rather than starting blank. The UI
+ * shows the count and total first, so nobody is surprised by the volume.
+ */
+export async function createFundForCategory(
+  categoryId: string,
+): Promise<ActionResult & { created?: number }> {
+  const g = await guard();
+  if (!g.ok) return g;
+  if (!uuid.safeParse(categoryId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [category] = await db
+    .select({ id: givingCategory.id, name: givingCategory.name })
+    .from(givingCategory)
+    .where(
+      and(
+        eq(givingCategory.id, categoryId),
+        eq(givingCategory.churchId, g.churchId),
+      ),
+    )
+    .limit(1);
+  if (!category) return { ok: false, error: "That category no longer exists." };
+
+  const already = await fundAccountFor(g.churchId, categoryId);
+  if (already) {
+    return { ok: false, error: `"${already.name}" is already this category's fund.` };
+  }
+
+  try {
+    // A church may already have an account under this name — from an earlier
+    // link that was undone, say. Give the new one a distinct name rather than
+    // failing on the unique index.
+    let name = category.name;
+    for (let attempt = 2; attempt <= 20; attempt++) {
+      const [clash] = await db
+        .select({ id: financeAccount.id })
+        .from(financeAccount)
+        .where(
+          and(
+            eq(financeAccount.churchId, g.churchId),
+            eq(financeAccount.name, name),
+          ),
+        )
+        .limit(1);
+      if (!clash) break;
+      name = `${category.name} (${attempt})`;
+    }
+
+    const [account] = await db
+      .insert(financeAccount)
+      .values({
+        churchId: g.churchId,
+        name,
+        type: "other",
+        givingCategoryId: categoryId,
+        note: `Fund for the "${category.name}" giving category. Income is recorded automatically from giving.`,
+        createdBy: g.userId,
+      })
+      .returning({ id: financeAccount.id });
+
+    const created = await backfillFund(
+      g.churchId,
+      categoryId,
+      account.id,
+      category.name,
+    );
+
+    refresh();
+    revalidatePath("/settings/giving");
+    return { ok: true, id: account.id, created };
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return { ok: false, error: "That category already has a fund account." };
+    }
+    console.error("createFundForCategory failed", e);
+    return { ok: false, error: "Could not create the fund account." };
+  }
+}
+
+/**
+ * Detach a fund from its giving category.
+ *
+ * Nothing is deleted. The account and every row in it stay exactly as they
+ * are — it simply becomes an ordinary account, free to receive transfers, and
+ * new giving stops feeding it. This is what "delete the category" offers to do
+ * instead of destroying financial records.
+ */
+export async function unlinkFund(accountId: string): Promise<ActionResult> {
+  const g = await guard();
+  if (!g.ok) return g;
+  if (!uuid.safeParse(accountId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [row] = await db
+    .update(financeAccount)
+    .set({ givingCategoryId: null })
+    .where(
+      and(
+        eq(financeAccount.id, accountId),
+        eq(financeAccount.churchId, g.churchId),
+      ),
+    )
+    .returning({ id: financeAccount.id });
+  if (!row) return { ok: false, error: "That account no longer exists." };
+
+  refresh();
+  revalidatePath("/settings/giving");
+  return { ok: true, id: row.id };
+}
+
+/* ============================================================
+ * Transfers
+ * ========================================================== */
+
+const transferSchema = z.object({
+  fromAccountId: uuid,
+  toAccountId: uuid,
+  amount: z.string().min(1, "Enter an amount."),
+  date: z.string().refine(isIsoDate, "Pick a valid date."),
+  reference: z.string().trim().max(120).optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+
+export type TransferInput = z.input<typeof transferSchema>;
+
+export async function recordTransfer(
+  input: TransferInput,
+): Promise<ActionResult> {
+  const g = await guard();
+  if (!g.ok) return g;
+
+  const parsed = transferSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Check the details and try again.",
+    };
+  }
+  const d = parsed.data;
+
+  const amount = parseAmount(d.amount);
+  if (amount === null) {
+    return { ok: false, error: "Enter an amount greater than zero." };
+  }
+
+  // Both accounts are read back from this church before the rule is applied,
+  // so an id from somewhere else matches nothing.
+  const accounts = await db
+    .select({
+      id: financeAccount.id,
+      isActive: financeAccount.isActive,
+      givingCategoryId: financeAccount.givingCategoryId,
+    })
+    .from(financeAccount)
+    .where(
+      and(
+        eq(financeAccount.churchId, g.churchId),
+        inArray(financeAccount.id, [d.fromAccountId, d.toAccountId]),
+      ),
+    );
+
+  const from = accounts.find((a) => a.id === d.fromAccountId);
+  const to = accounts.find((a) => a.id === d.toAccountId);
+  const problem = transferProblem(from, to);
+  if (problem) return { ok: false, error: problem };
+
+  try {
+    const [row] = await db
+      .insert(financeTransfer)
+      .values({
+        churchId: g.churchId,
+        fromAccountId: d.fromAccountId,
+        toAccountId: d.toAccountId,
+        amount,
+        date: d.date,
+        reference: d.reference || null,
+        note: d.note || null,
+        recordedBy: g.userId,
+      })
+      .returning({ id: financeTransfer.id });
+    refresh();
+    return { ok: true, id: row.id };
+  } catch (e) {
+    console.error("recordTransfer failed", e);
+    return { ok: false, error: "Could not record the transfer." };
+  }
+}
+
+export async function deleteTransfer(id: string): Promise<ActionResult> {
+  const g = await guard();
+  if (!g.ok) return g;
+  if (!uuid.safeParse(id).success) return { ok: false, error: "Invalid id" };
+
+  try {
+    const [row] = await db
+      .delete(financeTransfer)
+      .where(
+        and(
+          eq(financeTransfer.id, id),
+          eq(financeTransfer.churchId, g.churchId),
+        ),
+      )
+      .returning({ id: financeTransfer.id });
+    if (!row) return { ok: false, error: "That transfer no longer exists." };
+    refresh();
+    return { ok: true, id: row.id };
+  } catch (e) {
+    console.error("deleteTransfer failed", e);
+    return { ok: false, error: "Could not delete the transfer." };
+  }
 }

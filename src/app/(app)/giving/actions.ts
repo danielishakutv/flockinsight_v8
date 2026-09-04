@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { nextPledgeStatus } from "@/lib/pledge-status";
+import { syncGivingToFinance } from "@/lib/finance-giving-sync";
 import { giving, givingCategory, member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -152,8 +153,12 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       // can now be finished or unfinished. The link itself is untouched above,
       // so read it back from the row rather than the submitted fields.
       if (row.pledgeId) await syncPledgeStatus(church.id, row.pledgeId);
+      // Mirror the change into the category's fund, if it has one. The amount,
+      // date or category may all have moved.
+      await syncGivingToFinance(church.id, row.id);
       revalidatePath("/giving");
       revalidatePath("/dashboard");
+      revalidatePath("/finance");
       if (row.projectId) revalidatePath(`/giving/projects/${row.projectId}`);
       return { ok: true, id: row.id };
     }
@@ -165,6 +170,10 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
 
     // Close the pledge if this payment finishes it (best-effort, never blocks).
     if (d.pledgeId) await syncPledgeStatus(church.id, d.pledgeId);
+
+    // If this category has a fund account, the gift is mirrored into it as
+    // income. Best-effort: the gift is saved either way.
+    await syncGivingToFinance(church.id, row.id);
 
     // Thank the giver + speak a blessing, if requested and possible. The helper
     // re-checks the church's receipt setting and is best-effort (never throws).
@@ -186,6 +195,7 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
     revalidatePath("/giving");
     revalidatePath("/dashboard");
     revalidatePath("/communication/history");
+    revalidatePath("/finance");
     if (projectId) revalidatePath(`/giving/projects/${projectId}`);
     return { ok: true, id: row.id };
   } catch (e) {
@@ -251,6 +261,10 @@ export async function deleteGiving(id: string): Promise<ActionResult> {
     // Taking a payment away can leave a pledge marked complete that no longer
     // is, which would drop it out of the outstanding report for good.
     if (row.pledgeId) await syncPledgeStatus(church.id, row.pledgeId);
+    // The fund's mirror row goes with it, by the foreign key's cascade — it
+    // only ever existed as this gift's reflection, and leaving it would show
+    // money in the fund that nobody gave.
+    revalidatePath("/finance");
     // A gift feeds the dashboard totals and its project's progress too, so
     // refresh the same views recording one does — otherwise they keep showing
     // money that is no longer there.

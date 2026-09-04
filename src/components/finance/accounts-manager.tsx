@@ -18,6 +18,7 @@ import {
   deleteAccount,
   saveAccount,
   setAccountActive,
+  unlinkFund,
   type AccountInput,
 } from "@/app/(app)/finance/actions";
 import {
@@ -58,9 +59,13 @@ export type AccountRow = {
   openingBalance: number;
   isActive: boolean;
   note: string | null;
+  givingCategoryId: string | null;
+  givingCategoryName: string | null;
   balance: number;
   income: number;
   expense: number;
+  transferredIn: number;
+  transferredOut: number;
   transactionCount: number;
 };
 
@@ -169,6 +174,18 @@ export function AccountsManager({
     });
   }
 
+  function unlink(a: AccountRow) {
+    startTransition(async () => {
+      const res = await unlinkFund(a.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Unlinked — the account and its records are unchanged");
+      router.refresh();
+    });
+  }
+
   function remove(id: string) {
     startTransition(async () => {
       const res = await deleteAccount(id);
@@ -233,6 +250,9 @@ export function AccountsManager({
                       <div className="min-w-0">
                         <p className="truncate font-semibold">
                           {a.name}
+                          {a.givingCategoryId && (
+                            <Badge className="ml-2 text-[10px]">Fund</Badge>
+                          )}
                           {!a.isActive && (
                             <Badge variant="secondary" className="ml-2 text-[10px]">
                               Closed
@@ -281,25 +301,57 @@ export function AccountsManager({
                     {a.transactionCount === 1 ? "" : "s"}
                   </p>
 
-                  <div className="mt-3 flex gap-4 text-xs">
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                     <span className="text-emerald-600 dark:text-emerald-400">
                       +{formatMoney(a.income, currency)} in
                     </span>
                     <span className="text-rose-600 dark:text-rose-400">
                       −{formatMoney(a.expense, currency)} out
                     </span>
+                    {a.transferredIn > 0 && (
+                      <span className="text-muted-foreground">
+                        +{formatMoney(a.transferredIn, currency)} moved in
+                      </span>
+                    )}
+                    {a.transferredOut > 0 && (
+                      <span className="text-muted-foreground">
+                        −{formatMoney(a.transferredOut, currency)} moved out
+                      </span>
+                    )}
                   </div>
 
+                  {a.givingCategoryId && (
+                    <p className="text-muted-foreground mt-2 text-xs">
+                      Fund for the{" "}
+                      <span className="font-medium">
+                        {a.givingCategoryName ?? "linked"}
+                      </span>{" "}
+                      giving category. Income arrives from giving — it can be
+                      spent from or moved out, but not paid into by hand.
+                    </p>
+                  )}
+
                   {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-3 -ml-2"
-                      onClick={() => toggleActive(a)}
-                      disabled={pending}
-                    >
-                      {a.isActive ? "Close account" : "Reopen account"}
-                    </Button>
+                    <div className="mt-3 -ml-2 flex flex-wrap gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleActive(a)}
+                        disabled={pending}
+                      >
+                        {a.isActive ? "Close account" : "Reopen account"}
+                      </Button>
+                      {a.givingCategoryId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => unlink(a)}
+                          disabled={pending}
+                        >
+                          Unlink from giving
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -4,11 +4,11 @@ import { financeTransaction } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import {
-  activeAccountOptions,
   activeCategoryOptions,
   FINANCE_PAGE_SIZE,
   getFinanceSummary,
   getLedger,
+  transferableAccounts,
 } from "@/lib/finance-data";
 import { readFinanceFilters } from "@/lib/finance-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
@@ -37,7 +37,9 @@ export default async function FinancePage({
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const [accounts, categories, ledger, summary, [anyRow]] = await Promise.all([
-    activeAccountOptions(church.id),
+    // Carries the giving link, so the form knows which accounts may take
+    // income by hand and which are fed by giving alone.
+    transferableAccounts(church.id),
     activeCategoryOptions(church.id),
     getLedger(church.id, filters, page),
     // The summary follows the same range the person is looking at, so the

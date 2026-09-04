@@ -1,11 +1,14 @@
 import "server-only";
 import { and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
   financeAccount,
   financeCategory,
   financeTransaction,
+  financeTransfer,
+  givingCategory,
   user,
 } from "@/db/schema";
 import {
@@ -39,10 +42,15 @@ export type FinanceAccountRow = {
   openingBalance: number;
   isActive: boolean;
   note: string | null;
+  /** The giving category this is the fund for, if any. */
+  givingCategoryId: string | null;
+  givingCategoryName: string | null;
   /** Opening balance plus everything recorded against it. */
   balance: number;
   income: number;
   expense: number;
+  transferredIn: number;
+  transferredOut: number;
   transactionCount: number;
 };
 
@@ -84,10 +92,17 @@ export type FinanceTransactionRow = {
 export async function listAccounts(
   churchId: string,
 ): Promise<FinanceAccountRow[]> {
-  const [accounts, totals] = await Promise.all([
+  const [accounts, totals, movedOut, movedIn] = await Promise.all([
     db
-      .select()
+      .select({
+        account: financeAccount,
+        givingCategoryName: givingCategory.name,
+      })
       .from(financeAccount)
+      .leftJoin(
+        givingCategory,
+        eq(givingCategory.id, financeAccount.givingCategoryId),
+      )
       .where(eq(financeAccount.churchId, churchId))
       .orderBy(desc(financeAccount.isActive), asc(financeAccount.name)),
     db
@@ -100,6 +115,24 @@ export async function listAccounts(
       .from(financeTransaction)
       .where(eq(financeTransaction.churchId, churchId))
       .groupBy(financeTransaction.accountId, financeTransaction.kind),
+    // Transfers move a balance without being income or expense, so they are
+    // summed separately and never reach the income/expense figures.
+    db
+      .select({
+        accountId: financeTransfer.fromAccountId,
+        total: sql<number>`coalesce(sum(${financeTransfer.amount}), 0)`,
+      })
+      .from(financeTransfer)
+      .where(eq(financeTransfer.churchId, churchId))
+      .groupBy(financeTransfer.fromAccountId),
+    db
+      .select({
+        accountId: financeTransfer.toAccountId,
+        total: sql<number>`coalesce(sum(${financeTransfer.amount}), 0)`,
+      })
+      .from(financeTransfer)
+      .where(eq(financeTransfer.churchId, churchId))
+      .groupBy(financeTransfer.toAccountId),
   ]);
 
   const byAccount = new Map<
@@ -118,20 +151,36 @@ export async function listAccounts(
     byAccount.set(t.accountId, entry);
   }
 
-  return accounts.map((a) => {
+  const out = new Map(movedOut.map((r) => [r.accountId, Number(r.total ?? 0)]));
+  const into = new Map(movedIn.map((r) => [r.accountId, Number(r.total ?? 0)]));
+
+  return accounts.map(({ account: a, givingCategoryName }) => {
     const t = byAccount.get(a.id) ?? { income: 0, expense: 0, count: 0 };
+    const transferredOut = out.get(a.id) ?? 0;
+    const transferredIn = into.get(a.id) ?? 0;
+    const opening = Number(a.openingBalance ?? 0);
     return {
       id: a.id,
       name: a.name,
       type: a.type,
       institution: a.institution,
       accountNumber: a.accountNumber,
-      openingBalance: Number(a.openingBalance ?? 0),
+      openingBalance: opening,
       isActive: a.isActive,
       note: a.note,
+      givingCategoryId: a.givingCategoryId,
+      givingCategoryName,
       income: roundMoney(t.income),
       expense: roundMoney(t.expense),
-      balance: accountBalance(Number(a.openingBalance ?? 0), t.income, t.expense),
+      transferredIn: roundMoney(transferredIn),
+      transferredOut: roundMoney(transferredOut),
+      // Money in is income plus what was transferred in; money out is expense
+      // plus what was transferred away.
+      balance: accountBalance(
+        opening,
+        t.income + transferredIn,
+        t.expense + transferredOut,
+      ),
       transactionCount: t.count,
     };
   });
@@ -518,4 +567,82 @@ export async function getFinanceExportRows(
     r.note,
     r.recordedByName,
   ]);
+}
+
+/* ============================================================
+ * Transfers
+ * ========================================================== */
+
+export type FinanceTransferRow = {
+  id: string;
+  amount: number;
+  date: string;
+  fromAccountId: string;
+  fromAccountName: string | null;
+  toAccountId: string;
+  toAccountName: string | null;
+  reference: string | null;
+  note: string | null;
+  recordedByName: string | null;
+};
+
+/** Money moved between the church's own accounts, newest first. */
+export async function listTransfers(
+  churchId: string,
+  limit = 50,
+): Promise<FinanceTransferRow[]> {
+  const fromAccount = alias(financeAccount, "from_account");
+  const toAccount = alias(financeAccount, "to_account");
+
+  const rows = await db
+    .select({
+      id: financeTransfer.id,
+      amount: financeTransfer.amount,
+      date: financeTransfer.date,
+      fromAccountId: financeTransfer.fromAccountId,
+      fromAccountName: fromAccount.name,
+      toAccountId: financeTransfer.toAccountId,
+      toAccountName: toAccount.name,
+      reference: financeTransfer.reference,
+      note: financeTransfer.note,
+      recordedByName: user.name,
+    })
+    .from(financeTransfer)
+    .leftJoin(fromAccount, eq(fromAccount.id, financeTransfer.fromAccountId))
+    .leftJoin(toAccount, eq(toAccount.id, financeTransfer.toAccountId))
+    .leftJoin(user, eq(user.id, financeTransfer.recordedBy))
+    .where(eq(financeTransfer.churchId, churchId))
+    .orderBy(desc(financeTransfer.date), desc(financeTransfer.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({ ...r, amount: Number(r.amount ?? 0) }));
+}
+
+/**
+ * Accounts as the transfer rules need to see them — the link is what decides
+ * whether an account may receive money.
+ */
+export async function transferableAccounts(churchId: string): Promise<
+  {
+    id: string;
+    name: string;
+    isActive: boolean;
+    givingCategoryId: string | null;
+  }[]
+> {
+  return db
+    .select({
+      id: financeAccount.id,
+      name: financeAccount.name,
+      isActive: financeAccount.isActive,
+      givingCategoryId: financeAccount.givingCategoryId,
+    })
+    .from(financeAccount)
+    .where(
+      and(
+        eq(financeAccount.churchId, churchId),
+        eq(financeAccount.isActive, true),
+      ),
+    )
+    .orderBy(asc(financeAccount.name));
 }

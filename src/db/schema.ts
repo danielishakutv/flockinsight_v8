@@ -848,6 +848,15 @@ export const givingCategory = pgTable(
     description: text(),
     isActive: boolean().notNull().default(true),
     sortOrder: integer().notNull().default(0),
+    /**
+     * Whether a new category gets its own fund account in Finance. On by
+     * default so the books follow the giving without anyone remembering to
+     * wire it up; a church that tracks all giving in one pot turns it off.
+     *
+     * Only consulted when the category is created. Linking or unlinking later
+     * is done deliberately from Settings, not by flipping this.
+     */
+    autoFinanceAccount: boolean().notNull().default(true),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("giving_category_church_idx").on(t.churchId)],
@@ -2442,6 +2451,21 @@ export const financeAccount = pgTable(
       .default(0),
     /** Closed accounts stay for their history but drop out of the pickers. */
     isActive: boolean().notNull().default(true),
+    /**
+     * The giving category this account is the fund for, if any.
+     *
+     * A linked account is fed automatically: every gift in that category writes
+     * an income row here, and editing or removing the gift follows through. Its
+     * balance therefore always traces back to what was actually given, which is
+     * why a linked account cannot take part in transfers — moving money in or
+     * out by hand would break exactly that guarantee.
+     *
+     * Set null rather than cascade: deleting the category must never take the
+     * church's financial records with it. The account simply becomes ordinary.
+     */
+    givingCategoryId: uuid().references((): AnyPgColumn => givingCategory.id, {
+      onDelete: "set null",
+    }),
     note: text(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -2453,6 +2477,9 @@ export const financeAccount = pgTable(
   (t) => [
     index("finance_account_church_idx").on(t.churchId),
     uniqueIndex("finance_account_name_idx").on(t.churchId, t.name),
+    // One fund per giving category, so "the account for this category" is
+    // always a single answer.
+    uniqueIndex("finance_account_giving_category_idx").on(t.givingCategoryId),
   ],
 );
 
@@ -2505,6 +2532,18 @@ export const financeTransaction = pgTable(
     /** Cheque number, teller number, invoice reference. */
     reference: text(),
     method: financeMethodEnum(),
+    /**
+     * The gift this row was written from, for rows a linked fund account
+     * created automatically.
+     *
+     * Cascade is deliberate and is the one place this module deletes anything:
+     * the row is the gift's shadow in the books, so a gift that is removed must
+     * not leave money behind that nobody ever gave. Rows entered by hand have
+     * this null and are never touched.
+     */
+    givingId: uuid().references((): AnyPgColumn => giving.id, {
+      onDelete: "cascade",
+    }),
     note: text(),
     recordedBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -2522,5 +2561,60 @@ export const financeTransaction = pgTable(
     // splits by kind over a date range.
     index("finance_txn_church_date_idx").on(t.churchId, t.date),
     index("finance_txn_church_kind_idx").on(t.churchId, t.kind),
+  ],
+);
+
+/**
+ * Money moved between the church's own accounts.
+ *
+ * Its own table rather than a pair of rows in finance_transaction, for two
+ * reasons. A transfer is one event, and two rows can drift apart; and a
+ * transfer is neither income nor expense — recorded as a pair it would inflate
+ * both totals, so a church that moved 500,000 between its own accounts would
+ * appear to have received and spent it.
+ *
+ * Balances count transfers in and out; the income, expense and net figures
+ * ignore them entirely.
+ *
+ * A fund account linked to a giving category may be a transfer SOURCE but
+ * never a DESTINATION. Money enters such an account one way only — by someone
+ * actually giving — so anything paid in by hand would be money no one gave.
+ * Money leaving is ordinary: the fund is spent from, or moved to another
+ * account, and Finance then shows what is genuinely left. The giving records
+ * themselves never change, because they record what was given, not what
+ * remains.
+ */
+export const financeTransfer = pgTable(
+  "finance_transfer",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    // Restrict, not cascade: an account with transfers against it cannot be
+    // deleted at all (the UI offers to close it), so the books stay whole.
+    fromAccountId: uuid()
+      .notNull()
+      .references(() => financeAccount.id, { onDelete: "restrict" }),
+    toAccountId: uuid()
+      .notNull()
+      .references(() => financeAccount.id, { onDelete: "restrict" }),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    date: date().notNull(),
+    reference: text(),
+    note: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("finance_transfer_church_idx").on(t.churchId),
+    index("finance_transfer_date_idx").on(t.date),
+    index("finance_transfer_from_idx").on(t.fromAccountId),
+    index("finance_transfer_to_idx").on(t.toAccountId),
+    index("finance_transfer_church_date_idx").on(t.churchId, t.date),
   ],
 );

@@ -11,6 +11,12 @@ import {
   roundMoney,
   shareOfTotal,
   signedAmount,
+  isFundAccount,
+  canTransferFrom,
+  canTransferTo,
+  canRecordIncomeInto,
+  canRecordExpenseFrom,
+  transferProblem,
 } from "@/lib/finance-shared";
 
 describe("roundMoney", () => {
@@ -184,5 +190,78 @@ describe("activeFilterCount", () => {
         from: "2026-01-01",
       }),
     ).toBe(5);
+  });
+});
+
+describe("fund accounts linked to a giving category", () => {
+  const fund = { id: "f1", isActive: true, givingCategoryId: "cat-1" };
+  const plain = { id: "a1", isActive: true, givingCategoryId: null };
+  const closedPlain = { id: "a2", isActive: false, givingCategoryId: null };
+
+  it("knows which accounts are funds", () => {
+    expect(isFundAccount(fund)).toBe(true);
+    expect(isFundAccount(plain)).toBe(false);
+  });
+
+  it("lets money leave a fund", () => {
+    // A building fund exists to be spent. Money out is the normal case.
+    expect(canTransferFrom(fund)).toBe(true);
+    expect(canRecordExpenseFrom(fund)).toBe(true);
+  });
+
+  it("refuses money paid into a fund by hand", () => {
+    // A fund fills up one way only: someone gave. Anything else would be
+    // money nobody gave, and the balance would stop meaning anything.
+    expect(canTransferTo(fund)).toBe(false);
+    expect(canRecordIncomeInto(fund)).toBe(false);
+  });
+
+  it("leaves ordinary accounts unrestricted", () => {
+    expect(canTransferFrom(plain)).toBe(true);
+    expect(canTransferTo(plain)).toBe(true);
+    expect(canRecordIncomeInto(plain)).toBe(true);
+    expect(canRecordExpenseFrom(plain)).toBe(true);
+  });
+
+  it("treats a closed account as unusable in either direction", () => {
+    expect(canTransferFrom(closedPlain)).toBe(false);
+    expect(canTransferTo(closedPlain)).toBe(false);
+  });
+});
+
+describe("transferProblem", () => {
+  const fund = { id: "f1", isActive: true, givingCategoryId: "cat-1" };
+  const otherFund = { id: "f2", isActive: true, givingCategoryId: "cat-2" };
+  const plain = { id: "a1", isActive: true, givingCategoryId: null };
+  const plain2 = { id: "a2", isActive: true, givingCategoryId: null };
+  const closed = { id: "a3", isActive: false, givingCategoryId: null };
+
+  it("allows one ordinary account to another", () => {
+    expect(transferProblem(plain, plain2)).toBeNull();
+  });
+
+  it("allows a fund to be the source", () => {
+    // Moving the building fund into the current account is a real thing a
+    // treasurer does, and Finance should then show the fund drawn down.
+    expect(transferProblem(fund, plain)).toBeNull();
+  });
+
+  it("refuses a fund as the destination", () => {
+    expect(transferProblem(plain, fund)).toMatch(/giving fund/i);
+    expect(transferProblem(fund, otherFund)).toMatch(/giving fund/i);
+  });
+
+  it("refuses an account transferring to itself", () => {
+    expect(transferProblem(plain, plain)).toMatch(/different/i);
+  });
+
+  it("refuses a closed account on either side", () => {
+    expect(transferProblem(closed, plain)).toMatch(/closed/i);
+    expect(transferProblem(plain, closed)).toMatch(/closed/i);
+  });
+
+  it("asks for both accounts when one is missing", () => {
+    expect(transferProblem(undefined, plain)).toMatch(/both/i);
+    expect(transferProblem(plain, undefined)).toMatch(/both/i);
   });
 });
