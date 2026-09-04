@@ -43,6 +43,8 @@ export const releases: Release[] = [
         "Search the ledger by payee, reference, note or amount, and filter by type, account, category, method or date. What you download is what you were looking at.",
         "Reports gains three finance datasets, so the books join the CSV, PDF and full-export bundle like everything else.",
         "Friendlier pages when something goes wrong, including a proper page for a link that no longer exists.",
+        "Every PDF now carries your church's own logo, colours and contact details instead of ours — attendance, members, giving, finance and all 31 report datasets. FlockInsight is one small line at the foot of the page.",
+        "Giving statement (PDF): what came in over any period, broken down by category, with the entries behind it. The one to print for a board meeting.",
       ],
       Fixed: [
         "Pledges could get stuck marked complete. Deleting or reducing the payment that finished one left it closed while money was still owed, so it vanished from the outstanding report — and editing a payment up to the full amount never closed it. Both now settle correctly.",
@@ -52,6 +54,7 @@ export const releases: Release[] = [
       Security: [
         "Sign-in rate limiting now counts per visitor. It was applying one shared allowance across every church, which both weakened it against an attacker and could lock real people out on a busy Sunday.",
         "Turning off a device's notifications now only ever affects that person's own device.",
+        "Hardened how church logos are fetched when building a PDF, so the field can only ever point at our own image hosts.",
       ],
     },
   },
