@@ -29,6 +29,33 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.60.0",
+    date: "2026-09-04",
+    summary:
+      "Finance: keep the church's books alongside its giving. Record what comes in and what goes out, see what each account really holds, and give any giving category its own fund that fills up automatically.",
+    changes: {
+      Added: [
+        "Finance: a full record of income and expenses, with your own categories for each side of the books.",
+        "Accounts: name the bank account, the offering box, the mobile wallet. Each shows what it holds, worked out from what you record — plus an opening balance so a church joining mid-year starts from the truth.",
+        "Giving funds: give a category like Building Project its own account, and every gift recorded in it is added as income automatically. Link a category that already has years of giving and its whole history comes with it.",
+        "A fund can be spent from and moved out of, but nothing can be paid into it by hand — so its balance always reflects what was actually given.",
+        "Transfers: move money between your own accounts. Balances change; income and expense totals correctly ignore it.",
+        "Search the ledger by payee, reference, note or amount, and filter by type, account, category, method or date. What you download is what you were looking at.",
+        "Reports gains three finance datasets, so the books join the CSV, PDF and full-export bundle like everything else.",
+        "Friendlier pages when something goes wrong, including a proper page for a link that no longer exists.",
+      ],
+      Fixed: [
+        "Pledges could get stuck marked complete. Deleting or reducing the payment that finished one left it closed while money was still owed, so it vanished from the outstanding report — and editing a payment up to the full amount never closed it. Both now settle correctly.",
+        "Members who had finished paying a pledge could keep receiving reminders asking for a balance shown as 0.00, because of a rounding sliver. They stop.",
+        "Deleting or editing a gift now refreshes the dashboard and its project page, instead of leaving them showing money that had moved.",
+      ],
+      Security: [
+        "Sign-in rate limiting now counts per visitor. It was applying one shared allowance across every church, which both weakened it against an attacker and could lock real people out on a busy Sunday.",
+        "Turning off a device's notifications now only ever affects that person's own device.",
+      ],
+    },
+  },
+  {
     version: "0.59.0",
     date: "2026-08-28",
     summary:

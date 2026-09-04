@@ -1,9 +1,11 @@
 import { revalidatePath } from "next/cache";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { giving, givingCategory } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { parseCsv } from "@/lib/csv";
+import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
 import { normalizeDate } from "@/lib/members-data";
 import {
   getGivingCategories,
@@ -165,10 +167,52 @@ export async function POST(request: Request) {
     );
   }
 
+  // Gifts imported here belong in their category's fund exactly as if they
+  // had been typed in one at a time. Done after the transaction commits, and
+  // per category rather than per row: backfillFund is one INSERT ... SELECT
+  // that skips gifts already mirrored, so it costs one statement per category
+  // and adds nothing on a re-run.
+  //
+  // Best-effort. The import itself has already succeeded, and a fund that
+  // failed to catch up can be brought level from Settings without re-importing.
+  if (imported > 0) {
+    const touched = [
+      ...new Set(
+        parsed
+          .map((p) =>
+            p.categoryName ? catByName.get(p.categoryName.toLowerCase()) : null,
+          )
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    for (const categoryId of touched) {
+      try {
+        const fund = await fundAccountFor(church.id, categoryId);
+        if (!fund) continue;
+        const [cat] = await db
+          .select({ name: givingCategory.name })
+          .from(givingCategory)
+          .where(
+            and(
+              eq(givingCategory.id, categoryId),
+              eq(givingCategory.churchId, church.id),
+            ),
+          )
+          .limit(1);
+        if (cat) {
+          await backfillFund(church.id, categoryId, fund.id, cat.name);
+        }
+      } catch (e) {
+        console.error("giving import: fund catch-up failed", { categoryId }, e);
+      }
+    }
+  }
+
   if (imported > 0) {
     revalidatePath("/giving");
     revalidatePath("/settings/giving");
     revalidatePath("/dashboard");
+    revalidatePath("/finance");
   }
   if (createdCategories > 0) {
     errors.push(
