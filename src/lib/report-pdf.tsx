@@ -4,8 +4,6 @@ import {
   Page,
   View,
   Text,
-  Svg,
-  Path,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
@@ -13,6 +11,8 @@ import { format } from "date-fns";
 import type { DatasetResult } from "@/lib/report-data";
 import type { ChurchTotals } from "@/lib/report-data";
 import { CATEGORIES, type Dataset } from "@/lib/report-catalog";
+import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
+import type { ChurchBrand } from "@/lib/pdf-brand";
 
 /**
  * PDFs for the report centre: one generic table renderer that works for any
@@ -44,13 +44,6 @@ const C = {
   violet700: "#6d28d9",
 };
 
-const CHURCH_PATHS = [
-  "M10 9h4",
-  "M12 7v5",
-  "M14 21v-3a2 2 0 0 0-4 0v3",
-  "m18 9 3.52 2.147a1 1 0 0 1 .48.854V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6.999a1 1 0 0 1 .48-.854L6 9",
-  "M6 21V7a1 1 0 0 1 .376-.782l5-3.999a1 1 0 0 1 1.249.001l5 4A1 1 0 0 1 18 7v14",
-];
 
 /** Rows past this are cut, with a note. Keeps rendering time sane. */
 const MAX_PDF_ROWS = 1200;
@@ -185,59 +178,8 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 7, color: C.slate500 },
 });
 
-function Band({
-  eyebrow,
-  churchName,
-  right,
-  rightSub,
-}: {
-  eyebrow: string;
-  churchName: string;
-  right: string;
-  rightSub: string;
-}) {
-  return (
-    <View style={styles.band}>
-      <View style={styles.bandLeft}>
-        <View style={styles.logoBox}>
-          <Svg width={19} height={19} viewBox="0 0 24 24">
-            {CHURCH_PATHS.map((d, i) => (
-              <Path
-                key={i}
-                d={d}
-                stroke={C.white}
-                strokeWidth={2}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
-          </Svg>
-        </View>
-        <View>
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.churchName}>{churchName}</Text>
-        </View>
-      </View>
-      <View style={styles.bandRight}>
-        <Text style={styles.periodText}>{right}</Text>
-        <Text style={styles.bandSub}>{rightSub}</Text>
-      </View>
-    </View>
-  );
-}
-
-function Footer({ generated }: { generated: string }) {
-  return (
-    <View style={styles.footer} fixed>
-      <Text style={styles.footerText}>Generated {generated} · FlockInsight</Text>
-      <Text
-        style={styles.footerText}
-        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
-      />
-    </View>
-  );
-}
+// The header and footer now come from lib/pdf-chrome, so every module's PDF
+// is the same document and the branding rule lives in one place.
 
 function Tile({
   label,
@@ -279,12 +221,13 @@ function rangeLabel(range: { from: string | null; to: string | null }): string {
 
 /** One dataset as a landscape table. */
 export async function renderDatasetPdf(args: {
-  churchName: string;
+  brand: ChurchBrand;
   dataset: Dataset;
   data: DatasetResult;
   range: { from: string | null; to: string | null };
 }): Promise<Buffer> {
-  const { churchName, dataset, data, range } = args;
+  const { brand, dataset, data, range } = args;
+  const churchName = brand.name;
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
 
   const trimmedCols = data.columns.length > MAX_PDF_COLS;
@@ -297,9 +240,9 @@ export async function renderDatasetPdf(args: {
   const doc = (
     <Document title={`${churchName} — ${dataset.label}`} author={churchName}>
       <Page size="A4" orientation="landscape" style={styles.page}>
-        <Band
-          eyebrow={dataset.label.toUpperCase()}
-          churchName={churchName}
+        <BrandBand
+          brand={brand}
+          label={dataset.label}
           right={rangeLabel(range)}
           rightSub={`${data.rows.length.toLocaleString()} ${
             data.rows.length === 1 ? "row" : "rows"
@@ -345,7 +288,7 @@ export async function renderDatasetPdf(args: {
             </Text>
           )}
         </View>
-        <Footer generated={generated} />
+        <BrandFooter brand={brand} generated={generated} />
       </Page>
     </Document>
   );
@@ -359,14 +302,15 @@ export async function renderDatasetPdf(args: {
  * you hand to whoever does the analysis.
  */
 export async function renderSummaryPdf(args: {
-  churchName: string;
+  brand: ChurchBrand;
   totals: ChurchTotals;
   datasets: Dataset[];
   counts: Record<string, number>;
   range: { from: string | null; to: string | null };
   money: (n: number) => string;
 }): Promise<Buffer> {
-  const { churchName, totals, datasets, counts, range, money } = args;
+  const { brand, totals, datasets, counts, range, money } = args;
+  const churchName = brand.name;
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
   const totalRows = Object.values(counts).reduce((a, b) => a + b, 0);
 
@@ -378,15 +322,15 @@ export async function renderSummaryPdf(args: {
   const doc = (
     <Document title={`${churchName} — Data report`} author={churchName}>
       <Page size="A4" style={styles.page}>
-        <Band
-          eyebrow="DATA REPORT"
-          churchName={churchName}
+        <BrandBand
+          brand={brand}
+          label="Data report"
           right={rangeLabel(range)}
           rightSub={`${totalRows.toLocaleString()} rows across ${datasets.length} datasets`}
         />
         <View style={styles.body}>
           <Text style={styles.lead}>
-            Everything FlockInsight holds for {churchName}, grouped by subject. Each
+            Everything recorded for {churchName}, grouped by subject. Each
             dataset below is downloadable as a spreadsheet; every row carries its own
             id and the keys that link it to the others, so the files can be joined
             back together for analysis.
@@ -430,7 +374,7 @@ export async function renderSummaryPdf(args: {
             </View>
           ))}
         </View>
-        <Footer generated={generated} />
+        <BrandFooter brand={brand} generated={generated} />
       </Page>
     </Document>
   );

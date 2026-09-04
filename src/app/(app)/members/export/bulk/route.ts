@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { getChurchBrand } from "@/lib/pdf-brand";
 import { requireCan } from "@/lib/permissions";
 import { MEMBER_CSV_HEADERS, getMemberExportRows } from "@/lib/members-data";
 import { formatBirthday } from "@/lib/birthday";
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       email: r[6] ?? "",
       dob: formatBirthday(r[7]),
     }));
-    const pdf = await renderMembersPdf({ churchName: church.name, rows: pdfRows });
+    const pdf = await renderMembersPdf({ brand: await getChurchBrand(church), rows: pdfRows });
     return new Response(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",

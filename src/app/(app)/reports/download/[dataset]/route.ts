@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { getChurchBrand } from "@/lib/pdf-brand";
 import { getAccess } from "@/lib/permissions";
 import { canDownload, getDataset } from "@/lib/report-catalog";
 import { buildDataset } from "@/lib/report-data";
@@ -40,7 +41,7 @@ export async function GET(
   if (format === "pdf") {
     const { renderDatasetPdf } = await import("@/lib/report-pdf");
     const pdf = await renderDatasetPdf({
-      churchName: church.name,
+      brand: await getChurchBrand(church),
       dataset,
       data,
       range,

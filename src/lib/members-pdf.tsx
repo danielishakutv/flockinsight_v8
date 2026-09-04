@@ -4,12 +4,12 @@ import {
   Page,
   View,
   Text,
-  Svg,
-  Path,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { format } from "date-fns";
+import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
+import type { ChurchBrand } from "@/lib/pdf-brand";
 
 const C = {
   primary: "#6d28d9",
@@ -26,13 +26,6 @@ const C = {
   slate50: "#f8fafc",
 };
 
-const CHURCH_PATHS = [
-  "M10 9h4",
-  "M12 7v5",
-  "M14 21v-3a2 2 0 0 0-4 0v3",
-  "m18 9 3.52 2.147a1 1 0 0 1 .48.854V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6.999a1 1 0 0 1 .48-.854L6 9",
-  "M6 21V7a1 1 0 0 1 .376-.782l5-3.999a1 1 0 0 1 1.249.001l5 4A1 1 0 0 1 18 7v14",
-];
 
 const styles = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, color: C.slate700 },
@@ -113,44 +106,22 @@ export type MemberPdfRow = {
 };
 
 export async function renderMembersPdf(args: {
-  churchName: string;
+  brand: ChurchBrand;
   rows: MemberPdfRow[];
 }): Promise<Buffer> {
-  const { churchName, rows } = args;
+  const { brand, rows } = args;
+  const churchName = brand.name;
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
 
   const doc = (
     <Document title={`${churchName} - Members`} author={churchName}>
       <Page size="A4" style={styles.page}>
-        <View style={styles.band}>
-          <View style={styles.bandLeft}>
-            <View style={styles.logoBox}>
-              <Svg width={20} height={20} viewBox="0 0 24 24">
-                {CHURCH_PATHS.map((d, i) => (
-                  <Path
-                    key={i}
-                    d={d}
-                    stroke={C.white}
-                    strokeWidth={2}
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ))}
-              </Svg>
-            </View>
-            <View>
-              <Text style={styles.eyebrow}>MEMBER DIRECTORY</Text>
-              <Text style={styles.churchName}>{churchName}</Text>
-            </View>
-          </View>
-          <View style={styles.bandRight}>
-            <Text style={styles.periodText}>
-              {rows.length} {rows.length === 1 ? "member" : "members"}
-            </Text>
-            <Text style={styles.bandSub}>Generated {generated}</Text>
-          </View>
-        </View>
+        <BrandBand
+          brand={brand}
+          label="Member directory"
+          right={`${rows.length} ${rows.length === 1 ? "member" : "members"}`}
+          rightSub={`as at ${generated}`}
+        />
 
         <View style={styles.body}>
           {rows.length === 0 ? (
@@ -179,15 +150,7 @@ export async function renderMembersPdf(args: {
           )}
         </View>
 
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>{churchName}</Text>
-          <Text
-            style={styles.footerText}
-            render={({ pageNumber, totalPages }) =>
-              `Page ${pageNumber} of ${totalPages} · FlockInsight`
-            }
-          />
-        </View>
+        <BrandFooter brand={brand} generated={generated} />
       </Page>
     </Document>
   );

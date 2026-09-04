@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
+import { FileText,
   ArrowDownUp,
   Download,
   FileSpreadsheet,
@@ -91,6 +91,13 @@ export function GivingDataMenu({
         <DropdownMenuContent align="end" className="w-52">
           {hasData && (
             <>
+              <DropdownMenuItem asChild>
+                {/* The statement you print and hand over. */}
+                <a href="/giving/export/pdf" download>
+                  <FileText className="size-4" />
+                  Giving statement (PDF)
+                </a>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="/giving/export" download>
                   <FileSpreadsheet className="size-4" />

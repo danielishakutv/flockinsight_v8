@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { getChurchBrand } from "@/lib/pdf-brand";
 import { getAccess } from "@/lib/permissions";
 import { allowedDatasets } from "@/lib/report-catalog";
 import { getChurchTotals, getDatasetCounts } from "@/lib/report-data";
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   ]);
 
   const pdf = await renderSummaryPdf({
-    churchName: church.name,
+    brand: await getChurchBrand(church),
     totals,
     datasets,
     counts,

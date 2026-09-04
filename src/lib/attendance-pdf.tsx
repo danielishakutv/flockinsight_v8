@@ -4,12 +4,12 @@ import {
   Page,
   View,
   Text,
-  Svg,
-  Path,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { format, parseISO } from "date-fns";
+import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
+import type { ChurchBrand } from "@/lib/pdf-brand";
 import type {
   AttendanceExportRow,
   AttendanceSummary,
@@ -35,13 +35,6 @@ const C = {
 };
 
 // lucide "church" glyph, drawn white inside the header monogram.
-const CHURCH_PATHS = [
-  "M10 9h4",
-  "M12 7v5",
-  "M14 21v-3a2 2 0 0 0-4 0v3",
-  "m18 9 3.52 2.147a1 1 0 0 1 .48.854V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6.999a1 1 0 0 1 .48-.854L6 9",
-  "M6 21V7a1 1 0 0 1 .376-.782l5-3.999a1 1 0 0 1 1.249.001l5 4A1 1 0 0 1 18 7v14",
-];
 
 const styles = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, color: C.slate700 },
@@ -191,11 +184,12 @@ function Tile({
 }
 
 export async function renderAttendancePdf(args: {
-  churchName: string;
+  brand: ChurchBrand;
   rows: AttendanceExportRow[];
   summary: AttendanceSummary;
 }): Promise<Buffer> {
-  const { churchName, rows, summary: s } = args;
+  const { brand, rows, summary: s } = args;
+  const churchName = brand.name;
 
   const period =
     s.firstDate && s.lastDate
@@ -209,35 +203,12 @@ export async function renderAttendancePdf(args: {
     <Document title={`${churchName} - Attendance Report`} author={churchName}>
       <Page size="A4" style={styles.page}>
         {/* Church-forward header band */}
-        <View style={styles.band}>
-          <View style={styles.bandLeft}>
-            <View style={styles.logoBox}>
-              <Svg width={20} height={20} viewBox="0 0 24 24">
-                {CHURCH_PATHS.map((d, i) => (
-                  <Path
-                    key={i}
-                    d={d}
-                    stroke={C.white}
-                    strokeWidth={2}
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ))}
-              </Svg>
-            </View>
-            <View>
-              <Text style={styles.eyebrow}>ATTENDANCE REPORT</Text>
-              <Text style={styles.churchName}>{churchName}</Text>
-            </View>
-          </View>
-          <View style={styles.bandRight}>
-            <Text style={styles.periodText}>{period}</Text>
-            <Text style={styles.bandSub}>
-              {s.sessions} {s.sessions === 1 ? "service" : "services"} recorded
-            </Text>
-          </View>
-        </View>
+        <BrandBand
+          brand={brand}
+          label="Attendance report"
+          right={period}
+          rightSub={`${s.sessions} ${s.sessions === 1 ? "service" : "services"} recorded`}
+        />
 
         <View style={styles.body}>
           {rows.length === 0 ? (
@@ -307,18 +278,7 @@ export async function renderAttendancePdf(args: {
           )}
         </View>
 
-        {/* Subtle fixed footer — minimal platform branding */}
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>
-            {churchName} · Generated {generated}
-          </Text>
-          <Text
-            style={styles.footerText}
-            render={({ pageNumber, totalPages }) =>
-              `Page ${pageNumber} of ${totalPages} · FlockInsight`
-            }
-          />
-        </View>
+        <BrandFooter brand={brand} generated={generated} />
       </Page>
     </Document>
   );

@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { getChurchBrand } from "@/lib/pdf-brand";
 import {
   getAttendanceRows,
   summarizeAttendance,
@@ -12,7 +13,7 @@ export async function GET() {
   const summary = summarizeAttendance(rows);
 
   const pdf = await renderAttendancePdf({
-    churchName: church.name,
+    brand: await getChurchBrand(church),
     rows,
     summary,
   });
