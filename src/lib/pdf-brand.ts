@@ -1,4 +1,6 @@
 import "server-only";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
@@ -50,20 +52,102 @@ const MAX_LOGO_BYTES = 3 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 5000;
 
 /**
- * Logo bytes for a Cloudinary (or any http) URL.
+ * Hosts a logo may be fetched from.
+ *
+ * church.logo is a free-text field any church admin can set, and signing up is
+ * open, so without this the server would issue GET requests to wherever a
+ * stranger pointed it — the other apps sharing this box on loopback, a cloud
+ * metadata endpoint, anything on the private network. That is server-side
+ * request forgery, and the image comes back to them inside a PDF they
+ * download.
+ *
+ * An allowlist rather than a blocklist: we know exactly where our uploads
+ * live. EXTRA_LOGO_HOSTS exists for a church whose logo is genuinely hosted
+ * elsewhere, and is set by us, not by them.
+ */
+const ALLOWED_LOGO_HOSTS = new Set(
+  [
+    "res.cloudinary.com",
+    ...(process.env.EXTRA_LOGO_HOSTS ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
+  ],
+);
+
+/**
+ * True for an address that must never be reached from here: loopback, the
+ * private ranges, link-local (which includes the cloud metadata service at
+ * 169.254.169.254), and the unspecified address.
+ */
+export function isForbiddenAddress(address: string): boolean {
+  const v = isIP(address);
+  if (v === 4) {
+    const [a, b] = address.split(".").map(Number);
+    if (a === 127 || a === 0 || a === 10) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+    return false;
+  }
+  if (v === 6) {
+    const lower = address.toLowerCase();
+    if (lower === "::" || lower === "::1") return true;
+    if (lower.startsWith("fe80") || lower.startsWith("fc") || lower.startsWith("fd")) {
+      return true;
+    }
+    // ::ffff:127.0.0.1 and friends
+    const mapped = lower.split(":").pop();
+    if (mapped && isIP(mapped) === 4) return isForbiddenAddress(mapped);
+    return false;
+  }
+  return true; // not an IP at all — refuse rather than guess
+}
+
+/** Every address the host resolves to must be acceptable, not just the first. */
+async function resolvesSomewhereSafe(hostname: string): Promise<boolean> {
+  try {
+    if (isIP(hostname)) return !isForbiddenAddress(hostname);
+    const results = await lookup(hostname, { all: true, verbatim: true });
+    if (results.length === 0) return false;
+    return results.every((r) => !isForbiddenAddress(r.address));
+  } catch {
+    return false;
+  }
+}
+
+/** Scheme and host check, split out so the refusals can be tested directly. */
+export function isAllowedLogoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    return ALLOWED_LOGO_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Logo bytes for a remote URL.
  *
  * Fetched here rather than handed to react-pdf as a URL so the timeout, the
  * size cap and the content-type check are ours. A PDF must never hang or fail
  * because a logo host is slow or has gone away.
+ *
+ * Redirects are refused outright. Following one would mean re-checking the
+ * destination on every hop, and an allowed host that redirects to a private
+ * address is precisely how this kind of guard gets walked around.
  */
 async function fetchRemoteLogo(url: string): Promise<Buffer | null> {
   try {
+    if (!isAllowedLogoUrl(url)) return null;
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (!(await resolvesSomewhereSafe(parsed.hostname))) return null;
 
-    const res = await fetch(url, {
+    const res = await fetch(parsed, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: "follow",
+      redirect: "manual",
     });
     if (!res.ok) return null;
 
