@@ -8,8 +8,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 What to build next is kept in the `roadmap_item` table and edited at
 `/superadmin/roadmap`, so it can be added to from a phone. **Read it before
-planning work** — it is the current queue, and this file's neighbours
-(`FEATURE-ROADMAP.md`, `OVERNIGHT-REVIEW.md`) are frozen historical notes.
+planning work** — it is the current queue. Everything under `docs/archive/`
+is a frozen historical note, superseded by it.
 
 Fetch it as JSON:
 

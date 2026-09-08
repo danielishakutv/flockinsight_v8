@@ -7,7 +7,7 @@ A 17-episode tutorial series that takes a church from "what is this?" to fully r
 - Open with the outcome ("By the end of this video you'll…"), not the feature name.
 - Close with: *"Start free at flockinsight.com — your first 7 Sundays are on us."* + next-episode pointer.
 - Cut one 30–60s vertical Short from each episode (its single wow moment).
-- Click-by-click steps for every scene are in `FlockInsight-Tutorial-Scripts.md`.
+- Click-by-click steps for every scene are in `FlockInsight-Tutorial-Scripts.md` (same folder).
 
 ---
 
