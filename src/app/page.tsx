@@ -526,6 +526,7 @@ export default async function LandingPage() {
               <li><a href="#pricing" className="hover:text-primary">Pricing</a></li>
               <li><Link href="/churches" className="hover:text-primary">Find a church</Link></li>
               <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
+              <li><Link href="/roadmap" className="hover:text-primary">Roadmap</Link></li>
               <li><Link href="/signup" className="hover:text-primary">Get Started</Link></li>
             </ul>
           </div>

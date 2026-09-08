@@ -19,6 +19,7 @@ import {
   PartyPopper,
   Network,
   Database,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,7 @@ const REPORT_PERMS = [
   "giving.view",
   "finance.view",
   "groups.view",
+  "training.view",
   "followup.view",
   "communication.view",
   "forms.view",
@@ -76,6 +78,12 @@ export const mainNav: NavItem[] = [
   { label: "Members", href: "/members", icon: Users, perm: "members.view" },
   { label: "Groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
   { label: "Celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
+  {
+    label: "Training",
+    href: "/training",
+    icon: GraduationCap,
+    perm: "training.view",
+  },
   { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
   { label: "Finance", href: "/finance", icon: Wallet, perm: "finance.view" },
   {
@@ -245,6 +253,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Upcoming birthdays & anniversaries",
         tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
         perm: "members.view",
+      },
+      {
+        label: "Training",
+        href: "/training",
+        icon: GraduationCap,
+        description: "Classes, worker training & who has completed what",
+        tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
+        perm: "training.view",
       },
       {
         label: "Follow-up",

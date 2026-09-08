@@ -7,6 +7,8 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { ensureSignup, signupUrl } from "@/lib/member-signup";
 import { householdOptions } from "@/lib/households";
+import { badgesForMembers } from "@/lib/training";
+import type { EarnedBadge } from "@/lib/training-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { MembersList, type MemberRow } from "@/components/members/members-list";
@@ -58,6 +60,14 @@ export default async function MembersPage() {
     guardianName: r.guardianId ? nameById.get(r.guardianId) ?? null : null,
   }));
 
+  // Completed training, for the badges beside each name. One query for the
+  // whole page — see badgesForMembers.
+  const badgeMap = await badgesForMembers(
+    church.id,
+    raw.map((r) => r.id),
+  );
+  const badges: Record<string, EarnedBadge[]> = Object.fromEntries(badgeMap);
+
   const active = rows.filter((r) => r.status === "active").length;
   const visitors = rows.filter((r) => r.status === "visitor").length;
   const children = rows.filter((r) => r.isMinor).length;
@@ -95,6 +105,7 @@ export default async function MembersPage() {
       />
       <MembersList
         members={rows}
+        badges={badges}
         canManage={canManage}
         signupUrl={signup ? signupUrl(signup.slug) : undefined}
         signupEnabled={signup?.enabled ?? false}

@@ -32,12 +32,12 @@ export default async function SuperadminLayout({
     <div data-admin className="min-h-dvh">
       <header className="bg-background/85 sticky top-0 z-30 border-b backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-6">
-          <div className="flex items-center gap-3">
-            <Link href="/superadmin" className="flex items-center gap-2">
-              <Logo className="size-6" />
-              <span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
-                FlockInsight
-                <span className="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase">
+          <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-3">
+            <Link href="/superadmin" className="flex min-w-0 items-center gap-2">
+              <Logo className="size-6 shrink-0" />
+              <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold tracking-tight">
+                <span className="truncate">FlockInsight</span>
+                <span className="bg-primary/10 text-primary inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase">
                   <Shield className="size-2.5" /> Admin
                 </span>
               </span>
@@ -46,7 +46,7 @@ export default async function SuperadminLayout({
             <SuperadminMobileNav />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <CommandPaletteHint />
             <Link
               href="/dashboard"

@@ -58,6 +58,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "training",
+    label: "Training & classes",
+    description:
+      "Classes and worker training, who is enrolled, and who has completed what.",
+    perms: [
+      { key: "training.view", label: "View" },
+      { key: "training.manage", label: "Manage" },
+    ],
+  },
+  {
     key: "followup",
     label: "Follow-up",
     description: "Visitor and new-member follow-up.",

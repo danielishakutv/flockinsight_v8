@@ -29,6 +29,29 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.61.0",
+    date: "2026-09-08",
+    summary:
+      "Training & Classes: run Foundation, Baptism, Pre-Marital and leadership training inside FlockInsight — enrol people, record who finished, and show it beside their name.",
+    changes: {
+      Added: [
+        "Training & Classes: set up the courses your church runs, as classes for the congregation or training for workers.",
+        "Run a course as many times as you like. Each class has its own dates, venue, meeting day, capacity and register.",
+        "Instructors: credit whoever taught, whether they are a member or a guest speaker who isn't one.",
+        "Enrol people from your congregation in one go, and see at a glance who is enrolled, still going, finished, withdrew or did not pass.",
+        "Record a score, a grade and a certificate number for each person, with a pass mark per course. The top three in a scored class are marked, with ties sharing a place.",
+        "Finished a whole class? Mark everyone still taking it complete in one tap — anyone who withdrew or did not pass is left exactly as they are.",
+        "Badges: give each course a short label, an icon and a colour, and it appears beside the names of everyone who completed it — in the members list and on their profile.",
+        "A member's profile now lists every class they have taken, with their result and the date.",
+        "Roles gain View and Manage permissions for Training, so you can let a class secretary keep the register without opening the rest of the church's data.",
+      ],
+      Fixed: [
+        "The platform admin menu would not open on a phone. The panel was being clipped to the height of the header bar, so tapping it showed a sliver with no links in it — on a small screen it looked like nothing happened at all. It now opens full height, and the admin header no longer runs off the side of the screen.",
+        "The version shown on the changelog and in the app had drifted a release behind what was actually deployed.",
+      ],
+    },
+  },
+  {
     version: "0.60.0",
     date: "2026-09-04",
     summary:

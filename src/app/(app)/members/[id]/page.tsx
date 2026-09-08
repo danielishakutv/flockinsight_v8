@@ -2,7 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { ArrowLeft, ChevronRight, HandCoins, Home, UsersRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Award,
+  ChevronRight,
+  GraduationCap,
+  HandCoins,
+  Home,
+  UsersRound,
+} from "lucide-react";
 import { db } from "@/db";
 import {
   group,
@@ -21,6 +29,14 @@ import { getMemberPledges, cadenceLabel } from "@/lib/projects";
 import { formatMoney } from "@/lib/money";
 import { siteUrl } from "@/lib/site";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { memberTraining } from "@/lib/training";
+import {
+  ENROLLMENT_STATUSES,
+  badgeColor,
+  badgeLabelFor,
+} from "@/lib/training-shared";
+import { BadgeIcon } from "@/components/training/training-badge";
+import { cn } from "@/lib/utils";
 import { TYPE_LABEL, type GroupType } from "@/components/groups/labels";
 import { PageContainer } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +109,7 @@ export default async function MemberDetailPage({
     householdRow,
     householdSiblings,
     memberPledges,
+    training,
   ] = await Promise.all([
       // Groups / ministries this member belongs to.
       db
@@ -163,7 +180,9 @@ export default async function MemberDetailPage({
         : Promise.resolve([]),
       // This member's pledges across projects (their statement).
       getMemberPledges(church.id, id),
-    ]);
+        // Classes and training this member has taken.
+    memberTraining(church.id, id),
+  ]);
 
   const name = [m.firstName, m.middleName, m.lastName]
     .filter(Boolean)
@@ -366,6 +385,91 @@ export default async function MemberDetailPage({
                   </span>
                 </Link>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <GraduationCap className="text-primary size-5" />
+            Training &amp; classes
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {training.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Hasn&rsquo;t taken any classes yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {training.map((t) => {
+                const color = badgeColor(t.badgeColor);
+                const done = t.enrollment.status === "completed";
+                return (
+                  <Link
+                    key={t.enrollment.id}
+                    href={`/training/cohorts/${t.cohortId}`}
+                    className="hover:bg-accent/60 -mx-2 flex items-center gap-3 rounded-lg px-2 py-2"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-lg ring-1 ring-inset",
+                        done
+                          ? color.className
+                          : "bg-muted text-muted-foreground ring-transparent",
+                      )}
+                    >
+                      <BadgeIcon
+                        icon={t.badgeIcon === "none" ? "graduation" : t.badgeIcon}
+                        className="size-4"
+                        strokeWidth={2.4}
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+                        <span className="truncate">{t.courseName}</span>
+                        {done && (
+                          <span
+                            className={cn(
+                              "rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ring-1 ring-inset",
+                              color.className,
+                            )}
+                          >
+                            {badgeLabelFor({
+                              name: t.courseName,
+                              badgeLabel: t.badgeLabel,
+                            })}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-muted-foreground truncate text-xs">
+                        {t.cohortName} ·{" "}
+                        {
+                          ENROLLMENT_STATUSES.find(
+                            (s) => s.value === t.enrollment.status,
+                          )?.label
+                        }
+                        {t.enrollment.completedAt &&
+                          ` · ${t.enrollment.completedAt}`}
+                        {t.enrollment.score != null &&
+                          ` · ${t.enrollment.score}`}
+                        {t.enrollment.grade && ` · ${t.enrollment.grade}`}
+                      </p>
+                    </div>
+                    {t.enrollment.certificateNo && (
+                      <span
+                        title={`Certificate ${t.enrollment.certificateNo}`}
+                        className="text-muted-foreground shrink-0"
+                      >
+                        <Award className="size-4" />
+                      </span>
+                    )}
+                    <ChevronRight className="text-muted-foreground/60 size-4 shrink-0" />
+                  </Link>
+                );
+              })}
             </div>
           )}
         </CardContent>

@@ -1,5 +1,11 @@
 # FlockInsight — feature roadmap & "must-haves"
 
+> **Superseded, kept for the reasoning.** The live queue now lives in the app at
+> `/superadmin/roadmap` (table `roadmap_item`), so it can be added to from a
+> phone and read back as JSON at `/api/roadmap`. Add new ideas there, not here.
+> This file is the original thinking behind the ordering below, which is still
+> worth reading.
+
 Built so far (this round): public church pages + directory, events module, bulk
 SMS/email + sender-ID (Termii), automatic service reminders, birthday/anniversary
 auto-messages, support tickets + help guides, platform analytics, superadmin user

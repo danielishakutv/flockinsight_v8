@@ -29,6 +29,8 @@ import {
   type MemberFormState,
 } from "@/components/members/member-form-fields";
 import { MembersDataMenu } from "@/components/members/members-data-menu";
+import { TrainingBadges } from "@/components/training/training-badge";
+import type { EarnedBadge } from "@/lib/training-shared";
 import { MemberSignupLink } from "@/components/members/member-signup-link";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -108,6 +110,7 @@ function SelectBox({ on }: { on: boolean }) {
 
 export function MembersList({
   members,
+  badges = {},
   canManage = true,
   signupUrl,
   signupEnabled = false,
@@ -116,6 +119,8 @@ export function MembersList({
   accessRoles = [],
 }: {
   members: MemberRow[];
+  /** Completed training per member id, keyed for O(1) lookup while rendering. */
+  badges?: Record<string, EarnedBadge[]>;
   canManage?: boolean;
   signupUrl?: string;
   signupEnabled?: boolean;
@@ -420,7 +425,10 @@ export function MembersList({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold">{fullName(m)}</p>
+                  <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-bold">
+                    <span className="truncate">{fullName(m)}</span>
+                    <TrainingBadges badges={badges[m.id] ?? []} max={2} />
+                  </p>
                   <p className="text-muted-foreground truncate text-xs">
                     {m.isMinor
                       ? m.guardianName

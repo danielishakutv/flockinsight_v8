@@ -2618,3 +2618,267 @@ export const financeTransfer = pgTable(
     index("finance_transfer_church_date_idx").on(t.churchId, t.date),
   ],
 );
+
+/* ============================================================
+ * Platform roadmap (superadmin)
+ *
+ * The queue of what to build and the record of what shipped, kept in the
+ * database rather than a markdown file so it can be added to from a phone and
+ * read back by tooling.
+ *
+ * A shipped item freezes how big the platform was on the day it went out
+ * (`churchesAtShip` / `usersAtShip` / `membersAtShip`). Those are snapshots,
+ * never recomputed: the point is to see what the platform looked like when a
+ * feature landed, and a live count would erase exactly that.
+ * ========================================================== */
+
+export const roadmapStatusEnum = pgEnum("roadmap_status", [
+  "idea", // captured, not committed to
+  "planned", // committed, waiting its turn
+  "in_progress",
+  "shipped",
+  "parked", // deliberately not doing, for now
+]);
+
+export const roadmapPriorityEnum = pgEnum("roadmap_priority", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+]);
+
+export const roadmapItem = pgTable(
+  "roadmap_item",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    title: text().notNull(),
+    /** The spec. Markdown — this is what a future build session works from. */
+    detail: text(),
+    status: roadmapStatusEnum().notNull().default("idea"),
+    priority: roadmapPriorityEnum().notNull().default("medium"),
+    /** Free text ("Training", "Finance", "Platform") — modules come and go. */
+    area: text(),
+    /** Explicit ordering within a status, so the queue has a real sequence. */
+    position: integer().notNull().default(0),
+    /**
+     * Whether this appears on the public roadmap and in the unauthenticated
+     * feed. Off by default: the queue is competitive information, and an item
+     * has to be opted in one at a time.
+     */
+    isPublic: boolean().notNull().default(false),
+    /** Rough intent, for planning. Not a promise, and never shown publicly. */
+    targetDate: date(),
+    startedAt: timestamp({ withTimezone: true }),
+    // ----- Shipped -----
+    shippedAt: timestamp({ withTimezone: true }),
+    /** Release it went out in, e.g. "0.61.0". */
+    version: text(),
+    /**
+     * Platform size the day it shipped. Frozen at the moment of shipping —
+     * see the note above.
+     */
+    churchesAtShip: integer(),
+    usersAtShip: integer(),
+    membersAtShip: integer(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("roadmap_status_idx").on(t.status),
+    // The board reads one status at a time, in order.
+    index("roadmap_status_position_idx").on(t.status, t.position),
+    // The public feed and the shipped timeline both read newest-first.
+    index("roadmap_shipped_idx").on(t.shippedAt),
+  ],
+);
+
+/* ============================================================
+ * FlockInsight domain — training & classes
+ *
+ * Churches run two related things: classes the congregation takes
+ * (Foundation, Baptism, Pre-Marital) and training for workers (leaders,
+ * pastors, teachers). Both are the same shape — a course, run as one or more
+ * cohorts, that people enrol in and finish — so they share a model and differ
+ * by `kind`.
+ *
+ * Finishing a course is what earns a member their badge beside their name.
+ *
+ * Designed to grow: per-meeting attendance and assessments (quizzes, tests,
+ * scores) attach to `training_cohort` and `training_enrollment` respectively
+ * without either table changing shape. `score` and `grade` already live on the
+ * enrolment, so a recorded result has somewhere to land today.
+ * ========================================================== */
+
+export const trainingKindEnum = pgEnum("training_kind", [
+  "class", // congregation classes — Foundation, Baptism, Pre-Marital...
+  "training", // worker training — leaders, pastors, teachers...
+  "course", // anything else
+]);
+
+export const trainingCohortStatusEnum = pgEnum("training_cohort_status", [
+  "upcoming",
+  "running",
+  "completed",
+  "cancelled",
+]);
+
+export const trainingEnrollmentStatusEnum = pgEnum(
+  "training_enrollment_status",
+  ["enrolled", "in_progress", "completed", "withdrawn", "failed"],
+);
+
+export const trainingCourse = pgTable(
+  "training_course",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    kind: trainingKindEnum().notNull().default("class"),
+    description: text(),
+    /**
+     * Progression rank. A member's highest completed level is what shows as
+     * their standing, so a church can express "Foundation < Workers <
+     * Leadership" without another table.
+     */
+    level: integer().notNull().default(1),
+    // ----- Badge shown beside the member's name -----
+    /** Short label, e.g. "FND", "Baptised", "Leader". Falls back to the name. */
+    badgeLabel: text(),
+    /** Key into TRAINING_BADGE_COLORS (lib/training-shared.ts). */
+    badgeColor: text().notNull().default("indigo"),
+    /** Key into TRAINING_BADGE_ICONS. */
+    badgeIcon: text().notNull().default("check"),
+    /** Whether completing this shows a badge in member lists at all. */
+    showBadge: boolean().notNull().default(true),
+    /** Mark below which a result counts as failed. Null = not scored. */
+    passMark: integer(),
+    /** Does finishing this produce a certificate the church issues? */
+    issuesCertificate: boolean().notNull().default(false),
+    isActive: boolean().notNull().default(true),
+    position: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("training_course_church_idx").on(t.churchId),
+    index("training_course_church_active_idx").on(t.churchId, t.isActive),
+  ],
+);
+
+/** One running of a course — "Foundation Class, January 2026". */
+export const trainingCohort = pgTable(
+  "training_cohort",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    courseId: uuid()
+      .notNull()
+      .references(() => trainingCourse.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    status: trainingCohortStatusEnum().notNull().default("upcoming"),
+    startDate: date(),
+    endDate: date(),
+    venue: text(),
+    meetingDay: integer(), // 0=Sun .. 6=Sat; null = no fixed day
+    meetingTime: text(), // "18:00"
+    /** Null = no cap. Enforced when enrolling. */
+    capacity: integer(),
+    notes: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("training_cohort_church_idx").on(t.churchId),
+    index("training_cohort_course_idx").on(t.courseId),
+  ],
+);
+
+/**
+ * Who teaches a cohort. `memberId` for someone in the congregation; `name`
+ * alone for a guest speaker who was never a member — a church shouldn't have
+ * to create a member record just to credit whoever taught.
+ */
+export const trainingInstructor = pgTable(
+  "training_instructor",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    cohortId: uuid()
+      .notNull()
+      .references(() => trainingCohort.id, { onDelete: "cascade" }),
+    memberId: uuid().references(() => member.id, { onDelete: "cascade" }),
+    /** Used when there's no member row (guest/visiting instructor). */
+    name: text(),
+    /** "Instructor", "Facilitator", "Teacher", "Assistant"... */
+    role: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("training_instructor_cohort_idx").on(t.cohortId),
+    // One person is listed on a cohort once.
+    uniqueIndex("training_instructor_unique").on(t.cohortId, t.memberId),
+  ],
+);
+
+export const trainingEnrollment = pgTable(
+  "training_enrollment",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    cohortId: uuid()
+      .notNull()
+      .references(() => trainingCohort.id, { onDelete: "cascade" }),
+    /**
+     * Denormalised from the cohort. Badges are looked up per member across
+     * every course they finished, and carrying the course here keeps that a
+     * two-table read on a page that already lists a hundred members.
+     */
+    courseId: uuid()
+      .notNull()
+      .references(() => trainingCourse.id, { onDelete: "cascade" }),
+    memberId: uuid()
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+    status: trainingEnrollmentStatusEnum().notNull().default("enrolled"),
+    enrolledAt: date(),
+    completedAt: date(),
+    /** Final result, 0..100. Null when the course isn't scored. */
+    score: integer(),
+    /** Letter/label grade ("A", "Distinction", "Pass"). Free text. */
+    grade: text(),
+    certificateNo: text(),
+    notes: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // A member is enrolled in a given cohort once.
+    uniqueIndex("training_enrollment_unique").on(t.cohortId, t.memberId),
+    index("training_enrollment_church_idx").on(t.churchId),
+    index("training_enrollment_cohort_idx").on(t.cohortId),
+    // The badge lookup: everything this member has finished.
+    index("training_enrollment_member_status_idx").on(t.memberId, t.status),
+    index("training_enrollment_course_idx").on(t.courseId),
+  ],
+);

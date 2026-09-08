@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   LifeBuoy,
+  Map,
   Megaphone,
   Menu,
   MessageSquare,
@@ -48,6 +50,12 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { label: "Denominations", href: "/superadmin/denominations", icon: Church },
       { label: "Users", href: "/superadmin/users", icon: Users },
       { label: "Support", href: "/superadmin/support", icon: LifeBuoy },
+    ],
+  },
+  {
+    title: "Product",
+    items: [
+      { label: "Roadmap", href: "/superadmin/roadmap", icon: Map },
     ],
   },
   {
@@ -135,50 +143,88 @@ export function SuperadminSidebar() {
   );
 }
 
-/** The same list behind a button on small screens. */
+/**
+ * The same list behind a button on small screens.
+ *
+ * The drawer is rendered through a portal into `document.body` rather than in
+ * place. It has to be: this component sits inside the admin header, and that
+ * header carries `backdrop-blur`. A `backdrop-filter` makes an element the
+ * containing block for every `position: fixed` descendant, so an in-place
+ * `fixed inset-0` resolved against the 56px-tall header instead of the
+ * viewport — the panel was clipped to a sliver showing only its title and
+ * close button, and every nav link was cut off. On a phone that reads as "the
+ * menu doesn't open at all". The portal moves the drawer out from under the
+ * blur, so `inset-0` means the viewport again.
+ */
 export function SuperadminMobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const active = activeHref(pathname);
   const current = ALL_ITEMS.find((i) => i.href === active);
 
+  // Close on Escape, and don't let the page behind scroll while it's open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  const drawer = (
+    <div className="fixed inset-0 z-[60] lg:hidden">
+      <button
+        type="button"
+        aria-label="Close menu"
+        onClick={() => setOpen(false)}
+        className="absolute inset-0 bg-black/40"
+      />
+      <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r shadow-xl">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+          <span className="text-sm font-bold">Platform admin</span>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close menu"
+            className="hover:bg-accent -mr-1 rounded-md p-1.5"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto p-4"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+        >
+          <NavList onNavigate={() => setOpen(false)} />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hover:bg-accent flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold lg:hidden"
+        className="hover:bg-accent flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold lg:hidden"
         aria-label="Open admin menu"
         aria-expanded={open}
       >
-        <Menu className="size-4" />
-        {current?.label ?? "Menu"}
+        <Menu className="size-4 shrink-0" />
+        <span className="max-w-[9rem] truncate">
+          {current?.label ?? "Menu"}
+        </span>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Close menu"
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/40"
-          />
-          <div className="bg-background absolute inset-y-0 left-0 w-64 overflow-y-auto border-r p-4 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-bold">Platform admin</span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close menu"
-                className="hover:bg-accent rounded-md p-1"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <NavList onNavigate={() => setOpen(false)} />
-          </div>
-        </div>
-      )}
+      {/* `open` only ever becomes true from a click, so this never runs
+          during SSR and `document` is always there when it does. */}
+      {open && createPortal(drawer, document.body)}
     </>
   );
 }
