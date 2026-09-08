@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Clock, Search } from "lucide-react";
-import type { Guide } from "@/lib/help-guides";
+import { sectionBlocks, type Guide } from "@/lib/help-guides";
 import { helpIcon } from "@/components/help/icons";
 
 export function HelpBrowser({
@@ -15,16 +15,64 @@ export function HelpBrowser({
 }) {
   const [q, setQ] = useState("");
 
+  /**
+   * Everything in a guide, flattened once into one searchable string.
+   *
+   * Searching only titles and keywords means someone typing the words they
+   * actually have — "sender id rejected", "why did my SMS fail" — finds
+   * nothing, even though a guide answers it in as many words. Built once per
+   * guide list rather than per keystroke.
+   */
+  const haystacks = useMemo(
+    () =>
+      new Map(
+        guides.map((g) => {
+          const parts: string[] = [g.title, g.summary, ...(g.keywords ?? [])];
+          for (const w of g.whoFor ?? []) parts.push(w);
+          for (const s of g.sections) {
+            if (s.title) parts.push(s.title);
+            for (const b of sectionBlocks(s)) {
+              switch (b.kind) {
+                case "text":
+                case "note":
+                case "warning":
+                  parts.push(b.text);
+                  break;
+                case "bullets":
+                  parts.push(b.items.join(" "));
+                  break;
+                case "steps":
+                  parts.push(
+                    b.items.map((i) => `${i.title} ${i.detail ?? ""}`).join(" "),
+                  );
+                  break;
+                case "example":
+                  parts.push(b.title, b.lines.join(" "));
+                  break;
+                case "table":
+                  parts.push([...b.headers, ...b.rows.flat()].join(" "));
+                  break;
+              }
+            }
+          }
+          for (const f of g.faq ?? []) parts.push(f.q, f.a);
+          return [g.slug, parts.join(" ").toLowerCase()];
+        }),
+      ),
+    [guides],
+  );
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return guides;
-    return guides.filter((g) =>
-      [g.title, g.summary, ...(g.keywords ?? [])]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [q, guides]);
+    // Every word has to appear somewhere, so "sms sender" narrows rather than
+    // widening the way a single-substring match would.
+    const words = term.split(/\s+/);
+    return guides.filter((g) => {
+      const hay = haystacks.get(g.slug) ?? "";
+      return words.every((w) => hay.includes(w));
+    });
+  }, [q, guides, haystacks]);
 
   return (
     <div className="space-y-6">

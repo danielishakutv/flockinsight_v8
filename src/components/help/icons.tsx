@@ -24,6 +24,7 @@ import {
   Network,
   BadgeCheck,
   Database,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   network: Network,
   verification: BadgeCheck,
   reports: Database,
+  training: GraduationCap,
   default: BookOpen,
 };
 
