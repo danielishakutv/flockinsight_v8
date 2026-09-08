@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/brand";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function AuthLayout({
   children,
@@ -20,6 +21,7 @@ export default function AuthLayout({
       <p className="text-muted-foreground mt-8 text-center text-xs">
         © {new Date().getFullYear()} Toko Technologies · FlockInsight
       </p>
+      <Toaster />
     </div>
   );
 }

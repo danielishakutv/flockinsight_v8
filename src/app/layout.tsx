@@ -1,22 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { PostHogProvider } from "@/components/analytics/posthog-provider";
 import { MatomoProvider } from "@/components/analytics/matomo-provider";
 
 const SITE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
+/**
+ * One downloaded family, not two.
+ *
+ * Geist Mono was fetched on every page — another ~17KB of font before anything
+ * rendered — for six places that show a code-ish snippet. On a 400kbps link
+ * that is a second of the page's budget spent on a monospace font almost
+ * nobody sees. The system mono stack in globals.css covers those instead.
+ */
 const geistSans = Geist({
   variable: "--font-sans",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -82,8 +85,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-dvh antialiased`}
+        className={`${geistSans.variable} min-h-dvh antialiased`}
       >
+        {/*
+          The Toaster is NOT here. sonner ships with every page that mounts it,
+          and the marketing pages — which are the ones people open on bad
+          connections — never raise a toast. It is added by the layouts and
+          pages that actually need one.
+        */}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -92,7 +101,6 @@ export default function RootLayout({
         >
           <PostHogProvider>
             {children}
-            <Toaster />
             <ServiceWorkerRegister />
             <MatomoProvider />
           </PostHogProvider>

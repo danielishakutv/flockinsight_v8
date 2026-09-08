@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -54,47 +55,50 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-10">
-      <div className="mb-8">
-        <Wordmark logoClassName="size-10" className="text-2xl" />
-      </div>
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Set up your church</CardTitle>
-          <CardDescription>
-            One more step — name your church to get started.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="churchName">Church name</Label>
-              <Input
-                id="churchName"
-                name="churchName"
-                placeholder="Grace Chapel"
-                required
-                autoFocus
-              />
-            </div>
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={loading}
+    <>
+      <div className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-10">
+        <div className="mb-8">
+          <Wordmark logoClassName="size-10" className="text-2xl" />
+        </div>
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Set up your church</CardTitle>
+            <CardDescription>
+              One more step — name your church to get started.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="churchName">Church name</Label>
+                <Input
+                  id="churchName"
+                  name="churchName"
+                  placeholder="Grace Chapel"
+                  required
+                  autoFocus
+                />
+              </div>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={loading}
+              >
+                {loading && <Loader2 className="animate-spin" />}
+                Create church
+              </Button>
+            </form>
+            <button
+              onClick={() => signOut().then(() => router.push("/login"))}
+              className="text-muted-foreground mt-6 w-full text-center text-sm hover:underline"
             >
-              {loading && <Loader2 className="animate-spin" />}
-              Create church
-            </Button>
-          </form>
-          <button
-            onClick={() => signOut().then(() => router.push("/login"))}
-            className="text-muted-foreground mt-6 w-full text-center text-sm hover:underline"
-          >
-            Sign out
-          </button>
-        </CardContent>
-      </Card>
-    </div>
+              Sign out
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+      <Toaster />
+    </>
   );
 }

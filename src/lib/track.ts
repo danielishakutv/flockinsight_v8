@@ -1,4 +1,4 @@
-import posthog from "posthog-js";
+import { peekPostHog } from "@/lib/posthog-lazy";
 
 /**
  * Client-side action tracking. Fires a named event to PostHog and Matomo (both
@@ -9,8 +9,9 @@ import posthog from "posthog-js";
 export function track(name: string, props?: Record<string, unknown>): void {
   if (typeof window === "undefined") return;
   try {
-    if ((posthog as unknown as { __loaded?: boolean }).__loaded)
-      posthog.capture(name, props);
+    // Only if PostHog is already up — tracking an action must never be the
+    // thing that triggers a several-hundred-kilobyte download.
+    peekPostHog()?.capture(name, props);
   } catch {
     /* ignore */
   }

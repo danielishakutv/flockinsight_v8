@@ -15,7 +15,16 @@ const ENABLED = !!RAW_URL && !!SITE_ID;
 export function MatomoProvider() {
   const pathname = usePathname();
 
-  // One-time bootstrap.
+  /**
+   * One-time bootstrap, deliberately deferred.
+   *
+   * matomo.js is ~22KB and was being fetched while the page was still
+   * painting. On a 400kbps connection — which is what a lot of our churches
+   * actually have — that is roughly half a second of the visitor's bandwidth
+   * spent on analytics before they have seen anything. The queue (`_paq`) is
+   * set up immediately so nothing tracked in the meantime is lost; only the
+   * download waits for the browser to be idle.
+   */
   useEffect(() => {
     if (!ENABLED || typeof window === "undefined") return;
     const w = window as unknown as { _paq?: unknown[] };
@@ -25,10 +34,35 @@ export function MatomoProvider() {
     paq.push(["enableLinkTracking"]);
     paq.push(["setTrackerUrl", `${u}matomo.php`]);
     paq.push(["setSiteId", SITE_ID]);
-    const g = document.createElement("script");
-    g.async = true;
-    g.src = `${u}matomo.js`;
-    document.head.appendChild(g);
+
+    let cancelled = false;
+    const load = () => {
+      if (cancelled || document.getElementById("matomo-js")) return;
+      const g = document.createElement("script");
+      g.id = "matomo-js";
+      g.async = true;
+      g.src = `${u}matomo.js`;
+      document.head.appendChild(g);
+    };
+
+    // requestIdleCallback where it exists (not Safari), a timeout elsewhere.
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      }
+    ).requestIdleCallback;
+    const handle = ric
+      ? ric(load, { timeout: 5000 })
+      : window.setTimeout(load, 3000);
+
+    return () => {
+      cancelled = true;
+      const cic = (
+        window as unknown as { cancelIdleCallback?: (h: number) => void }
+      ).cancelIdleCallback;
+      if (ric && cic) cic(handle);
+      else window.clearTimeout(handle);
+    };
   }, []);
 
   // Track each in-app navigation (SPA pageview).

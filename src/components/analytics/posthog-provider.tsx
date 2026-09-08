@@ -1,36 +1,46 @@
 "use client";
 
 import { useEffect } from "react";
-import posthog from "posthog-js";
-import { PostHogProvider as PHProvider } from "posthog-js/react";
-
-const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com";
+import { loadPostHog, posthogEnabled } from "@/lib/posthog-lazy";
 
 /**
- * PostHog client provider. Fully env-gated: if NEXT_PUBLIC_POSTHOG_KEY is unset
- * it renders children untouched and loads nothing — so it's completely inert
- * until you add your key. Session replay masks all inputs (member PII safety).
+ * Starts PostHog, if it is configured at all.
+ *
+ * Renders nothing and wraps nothing. It used to wrap the whole tree in
+ * PostHog's own provider, which meant `posthog-js` was imported statically and
+ * shipped to every visitor — including the marketing pages, where it was
+ * initialised only to discover there was no key. Nothing in the app uses
+ * PostHog's React hooks, so the wrapper bought us nothing and cost everyone a
+ * large download.
+ *
+ * The load is deferred to idle so it never competes with first paint on a slow
+ * connection.
  */
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    if (!KEY || typeof window === "undefined") return;
-    // Internal flag guards against double-init on HMR / re-render.
-    if ((posthog as unknown as { __loaded?: boolean }).__loaded) return;
-    posthog.init(KEY, {
-      api_host: HOST,
-      capture_pageview: true,
-      capture_pageleave: true,
-      autocapture: true,
-      // Only create person profiles for identified (logged-in) users.
-      person_profiles: "identified_only",
-      session_recording: {
-        maskAllInputs: true,
-        maskTextSelector: "[data-ph-mask]",
-      },
-    });
+    if (!posthogEnabled || typeof window === "undefined") return;
+
+    let cancelled = false;
+    const start = () => {
+      if (!cancelled) void loadPostHog();
+    };
+
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      }
+    ).requestIdleCallback;
+    const handle = ric ? ric(start, { timeout: 5000 }) : window.setTimeout(start, 3000);
+
+    return () => {
+      cancelled = true;
+      const cic = (
+        window as unknown as { cancelIdleCallback?: (h: number) => void }
+      ).cancelIdleCallback;
+      if (ric && cic) cic(handle);
+      else window.clearTimeout(handle);
+    };
   }, []);
 
-  if (!KEY) return <>{children}</>;
-  return <PHProvider client={posthog}>{children}</PHProvider>;
+  return <>{children}</>;
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LinkIcon } from "lucide-react";
 import { getMemberByUpdateToken } from "@/lib/member-update";
 import { MemberUpdateForm } from "@/components/members/member-update-form";
+import { Toaster } from "@/components/ui/sonner";
 
 export const dynamic = "force-dynamic";
 
@@ -40,42 +41,45 @@ export default async function MemberUpdatePage({
   const c = data.church;
 
   return (
-    <div className="bg-muted/40 min-h-dvh">
-      <div className="mx-auto w-full max-w-2xl px-4 py-8 lg:py-12">
-        <div className="mb-6 flex items-center gap-3">
-          {c.logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={c.logo}
-              alt=""
-              className="size-12 shrink-0 rounded-xl border object-cover"
-            />
-          ) : null}
-          <p className="font-semibold">{c.name}</p>
-        </div>
+    <>
+      <div className="bg-muted/40 min-h-dvh">
+        <div className="mx-auto w-full max-w-2xl px-4 py-8 lg:py-12">
+          <div className="mb-6 flex items-center gap-3">
+            {c.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={c.logo}
+                alt=""
+                className="size-12 shrink-0 rounded-xl border object-cover"
+              />
+            ) : null}
+            <p className="font-semibold">{c.name}</p>
+          </div>
 
-        <div className="bg-card border-t-primary mb-4 rounded-2xl border border-t-4 p-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">
-            Hi {data.member.firstName || "there"}, update your details
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            We&apos;ve filled in what we already have for you at{" "}
-            <strong>{c.name}</strong>. Review it, correct anything, add your
-            children, and save.
-            {data.config.requireVerification
-              ? " We'll send you a quick code to confirm it's you."
-              : ""}{" "}
-            This link can be used once.
+          <div className="bg-card border-t-primary mb-4 rounded-2xl border border-t-4 p-6">
+            <h1 className="text-2xl font-extrabold tracking-tight">
+              Hi {data.member.firstName || "there"}, update your details
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              We&apos;ve filled in what we already have for you at{" "}
+              <strong>{c.name}</strong>. Review it, correct anything, add your
+              children, and save.
+              {data.config.requireVerification
+                ? " We'll send you a quick code to confirm it's you."
+                : ""}{" "}
+              This link can be used once.
+            </p>
+          </div>
+
+          <MemberUpdateForm data={data} />
+
+          <p className="text-muted-foreground mt-8 text-center text-xs">
+            This is your personal link — please don&apos;t share it. Powered by
+            FlockInsight.
           </p>
         </div>
-
-        <MemberUpdateForm data={data} />
-
-        <p className="text-muted-foreground mt-8 text-center text-xs">
-          This is your personal link — please don&apos;t share it. Powered by
-          FlockInsight.
-        </p>
       </div>
-    </div>
+      <Toaster />
+    </>
   );
 }

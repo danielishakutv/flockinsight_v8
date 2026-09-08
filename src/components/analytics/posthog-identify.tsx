@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import posthog from "posthog-js";
-
-const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+import { loadPostHog } from "@/lib/posthog-lazy";
 
 /**
  * Ties PostHog events to the signed-in user and their church, so behaviour can
@@ -25,10 +23,12 @@ export function PostHogIdentify({
 }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (KEY && (posthog as unknown as { __loaded?: boolean }).__loaded) {
-      posthog.identify(userId, { plan, role });
-      posthog.group("church", churchId, { name: churchName, plan });
-    }
+    // Resolves to null when PostHog is off, and downloads nothing.
+    void loadPostHog().then((ph) => {
+      if (!ph) return;
+      ph.identify(userId, { plan, role });
+      ph.group("church", churchId, { name: churchName, plan });
+    });
     // Tie Matomo visits to the same user for cross-tool consistency.
     const paq = (window as unknown as { _paq?: unknown[] })._paq;
     if (paq) paq.push(["setUserId", userId]);

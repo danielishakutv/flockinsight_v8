@@ -6,6 +6,7 @@ import {
   AcceptInvitation,
   type AcceptMode,
 } from "@/components/auth/accept-invitation";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata = { title: "Church invitation" };
 
@@ -76,12 +77,15 @@ export default async function AcceptInvitationPage({
   }
 
   return (
-    <AcceptInvitation
-      id={id}
-      mode={mode}
-      churchName={inv?.churchName ?? null}
-      email={inv?.email ?? null}
-      sessionEmail={sessionEmail}
-    />
+    <>
+      <AcceptInvitation
+        id={id}
+        mode={mode}
+        churchName={inv?.churchName ?? null}
+        email={inv?.email ?? null}
+        sessionEmail={sessionEmail}
+      />
+      <Toaster />
+    </>
   );
 }

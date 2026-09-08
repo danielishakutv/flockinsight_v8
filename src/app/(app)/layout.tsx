@@ -17,6 +17,7 @@ import { UploadProvider } from "@/components/media/upload-provider";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
 import { PageTracker } from "@/components/analytics/page-tracker";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
   children,
@@ -99,6 +100,7 @@ export default async function AppLayout({
 
         <MobileNav perms={perms} isOwner={access.isOwner} />
       </div>
+      <Toaster />
       <InstallPrompt />
       <OfflineIndicator />
       <PageTracker />

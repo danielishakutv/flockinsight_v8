@@ -1,18 +1,30 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
   Bell,
+  BookOpen,
   CalendarDays,
   Check,
   CheckCircle2,
+  ClipboardCheck,
+  Database,
+  FileText,
+  FolderOpen,
   Globe,
+  GraduationCap,
   HandCoins,
   HeartHandshake,
+  Mail,
   MessageSquare,
-  PartyPopper,
+  Network,
+  ShieldCheck,
   Star,
   Users,
+  UsersRound,
+  Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { LandingHeaderAuth } from "@/components/landing-header-auth";
@@ -21,159 +33,153 @@ import { PromoPopup } from "@/components/public/promo-popup";
 import { siteUrl } from "@/lib/site";
 import { getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
+import { APP_VERSION } from "@/lib/version";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import {
+  AUDIENCES,
+  BUILT_FOR,
+  FAQ,
+  FEATURES,
+  HIGHLIGHTS,
+  PAINS,
+  STEPS,
+} from "@/lib/landing-content";
 
-export const metadata = {
-  title: "FlockInsight — Church, Fellowship & Ministry Management",
+export const metadata: Metadata = {
+  title: "FlockInsight — Church Management Software for Africa",
   description:
-    "Attendance, members, giving, follow-up, bulk SMS & email, automatic reminders, birthdays, events and your own public page — the all-in-one platform for churches, fellowships and ministries. Built for Africa. Start free.",
+    "Church management software for attendance, members, groups, training, giving, church finances, follow-up, bulk SMS and email, events, forms and your own public page. Built for churches in Nigeria and across Africa. First 7 Sundays free.",
+  keywords: [
+    "church management software",
+    "church management software Nigeria",
+    "church attendance app",
+    "church membership software",
+    "church giving and tithe tracking",
+    "church accounting software Africa",
+    "bulk SMS for churches",
+    "ChMS Africa",
+    "fellowship management software",
+    "church database",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    title: "FlockInsight — Church Management Software for Africa",
+    description:
+      "Attendance, members, training, giving, finance, follow-up, SMS and your own public page — one app for churches, fellowships and ministries.",
+  },
 };
 
-const stats = [
-  { value: "5,000+", label: "Churches" },
-  { value: "500K+", label: "Members Managed" },
-  { value: "99.9%", label: "Uptime" },
-  { value: "24/7", label: "Support" },
-];
+/** Static: the copy only changes when we deploy, so serve it from the edge. */
+export const revalidate = 3600;
 
-const pains = [
-  "“I have no idea how many people actually came last Sunday — or last month.”",
-  "“Our members’ details are scattered across notebooks, phones and three different WhatsApp groups.”",
-  "“First-timers visit once and we never follow up — they just disappear.”",
-  "“Counting and tracking giving by hand takes hours and still doesn’t add up.”",
-  "“We forget members’ birthdays, and reminding everyone about service is a manual chore.”",
-  "“We have no simple, shareable page to invite people or be found online.”",
-];
-
-const features = [
-  {
-    icon: Users,
-    title: "Members & groups",
-    body: "One clean directory for your whole congregation — profiles, families, ministries, departments and cells. Import from a spreadsheet in minutes.",
-  },
-  {
-    icon: BarChart3,
-    title: "Attendance & analytics",
-    body: "Take fast headcounts in seconds and instantly see growth trends, averages and breakdowns. Know exactly how you’re doing.",
-  },
-  {
-    icon: HandCoins,
-    title: "Giving tracking",
-    body: "Record tithes, offerings and donations by category. Clear totals and reports — no more guesswork or messy spreadsheets.",
-  },
-  {
-    icon: HeartHandshake,
-    title: "Visitor follow-up",
-    body: "Never lose a first-timer again. Track visitors through stages, log every call and visit, and assign care to your team.",
-  },
-  {
-    icon: MessageSquare,
-    title: "Bulk SMS & email",
-    body: "Reach everyone — or a single group — with your own SMS sender ID and free email. Templates make it effortless.",
-  },
-  {
-    icon: Bell,
-    title: "Automatic service reminders",
-    body: "Set it once and members get reminded about every service by SMS or email, automatically, in your timezone.",
-  },
-  {
-    icon: PartyPopper,
-    title: "Birthday & anniversary wishes",
-    body: "Make members feel loved — automatic birthday and anniversary messages with your own words. They’ll never forget your church.",
-  },
-  {
-    icon: CalendarDays,
-    title: "Events with flyers",
-    body: "Publish programs with flyers, dates and venues, and let people discover what’s on near them.",
-  },
-  {
-    icon: Globe,
-    title: "Your own public page",
-    body: "A beautiful, shareable page (flockinsight.com/c/yourchurch) so members invite people and seekers find you in the directory.",
-  },
-];
-
-const audiences = [
-  "Local churches",
-  "Campus & student fellowships",
-  "House fellowships & cell groups",
-  "Ministries & outreaches",
-  "Multi-branch denominations",
-];
-
-const steps = [
-  {
-    n: 1,
-    title: "Create Account",
-    body: "Sign up in seconds with your church details and preferences.",
-  },
-  {
-    n: 2,
-    title: "Add Your Services",
-    body: "Set up your services and import or add your members.",
-  },
-  {
-    n: 3,
-    title: "Start Managing",
-    body: "Begin using all features immediately with our intuitive dashboard.",
-  },
-];
-
-const testimonials = [
-  {
-    quote:
-      "FlockInsight transformed how we manage our church. Member engagement is up 40% and administration time is cut in half!",
-    name: "Pastor John Adeyemi",
-    church: "Grace Chapel, Lagos",
-  },
-  {
-    quote:
-      "The donation tracking feature alone paid for itself. Our giving increased by 35% with transparent, easy-to-use tools.",
-    name: "Rev. Sarah Okafor",
-    church: "Faith Community Church, Abuja",
-  },
-  {
-    quote:
-      "Communication has never been easier. We reach our entire congregation instantly with targeted messages and updates.",
-    name: "Pastor David Nwosu",
-    church: "Living Word Ministry, Port Harcourt",
-  },
-];
+/** Feature icon keys → components. Keeps the copy free of JSX. */
+const FEATURE_ICONS: Record<string, LucideIcon> = {
+  attendance: ClipboardCheck,
+  members: Users,
+  groups: UsersRound,
+  training: GraduationCap,
+  giving: HandCoins,
+  finance: Wallet,
+  followup: HeartHandshake,
+  comms: MessageSquare,
+  reminders: Bell,
+  forms: FileText,
+  events: CalendarDays,
+  media: FolderOpen,
+  devotionals: Mail,
+  public: Globe,
+  analytics: BarChart3,
+  reports: Database,
+  branches: Network,
+  roles: ShieldCheck,
+};
 
 export default async function LandingPage() {
   const site = siteUrl();
+  /**
+   * Structured data, for search engines and for AI assistants.
+   *
+   * The FAQ is emitted from the same array the page renders, so the two can
+   * never disagree — a mismatch between visible content and structured data is
+   * treated as cloaking. There is deliberately no AggregateRating: we have no
+   * verified reviews, and inventing them is exactly the kind of thing that
+   * loses a domain its rich results.
+   */
   const jsonLd = [
     {
       "@context": "https://schema.org",
       "@type": "Organization",
+      "@id": `${site}/#organization`,
       name: "FlockInsight",
+      alternateName: "FlockInsight Church Management",
       url: site,
-      logo: `${site}/icon-512`,
+      logo: { "@type": "ImageObject", url: `${site}/icon-512`, width: 512, height: 512 },
       description:
-        "Church management software for attendance, members, groups, giving, communication and more — built for Africa.",
+        "Church management software for churches, fellowships and ministries in Nigeria and across Africa.",
+      email: "support@flockinsight.com",
+      parentOrganization: { "@type": "Organization", name: "Toko Technologies" },
+      areaServed: [
+        { "@type": "Country", name: "Nigeria" },
+        { "@type": "Place", name: "Africa" },
+      ],
+      contactPoint: {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: "support@flockinsight.com",
+        availableLanguage: ["English"],
+      },
     },
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
+      "@id": `${site}/#website`,
       name: "FlockInsight",
       url: site,
+      publisher: { "@id": `${site}/#organization` },
+      inLanguage: "en",
       potentialAction: {
         "@type": "SearchAction",
-        target: `${site}/churches?q={search_term_string}`,
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${site}/churches?q={search_term_string}`,
+        },
         "query-input": "required name=search_term_string",
       },
     },
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
+      "@id": `${site}/#software`,
       name: "FlockInsight",
       applicationCategory: "BusinessApplication",
-      operatingSystem: "Web, iOS, Android",
-      offers: { "@type": "Offer", price: "0", priceCurrency: "NGN" },
+      applicationSubCategory: "Church Management Software",
+      operatingSystem: "Web browser, Android, iOS",
+      url: site,
+      publisher: { "@id": `${site}/#organization` },
       description:
-        "All-in-one church management: attendance, members, giving, follow-up, communication, devotionals, forms and a public church page.",
+        "All-in-one church management: attendance, members and households, groups and ministries, training and classes, giving with projects and pledges, church finances, visitor follow-up, bulk SMS and email, automatic reminders, events, forms, sermon media, devotionals, reports and a public church page.",
+      featureList: FEATURES.map((f) => f.title),
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "NGN",
+        description: "First 7 Sundays free, no card required.",
+      },
+      softwareVersion: APP_VERSION,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "@id": `${site}/#faq`,
+      mainEntity: FAQ.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
     },
   ];
   const plans = await getPlans();
@@ -189,6 +195,7 @@ export default async function LandingPage() {
             <a href="#features" className="hover:text-primary">Features</a>
             <a href="#how" className="hover:text-primary">How It Works</a>
             <a href="#pricing" className="hover:text-primary">Pricing</a>
+            <a href="#faq" className="hover:text-primary">FAQ</a>
             <Link href="/churches" className="hover:text-primary">Find a church</Link>
           </nav>
           <div className="flex items-center gap-2">
@@ -214,10 +221,11 @@ export default async function LandingPage() {
               <span className="text-primary">in one simple app</span>
             </h1>
             <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg text-balance">
-              Stop juggling notebooks, spreadsheets and WhatsApp groups. Track
-              attendance, members, giving and follow-up, send SMS & email,
-              automate reminders and birthdays, publish events, and get your own
-              shareable page — all in one place, built for Africa.
+              Stop juggling notebooks, spreadsheets and WhatsApp groups.
+              Attendance, members, groups, classes, giving, church finances and
+              follow-up. Bulk SMS and free email, reminders that send
+              themselves, events, forms, sermons and your own public page —
+              one login, built for Africa.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="xl">
@@ -238,7 +246,7 @@ export default async function LandingPage() {
 
             {/* Stats */}
             <div className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-6 lg:grid-cols-4">
-              {stats.map((s) => (
+              {HIGHLIGHTS.map((s) => (
                 <div key={s.label}>
                   <div className="text-primary text-3xl font-extrabold lg:text-4xl">
                     {s.value}
@@ -268,7 +276,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {pains.map((p) => (
+              {PAINS.map((p) => (
                 <div
                   key={p}
                   className="bg-card rounded-2xl border border-dashed p-5 text-pretty"
@@ -299,7 +307,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mx-auto mb-10 mt-6 flex max-w-3xl flex-wrap justify-center gap-2">
-              {audiences.map((a) => (
+              {AUDIENCES.map((a) => (
                 <span
                   key={a}
                   className="bg-background rounded-full border px-3 py-1 text-sm font-semibold"
@@ -309,19 +317,25 @@ export default async function LandingPage() {
               ))}
             </div>
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((f) => (
-                <Card key={f.title} className="transition-shadow hover:shadow-md">
-                  <CardContent>
-                    <div className="bg-primary/10 text-primary grid size-12 place-items-center rounded-xl">
-                      <f.icon className="size-6" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-bold">{f.title}</h3>
-                    <p className="text-muted-foreground mt-2 text-sm">
-                      {f.body}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+              {FEATURES.map((f) => {
+                const Icon = FEATURE_ICONS[f.icon] ?? BookOpen;
+                return (
+                  <Card
+                    key={f.title}
+                    className="transition-shadow hover:shadow-md"
+                  >
+                    <CardContent>
+                      <div className="bg-primary/10 text-primary grid size-12 place-items-center rounded-xl">
+                        <Icon className="size-6" />
+                      </div>
+                      <h3 className="mt-4 text-lg font-bold">{f.title}</h3>
+                      <p className="text-muted-foreground mt-2 text-sm">
+                        {f.body}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -342,7 +356,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mt-12 grid gap-8 md:grid-cols-3">
-              {steps.map((s) => (
+              {STEPS.map((s) => (
                 <div key={s.n} className="text-center">
                   <div className="from-primary mx-auto grid size-16 place-items-center rounded-2xl bg-gradient-to-br to-violet-500 text-2xl font-extrabold text-white shadow-lg">
                     {s.n}
@@ -355,36 +369,37 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Testimonials */}
+        {/* Built for African churches — every claim checkable in the app */}
         <section
-          id="testimonials"
+          id="built-for"
           className="bg-muted/30 border-y py-20 lg:py-28"
         >
           <div className="mx-auto max-w-6xl px-4 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-primary text-sm font-bold uppercase tracking-wider">
-                Testimonials
+              <p className="text-primary text-sm font-bold tracking-wider uppercase">
+                Why this one
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Loved by Church Leaders
+                Built for how African churches actually work
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
-                See what pastors and administrators are saying about FlockInsight.
+                Most church software is built for an American congregation with
+                office broadband. These are the decisions that make this one
+                different — all of them checkable the moment you sign up.
               </p>
             </div>
-            <div className="mt-12 grid gap-5 md:grid-cols-3">
-              {testimonials.map((t) => (
-                <Card key={t.name}>
-                  <CardContent className="flex h-full flex-col">
-                    <div className="flex gap-0.5 text-amber-400">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} className="size-4 fill-current" />
-                      ))}
-                    </div>
-                    <p className="mt-4 flex-1 text-pretty">“{t.quote}”</p>
-                    <div className="mt-6">
-                      <p className="font-bold">{t.name}</p>
-                      <p className="text-muted-foreground text-sm">{t.church}</p>
+            <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {BUILT_FOR.map((b) => (
+                <Card key={b.title}>
+                  <CardContent>
+                    <div className="flex items-start gap-2.5">
+                      <CheckCircle2 className="text-primary mt-0.5 size-5 shrink-0" />
+                      <div>
+                        <h3 className="font-bold">{b.title}</h3>
+                        <p className="text-muted-foreground mt-1.5 text-sm">
+                          {b.body}
+                        </p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -476,17 +491,44 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        {/* FAQ — also emitted as FAQPage structured data */}
+        <section id="faq" className="py-20 lg:py-28">
+          <div className="mx-auto max-w-3xl px-4 lg:px-8">
+            <div className="text-center">
+              <p className="text-primary text-sm font-bold tracking-wider uppercase">
+                Questions
+              </p>
+              <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
+                Straight answers
+              </h2>
+            </div>
+            <div className="mt-10 divide-y rounded-2xl border">
+              {FAQ.map((f) => (
+                <details key={f.q} className="group p-5">
+                  <summary className="cursor-pointer list-none text-lg font-bold">
+                    {f.q}
+                  </summary>
+                  <p className="text-muted-foreground mt-3 leading-relaxed">
+                    {f.a}
+                  </p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* CTA */}
         <section className="py-20 lg:py-28">
           <div className="mx-auto max-w-4xl px-4 lg:px-8">
             <Card className="from-primary overflow-hidden bg-gradient-to-br to-violet-600 text-center text-white">
               <CardContent className="px-6 py-14">
                 <h2 className="text-3xl font-extrabold tracking-tight text-balance lg:text-4xl">
-                  Ready to Transform Your Church Management?
+                  Start with this Sunday
                 </h2>
                 <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">
-                  Join thousands of churches already using FlockInsight to
-                  streamline operations and grow their ministry.
+                  Set your church up in about half an hour, and record your
+                  first Sunday the same week. Seven Sundays free, and your data
+                  is yours to take at any time.
                 </p>
                 <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                   <Button asChild size="xl" variant="secondary">
@@ -500,7 +542,7 @@ export default async function LandingPage() {
                     <CheckCircle2 className="size-4" /> No credit card required
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <CheckCircle2 className="size-4" /> 30-day free trial
+                    <CheckCircle2 className="size-4" /> First 7 Sundays free
                   </span>
                 </div>
               </CardContent>
