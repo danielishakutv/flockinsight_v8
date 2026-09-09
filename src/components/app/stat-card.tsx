@@ -27,10 +27,19 @@ export function StatCard({
         accent && "from-primary to-violet-500 bg-gradient-to-br text-white",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
+      {/*
+        The label WRAPS, it does not truncate.
+        Four of these across a laptop leaves each card narrow enough that
+        "Total members" and "Weekly average" were being cut to "Total mem…" —
+        which reads as a broken layout rather than a deliberate one, and hides
+        the one word that says what the number is. Two short lines cost a few
+        pixels of height and always say the whole thing. `min-h` keeps a
+        one-line card the same height as a two-line one so the row stays even.
+      */}
+      <div className="flex items-start justify-between gap-2">
         <span
           className={cn(
-            "min-w-0 truncate text-sm font-semibold",
+            "min-w-0 min-h-[2.5rem] text-sm leading-tight font-semibold text-balance",
             accent ? "text-white/80" : "text-muted-foreground",
           )}
         >
@@ -52,13 +61,17 @@ export function StatCard({
         </span>
         {hasDelta && (
           <span
+            // A fall is information, not an error. The destructive red is the
+            // colour used for "you are about to delete something", and against
+            // a dark card it pulled the eye before the number it describes.
+            // Amber reads as "worth a look" without shouting.
             className={cn(
               "mb-1 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-bold",
               accent
                 ? "bg-white/20 text-white"
                 : up
                   ? "bg-success/15 text-success"
-                  : "bg-destructive/15 text-destructive",
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
             )}
           >
             {up ? (

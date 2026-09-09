@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CHART_MARGIN, Y_AXIS_PROPS } from "@/components/charts/axis";
 
 type Point = { label: string; total: number };
 
@@ -38,7 +39,7 @@ function ChartTooltip({
 export function AttendanceTrend({ data }: { data: Point[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+      <AreaChart data={data} margin={CHART_MARGIN}>
         <defs>
           <linearGradient id="fillTotal" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
@@ -55,10 +56,7 @@ export function AttendanceTrend({ data }: { data: Point[] }) {
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <YAxis
-          tickLine={false}
-          axisLine={false}
-          width={40}
-          allowDecimals={false}
+          {...Y_AXIS_PROPS}
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)" }} />

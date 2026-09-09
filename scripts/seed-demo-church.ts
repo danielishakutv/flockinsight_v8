@@ -681,6 +681,66 @@ async function seedChurch(churchId: string) {
       });
     }
   }
+  /*
+   * Make the current month read as growth.
+   *
+   * "Giving this month" compares month-to-date against the same span of last
+   * month. Early in a month that span may hold one Sunday against last
+   * month's two, so a perfectly healthy church shows a fall — which on a
+   * marketing screenshot is the first thing the eye lands on. This is a
+   * fictional church whose job is to look like a thriving one, so it tops the
+   * current month up with the daily online transfers a real church receives
+   * until it is comfortably ahead. Nothing here changes how the app computes
+   * the figure; it changes what this one demo church gave.
+   */
+  {
+    // Midday, not midnight. `iso()` formats through UTC, so a date built at
+    // local midnight in a positive-offset timezone reports as the day before —
+    // which silently shifted every boundary here by one day.
+    const now = new Date();
+    const at = (y: number, m: number, d: number) => new Date(y, m, d, 12);
+    const monthStart = at(now.getFullYear(), now.getMonth(), 1);
+    const prevStart = at(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevEnd = at(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      Math.min(
+        now.getDate(),
+        new Date(now.getFullYear(), now.getMonth(), 0).getDate(),
+      ),
+    );
+    const today = at(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const within = (d: string, from: Date, to: Date) =>
+      d >= iso(from) && d <= iso(to);
+
+    const sumOf = (from: Date, to: Date) =>
+      gifts
+        .filter((g) => within(String(g.date), from, to))
+        .reduce((n, g) => n + Number(g.amount), 0);
+
+    const target = sumOf(prevStart, prevEnd) * 1.18; // ~18% ahead
+    let current = sumOf(monthStart, today);
+    const elapsedDays = now.getDate();
+
+    // Spread the top-up over the days that have already happened, so it looks
+    // like giving rather than one implausible lump on the 1st.
+    let guard = 0;
+    while (current < target && guard++ < 400) {
+      const day = at(now.getFullYear(), now.getMonth(), int(1, elapsedDays));
+      const amount = int(20000, 150000);
+      gifts.push({
+        churchId,
+        categoryId: pick([catBy.Tithe, catBy.Offering, catBy["Building Project"]]),
+        amount,
+        date: iso(day),
+        method: "online",
+        note: "Online transfer",
+      });
+      current += amount;
+    }
+  }
+
   const giftRows = await db
     .insert(giving)
     .values(gifts)

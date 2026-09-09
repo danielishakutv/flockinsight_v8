@@ -29,10 +29,37 @@ const accountIds: string[] = [];
 const categoryIds: string[] = [];
 const txnIds: string[] = [];
 
+const stamp = Date.now();
+
 beforeAll(async () => {
-  const churches = await db.select({ id: church.id }).from(church).limit(2);
-  churchId = churches[0].id;
-  otherChurchId = churches[1]?.id ?? churches[0].id;
+  /*
+   * Two churches of our own, created here and removed in afterAll.
+   *
+   * This used to borrow whichever two churches the database happened to
+   * return first, then assert exact totals against them — which only held
+   * while no real church had any finance records. The moment one did (a
+   * church seeded with demo data for marketing, say) the totals included
+   * rows the test never wrote and it failed for a reason that had nothing to
+   * do with the code under test. Owning the fixtures makes it deterministic.
+   */
+  churchId = `zzfin-a-${stamp}`;
+  otherChurchId = `zzfin-b-${stamp}`;
+  await db.insert(church).values([
+    {
+      id: churchId,
+      name: "ZZ Finance Test A",
+      slug: churchId,
+      currency: "NGN",
+      country: "Nigeria",
+    },
+    {
+      id: otherChurchId,
+      name: "ZZ Finance Test B",
+      slug: otherChurchId,
+      currency: "NGN",
+      country: "Nigeria",
+    },
+  ]);
 
   const [bank] = await db
     .insert(financeAccount)
@@ -118,6 +145,9 @@ afterAll(async () => {
     await db.delete(financeCategory).where(inArray(financeCategory.id, categoryIds));
   if (accountIds.length)
     await db.delete(financeAccount).where(inArray(financeAccount.id, accountIds));
+  // The two churches this file created. Everything under them has already
+  // gone, and the cascade would take anything missed.
+  await db.delete(church).where(inArray(church.id, [churchId, otherChurchId]));
 });
 
 describe("accounts", () => {

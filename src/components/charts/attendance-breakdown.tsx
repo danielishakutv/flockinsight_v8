@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CHART_MARGIN, Y_AXIS_PROPS } from "@/components/charts/axis";
 
 type Point = {
   label: string;
@@ -62,7 +63,7 @@ function ChartTooltip({
 export function AttendanceBreakdown({ data }: { data: Point[] }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+      <BarChart data={data} margin={CHART_MARGIN}>
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis
           dataKey="label"
@@ -73,10 +74,7 @@ export function AttendanceBreakdown({ data }: { data: Point[] }) {
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <YAxis
-          tickLine={false}
-          axisLine={false}
-          width={40}
-          allowDecimals={false}
+          {...Y_AXIS_PROPS}
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />
