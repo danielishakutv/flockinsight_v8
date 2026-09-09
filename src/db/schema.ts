@@ -284,6 +284,15 @@ export const church = pgTable("church", {
   handle: text().unique(),
   // Whether the church is listed in the public directory & its page is live.
   publicEnabled: boolean().notNull().default(true),
+  /**
+   * The church that referred this one, resolved from `?ref=<handle>` at
+   * signup. Set once and never changed — a referral is a fact about how this
+   * church arrived, not a setting. Null for churches that found us directly.
+   */
+  referredByChurchId: text().references((): AnyPgColumn => church.id, {
+    onDelete: "set null",
+  }),
+  referredAt: timestamp({ withTimezone: true }),
   denomination: text(),
   // Platform-managed grouping (see the denomination table). The text column
   // above stays the church's own wording; this is the tidy one we group by.

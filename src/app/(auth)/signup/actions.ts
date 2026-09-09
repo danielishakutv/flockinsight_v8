@@ -1,6 +1,6 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
@@ -8,6 +8,7 @@ import { church, staff, session as sessionTable, user } from "@/db/schema";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { ensureMemberForUser } from "@/lib/member-link";
 import { trialEndDate } from "@/lib/trial";
+import { REFERRAL_COOKIE } from "@/lib/referral";
 
 export type SignUpResult =
   | { ok: true; signedIn: boolean }
@@ -94,6 +95,20 @@ export async function createChurchAccount(input: {
   const base = slugify(churchName) || "church";
   let slug = base;
 
+  // Who sent them, if anyone. Set by /r/<code> up to 30 days ago. Read here
+  // rather than trusted from the client, and verified to be a real church so
+  // a hand-edited cookie cannot credit one that does not exist.
+  const referredByChurchId = await (async () => {
+    const raw = (await cookies()).get(REFERRAL_COOKIE)?.value;
+    if (!raw) return null;
+    const [row] = await db
+      .select({ id: church.id })
+      .from(church)
+      .where(eq(church.id, raw))
+      .limit(1);
+    return row?.id ?? null;
+  })();
+
   for (let attempt = 0; ; attempt++) {
     try {
       await db.transaction(async (tx) => {
@@ -109,6 +124,8 @@ export async function createChurchAccount(input: {
           contactEmail: email.toLowerCase(),
           // Start the "first 7 Sundays free" trial from today.
           trialEndsAt: trialEndDate(new Date()),
+          referredByChurchId,
+          referredAt: referredByChurchId ? new Date() : null,
         });
         await tx.insert(staff).values({
           id: crypto.randomUUID(),

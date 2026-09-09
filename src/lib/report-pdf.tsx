@@ -13,6 +13,14 @@ import type { ChurchTotals } from "@/lib/report-data";
 import { CATEGORIES, type Dataset } from "@/lib/report-catalog";
 import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
 import type { ChurchBrand } from "@/lib/pdf-brand";
+import {
+  cellLimit,
+  columnWeights,
+  humanize,
+  isIdColumn,
+  pdfColumns,
+  short,
+} from "@/lib/report-pdf-columns";
 
 /**
  * PDFs for the report centre: one generic table renderer that works for any
@@ -35,6 +43,7 @@ const C = {
   slate700: "#334155",
   slate600: "#475569",
   slate500: "#64748b",
+  slate400: "#94a3b8",
   slate300: "#cbd5e1",
   slate200: "#e2e8f0",
   slate100: "#f1f5f9",
@@ -148,6 +157,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.slate50,
   },
   td: { fontSize: 7, color: C.slate600 },
+  numCell: { color: C.slate400, textAlign: "right", paddingRight: 6 },
   cell: { flexGrow: 1, flexBasis: 0, paddingRight: 4 },
   note: {
     marginTop: 8,
@@ -200,18 +210,6 @@ function Tile({
   );
 }
 
-/** Column header → something readable: `member_name` → `Member name`. */
-function humanize(column: string): string {
-  const s = column.replace(/_/g, " ").trim();
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** Keep a cell from blowing the column width apart. */
-function short(v: string | number | null, limit = 42): string {
-  const s = v == null ? "" : String(v);
-  return s.length > limit ? `${s.slice(0, limit - 1)}…` : s;
-}
-
 function rangeLabel(range: { from: string | null; to: string | null }): string {
   if (range.from && range.to) return `${range.from} to ${range.to}`;
   if (range.from) return `From ${range.from}`;
@@ -230,12 +228,18 @@ export async function renderDatasetPdf(args: {
   const churchName = brand.name;
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
 
-  const trimmedCols = data.columns.length > MAX_PDF_COLS;
-  const colIdx = data.columns
-    .map((_, i) => i)
-    .filter((i) => i < MAX_PDF_COLS);
+  // Ids are dropped from the PDF and kept in the CSV. See isIdColumn.
+  const readableCount = data.columns.filter((c) => !isIdColumn(c)).length;
+  const trimmedCols = readableCount > MAX_PDF_COLS;
+  const colIdx = pdfColumns(data.columns, MAX_PDF_COLS);
+  const droppedIds = data.columns.length - readableCount;
+
   const rows = data.rows.slice(0, MAX_PDF_ROWS);
   const trimmedRows = data.rows.length > rows.length;
+  const weights = columnWeights(data.columns, rows, colIdx);
+  // The row number replaces the id: it gives someone reading aloud in a
+  // meeting something to point at, without a line of hex.
+  const NUM_WEIGHT = Math.max(3, String(rows.length).length + 1.5);
 
   const doc = (
     <Document title={`${churchName} — ${dataset.label}`} author={churchName}>
@@ -258,17 +262,23 @@ export async function renderDatasetPdf(args: {
           ) : (
             <View style={styles.table}>
               <View style={styles.thead} fixed>
-                {colIdx.map((i) => (
-                  <View key={i} style={styles.cell}>
+                <View style={[styles.cell, { flexGrow: NUM_WEIGHT }]}>
+                  <Text style={[styles.th, styles.numCell]}>#</Text>
+                </View>
+                {colIdx.map((i, n) => (
+                  <View key={i} style={[styles.cell, { flexGrow: weights[n] }]}>
                     <Text style={styles.th}>{humanize(data.columns[i])}</Text>
                   </View>
                 ))}
               </View>
               {rows.map((row, r) => (
                 <View key={r} style={r % 2 ? styles.trOdd : styles.trEven} wrap={false}>
-                  {colIdx.map((i) => (
-                    <View key={i} style={styles.cell}>
-                      <Text style={styles.td}>{short(row[i])}</Text>
+                  <View style={[styles.cell, { flexGrow: NUM_WEIGHT }]}>
+                    <Text style={[styles.td, styles.numCell]}>{r + 1}</Text>
+                  </View>
+                  {colIdx.map((i, n) => (
+                    <View key={i} style={[styles.cell, { flexGrow: weights[n] }]}>
+                      <Text style={styles.td}>{short(row[i], cellLimit(weights[n]))}</Text>
                     </View>
                   ))}
                 </View>
@@ -276,15 +286,18 @@ export async function renderDatasetPdf(args: {
             </View>
           )}
 
-          {(trimmedRows || trimmedCols) && (
+          {(trimmedRows || trimmedCols || droppedIds > 0) && (
             <Text style={styles.note}>
               {trimmedRows
                 ? `Showing the first ${rows.length.toLocaleString()} of ${data.rows.length.toLocaleString()} rows. `
                 : ""}
               {trimmedCols
-                ? `Showing ${MAX_PDF_COLS} of ${data.columns.length} columns. `
+                ? `Showing ${MAX_PDF_COLS} of ${readableCount} columns. `
                 : ""}
-              Download the CSV for the complete data.
+              {droppedIds > 0
+                ? "Reference ids are left out of the PDF for readability. "
+                : ""}
+              Download the CSV for the complete data, ids included.
             </Text>
           )}
         </View>

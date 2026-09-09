@@ -1,6 +1,14 @@
 // Subscription tiers (client-safe). Prices are in Nigerian Naira / month.
-// Plans currently drive pricing, targeting and badges; limit enforcement is
-// intentionally informational for now (see REVIEW doc).
+//
+// IMPORTANT: only `memberLimit` and `emailAllowance` are actually enforced
+// (lib/plan-limits.ts). Every module is open on every plan. So `features` is
+// marketing copy describing what a church is BUYING INTO, not a gate — a
+// Starter church can still open Finance today.
+//
+// Keep this list current. When a module ships it belongs on a tier here and on
+// the pricing page, or churches never learn it exists and it drives no
+// upgrades. The list is also the default behind the admin-editable copy in
+// lib/pricing.ts, so what is written here is what a new deployment shows.
 
 export type PlanId = "starter" | "growth" | "pro" | "enterprise";
 
@@ -27,9 +35,12 @@ export const PLANS: Plan[] = [
     emailAllowance: 500,
     features: [
       "Up to 150 members",
-      "Attendance recording & history",
-      "Members & groups",
-      "Basic giving tracking",
+      "Attendance in seconds, with history and trends",
+      "Members, households & children",
+      "Groups, ministries & home cells",
+      "Offerings & tithes by category",
+      "Your own public church page & events",
+      "Birthday & anniversary greetings by email",
       "1 admin account",
     ],
   },
@@ -44,9 +55,13 @@ export const PLANS: Plan[] = [
     features: [
       "Up to 1,000 members",
       "Everything in Starter",
-      "Giving categories & reports",
-      "Follow-up & visitor care",
-      "Analytics & trends",
+      "Training & classes — Foundation, Baptism, Pre-Marital, leadership, with badges beside members' names",
+      "Building projects & pledge tracking",
+      "First-timer follow-up & visitor care",
+      "Forms with a shareable link & QR code",
+      "Devotionals & newsletters by email",
+      "Automatic service reminders",
+      "Analytics & growth trends",
       "CSV import / export",
       "Up to 10 team members & custom roles",
     ],
@@ -61,8 +76,11 @@ export const PLANS: Plan[] = [
     features: [
       "Unlimited members",
       "Everything in Growth",
-      "SMS broadcasts",
-      "Advanced analytics & PDF reports",
+      "Church finance — income, expenses, accounts & funds that fill themselves from giving",
+      "Bulk SMS with your church's own sender ID",
+      "Sermon & media library",
+      "Reports centre: 31 datasets as CSV or PDF, plus a full export",
+      "Branded PDFs carrying your logo & colours",
       "Unlimited team members & roles",
       "Priority support",
     ],
@@ -76,7 +94,8 @@ export const PLANS: Plan[] = [
     emailAllowance: null,
     features: [
       "Everything in Pro",
-      "Multi-branch / multi-campus",
+      "Branches & denominations — one report across every branch, grouped by zone",
+      "Automatic weekly or monthly branch reports by email",
       "Dedicated account manager",
       "Custom integrations & onboarding",
       "Service-level agreement (SLA)",

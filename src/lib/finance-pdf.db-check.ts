@@ -24,6 +24,7 @@ const brand = (over: Partial<ChurchBrand> = {}): ChurchBrand => ({
   from: "#0ea5e9",
   to: "#2563eb",
   contact: "12 Church Road, Ikeja, Lagos  ·  0801 234 5678  ·  hi@grace.org",
+  referralUrl: "https://flockinsight.com/r/grace-chapel",
   ...over,
 });
 

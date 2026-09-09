@@ -5,6 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
 import { getTheme } from "@/lib/church-themes";
+import { referralUrl } from "@/lib/referral";
+import { siteUrl } from "@/lib/site";
 
 /**
  * The church's own identity, for the top of a PDF.
@@ -25,6 +27,11 @@ export type ChurchBrand = {
   to: string;
   /** One line of address, phone and email — whatever the church has filled in. */
   contact: string | null;
+  /**
+   * The church's own referral link. Every PDF carries it, so a document
+   * forwarded to another pastor credits the church that shared it.
+   */
+  referralUrl: string;
 };
 
 /** What a caller must give us. Matches the church row's shape. */
@@ -33,6 +40,9 @@ export type BrandSource = {
   name: string;
   logo: string | null;
   theme: string | null;
+  /** Public handle and slug — the referral code is the handle. */
+  handle?: string | null;
+  slug?: string;
   addressText?: string | null;
   city?: string | null;
   state?: string | null;
@@ -234,5 +244,11 @@ export async function getChurchBrand(
     from: theme.from,
     to: theme.to,
     contact: contactLine(church),
+    // Falls back to the plain site when a church somehow has neither handle
+    // nor slug — a PDF should never carry a broken link.
+    referralUrl:
+      church.handle || church.slug
+        ? referralUrl({ handle: church.handle, slug: church.slug ?? "" })
+        : siteUrl(),
   };
 }

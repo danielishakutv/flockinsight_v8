@@ -1,5 +1,13 @@
 import "server-only";
-import { View, Text, Image, Svg, Path, StyleSheet } from "@react-pdf/renderer";
+import {
+  View,
+  Text,
+  Image,
+  Svg,
+  Path,
+  Link,
+  StyleSheet,
+} from "@react-pdf/renderer";
 import type { ChurchBrand } from "@/lib/pdf-brand";
 
 /**
@@ -100,6 +108,12 @@ const s = StyleSheet.create({
   page: { fontSize: 7, color: PDF_COLORS.slate500 },
   // Our name: one line, smallest type, muted. Present, not prominent.
   attribution: { fontSize: 6, color: PDF_COLORS.slate400, marginTop: 3 },
+  attributionLink: {
+    fontSize: 6,
+    color: PDF_COLORS.slate500,
+    textDecoration: "none",
+    fontFamily: "Helvetica-Bold",
+  },
 });
 
 /**
@@ -182,8 +196,17 @@ export function BrandFooter({
           }
         />
       </View>
+      {/*
+        "FlockInsight" is a live link carrying the church's own referral code,
+        so a PDF forwarded to another pastor — which is how most of these
+        travel — credits the church that shared it. Rendered as one line so it
+        still reads as a quiet attribution rather than an advert.
+      */}
       <Text style={s.attribution}>
-        {generated} · Prepared with FlockInsight
+        {generated} · Prepared with{" "}
+        <Link src={brand.referralUrl} style={s.attributionLink}>
+          FlockInsight
+        </Link>
       </Text>
     </View>
   );

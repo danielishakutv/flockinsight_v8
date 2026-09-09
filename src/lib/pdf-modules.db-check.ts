@@ -20,6 +20,7 @@ const brand: ChurchBrand = {
   from: "#10b981",
   to: "#0d9488",
   contact: "12 Church Road, Ikeja, Lagos  ·  0801 234 5678  ·  hi@grace.org",
+  referralUrl: "https://flockinsight.com/r/grace-chapel",
 };
 
 /** A church with nothing filled in — no logo, no contact details. */
