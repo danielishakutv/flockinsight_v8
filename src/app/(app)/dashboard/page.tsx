@@ -76,6 +76,29 @@ export default async function DashboardPage() {
   const startOfPrevMonth = fmtMonthStart(
     new Date(now.getFullYear(), now.getMonth() - 1, 1),
   );
+  /**
+   * The same point in last month that we have reached in this one.
+   *
+   * "Giving this month" is a month-to-date figure, so comparing it against a
+   * COMPLETE previous month made every church look like it had collapsed for
+   * the first three weeks of every month — on the 9th, nine days were being
+   * measured against thirty-one. Comparing like with like means the arrow says
+   * something true: are we ahead of where we were this time last month?
+   *
+   * Clamped to the end of the previous month, so the 31st of a month never
+   * spills into this one when the previous month was shorter.
+   */
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  const prevToDate = (() => {
+    const d = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      Math.min(now.getDate(), prevMonthEnd),
+    );
+    // Exclusive upper bound: everything up to and including the same day.
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
   const sumAmount = sql<number>`coalesce(sum(${giving.amount}), 0)`;
 
   // "This month" for the module highlights & usage counters.
@@ -124,7 +147,7 @@ export default async function DashboardPage() {
     db
       .select({
         month: sql<number>`coalesce(sum(${giving.amount}) filter (where ${giving.date} >= ${startOfMonth}), 0)`,
-        prev: sql<number>`coalesce(sum(${giving.amount}) filter (where ${giving.date} >= ${startOfPrevMonth} and ${giving.date} < ${startOfMonth}), 0)`,
+        prev: sql<number>`coalesce(sum(${giving.amount}) filter (where ${giving.date} >= ${startOfPrevMonth} and ${giving.date} < ${prevToDate}), 0)`,
         total: sumAmount,
       })
       .from(giving)
