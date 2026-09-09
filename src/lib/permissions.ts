@@ -57,11 +57,33 @@ export const getAccess = cache(async (): Promise<Access> => {
 
   if (s.roleId) {
     const [r] = await db
-      .select({ permissions: role.permissions })
+      .select({ permissions: role.permissions, isSystem: role.isSystem })
       .from(role)
       .where(and(eq(role.id, s.roleId), eq(role.churchId, churchId)))
       .limit(1);
-    if (r) return { isOwner: false, perms: new Set(r.permissions), staffRole: s.role };
+    if (r) {
+      /*
+       * The locked system role means "everything", and it has to mean
+       * everything TODAY.
+       *
+       * A role's permissions are a text[] frozen when the role was created.
+       * That is right for a role a church wrote itself — we must never widen
+       * access behind their back. But the system role is created by us,
+       * described as "Full access to everything. Cannot be changed." and
+       * cannot be edited, so a stored list is simply a stale copy of
+       * ALL_PERMISSIONS. Churches that signed up before a module existed had
+       * people on this role who could not see it, which read as the module
+       * being missing rather than hidden.
+       */
+      if (r.isSystem) {
+        return {
+          isOwner: false,
+          perms: new Set(ALL_PERMISSIONS),
+          staffRole: s.role,
+        };
+      }
+      return { isOwner: false, perms: new Set(r.permissions), staffRole: s.role };
+    }
   }
 
   // No custom role assigned yet — keep legacy admins fully enabled, and give

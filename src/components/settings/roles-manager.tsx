@@ -8,8 +8,9 @@ import {
   createRole,
   updateRole,
   deleteRole,
+  grantNewPermissions,
 } from "@/app/(app)/settings/roles/actions";
-import { PERMISSION_CATALOG } from "@/lib/permissions-catalog";
+import { ALL_PERMISSIONS, PERMISSION_CATALOG } from "@/lib/permissions-catalog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,12 +35,37 @@ export type RoleRow = {
 
 const TOTAL_PERMS = PERMISSION_CATALOG.reduce((n, m) => n + m.perms.length, 0);
 
+/** Permissions in today's catalogue that a role does not hold. */
+function missingFor(r: RoleRow): string[] {
+  return ALL_PERMISSIONS.filter((p) => !r.permissions.includes(p));
+}
+
+/** Those permissions as module names, which is what an admin recognises. */
+function missingModules(r: RoleRow): string[] {
+  const missing = new Set(missingFor(r));
+  return PERMISSION_CATALOG.filter((m) =>
+    m.perms.some((p) => missing.has(p.key)),
+  ).map((m) => m.label);
+}
+
 export function RolesManager({ roles }: { roles: RoleRow[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<RoleRow | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  function grantNew(id: string) {
+    startTransition(async () => {
+      const res = await grantNewPermissions(id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("New permissions granted");
+      router.refresh();
+    });
+  }
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -164,6 +190,34 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
                   {" · "}
                   {r.members} member{r.members === 1 ? "" : "s"}
                 </p>
+                {/*
+                  A role stores a fixed list of permission keys, so one written
+                  before a module shipped can never see that module — and until
+                  now nothing said so. Modules simply looked missing.
+                */}
+                {!r.isSystem && missingFor(r).length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5">
+                    <p className="text-[11px] leading-snug">
+                      <span className="font-bold">
+                        {missingModules(r).length} newer{" "}
+                        {missingModules(r).length === 1 ? "module" : "modules"}
+                      </span>{" "}
+                      not in this role:{" "}
+                      <span className="text-muted-foreground">
+                        {missingModules(r).join(", ")}
+                      </span>
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 text-[11px]"
+                      onClick={() => grantNew(r.id)}
+                      disabled={pending}
+                    >
+                      Add them
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {!r.isSystem && (

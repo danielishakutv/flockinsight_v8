@@ -185,3 +185,42 @@ export async function assignRole(
   revalidatePath("/settings/team");
   return { ok: true };
 }
+
+/**
+ * Grant a role every permission it does not yet have.
+ *
+ * Roles store a fixed list of permission keys, so a role written before a
+ * module shipped can never see that module — and nothing told anyone. Widening
+ * access silently would be wrong, so this is a deliberate, one-click action an
+ * admin takes after reading what is new.
+ */
+export async function grantNewPermissions(id: string): Promise<ActionResult> {
+  if (!z.string().uuid().safeParse(id).success)
+    return { ok: false, error: "Invalid id" };
+
+  const { ctx, error } = await guard();
+  if (error) return { ok: false, error };
+
+  const [existing] = await db
+    .select({ isSystem: role.isSystem, permissions: role.permissions })
+    .from(role)
+    .where(and(eq(role.id, id), eq(role.churchId, ctx.church.id)))
+    .limit(1);
+  if (!existing) return { ok: false, error: "Role not found." };
+  if (existing.isSystem)
+    return { ok: false, error: "The Owner role already has everything." };
+
+  const missing = ALL_PERMISSIONS.filter(
+    (p) => !existing.permissions.includes(p),
+  );
+  if (missing.length === 0) return { ok: true };
+
+  await db
+    .update(role)
+    .set({ permissions: [...existing.permissions, ...missing] })
+    .where(and(eq(role.id, id), eq(role.churchId, ctx.church.id)));
+
+  revalidatePath("/settings/roles");
+  revalidatePath("/settings/team");
+  return { ok: true };
+}
