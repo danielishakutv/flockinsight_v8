@@ -293,6 +293,12 @@ export const church = pgTable("church", {
     onDelete: "set null",
   }),
   referredAt: timestamp({ withTimezone: true }),
+  /**
+   * When the referral reward was paid out for THIS church joining. Set once,
+   * on its first successful payment, and checked before crediting anyone —
+   * it is the thing that stops a second payment paying the bonus twice.
+   */
+  referralRewardedAt: timestamp({ withTimezone: true }),
   denomination: text(),
   // Platform-managed grouping (see the denomination table). The text column
   // above stays the church's own wording; this is the tidy one we group by.

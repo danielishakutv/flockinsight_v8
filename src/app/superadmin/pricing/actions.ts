@@ -6,6 +6,7 @@ import { requireSuperAdmin } from "@/lib/session";
 import { setPlanPrice, setPlanFeatures, setStorageBundles } from "@/lib/pricing";
 import { planName, type PlanId } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
+import { setReferralRewards } from "@/lib/referrals";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -102,5 +103,37 @@ export async function setStorageBundlesAction(
 
   revalidatePath("/superadmin/pricing");
   revalidatePath("/settings/storage");
+  return { ok: true };
+}
+
+const referralSchema = z.object({
+  referrer: z.number().min(0).max(1_000_000),
+  referred: z.number().min(0).max(1_000_000),
+});
+
+export type ReferralRewardInput = z.infer<typeof referralSchema>;
+
+/**
+ * What a referral pays. Changing it affects referrals rewarded from now on;
+ * bonuses already credited are in the wallet ledger and are not revisited.
+ */
+export async function setReferralRewardsAction(
+  input: ReferralRewardInput,
+): Promise<ActionResult> {
+  const admin = await requireSuperAdmin();
+  const parsed = referralSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid amount" };
+
+  await setReferralRewards(parsed.data);
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_referral_rewards",
+    summary: `Referral rewards set to ₦${parsed.data.referrer} (referrer) / ₦${parsed.data.referred} (new church)`,
+  });
+
+  revalidatePath("/superadmin/pricing");
+  revalidatePath("/settings/referrals");
   return { ok: true };
 }

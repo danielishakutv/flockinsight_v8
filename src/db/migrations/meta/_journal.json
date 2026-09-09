@@ -421,6 +421,13 @@
       "when": 1788948431101,
       "tag": "0059_calm_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1788957078746,
+      "tag": "0060_lumpy_stranger",
+      "breakpoints": true
     }
   ]
 }

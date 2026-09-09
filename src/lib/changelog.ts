@@ -29,6 +29,27 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.62.0",
+    date: "2026-09-09",
+    summary:
+      "Refer another church and earn wallet credit — plus reports that are actually readable when you print them.",
+    changes: {
+      Added: [
+        "Referrals: every church now has its own link. Share it with another church, and when they subscribe we add ₦2,000 to your wallet and ₦1,000 to theirs as a welcome. Settings → Referrals shows your link, who you have referred and what you have earned.",
+        "Your link is already on every PDF you produce — the small “Prepared with FlockInsight” line at the foot of a report now links to it. A statement handed round a board meeting counts.",
+        "Referral credit is paid once per church, when they first subscribe. A church that only uses the free plan earns nothing, which keeps the scheme honest.",
+      ],
+      Improved: [
+        "Report PDFs are far easier to read. Reference ids are gone — they were 36 characters of hex that overflowed onto the next column — replaced by a simple row number. Columns are now sized to their contents, so an address gets room and a date does not waste half a column. The CSV still carries every id, which is what you need for joining data.",
+        "Plan pages now list what each plan actually includes. Training, Finance, Forms, Media, Devotionals, Reports and Branches had never been added.",
+      ],
+      Fixed: [
+        "“Giving this month” showed a large red drop for the first three weeks of every month. It was comparing part of this month against the whole of last month — on the 9th, nine days against thirty-one. It now compares the same span of each month.",
+        "Money could appear as “NGN 2,000.00” in one place and “₦2,000.00” in another on the same screen, depending on where the figure was formatted. It is the symbol everywhere now.",
+      ],
+    },
+  },
+  {
     version: "0.61.0",
     date: "2026-09-08",
     summary:

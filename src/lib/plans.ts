@@ -41,6 +41,7 @@ export const PLANS: Plan[] = [
       "Offerings & tithes by category",
       "Your own public church page & events",
       "Birthday & anniversary greetings by email",
+      "Earn wallet credit for every church you refer",
       "1 admin account",
     ],
   },

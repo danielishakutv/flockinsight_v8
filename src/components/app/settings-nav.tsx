@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Gift,
   Building2,
   Globe,
   ListChecks,
@@ -61,6 +62,7 @@ const GROUPS: Group[] = [
       { label: "Wallet", href: "/settings/wallet", need: "settings", icon: Wallet },
       { label: "Storage", href: "/settings/storage", need: "settings", icon: HardDrive },
       { label: "Plan & billing", href: "/settings/billing", need: "settings", icon: CreditCard },
+      { label: "Referrals", href: "/settings/referrals", need: "settings", icon: Gift },
     ],
   },
   {

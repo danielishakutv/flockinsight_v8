@@ -52,9 +52,16 @@ export function formatMoney(
   currency: string = DEFAULT_CURRENCY,
 ): string {
   try {
+    // narrowSymbol, not the default: with the runtime locale left to decide,
+    // the SAME amount rendered "₦2,000.00" on the server (Node) and
+    // "NGN 2,000.00" in the browser, so a figure could change shape between
+    // the page and a client component beside it. narrowSymbol asks for the
+    // symbol whatever the locale, which is what a Nigerian church expects to
+    // see either way.
     return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency,
+      currencyDisplay: "narrowSymbol",
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
@@ -75,6 +82,7 @@ export function formatMoneyCompact(
     return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency,
+      currencyDisplay: "narrowSymbol",
       notation: "compact",
       maximumFractionDigits: 1,
     }).format(amount);

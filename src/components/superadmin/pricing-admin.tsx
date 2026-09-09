@@ -17,6 +17,7 @@ import {
   setPlanPrices,
   setPlanFeaturesAction,
   setStorageBundlesAction,
+  setReferralRewardsAction,
   type PlanPriceInput,
 } from "@/app/superadmin/pricing/actions";
 import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
@@ -33,16 +34,34 @@ export function PricingAdmin({
   initial,
   bundles: initialBundles,
   features,
+  referralRewards,
+  referralStats,
 }: {
   initial: PlanPriceInput;
   bundles: StorageBundle[];
   features: Record<PlanId, string[]>;
+  referralRewards: { referrer: number; referred: number };
+  referralStats: { referred: number; rewarded: number };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState<PlanPriceInput>(initial);
   const [bundles, setBundles] = useState<StorageBundle[]>(initialBundles);
   const [savingBundles, startBundles] = useTransition();
+  const [rw, setRw] = useState(referralRewards);
+  const [savingRw, startRw] = useTransition();
+
+  function saveRewards() {
+    startRw(async () => {
+      const res = await setReferralRewardsAction(rw);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Referral rewards updated");
+      router.refresh();
+    });
+  }
 
   function save() {
     start(async () => {
@@ -77,6 +96,55 @@ export function PricingAdmin({
 
   return (
     <div className="max-w-2xl space-y-6">
+      {/* Referral rewards */}
+      <section className="rounded-2xl border p-5">
+        <h2 className="text-lg font-bold">Referral rewards</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Paid once, when a referred church makes its first successful payment
+          — never at signup, so it cannot be farmed. {referralStats.referred}{" "}
+          church{referralStats.referred === 1 ? "" : "es"} arrived by referral,{" "}
+          {referralStats.rewarded} rewarded so far.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="rw-referrer">To the referring church (₦)</Label>
+            <Input
+              id="rw-referrer"
+              type="number"
+              min={0}
+              value={rw.referrer}
+              onChange={(e) =>
+                setRw({ ...rw, referrer: Number(e.target.value) || 0 })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rw-referred">Welcome credit to the new church (₦)</Label>
+            <Input
+              id="rw-referred"
+              type="number"
+              min={0}
+              value={rw.referred}
+              onChange={(e) =>
+                setRw({ ...rw, referred: Number(e.target.value) || 0 })
+              }
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={saveRewards} disabled={savingRw}>
+            {savingRw && <Loader2 className="size-4 animate-spin" />}
+            Save rewards
+          </Button>
+        </div>
+        <p className="text-muted-foreground mt-3 text-xs">
+          Setting either to 0 turns that side off. Changes apply to referrals
+          rewarded from now on; bonuses already credited stay in the wallet
+          ledger.
+        </p>
+      </section>
+
+
       <div>
         <h1 className="text-xl font-semibold tracking-tight">
           Pricing
