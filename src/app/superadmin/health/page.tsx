@@ -7,7 +7,7 @@ import { church, termiiSnapshot } from "@/db/schema";
 import { getFloatOverview } from "@/lib/float";
 import { getCronLiveness } from "@/lib/cron-run";
 import { getCohortRetention } from "@/lib/platform-stats";
-import { isEmailConfigured } from "@/lib/mailer";
+import { emailProvider, isEmailConfigured } from "@/lib/mailer";
 import { isPushConfigured } from "@/lib/push";
 import { isPaystackConfigured } from "@/lib/paystack";
 import { isTermiiConfigured } from "@/lib/termii-balance";
@@ -25,8 +25,19 @@ import {
 } from "@/components/superadmin/skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { refreshFloat, saveUnitCost } from "./actions";
+import { EmailTest } from "@/components/superadmin/email-test";
 
 export const metadata = { title: "Health · Admin" };
+const PROVIDER_LABEL: Record<
+  ReturnType<typeof emailProvider>,
+  string
+> = {
+  zeptomail: "ZeptoMail",
+  resend: "Resend",
+  smtp: "SMTP",
+  none: "not set up",
+};
+
 export const dynamic = "force-dynamic";
 
 export default function SuperadminHealthPage() {
@@ -107,7 +118,9 @@ async function Integrations() {
         : null,
     },
     {
-      label: "Resend (email)",
+      // Named after whichever provider is actually carrying mail, so the page
+      // cannot claim Resend while ZeptoMail is doing the work.
+      label: `Email (${PROVIDER_LABEL[emailProvider()]})`,
       configured: isEmailConfigured(),
       note: "Configured — failures show in server logs",
     },
@@ -116,7 +129,12 @@ async function Integrations() {
     { label: "Web push (VAPID)", configured: isPushConfigured() },
   ];
 
-  return <IntegrationTable items={items} />;
+  return (
+    <>
+      <IntegrationTable items={items} />
+      <EmailTest provider={PROVIDER_LABEL[emailProvider()]} />
+    </>
+  );
 }
 
 const BACKUP_MAX_AGE_MS = 48 * 3_600_000;

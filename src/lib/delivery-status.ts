@@ -98,3 +98,46 @@ export function shouldApply(
   if (next === "sent") return false;
   return true;
 }
+
+/* ------------------------------------------------------------------ *
+ * ZeptoMail
+ * ------------------------------------------------------------------ */
+
+/**
+ * ZeptoMail's `event_name` → our state.
+ *
+ * Only delivery outcomes are recorded. Opens and clicks are deliberately
+ * ignored: church email should not carry tracking pixels or rewritten links,
+ * and a pastor does not need to know who opened the newsletter.
+ */
+const ZEPTO: Record<string, DeliveryState> = {
+  email_delivered: "delivered",
+  emaildelivered: "delivered",
+  delivered: "delivered",
+  email_bounce: "undelivered",
+  email_bounced: "undelivered",
+  emailbounce: "undelivered",
+  bounce: "undelivered",
+  hardbounce: "undelivered",
+  softbounce: "undelivered",
+  email_dropped: "undelivered",
+  dropped: "undelivered",
+  spam: "undelivered",
+  complaint: "undelivered",
+};
+
+export function mapZeptoEvent(name: string): DeliveryState | null {
+  const key = (name ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return ZEPTO[key] ?? ZEPTO[key.replace(/_/g, "")] ?? null;
+}
+
+export function zeptoReason(name: string, detail?: string | null): string | null {
+  const clean = (detail ?? "").trim();
+  const key = (name ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (key.includes("spam") || key.includes("complaint"))
+    return "Marked as spam by the recipient";
+  if (key.includes("drop")) return clean || "Dropped before sending";
+  if (key.includes("bounce"))
+    return clean ? `Bounced — ${clean}` : "Bounced — the address rejected it";
+  return clean || null;
+}

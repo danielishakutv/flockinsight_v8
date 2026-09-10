@@ -1,6 +1,7 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
 import { Resend } from "resend";
+import { sendViaZepto, zeptoConfigured } from "@/lib/zeptomail";
 
 let cached: Transporter | null | undefined;
 let resendCached: Resend | null | undefined;
@@ -32,7 +33,27 @@ function getTransport(): Transporter | null {
 }
 
 export function isEmailConfigured() {
-  return !!(process.env.RESEND_API_KEY || process.env.SMTP_HOST);
+  return !!(
+    zeptoConfigured() ||
+    process.env.RESEND_API_KEY ||
+    process.env.SMTP_HOST
+  );
+}
+
+/** Which provider is actually carrying mail — shown on the admin health page. */
+export function emailProvider(): "zeptomail" | "resend" | "smtp" | "none" {
+  if (zeptoConfigured()) return "zeptomail";
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.SMTP_HOST) return "smtp";
+  return "none";
+}
+
+/** Split "Name <a@b.c>" into its parts for providers that want them apart. */
+export function splitFrom(from: string): { address: string; name?: string } {
+  const m = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (!m) return { address: from.trim() };
+  const name = m[1].replace(/^"|"$/g, "").trim();
+  return name ? { address: m[2].trim(), name } : { address: m[2].trim() };
 }
 
 export type EmailAttachment = {
@@ -89,7 +110,35 @@ export async function sendEmailWithId(
 ): Promise<{ ok: boolean; id: string | null }> {
   const from = buildFrom(opts.fromName);
 
-  // Preferred: Resend API (uses RESEND_API_KEY).
+  /*
+   * Provider order is deliberate: ZeptoMail, then Resend, then SMTP.
+   *
+   * Whichever is configured first wins, so moving between them is an env
+   * change and a restart — no code deploy, and no window where mail stops.
+   * Leaving the old provider's key in place keeps a fallback available while
+   * the new one is proven.
+   */
+  if (zeptoConfigured()) {
+    const res = await sendViaZepto({
+      from: splitFrom(from),
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+      cc: opts.cc ? (Array.isArray(opts.cc) ? opts.cc : [opts.cc]) : undefined,
+      replyTo: opts.replyTo,
+      attachments: opts.attachments,
+    });
+    if (!res.ok) {
+      console.error(
+        `[mailer] ZeptoMail error for "${opts.subject}" to ${opts.to}:`,
+        res.error,
+      );
+    }
+    return { ok: res.ok, id: res.id };
+  }
+
+  // Resend API (uses RESEND_API_KEY).
   const resend = getResend();
   if (resend) {
     const { data, error } = await resend.emails.send({
