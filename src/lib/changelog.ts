@@ -45,6 +45,7 @@ export const releases: Release[] = [
         "Report PDFs are far easier to read. Reference ids are gone — they were 36 characters of hex that overflowed onto the next column — replaced by a simple row number. Columns are now sized to their contents, so an address gets room and a date does not waste half a column. The CSV still carries every id, which is what you need for joining data.",
         "Plan pages now list what each plan actually includes. Training, Finance, Forms, Media, Devotionals, Reports and Branches had never been added.",
         "Email now goes out through a dedicated sending service, so invitations, receipts and newsletters are less likely to land in spam. Bounces and spam complaints come back to us automatically and show against the message, so you can see a bad address instead of guessing.",
+        "Announcements from us can now be written properly — bold, italic, underline, lists and real clickable links, instead of a pasted-in web address you had to copy by hand.",
       ],
       Fixed: [
         "“Giving this month” showed a large red drop for the first three weeks of every month. It was comparing part of this month against the whole of last month — on the 9th, nine days against thirty-one. It now compares the same span of each month.",
