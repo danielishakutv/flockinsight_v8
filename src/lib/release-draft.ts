@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { broadcast, user } from "@/db/schema";
 import { APP_VERSION } from "@/lib/version";
-import { CATEGORY_ORDER, releases, type Release } from "@/lib/changelog";
+import { releases, type Release } from "@/lib/changelog";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 
@@ -21,26 +21,141 @@ import { siteUrl } from "@/lib/site";
  * each other cannot both write one.
  */
 
-/** Turn a changelog entry into something a pastor would want to read. */
-export function draftFromRelease(r: Release): { title: string; body: string } {
-  const lines: string[] = [];
-  if (r.summary) lines.push(r.summary);
+/*
+ * Turning a changelog into an announcement is mostly a matter of leaving
+ * things out.
+ *
+ * The changelog is written for us: every entry in full, including what was
+ * broken and why. A church wants none of that. They want to know what they can
+ * do this week that they could not do last week, in a few lines they can read
+ * on a phone between services. So: keep the wins, cut each to its first
+ * clause, cap the list, and reduce the rest to a count — "plus 2 small fixes"
+ * reassures, where a paragraph about how giving was miscounted for three weeks
+ * does the opposite.
+ */
 
-  for (const category of CATEGORY_ORDER) {
-    const items = r.changes[category];
-    if (!items?.length) continue;
-    // "Security" and "Changed" matter to us more than to a church; lead with
-    // what they actually gain.
-    lines.push("", `${category}:`);
-    for (const item of items) lines.push(`• ${item}`);
+/** The most bullets anyone reads in a notification. */
+const MAX_BULLETS = 4;
+
+const TITLE = "What's new in FlockInsight ✨";
+
+/**
+ * The first sentence, and only the first.
+ *
+ * A full stop only ends a sentence when a new one starts after it, which stops
+ * money (₦2,000.00) and abbreviations from cutting a line in half.
+ */
+export function firstSentence(text: string): string {
+  const t = text.trim();
+  const m = t.match(/[.!?](?=\s+["“(]?[A-Z])/);
+  return m?.index === undefined ? t : t.slice(0, m.index + 1);
+}
+
+/**
+ * One short, readable line from one changelog entry.
+ *
+ * Our entries tend to state the benefit and then qualify it after an em dash,
+ * so when a line runs long the half before the dash is almost always the
+ * headline and the half after is the detail.
+ */
+export function headline(text: string, max = 100): string {
+  let s = firstSentence(text);
+
+  if (s.length > max) {
+    const dash = s.indexOf(" — ");
+    if (dash > 20) s = s.slice(0, dash);
   }
 
-  return {
-    title: `What's new in FlockInsight ${r.version}`,
-    // Trimmed to the column the composer allows, on a line boundary so it
-    // never stops mid-sentence.
-    body: clip(lines.join("\n").trim(), 2000),
-  };
+  if (s.length > max) {
+    const cut = s.slice(0, max);
+    const space = cut.lastIndexOf(" ");
+    s = `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+  }
+
+  // Bullets read better without a full stop; an ellipsis earns its place.
+  return s.replace(/[.\s]+$/, "");
+}
+
+/** Fixes, changes and security work — counted, not listed. */
+function quietCount(r: Release): number {
+  return (
+    (r.changes.Fixed?.length ?? 0) +
+    (r.changes.Changed?.length ?? 0) +
+    (r.changes.Security?.length ?? 0)
+  );
+}
+
+/** What a church gained, in the order they would care about it. */
+function wins(r: Release): string[] {
+  return [...(r.changes.Added ?? []), ...(r.changes.Improved ?? [])];
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function closing(parts: string[]): string {
+  const tail = "It's all live — open FlockInsight to take a look.";
+  return parts.length ? `Plus ${parts.join(" and ")}. ${tail}` : tail;
+}
+
+/** Announce one release. */
+export function draftFromRelease(r: Release): { title: string; body: string } {
+  const got = wins(r);
+  const lines: string[] = [];
+
+  if (r.summary) lines.push(headline(r.summary, 140), "");
+  for (const w of got.slice(0, MAX_BULLETS)) lines.push(`• ${headline(w)}`);
+
+  const more = got.length - MAX_BULLETS;
+  const quiet = quietCount(r);
+  const tail: string[] = [];
+  if (more > 0) tail.push(plural(more, "more update", "more updates"));
+  if (quiet > 0) tail.push(plural(quiet, "small fix", "small fixes"));
+
+  lines.push("", closing(tail));
+
+  return { title: TITLE, body: clip(lines.join("\n").trim(), 2000) };
+}
+
+/**
+ * Announce several releases at once, for a church that has not heard from us
+ * in a while.
+ *
+ * One line per release, taken from its summary — that line was already written
+ * as the headline for everything in it, so it is the right length and the
+ * right voice. A release with no summary falls back to its first win.
+ */
+export function draftFromReleases(rs: Release[]): {
+  title: string;
+  body: string;
+} {
+  const usable = rs.filter((r) => r.summary || wins(r).length > 0);
+  if (usable.length === 0) return { title: TITLE, body: "" };
+  if (usable.length === 1) return draftFromRelease(usable[0]);
+
+  const lines: string[] = [
+    "A lot has landed in FlockInsight lately. Here are the highlights 👇",
+    "",
+  ];
+
+  for (const r of usable) {
+    // One idea per line. A summary often carries two, joined by an em dash
+    // ("Refer another church and earn credit — plus readable reports"); in a
+    // list of five, the first half alone lands harder.
+    const lead = firstSentence(r.summary ?? wins(r)[0]).split(" — ")[0];
+    lines.push(`• ${headline(lead, 110)}`);
+  }
+
+  const quiet = usable.reduce((n, r) => n + quietCount(r), 0);
+  lines.push(
+    "",
+    closing(
+      quiet > 0 ? [`${plural(quiet, "small fix", "small fixes")} along the way`] : [],
+    ),
+  );
+
+  return { title: TITLE, body: clip(lines.join("\n").trim(), 2000) };
 }
 
 function clip(text: string, max: number): string {

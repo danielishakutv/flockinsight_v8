@@ -4,9 +4,21 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { CalendarClock, FileText, Loader2, Pencil, Send, Trash2 } from "lucide-react";
+import {
+  CalendarClock,
+  FileText,
+  Loader2,
+  Pencil,
+  Send,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
-import { deleteDraft, sendDraft } from "@/app/superadmin/notifications/actions";
+import {
+  createCatchUpDraft,
+  deleteDraft,
+  sendDraft,
+} from "@/app/superadmin/notifications/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +62,18 @@ export function DraftBroadcasts({ items }: { items: DraftRow[] }) {
     });
   }
 
+  function catchUp() {
+    start(async () => {
+      const res = await createCatchUpDraft(5);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Catch-up draft written — read it before you send it.");
+      router.refresh();
+    });
+  }
+
   function remove(id: string) {
     start(async () => {
       const res = await deleteDraft(id);
@@ -65,10 +89,24 @@ export function DraftBroadcasts({ items }: { items: DraftRow[] }) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <FileText className="size-4" /> Drafts ({items.length})
         </CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={catchUp}
+          title="Summarise the last 5 releases into one short notice"
+        >
+          {pending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          Catch-up draft
+        </Button>
       </CardHeader>
       <CardContent className="space-y-2">
         {items.length === 0 ? (

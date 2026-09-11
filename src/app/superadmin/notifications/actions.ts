@@ -11,6 +11,9 @@ import {
   type BroadcastAudience,
 } from "@/lib/broadcasts";
 import { recordAudit } from "@/lib/audit";
+import { draftFromReleases } from "@/lib/release-draft";
+import { releases } from "@/lib/changelog";
+import { siteUrl } from "@/lib/site";
 
 export type CreateResult =
   | { ok: true; pushSent: number; emailSent: number; scheduled?: boolean }
@@ -191,6 +194,46 @@ export async function saveDraft(
   const [row] = await db
     .insert(broadcast)
     .values({ ...values, createdBy: admin.id })
+    .returning({ id: broadcast.id });
+
+  revalidatePath("/superadmin/notifications");
+  return { ok: true, id: row.id };
+}
+
+/**
+ * Write a catch-up draft covering the last few releases.
+ *
+ * Churches do not read our changelog, and a release-by-release notice is easy
+ * to miss. This gathers the recent ones into a single short list of what they
+ * gained, as a draft like any other — edit it, choose who gets it, send it.
+ *
+ * It carries no `sourceVersion`: that column is the release cron's idempotency
+ * key, and a catch-up is not the announcement of any one version.
+ */
+export async function createCatchUpDraft(
+  count = 5,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const admin = await requireSuperAdmin();
+  const n = Math.min(Math.max(Math.trunc(count) || 5, 2), 10);
+
+  const { title, body } = draftFromReleases(releases.slice(0, n));
+  if (!body.trim())
+    return { ok: false, error: "There are no releases to summarise yet." };
+
+  const [row] = await db
+    .insert(broadcast)
+    .values({
+      title,
+      body,
+      category: "system",
+      audience: "all",
+      inApp: true,
+      email: true,
+      scheduledAt: null,
+      status: "draft",
+      linkUrl: `${siteUrl()}/changelog`,
+      createdBy: admin.id,
+    })
     .returning({ id: broadcast.id });
 
   revalidatePath("/superadmin/notifications");
