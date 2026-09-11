@@ -2,9 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Search, Send } from "lucide-react";
+import { Check, FileText, Loader2, Search, Send } from "lucide-react";
 import { toast } from "sonner";
-import { createNotification } from "@/app/superadmin/notifications/actions";
+import {
+  createNotification,
+  saveDraft,
+} from "@/app/superadmin/notifications/actions";
 import { PLANS } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,29 +33,61 @@ const AUDIENCES = [
   { id: "churches", label: "Specific churches" },
 ] as const;
 
+/**
+ * Everything needed to reopen a draft, or to start from something already
+ * sent. Serialised on the server and handed in as a prop, so a reuse survives
+ * a refresh and can be linked to.
+ */
+export type ComposerPrefill = {
+  /** Set when editing an existing draft; absent when copying a sent message. */
+  draftId?: string;
+  title: string;
+  body: string;
+  category: "system" | "general";
+  audience: "all" | "plan" | "country" | "churches";
+  targetPlan?: string | null;
+  targetCountry?: string | null;
+  churchIds?: string[];
+  linkUrl?: string | null;
+  inApp: boolean;
+  email: boolean;
+};
+
 export function NotificationComposer({
   churches,
   countries,
+  prefill,
 }: {
   churches: ChurchOption[];
   countries: string[];
+  prefill?: ComposerPrefill | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [savingDraft, startDraft] = useTransition();
 
-  const [category, setCategory] = useState<"system" | "general">("general");
+  // The draft being edited, if any. Saving again updates it rather than
+  // leaving a trail of near-identical drafts behind.
+  const [draftId, setDraftId] = useState<string | undefined>(prefill?.draftId);
+  const [category, setCategory] = useState<"system" | "general">(
+    prefill?.category ?? "general",
+  );
   const [audience, setAudience] = useState<
     "all" | "plan" | "country" | "churches"
-  >("all");
-  const [targetPlan, setTargetPlan] = useState("growth");
-  const [targetCountry, setTargetCountry] = useState(countries[0] ?? "Nigeria");
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  >(prefill?.audience ?? "all");
+  const [targetPlan, setTargetPlan] = useState(prefill?.targetPlan ?? "growth");
+  const [targetCountry, setTargetCountry] = useState(
+    prefill?.targetCountry ?? countries[0] ?? "Nigeria",
+  );
+  const [picked, setPicked] = useState<Set<string>>(
+    new Set(prefill?.churchIds ?? []),
+  );
   const [query, setQuery] = useState("");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [inApp, setInApp] = useState(true);
-  const [email, setEmail] = useState(false);
+  const [title, setTitle] = useState(prefill?.title ?? "");
+  const [body, setBody] = useState(prefill?.body ?? "");
+  const [linkUrl, setLinkUrl] = useState(prefill?.linkUrl ?? "");
+  const [inApp, setInApp] = useState(prefill?.inApp ?? true);
+  const [email, setEmail] = useState(prefill?.email ?? false);
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
 
@@ -122,6 +157,43 @@ export function NotificationComposer({
       setPicked(new Set());
       setScheduleMode(false);
       setScheduledAt("");
+      // A draft that has just gone out is no longer a draft.
+      setDraftId(undefined);
+      router.replace("/superadmin/notifications");
+      router.refresh();
+    });
+  }
+
+  /**
+   * Keep what is written without sending it.
+   *
+   * Saving again updates the same draft rather than leaving a trail of
+   * near-identical ones, which is what makes "write it now, decide later"
+   * actually usable.
+   */
+  function saveAsDraft() {
+    if (!title.trim()) return toast.error("Give it a title first.");
+    startDraft(async () => {
+      const res = await saveDraft({
+        id: draftId,
+        title,
+        body: body.trim() || " ",
+        category,
+        audience,
+        targetPlan: audience === "plan" ? targetPlan : "",
+        targetCountry: audience === "country" ? targetCountry : "",
+        churchIds: audience === "churches" ? [...picked] : [],
+        linkUrl,
+        inApp,
+        email,
+        scheduledAt: null,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setDraftId(res.id);
+      toast.success(draftId ? "Draft updated." : "Saved as a draft.");
       router.refresh();
     });
   }
@@ -129,7 +201,9 @@ export function NotificationComposer({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Send a notification</CardTitle>
+        <CardTitle className="text-lg">
+          {draftId ? "Editing a draft" : "Send a notification"}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -336,10 +410,29 @@ export function NotificationComposer({
             <span className="text-foreground font-bold">{reach}</span> church
             {reach === 1 ? "" : "es"}
           </p>
-          <Button onClick={submit} disabled={pending} size="lg">
-            {pending ? <Loader2 className="animate-spin" /> : <Send className="size-4" />}
-            {scheduleMode ? "Schedule" : "Send now"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={saveAsDraft}
+              disabled={savingDraft || pending}
+              variant="outline"
+              size="lg"
+            >
+              {savingDraft ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <FileText className="size-4" />
+              )}
+              {draftId ? "Update draft" : "Save as draft"}
+            </Button>
+            <Button onClick={submit} disabled={pending || savingDraft} size="lg">
+              {pending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {scheduleMode ? "Schedule" : "Send now"}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

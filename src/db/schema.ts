@@ -1165,6 +1165,9 @@ export const auditLog = pgTable(
 );
 
 export const broadcastStatusEnum = pgEnum("broadcast_status", [
+  // Written but not going anywhere until someone says so. A draft has no
+  // scheduledAt, which is what keeps the cron from ever picking it up.
+  "draft",
   "scheduled",
   "sent",
   "cancelled",
@@ -1185,15 +1188,36 @@ export const broadcast = pgTable(
     linkUrl: text(),
     inApp: boolean().notNull().default(true), // in-app notification + web push
     email: boolean().notNull().default(false),
-    scheduledAt: timestamp({ withTimezone: true }).notNull(),
+    /**
+     * Null for a draft — it has no send time because nobody has chosen one.
+     * The cron matches on `scheduledAt <= now`, and SQL comparisons against
+     * null are never true, so a draft cannot be picked up even if its status
+     * were somehow wrong.
+     */
+    scheduledAt: timestamp({ withTimezone: true }),
     status: broadcastStatusEnum().notNull().default("scheduled"),
     sentAt: timestamp({ withTimezone: true }),
     pushSent: integer().notNull().default(0),
     emailSent: integer().notNull().default(0),
+    /**
+     * Set when this draft was generated automatically for a release, e.g.
+     * "0.63.0". It is what stops a second one being written for the same
+     * version on the next cron tick.
+     */
+    sourceVersion: text(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  (t) => [index("broadcast_status_idx").on(t.status, t.scheduledAt)],
+  (t) => [
+    index("broadcast_status_idx").on(t.status, t.scheduledAt),
+    // One auto-draft per release, enforced by the database rather than by
+    // remembering to check.
+    uniqueIndex("broadcast_source_version_idx").on(t.sourceVersion),
+  ],
 );
 
 // Browser web-push subscriptions (one per device/browser per user).

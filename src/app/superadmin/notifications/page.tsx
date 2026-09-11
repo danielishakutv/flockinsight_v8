@@ -1,10 +1,23 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { format } from "date-fns";
-import { Cog, Megaphone } from "lucide-react";
+import { Cog, Copy, Megaphone } from "lucide-react";
 import { db } from "@/db";
-import { church, notification, broadcast, user } from "@/db/schema";
+import {
+  church,
+  notification,
+  notificationTarget,
+  broadcast,
+  user,
+} from "@/db/schema";
 import { planName } from "@/lib/plans";
-import { NotificationComposer } from "@/components/superadmin/notification-composer";
+import {
+  NotificationComposer,
+  type ComposerPrefill,
+} from "@/components/superadmin/notification-composer";
+import {
+  DraftBroadcasts,
+  type DraftRow,
+} from "@/components/superadmin/draft-broadcasts";
 import { ScheduledBroadcasts } from "@/components/superadmin/scheduled-broadcasts";
 import {
   Card,
@@ -13,6 +26,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export const metadata = { title: "Notifications · Admin" };
 
@@ -27,8 +42,18 @@ function audienceLabel(n: {
   return "Specific churches";
 }
 
-export default async function SuperadminNotificationsPage() {
-  const [churches, countryRows, history, scheduled] = await Promise.all([
+export default async function SuperadminNotificationsPage({
+  searchParams,
+}: {
+  /**
+   * `?draft=<id>` reopens a draft for editing; `?reuse=<id>` starts a new one
+   * from something already sent. Both go through the URL rather than client
+   * state so the composer survives a refresh and the link can be shared.
+   */
+  searchParams: Promise<{ draft?: string; reuse?: string }>;
+}) {
+  const { draft: draftId, reuse: reuseId } = await searchParams;
+  const [churches, countryRows, history, scheduled, drafts] = await Promise.all([
     db
       .select({
         id: church.id,
@@ -74,19 +99,107 @@ export default async function SuperadminNotificationsPage() {
       .where(eq(broadcast.status, "scheduled"))
       .orderBy(asc(broadcast.scheduledAt))
       .limit(50),
+    db
+      .select()
+      .from(broadcast)
+      .where(eq(broadcast.status, "draft"))
+      .orderBy(desc(broadcast.updatedAt))
+      .limit(50),
   ]);
 
   const countries = countryRows.map((c) => c.country).filter(Boolean);
 
-  const scheduledItems = scheduled.map((b) => ({
-    id: b.id,
-    title: b.title,
-    audienceLabel: audienceLabel(b),
-    channels: [b.inApp ? "In-app" : "", b.email ? "Email" : ""]
+  /*
+   * What the composer opens with.
+   *
+   * A draft is loaded whole, id included, so saving updates it. A reuse copies
+   * a sent notification's wording and targeting but deliberately carries no
+   * id — it becomes a new message, and the original stays in history as a
+   * record of what actually went out.
+   */
+  let prefill: ComposerPrefill | null = null;
+
+  if (draftId) {
+    const [d] = await db
+      .select()
+      .from(broadcast)
+      .where(and(eq(broadcast.id, draftId), eq(broadcast.status, "draft")))
+      .limit(1);
+    if (d) {
+      prefill = {
+        draftId: d.id,
+        title: d.title,
+        body: d.body,
+        category: d.category === "system" ? "system" : "general",
+        audience: d.audience === "user" ? "all" : d.audience,
+        targetPlan: d.targetPlan,
+        targetCountry: d.targetCountry,
+        churchIds: d.churchIds,
+        linkUrl: d.linkUrl,
+        inApp: d.inApp,
+        email: d.email,
+      };
+    }
+  } else if (reuseId) {
+    const [n] = await db
+      .select()
+      .from(notification)
+      .where(eq(notification.id, reuseId))
+      .limit(1);
+    if (n) {
+      // Hand-picked churches live in their own table, so fetch them back or a
+      // reused "specific churches" message would arrive with nobody selected.
+      const targets =
+        n.audience === "churches"
+          ? (
+              await db
+                .select({ churchId: notificationTarget.churchId })
+                .from(notificationTarget)
+                .where(eq(notificationTarget.notificationId, n.id))
+            ).map((t) => t.churchId)
+          : [];
+      prefill = {
+        title: n.title,
+        body: n.body,
+        category: n.category === "system" ? "system" : "general",
+        audience: n.audience === "user" ? "all" : n.audience,
+        targetPlan: n.targetPlan,
+        targetCountry: n.targetCountry,
+        churchIds: targets,
+        linkUrl: n.linkUrl,
+        inApp: true,
+        email: false,
+      };
+    }
+  }
+
+  const draftItems: DraftRow[] = drafts.map((d) => ({
+    id: d.id,
+    title: d.title,
+    body: d.body,
+    category: d.category,
+    audienceLabel: audienceLabel(d),
+    channels: [d.inApp ? "In-app" : "", d.email ? "Email" : ""]
       .filter(Boolean)
       .join(" · "),
-    scheduledAt: b.scheduledAt.toISOString(),
+    createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
+    sourceVersion: d.sourceVersion,
   }));
+
+  // scheduledAt is nullable now that drafts share this table, but a row with
+  // status "scheduled" always has one — the filter above guarantees it.
+  const scheduledItems = scheduled
+    .filter((b): b is typeof b & { scheduledAt: Date } => !!b.scheduledAt)
+    .map((b) => ({
+      id: b.id,
+      title: b.title,
+      audienceLabel: audienceLabel(b),
+      channels: [b.inApp ? "In-app" : "", b.email ? "Email" : ""]
+        .filter(Boolean)
+        .join(" · "),
+      scheduledAt: b.scheduledAt.toISOString(),
+    }));
 
   return (
     <div className="space-y-6">
@@ -99,7 +212,13 @@ export default async function SuperadminNotificationsPage() {
         </p>
       </div>
 
-      <NotificationComposer churches={churches} countries={countries} />
+      <NotificationComposer
+        churches={churches}
+        countries={countries}
+        prefill={prefill}
+      />
+
+      <DraftBroadcasts items={draftItems} />
 
       <ScheduledBroadcasts items={scheduledItems} />
 
@@ -147,6 +266,16 @@ export default async function SuperadminNotificationsPage() {
                       {n.pushSent > 0 ? ` · ${n.pushSent} push` : ""}
                     </p>
                   </div>
+                  {/*
+                    Reuse loads this into the composer as a NEW message —
+                    wording and targeting copied, nothing sent, and the record
+                    of what actually went out left untouched.
+                  */}
+                  <Button asChild size="sm" variant="ghost" className="shrink-0">
+                    <Link href={`/superadmin/notifications?reuse=${n.id}`}>
+                      <Copy className="size-3.5" /> Reuse
+                    </Link>
+                  </Button>
                 </div>
               );
             })

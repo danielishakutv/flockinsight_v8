@@ -2,6 +2,7 @@ import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { broadcast } from "@/db/schema";
 import { deliverBroadcast } from "@/lib/broadcasts";
+import { ensureReleaseDraft } from "@/lib/release-draft";
 import { withCronRun } from "@/lib/cron-run";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,17 @@ export async function GET(request: Request) {
   }
 
   return withCronRun("broadcasts", async () => {
+  /*
+   * First, notice whether a new version has gone out.
+   *
+   * Done here rather than on a deploy hook: this cron already runs every few
+   * minutes, so a release is picked up within minutes of the new build
+   * serving traffic, with nothing to remember and nothing to wire into the
+   * deploy script. It only ever writes a DRAFT and emails the admins — no
+   * church hears anything until a person presses send.
+   */
+  const release = await ensureReleaseDraft();
+
   const due = await db
     .select()
     .from(broadcast)
@@ -67,7 +79,13 @@ export async function GET(request: Request) {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, delivered, emails, push }),
+    JSON.stringify({
+      ok: true,
+      delivered,
+      emails,
+      push,
+      releaseDraft: release.created ? release.version : null,
+    }),
     { headers: { "Content-Type": "application/json" } },
   );
   });

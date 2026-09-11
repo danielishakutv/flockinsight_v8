@@ -428,6 +428,13 @@
       "when": 1788957078746,
       "tag": "0060_lumpy_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789122072914,
+      "tag": "0061_wealthy_joseph",
+      "breakpoints": true
     }
   ]
 }

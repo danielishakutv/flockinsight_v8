@@ -30,7 +30,7 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 export const releases: Release[] = [
   {
     version: "0.62.0",
-    date: "2026-09-09",
+    date: "2026-09-11",
     summary:
       "Refer another church and earn wallet credit — plus reports that are actually readable when you print them.",
     changes: {
@@ -38,10 +38,13 @@ export const releases: Release[] = [
         "Referrals: every church now has its own link. Share it with another church, and when they subscribe we add ₦2,000 to your wallet and ₦1,000 to theirs as a welcome. Settings → Referrals shows your link, who you have referred and what you have earned.",
         "Your link is already on every PDF you produce — the small “Prepared with FlockInsight” line at the foot of a report now links to it. A statement handed round a board meeting counts.",
         "Referral credit is paid once per church, when they first subscribe. A church that only uses the free plan earns nothing, which keeps the scheme honest.",
+        "Platform admins can save an announcement as a draft and finish it later, and can reuse anything already sent — open it, edit the wording, pick a different audience, send. No more retyping last month’s notice.",
+        "Every release now writes its own announcement as a draft and emails it to the platform admins exactly as a church would receive it. Nothing reaches a church until someone has read it and pressed send.",
       ],
       Improved: [
         "Report PDFs are far easier to read. Reference ids are gone — they were 36 characters of hex that overflowed onto the next column — replaced by a simple row number. Columns are now sized to their contents, so an address gets room and a date does not waste half a column. The CSV still carries every id, which is what you need for joining data.",
         "Plan pages now list what each plan actually includes. Training, Finance, Forms, Media, Devotionals, Reports and Branches had never been added.",
+        "Email now goes out through a dedicated sending service, so invitations, receipts and newsletters are less likely to land in spam. Bounces and spam complaints come back to us automatically and show against the message, so you can see a bad address instead of guessing.",
       ],
       Fixed: [
         "“Giving this month” showed a large red drop for the first three weeks of every month. It was comparing part of this month against the whole of last month — on the 9th, nine days against thirty-one. It now compares the same span of each month.",
