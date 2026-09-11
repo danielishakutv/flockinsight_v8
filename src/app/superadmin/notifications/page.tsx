@@ -10,6 +10,7 @@ import {
   user,
 } from "@/db/schema";
 import { planName } from "@/lib/plans";
+import { richTextToPlain, sanitizeRichText } from "@/lib/rich-text";
 import {
   NotificationComposer,
   type ComposerPrefill,
@@ -129,7 +130,9 @@ export default async function SuperadminNotificationsPage({
       prefill = {
         draftId: d.id,
         title: d.title,
-        body: d.body,
+        // The editor puts this straight into innerHTML, so it is cleaned here
+        // - the one place a stored body crosses into a browser.
+        body: sanitizeRichText(d.body),
         category: d.category === "system" ? "system" : "general",
         audience: d.audience === "user" ? "all" : d.audience,
         targetPlan: d.targetPlan,
@@ -160,7 +163,7 @@ export default async function SuperadminNotificationsPage({
           : [];
       prefill = {
         title: n.title,
-        body: n.body,
+        body: sanitizeRichText(n.body),
         category: n.category === "system" ? "system" : "general",
         audience: n.audience === "user" ? "all" : n.audience,
         targetPlan: n.targetPlan,
@@ -176,7 +179,8 @@ export default async function SuperadminNotificationsPage({
   const draftItems: DraftRow[] = drafts.map((d) => ({
     id: d.id,
     title: d.title,
-    body: d.body,
+    // The card shows a two-line preview as plain text; tags would show as tags.
+    body: richTextToPlain(d.body),
     category: d.category,
     audienceLabel: audienceLabel(d),
     channels: [d.inApp ? "In-app" : "", d.email ? "Email" : ""]

@@ -15,7 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
+
+/** What the server accepts, counted as visible text rather than markup. */
+const BODY_LIMIT = 2000;
 import {
   Select,
   SelectContent,
@@ -85,6 +88,9 @@ export function NotificationComposer({
   const [query, setQuery] = useState("");
   const [title, setTitle] = useState(prefill?.title ?? "");
   const [body, setBody] = useState(prefill?.body ?? "");
+  // Measured off the editor's own text, so markup never eats the budget.
+  const [bodyText, setBodyText] = useState("");
+  const bodyLength = bodyText.trim().length;
   const [linkUrl, setLinkUrl] = useState(prefill?.linkUrl ?? "");
   const [inApp, setInApp] = useState(prefill?.inApp ?? true);
   const [email, setEmail] = useState(prefill?.email ?? false);
@@ -116,8 +122,10 @@ export function NotificationComposer({
   }, [audience, churches, targetPlan, targetCountry, picked]);
 
   function submit() {
-    if (!title.trim() || !body.trim())
+    if (!title.trim() || !bodyLength)
       return toast.error("Add a title and message.");
+    if (bodyLength > BODY_LIMIT)
+      return toast.error(`Shorten the message to ${BODY_LIMIT} characters.`);
     if (!inApp && !email)
       return toast.error("Pick at least one channel (in-app or email).");
     if (scheduleMode && !scheduledAt)
@@ -335,18 +343,23 @@ export function NotificationComposer({
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-body">Message</Label>
-          <Textarea
-            id="n-body"
+          <RichTextEditor
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
+            onPlainChange={setBodyText}
             placeholder="Write your announcement…"
-            rows={4}
+            ariaLabel="Message"
           />
-          <p className="text-muted-foreground text-xs">
-            Tip: use <code className="bg-muted rounded px-1">{"{name}"}</code> to
-            greet each person by their first name in emails (in-app/push use a
-            neutral greeting).
-          </p>
+          <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
+            <p>
+              Tip: use <code className="bg-muted rounded px-1">{"{name}"}</code>{" "}
+              to greet each person by their first name in emails (in-app/push
+              use a neutral greeting).
+            </p>
+            <span className={bodyLength > BODY_LIMIT ? "text-destructive font-semibold" : ""}>
+              {bodyLength}/{BODY_LIMIT}
+            </span>
+          </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-link">Link (optional)</Label>

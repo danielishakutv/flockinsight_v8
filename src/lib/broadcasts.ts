@@ -8,6 +8,7 @@ import {
 } from "@/lib/notifications";
 import { sendPushToUsers } from "@/lib/push";
 import { sendEmail, emailLayout } from "@/lib/mailer";
+import { richTextToEmailHtml, richTextToPlain } from "@/lib/rich-text";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -51,7 +52,12 @@ export async function deliverBroadcast(
   // In-app + push reach many people at once, so they can't be personalised —
   // use a neutral greeting there. Email is personalised per recipient below.
   const neutralTitle = fillName(d.title);
-  const neutralBody = fillName(d.body);
+  /*
+   * The stored body may carry formatting. The notification centre and a push
+   * banner both render text, so they get the words: a push reading
+   * "<p><strong>Good news</strong></p>" is worse than no push at all.
+   */
+  const neutralBody = richTextToPlain(fillName(d.body));
 
   if (d.inApp) {
     const [row] = await db
@@ -114,10 +120,15 @@ export async function deliverBroadcast(
         const body = fillName(d.body, r.name);
         const html = emailLayout(
           escapeHtml(subject),
-          `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+          // Already sanitised on the way in; this re-runs it rather than
+          // trusting a row that might predate the editor, or have been
+          // written straight into the database.
+          richTextToEmailHtml(body),
           { label: "Open FlockInsight", url: linkAbs },
         );
-        return sendEmail({ to: r.email, subject, html, text: body });
+        // A text/plain part every client can read, formatting or not.
+        const text = richTextToPlain(body);
+        return sendEmail({ to: r.email, subject, html, text });
       }),
     );
     emailSent = results.filter((x) => x.status === "fulfilled" && x.value).length;

@@ -11,6 +11,7 @@ import {
   type BroadcastAudience,
 } from "@/lib/broadcasts";
 import { recordAudit } from "@/lib/audit";
+import { richTextToPlain, sanitizeRichText } from "@/lib/rich-text";
 import { draftFromReleases } from "@/lib/release-draft";
 import { releases } from "@/lib/changelog";
 import { siteUrl } from "@/lib/site";
@@ -25,7 +26,24 @@ const emptyToNull = (v: unknown) =>
 
 const schema = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
-  body: z.string().trim().min(1, "Message is required").max(2000),
+  /*
+   * The body may carry formatting, so it is checked twice over: the markup has
+   * a generous ceiling purely to stop anything absurd being stored, while the
+   * limit that matters is on the words a person actually reads. Counting tags
+   * against the author would mean three words in bold cost more than three
+   * words.
+   */
+  body: z
+    .string()
+    .trim()
+    .min(1, "Message is required")
+    .max(20000, "Message is too long")
+    .transform(sanitizeRichText)
+    .refine((v) => richTextToPlain(v).trim().length > 0, "Message is required")
+    .refine(
+      (v) => richTextToPlain(v).trim().length <= 2000,
+      "Message is too long — keep it under 2000 characters",
+    ),
   category: z.enum(["system", "general"]),
   audience: z.enum(["all", "plan", "country", "churches"]),
   targetPlan: z.preprocess(
