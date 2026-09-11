@@ -38,6 +38,7 @@ import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { SenderIdDiagnostics } from "@/lib/sms-sender";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -67,10 +68,12 @@ export function SmsAdmin({
   price,
   churches,
   gatewayReady,
+  sender,
 }: {
   price: number;
   churches: ChurchSms[];
   gatewayReady: boolean;
+  sender: SenderIdDiagnostics;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -93,7 +96,9 @@ export function SmsAdmin({
         toast.error(res.error);
         return;
       }
-      toast.success("Test SMS sent!");
+      toast.success(
+        res.senderId ? `Test SMS sent as “${res.senderId}”.` : "Test SMS sent!",
+      );
     });
   }
 
@@ -242,7 +247,7 @@ export function SmsAdmin({
         </div>
       )}
 
-      {/* Send a test SMS via the platform sender ID (TEDxYola) */}
+      {/* Send a test SMS via the platform sender ID in TERMII_SENDER_ID */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Send a test SMS</CardTitle>
@@ -273,9 +278,52 @@ export function SmsAdmin({
               Send test
             </Button>
           </div>
-          <p className="text-muted-foreground text-xs">
-            Sends from your platform sender ID (<code>TERMII_SENDER_ID</code>).
-          </p>
+          <div className="text-muted-foreground space-y-2 text-xs">
+            <p>
+              Sends from{" "}
+              {sender.effective ? (
+                <span className="text-foreground font-semibold">
+                  {sender.effective}
+                </span>
+              ) : (
+                <span className="font-semibold">nothing — unset</span>
+              )}
+              , the value of <code>TERMII_SENDER_ID</code>{" "}
+              in the running server. Church messages use each church&apos;s own approved
+              sender ID instead; this is the only place the platform one is
+              used.
+            </p>
+
+            {sender.drifted && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-amber-900 dark:text-amber-200">
+                <p className="font-semibold">
+                  The running server is ignoring your .env edit.
+                </p>
+                <p className="mt-1">
+                  <code>.env</code> says{" "}
+                  <span className="font-semibold">{sender.inFile}</span>, but
+                  the server is sending as{" "}
+                  <span className="font-semibold">{sender.effective}</span>. A
+                  variable already set in the process wins over the file, and
+                  PM2 keeps the environment it started with — so a plain
+                  restart re-launches with the old value. Reload it with the
+                  environment refreshed:
+                </p>
+                <pre className="mt-2 overflow-x-auto rounded bg-black/10 p-2 dark:bg-black/30">
+                  pm2 reload flockinsight --update-env
+                </pre>
+              </div>
+            )}
+
+            {sender.duplicated && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-amber-900 dark:text-amber-200">
+                <code>TERMII_SENDER_ID</code> is set more than once in{" "}
+                <code>.env</code>. The last one wins, so an older line above it
+                is harmless — but it is worth deleting the duplicate so the
+                file says what it does.
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

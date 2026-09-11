@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { church, smsSenderSubmission } from "@/db/schema";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { isSmsConfigured } from "@/lib/sms";
+import { senderIdDiagnostics } from "@/lib/sms-sender";
 import { normalizeSenderId } from "@/lib/termii-sender";
 import { SmsAdmin, type ChurchSms } from "@/components/superadmin/sms-admin";
 
@@ -63,6 +64,7 @@ export default async function SuperadminSmsPage() {
         price={price}
         churches={churches}
         gatewayReady={isSmsConfigured()}
+        sender={senderIdDiagnostics()}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import { church, smsSenderSubmission, walletTxn } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
+import { platformSenderId } from "@/lib/sms-sender";
 import {
   requestSenderId,
   listNetworkSenderIds,
@@ -44,11 +45,18 @@ async function notifyRejected(churchId: string, senderId: string | null, reason?
   });
 }
 
-/** Send a test SMS via the platform's default Termii sender ID (TEDxYola). */
+/**
+ * Send a test SMS from the platform sender ID in `TERMII_SENDER_ID`.
+ *
+ * Reports the sender it used back to the caller. That sounds redundant — the
+ * page already shows the value — but it is the only proof that the message
+ * which just left carried it, which is exactly the question being asked when
+ * a .env edit does not appear to take.
+ */
 export async function sendTestSms(
   to: string,
   message: string,
-): Promise<ActionResult> {
+): Promise<ActionResult & { senderId?: string }> {
   await requireSuperAdmin();
   if (!isSmsConfigured())
     return {
@@ -56,7 +64,9 @@ export async function sendTestSms(
       error: "Set TERMII_API_KEY and TERMII_SENDER_ID in .env first.",
     };
   const msg = (message || "").trim() || "FlockInsight test SMS — it works!";
-  return await sendSms({ to, message: msg });
+  const from = platformSenderId();
+  const res = await sendSms({ to, message: msg });
+  return res.ok ? { ok: true, senderId: from ?? undefined } : res;
 }
 
 export async function setSmsPrice(price: number): Promise<ActionResult> {
