@@ -30,9 +30,35 @@ export const RICH_TAGS = [
  * Bodies written before the editor existed are plain, and so are the ones the
  * release drafter writes. Both must keep rendering correctly, so every reader
  * asks this first rather than assuming HTML.
+ *
+ * Never use this to decide whether to sanitise — see sanitizeRichText.
  */
 export function isRichText(body: string): boolean {
   return new RegExp(`<(${RICH_TAGS.join("|")})\\b[^>]*>`, "i").test(body);
+}
+
+/**
+ * Is this a complete email template rather than a few formatted paragraphs?
+ *
+ * A pasted template carries its own <html>, its own <head> and its own
+ * styling, so it cannot be nested inside our standard email frame — it has to
+ * be sent as the whole message. It also cannot be edited in the WYSIWYG box,
+ * because assigning a document to innerHTML makes the browser throw most of it
+ * away, so the composer opens this in the code view instead.
+ */
+export function isFullHtmlDocument(body: string): boolean {
+  return /^\s*(<!doctype\s+html|<html\b)/i.test(body);
+}
+
+/**
+ * Should the composer open in the code view?
+ *
+ * A <style> block belongs to the message, not to the admin page it is being
+ * written on — dropping one into contentEditable restyles the screen around
+ * it. Anything carrying one is edited as source.
+ */
+export function needsCodeView(body: string): boolean {
+  return isFullHtmlDocument(body) || /<style\b/i.test(body) || /<table\b/i.test(body);
 }
 
 /**
@@ -56,8 +82,15 @@ export function plainLength(plain: string): number {
  */
 export function stripTagsLoosely(html: string): string {
   return html
+    // A template's CSS and <head> are not words anybody wants read out in a
+    // push banner. Take the contents, not just the tags.
+    .replace(/<\s*(style|head|script|title)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<!doctype[^>]*>/gi, "")
     .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-    .replace(/<\s*\/\s*(p|div|li|blockquote|ul|ol)\s*>/gi, "\n")
+    .replace(
+      /<\s*\/\s*(p|div|li|blockquote|ul|ol|tr|td|th|table|h[1-6]|section)\s*>/gi,
+      "\n",
+    )
     .replace(/<\s*li\b[^>]*>/gi, "• ")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")

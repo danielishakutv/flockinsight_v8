@@ -4,7 +4,7 @@ import {
   richTextToPlain,
   sanitizeRichText,
 } from "@/lib/rich-text";
-import { isRichText } from "@/lib/rich-text-shared";
+import { isFullHtmlDocument, isRichText } from "@/lib/rich-text-shared";
 
 describe("isRichText", () => {
   it("recognises a formatted body", () => {
@@ -37,10 +37,13 @@ describe("sanitizeRichText — what must not survive", () => {
     expect(out).toContain("Hi");
   });
 
-  it("drops an img with an onerror payload entirely", () => {
+  it("keeps the image but never its onerror", () => {
+    // Templates are full of images, so <img> stays. The handler is the
+    // payload, and that is what has to go.
     const out = sanitizeRichText('<p>a</p><img src=x onerror="alert(1)">');
     expect(out).not.toContain("onerror");
-    expect(out).not.toContain("<img");
+    expect(out).not.toContain("alert");
+    expect(out).toContain("<img");
   });
 
   it("refuses a javascript: link but keeps the words", () => {
@@ -56,11 +59,22 @@ describe("sanitizeRichText — what must not survive", () => {
     expect(out).not.toContain("data:");
   });
 
-  it("strips style attributes and style blocks", () => {
+  it("refuses CSS that fetches or executes, inside a style block", () => {
+    // allowedStyles governs inline attributes only — sanitize-html never
+    // parses the CSS inside <style>, so this needs its own guard.
     const out = sanitizeRichText(
-      '<style>body{display:none}</style><p style="position:fixed">Hi</p>',
+      "<style>@import url(//evil.test/x.css); a{behavior:url(#x)}</style>",
     );
-    expect(out).not.toContain("style");
+    expect(out).not.toContain("@import");
+    expect(out).not.toContain("behavior:");
+    expect(out).toContain("<style>");
+  });
+
+  it("refuses expression() in an inline style", () => {
+    const out = sanitizeRichText(
+      '<p style="width:expression(alert(1))">Hi</p>',
+    );
+    expect(out).not.toContain("expression");
     expect(out).toContain("Hi");
   });
 
@@ -101,8 +115,19 @@ describe("sanitizeRichText — what must survive", () => {
     );
   });
 
-  it("turns the editor's divs into paragraphs", () => {
-    expect(sanitizeRichText("<div>line</div>")).toBe("<p>line</p>");
+  it("keeps a div, because a template is built from them", () => {
+    expect(sanitizeRichText("<div>line</div>")).toBe("<div>line</div>");
+  });
+
+  it("keeps a layout table with its spacing attributes", () => {
+    const html =
+      '<table cellpadding="0" cellspacing="0" width="600" bgcolor="#FOEEF8">' +
+      '<tr><td align="center" style="padding:24px">Hi</td></tr></table>';
+    const out = sanitizeRichText(html);
+    expect(out).toContain("<table");
+    expect(out).toContain('cellpadding="0"');
+    expect(out).toContain('width="600"');
+    expect(out).toContain("padding:24px");
   });
 
   it("leaves a plain body completely untouched", () => {
@@ -118,15 +143,94 @@ describe("sanitizeRichText — what must survive", () => {
     // The bypass this closes: nothing here looks "formatted", so deciding
     // whether to sanitise by asking "is this rich text?" waved it straight
     // through into an innerHTML assignment.
-    const out = sanitizeRichText('<img src=x onerror="alert(1)">');
-    expect(out).not.toContain("onerror");
-    expect(out).not.toContain("<img");
+    const out = sanitizeRichText('<iframe src="https://evil.test"></iframe>');
+    expect(out).not.toContain("iframe");
+  });
+
+  it("refuses a form, so an email from us can never ask for a password", () => {
+    const out = sanitizeRichText(
+      '<form action="https://evil.test"><input name="password"></form>',
+    );
+    expect(out).not.toContain("<form");
+    expect(out).not.toContain("<input");
   });
 
   it("escapes a stray angle bracket instead of eating the text after it", () => {
     expect(richTextToPlain(sanitizeRichText("Costs < 5 and > 2"))).toBe(
       "Costs < 5 and > 2",
     );
+  });
+});
+
+describe("a whole pasted email template", () => {
+  const template = `<!DOCTYPE html>
+<html lang="en" style="margin:0; padding:0;">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refer a church, earn &#8358;2,000</title>
+<style>@media (max-width:600px){ .wrap{width:100%!important} }</style>
+</head>
+<body style="margin:0; padding:0; background-color:#FOEEF8;">
+<table class="wrap" width="600" cellpadding="0" cellspacing="0">
+<tr><td style="padding:24px">
+<h1 style="color:#5b3df5">Refer a church</h1>
+<p>Earn <b>&#8358;2,000</b> when they subscribe.</p>
+<a href="https://flockinsight.com/r/grace" style="color:#fff">Share your link</a>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  it("is recognised as a document", () => {
+    expect(isFullHtmlDocument(template)).toBe(true);
+    expect(isFullHtmlDocument("<p>just a notice</p>")).toBe(false);
+  });
+
+  it("survives sanitising with its structure and styling intact", () => {
+    const out = sanitizeRichText(template);
+    expect(out).toContain("<!DOCTYPE html>");
+    expect(out).toContain("<table");
+    expect(out).toContain('width="600"');
+    expect(out).toContain("background-color:#FOEEF8");
+    expect(out).toContain("color:#5b3df5");
+    expect(out).toContain("@media");
+  });
+
+  it("keeps its media query, which is what makes it readable on a phone", () => {
+    expect(sanitizeRichText(template)).toContain("max-width:600px");
+  });
+
+  it("is sent as the whole email rather than nested in our frame", () => {
+    // A document inside our layout div is invalid, and would staple our header
+    // and CTA onto a design that already has both.
+    const out = richTextToEmailHtml(template);
+    expect(isFullHtmlDocument(out)).toBe(true);
+    expect(out).not.toContain("Open FlockInsight");
+  });
+
+  it("reduces to readable words for push, with no CSS and no <title>", () => {
+    const plain = richTextToPlain(template);
+    expect(plain).toContain("Refer a church");
+    expect(plain).toContain("Earn ₦2,000 when they subscribe");
+    expect(plain).not.toContain("@media");
+    expect(plain).not.toContain("max-width");
+    expect(plain).not.toMatch(/[<>]/);
+  });
+
+  it("still drops a script hidden inside the template", () => {
+    const out = sanitizeRichText(
+      template.replace("</body>", "<script>steal()</script></body>"),
+    );
+    expect(out).not.toContain("steal");
+    expect(out).not.toContain("<script");
+  });
+
+  it("still drops an event handler hidden on a table cell", () => {
+    const out = sanitizeRichText(
+      template.replace('<td style="padding:24px">', '<td onmouseover="x()">'),
+    );
+    expect(out).not.toContain("onmouseover");
   });
 });
 

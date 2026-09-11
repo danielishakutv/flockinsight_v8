@@ -17,8 +17,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 
-/** What the server accepts, counted as visible text rather than markup. */
-const BODY_LIMIT = 2000;
+/**
+ * What the server accepts, counted as visible text rather than markup.
+ *
+ * Must match the refine() in actions.ts — a composer that allows more than the
+ * action does just turns a clear warning into a failed save.
+ */
+const BODY_LIMIT = 20_000;
 import {
   Select,
   SelectContent,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bold,
+  Code2,
   Italic,
   Link2,
   Link2Off,
@@ -13,6 +14,7 @@ import {
   Underline,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { needsCodeView } from "@/lib/rich-text-shared";
 
 /**
  * A small formatting editor for notification bodies.
@@ -87,6 +89,12 @@ export function RichTextEditor({
   const ref = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
   const [empty, setEmpty] = useState(true);
+  /*
+   * A body that arrives as a whole template, or carries a <style> block or a
+   * layout table, opens as source. Anything else opens as formatting, which is
+   * what almost every notice is.
+   */
+  const [code, setCode] = useState(() => needsCodeView(value));
 
   /*
    * Push `value` in only when it differs from what is already rendered.
@@ -101,6 +109,7 @@ export function RichTextEditor({
    * caller owns that; this line trusts it.
    */
   useEffect(() => {
+    if (code) return;
     const el = ref.current;
     if (el && value !== el.innerHTML) {
       el.innerHTML = value;
@@ -109,7 +118,7 @@ export function RichTextEditor({
       // character count reads 0 until the first keystroke.
       onPlainChange?.(el.innerText);
     }
-  }, [value, onPlainChange]);
+  }, [value, onPlainChange, code]);
 
   const publish = useCallback(() => {
     const el = ref.current;
@@ -206,20 +215,62 @@ export function RichTextEditor({
   return (
     <div className={cn("rounded-xl border", className)}>
       <div className="flex flex-wrap items-center gap-0.5 border-b p-1.5">
-        {COMMANDS.map((c) => (
-          <ToolButton
-            key={c.key}
-            label={c.label}
-            icon={c.icon}
-            pressed={active[c.key]}
-            onClick={() => run(c)}
-          />
-        ))}
-        <span className="bg-border mx-1 h-5 w-px" aria-hidden />
-        <ToolButton label="Add link" icon={Link2} onClick={addLink} />
-        <ToolButton label="Remove link" icon={Link2Off} onClick={removeLink} />
+        {!code &&
+          COMMANDS.map((c) => (
+            <ToolButton
+              key={c.key}
+              label={c.label}
+              icon={c.icon}
+              pressed={active[c.key]}
+              onClick={() => run(c)}
+            />
+          ))}
+        {!code && (
+          <>
+            <span className="bg-border mx-1 h-5 w-px" aria-hidden />
+            <ToolButton label="Add link" icon={Link2} onClick={addLink} />
+            <ToolButton
+              label="Remove link"
+              icon={Link2Off}
+              onClick={removeLink}
+            />
+          </>
+        )}
+        {code && (
+          <p className="text-muted-foreground px-1.5 text-xs">
+            Paste a full HTML email here — it is sent exactly as written, minus
+            anything that could run.
+          </p>
+        )}
+        <span className="flex-1" />
+        <ToolButton
+          label={code ? "Back to formatting" : "Edit HTML"}
+          icon={Code2}
+          pressed={code}
+          onClick={() => setCode((v) => !v)}
+        />
       </div>
 
+      {code ? (
+        /*
+         * A plain textarea, not contentEditable.
+         *
+         * Assigning a whole document to innerHTML makes the browser throw away
+         * the <head> and unwrap the rest, so a template edited in the WYSIWYG
+         * box would be quietly destroyed by opening it. Source stays source.
+         */
+        <textarea
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            onPlainChange?.(plainPreview(e.target.value));
+          }}
+          spellCheck={false}
+          aria-label={`${ariaLabel} (HTML)`}
+          placeholder="<!DOCTYPE html> …"
+          className="min-h-64 w-full resize-y bg-transparent px-3 py-3 font-mono text-xs leading-relaxed outline-none"
+        />
+      ) : (
       <div className="relative">
         {empty && placeholder && (
           <p className="text-muted-foreground pointer-events-none absolute top-3 left-3 text-sm">
@@ -241,8 +292,23 @@ export function RichTextEditor({
           className="min-h-32 w-full px-3 py-3 text-sm leading-relaxed outline-none [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:italic [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
         />
       </div>
+      )}
     </div>
   );
+}
+
+/**
+ * A rough word count for the code view's character counter.
+ *
+ * The real one runs server-side through the parser; this only has to be close
+ * enough to warn someone before they hit save.
+ */
+function plainPreview(html: string): string {
+  return html
+    .replace(/<\s*(style|head|script|title)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function ToolButton({

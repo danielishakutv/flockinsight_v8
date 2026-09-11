@@ -9,6 +9,7 @@ import {
 import { sendPushToUsers } from "@/lib/push";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { richTextToEmailHtml, richTextToPlain } from "@/lib/rich-text";
+import { isFullHtmlDocument } from "@/lib/rich-text-shared";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -118,14 +119,25 @@ export async function deliverBroadcast(
         // Personalise per recipient: {name} → their first name.
         const subject = fillName(d.title, r.name);
         const body = fillName(d.body, r.name);
-        const html = emailLayout(
-          escapeHtml(subject),
-          // Already sanitised on the way in; this re-runs it rather than
-          // trusting a row that might predate the editor, or have been
-          // written straight into the database.
-          richTextToEmailHtml(body),
-          { label: "Open FlockInsight", url: linkAbs },
-        );
+        // Already sanitised on the way in; this re-runs it rather than
+        // trusting a row that might predate the editor, or have been written
+        // straight into the database.
+        const rendered = richTextToEmailHtml(body);
+        /*
+         * A pasted template is the whole email.
+         *
+         * It arrives with its own <html>, its own width, its own colours and
+         * its own footer. Nesting that inside our standard frame would put a
+         * document inside a div — invalid, and rendered differently by every
+         * client that tries — and would staple our header and CTA onto a
+         * design that already has both.
+         */
+        const html = isFullHtmlDocument(rendered)
+          ? rendered
+          : emailLayout(escapeHtml(subject), rendered, {
+              label: "Open FlockInsight",
+              url: linkAbs,
+            });
         // A text/plain part every client can read, formatting or not.
         const text = richTextToPlain(body);
         return sendEmail({ to: r.email, subject, html, text });
