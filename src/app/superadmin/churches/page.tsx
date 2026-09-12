@@ -4,6 +4,7 @@ import { church, giving, group, staff, user } from "@/db/schema";
 import { getChurchHealth } from "@/lib/platform-health";
 import { getChurchPnl } from "@/lib/platform-stats";
 import { isChurchVerified } from "@/lib/verification-shared";
+import { OnboardChurch } from "@/components/superadmin/onboard-church";
 import {
   ChurchesTable,
   type ChurchRow,
@@ -94,7 +95,8 @@ export default async function SuperadminChurchesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h1 className="text-xl font-semibold tracking-tight">
           Churches
         </h1>
@@ -103,6 +105,8 @@ export default async function SuperadminChurchesPage() {
           this week
           {attention > 0 ? ` · ${attention} need attention` : ""}.
         </p>
+        </div>
+        <OnboardChurch />
       </div>
       <ChurchesTable churches={rows} />
     </div>
