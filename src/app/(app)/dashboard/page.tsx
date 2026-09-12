@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { InstallNotice } from "@/components/pwa/install-notice";
 import { asc, count, desc, eq, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
@@ -222,6 +223,8 @@ export default async function DashboardPage() {
           unverified account is a standing condition, not a suggestion. */}
       <VerifyBanner church={church} canManage={canSettings} />
       <SetupNotices notices={notices} />
+      {/* Stays until the app is installed, then removes itself. */}
+      <InstallNotice />
 
       <div className="mb-5">
         <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">

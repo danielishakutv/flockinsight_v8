@@ -12,6 +12,7 @@ import { DesktopTopbar } from "@/components/app/desktop-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
 import { ImpersonationBanner } from "@/components/app/impersonation-banner";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { SplashScreen } from "@/components/pwa/splash-screen";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
@@ -101,6 +102,7 @@ export default async function AppLayout({
         <MobileNav perms={perms} isOwner={access.isOwner} />
       </div>
       <Toaster />
+      <SplashScreen />
       <InstallPrompt />
       <OfflineIndicator />
       <PageTracker />
