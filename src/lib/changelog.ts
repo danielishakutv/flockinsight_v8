@@ -40,6 +40,7 @@ export const releases: Release[] = [
         "Referral credit is paid once per church, when they first subscribe. A church that only uses the free plan earns nothing, which keeps the scheme honest.",
         "Platform admins can save an announcement as a draft and finish it later, and can reuse anything already sent — open it, edit the wording, pick a different audience, send. No more retyping last month’s notice.",
         "Every release now writes its own announcement as a draft and emails it to the platform admins exactly as a church would receive it. Nothing reaches a church until someone has read it and pressed send.",
+        "Install FlockInsight on your phone. Add it to your home screen and it opens like any other app — its own icon, its own launch screen, no browser bar, and it keeps working when the network drops. There is a short how-to on the dashboard, including the steps for iPhone.",
       ],
       Improved: [
         "Report PDFs are far easier to read. Reference ids are gone — they were 36 characters of hex that overflowed onto the next column — replaced by a simple row number. Columns are now sized to their contents, so an address gets room and a date does not waste half a column. The CSV still carries every id, which is what you need for joining data.",
