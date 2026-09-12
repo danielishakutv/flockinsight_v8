@@ -10,6 +10,10 @@ import { hashPassword } from "@/lib/admin-users";
 import { ensureMemberForUser } from "@/lib/member-link";
 import { recordAudit } from "@/lib/audit";
 import { trialEndDate } from "@/lib/trial";
+import {
+  generateTempPassword,
+  randomSlugSuffix,
+} from "@/lib/temp-password";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 
@@ -69,20 +73,6 @@ function slugify(s: string): string {
     .slice(0, 48);
 }
 
-function randomSuffix(): string {
-  return Math.random().toString(36).slice(2, 6);
-}
-
-/** A password someone can read down a phone line without spelling it out. */
-function generatePassword(): string {
-  const words = [
-    "harvest", "anchor", "cedar", "kindle", "meadow", "lantern",
-    "summit", "pebble", "willow", "compass", "amber", "beacon",
-  ];
-  const pick = () => words[Math.floor(Math.random() * words.length)];
-  return `${pick()}-${pick()}-${Math.floor(100 + Math.random() * 900)}`;
-}
-
 function isUniqueViolation(e: unknown): boolean {
   return (e as { code?: string })?.code === "23505";
 }
@@ -112,7 +102,7 @@ export async function adminOnboardChurch(
         "That email already has an account. Create the church, then use Assign to church on their user page.",
     };
 
-  const password = d.password ?? generatePassword();
+  const password = d.password ?? generateTempPassword();
   const generated = d.password === null;
 
   // 1) The person. Created directly rather than through the sign-up API: that
@@ -188,7 +178,7 @@ export async function adminOnboardChurch(
       break;
     } catch (e) {
       if (isUniqueViolation(e) && attempt < 4) {
-        slug = `${base}-${randomSuffix()}`;
+        slug = `${base}-${randomSlugSuffix()}`;
         continue;
       }
       console.error("adminOnboardChurch: church insert failed", e);
