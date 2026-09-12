@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Download,
   FileText,
+  ListChecks,
   Loader2,
   Plus,
   Search,
@@ -18,7 +19,13 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { saveMember, deleteMember, deleteMembers } from "@/app/(app)/members/actions";
+import {
+  saveMember,
+  deleteMember,
+  deleteMembers,
+  previewMemberDeletion,
+  type DeleteImpact,
+} from "@/app/(app)/members/actions";
 import { inviteMembersAsStaff } from "@/app/(app)/members/access-actions";
 import { track } from "@/lib/track";
 import {
@@ -99,12 +106,38 @@ function SelectBox({ on }: { on: boolean }) {
   return (
     <span
       className={cn(
-        "grid size-5 place-items-center rounded border transition-colors",
-        on ? "bg-primary border-primary text-primary-foreground" : "border-input",
+        // A 1px border the colour of the card reads as nothing at all on a
+        // dark background, which is why nobody found bulk select. Thicker,
+        // lighter, and larger than the 24px minimum for a tap target.
+        "grid size-6 place-items-center rounded-md border-2 transition-colors",
+        on
+          ? "bg-primary border-primary text-primary-foreground"
+          : "border-muted-foreground/50 hover:border-primary",
       )}
     >
-      {on && <Check className="size-3.5" />}
+      {on && <Check className="size-4" />}
     </span>
+  );
+}
+
+/** One "1,284 attendance records" line, hidden when the count is zero. */
+function ImpactRow({
+  n,
+  one,
+  many,
+}: {
+  n: number;
+  one: string;
+  many: string;
+}) {
+  if (n === 0) return null;
+  return (
+    <li>
+      <span className="text-foreground font-semibold">
+        {n.toLocaleString()}
+      </span>{" "}
+      {n === 1 ? one : many}
+    </li>
   );
 }
 
@@ -139,7 +172,11 @@ export function MembersList({
   const [confirmId, setConfirmId] = useState<string | null>(null);
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selecting, setSelecting] = useState(false);
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [impact, setImpact] = useState<DeleteImpact | null>(null);
+  const [loadingImpact, setLoadingImpact] = useState(false);
+  const [typed, setTyped] = useState("");
   const [downloading, setDownloading] = useState(false);
 
   const filtered = useMemo(() => {
@@ -184,6 +221,26 @@ export function MembersList({
     setConfirmBulk(false);
   }
 
+  /*
+   * Ask the server what this would destroy before asking the person.
+   *
+   * Deleting a member takes their attendance, follow-ups, group memberships
+   * and training results with them. Real numbers make that a decision; "this
+   * cannot be undone" is wallpaper.
+   */
+  function openBulkDelete() {
+    if (selected.size === 0) return;
+    setTyped("");
+    setImpact(null);
+    setConfirmBulk(true);
+    setLoadingImpact(true);
+    void (async () => {
+      const res = await previewMemberDeletion([...selected]);
+      setLoadingImpact(false);
+      if (res.ok) setImpact(res.impact);
+    })();
+  }
+
   function bulkDelete() {
     startTransition(async () => {
       const res = await deleteMembers([...selected]);
@@ -192,6 +249,8 @@ export function MembersList({
         return;
       }
       toast.success(`${res.deleted} member${res.deleted === 1 ? "" : "s"} removed`);
+      setConfirmBulk(false);
+      setSelecting(false);
       clearSel();
       router.refresh();
     });
@@ -304,6 +363,21 @@ export function MembersList({
             <MemberSignupLink url={signupUrl} enabled={signupEnabled} />
           )}
           <MembersDataMenu canManage={canManage} />
+          {canManage && filtered.length > 0 && (
+            /* The checkboxes were always there; nothing said so. */
+            <Button
+              variant={selecting ? "secondary" : "outline"}
+              size="lg"
+              onClick={() => {
+                setSelecting((v) => !v);
+                if (selecting) clearSel();
+              }}
+              aria-pressed={selecting}
+            >
+              <ListChecks className="size-5" />
+              {selecting ? "Done" : "Select"}
+            </Button>
+          )}
           {canManage && (
             <Button onClick={openAdd} size="lg" className="flex-1 sm:flex-none">
               <Plus className="size-5" />
@@ -314,7 +388,7 @@ export function MembersList({
       </div>
 
       {/* Bulk action bar */}
-      {canManage && selected.size > 0 && (
+      {canManage && (selecting || selected.size > 0) && (
         <div className="bg-primary/5 border-primary/30 sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 shadow-sm backdrop-blur">
           <span className="text-sm font-semibold">
             {selected.size} selected
@@ -352,26 +426,15 @@ export function MembersList({
             >
               <FileText className="size-4" /> PDF
             </Button>
-            {confirmBulk ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={bulkDelete}
-                disabled={pending}
-              >
-                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                Delete {selected.size}?
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmBulk(true)}
-                className="text-destructive"
-              >
-                <Trash2 className="size-4" /> Delete
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openBulkDelete}
+              disabled={selected.size === 0}
+              className="text-destructive"
+            >
+              <Trash2 className="size-4" /> Delete
+            </Button>
             <Button variant="ghost" size="icon" aria-label="Clear selection" onClick={clearSel}>
               <X className="size-4" />
             </Button>
@@ -405,7 +468,7 @@ export function MembersList({
                 selected.has(m.id) && "border-primary/50 bg-primary/5",
               )}
             >
-              {canManage && (
+              {canManage && (selecting || selected.size > 0) && (
                 <button
                   type="button"
                   onClick={() => toggleSel(m.id)}
@@ -505,6 +568,125 @@ export function MembersList({
               {pending && <Loader2 className="animate-spin" />}
               Add member
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk delete: say what goes, and what stays. */}
+      <Dialog open={confirmBulk} onOpenChange={(o) => !o && setConfirmBulk(false)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selected.size} member{selected.size === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This cannot be undone. Download a copy first if you might need
+              these records again.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingImpact ? (
+            <p className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Loader2 className="size-4 animate-spin" /> Checking what this
+              affects…
+            </p>
+          ) : impact ? (
+            <div className="space-y-3 text-sm">
+              <div className="border-destructive/30 bg-destructive/5 rounded-xl border p-3">
+                <p className="text-destructive font-semibold">
+                  Deleted with them, permanently
+                </p>
+                <ul className="text-muted-foreground mt-1.5 space-y-1">
+                  <ImpactRow
+                    n={impact.attendance}
+                    one="attendance record"
+                    many="attendance records"
+                  />
+                  <ImpactRow
+                    n={impact.followUps}
+                    one="follow-up note"
+                    many="follow-up notes"
+                  />
+                  <ImpactRow
+                    n={impact.groupMemberships}
+                    one="group membership"
+                    many="group memberships"
+                  />
+                  <ImpactRow
+                    n={impact.trainingEnrollments}
+                    one="training result"
+                    many="training results and certificates"
+                  />
+                  {impact.attendance +
+                    impact.followUps +
+                    impact.groupMemberships +
+                    impact.trainingEnrollments ===
+                    0 && <li>Nothing else — these members have no history yet.</li>}
+                </ul>
+              </div>
+
+              {(impact.givingRecords > 0 || impact.pledges > 0) && (
+                <div className="rounded-xl border p-3">
+                  <p className="font-semibold">Kept, but no longer named</p>
+                  <ul className="text-muted-foreground mt-1.5 space-y-1">
+                    <ImpactRow
+                      n={impact.givingRecords}
+                      one="giving record"
+                      many="giving records"
+                    />
+                    <ImpactRow n={impact.pledges} one="pledge" many="pledges" />
+                  </ul>
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    Your totals stay correct — these entries simply stop being
+                    attached to a person.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* A big deletion should take more than two taps. */}
+          {selected.size > 10 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-delete">
+                Type <span className="font-mono font-bold">DELETE</span> to
+                confirm
+              </Label>
+              <Input
+                id="confirm-delete"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+              />
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              variant="outline"
+              onClick={() => bulkDownload("csv")}
+              disabled={downloading}
+            >
+              <Download className="size-4" /> Download CSV first
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setConfirmBulk(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={bulkDelete}
+                disabled={
+                  pending ||
+                  loadingImpact ||
+                  (selected.size > 10 && typed.trim() !== "DELETE")
+                }
+              >
+                {pending && <Loader2 className="size-4 animate-spin" />}
+                Delete {selected.size}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

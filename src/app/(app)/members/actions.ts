@@ -2,14 +2,24 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { member } from "@/db/schema";
+import {
+  attendanceRecord,
+  followUpInteraction,
+  giving,
+  groupMembership,
+  member,
+  pledge,
+  trainingEnrollment,
+} from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
 import { recordAction } from "@/lib/analytics";
+import { recordAudit } from "@/lib/audit";
 import { createHousehold, householdInChurch } from "@/lib/households";
 import {
   ensureMemberUpdateToken,
@@ -309,25 +319,144 @@ export type BulkResult =
   | { ok: true; deleted: number }
   | { ok: false; error: string };
 
-/** Delete many members at once (church-scoped). */
-export async function deleteMembers(ids: string[]): Promise<BulkResult> {
+/**
+ * What deleting these people would destroy.
+ *
+ * Deleting a member is not one row. Attendance, follow-up notes, group
+ * memberships and training results are all keyed to them and go with them, and
+ * none of that is recoverable. Giving and pledges survive — they are set to no
+ * member rather than deleted, so the church's money still adds up — but they
+ * stop being attributable to anyone.
+ *
+ * The confirmation shows these numbers rather than describing them in the
+ * abstract. "This also deletes 1,284 attendance records" is a decision; "this
+ * cannot be undone" is wallpaper that everybody clicks through.
+ */
+export type DeleteImpact = {
+  members: number;
+  attendance: number;
+  followUps: number;
+  groupMemberships: number;
+  trainingEnrollments: number;
+  /** Kept, but no longer attached to a person. */
+  givingRecords: number;
+  pledges: number;
+};
+
+export async function previewMemberDeletion(
+  ids: string[],
+): Promise<{ ok: true; impact: DeleteImpact } | { ok: false; error: string }> {
+  const clean = cleanIds(ids);
+  if (!clean.ok) return clean;
+
+  const { church } = await requireChurch();
+  if (!(await can("members.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+
+  // Scope to the church first: an id from another church must count as zero,
+  // not as somebody else's data.
+  const owned = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(inArray(member.id, clean.ids), eq(member.churchId, church.id)));
+  const ids2 = owned.map((r) => r.id);
+  if (ids2.length === 0)
+    return {
+      ok: true,
+      impact: {
+        members: 0,
+        attendance: 0,
+        followUps: 0,
+        groupMemberships: 0,
+        trainingEnrollments: 0,
+        givingRecords: 0,
+        pledges: 0,
+      },
+    };
+
+  const count = async (table: PgTable, col: AnyPgColumn) => {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(table)
+      .where(inArray(col, ids2));
+    return row?.n ?? 0;
+  };
+
+  const [attendance, followUps, groupMemberships, trainingEnrollments, givingRecords, pledges] =
+    await Promise.all([
+      count(attendanceRecord, attendanceRecord.memberId),
+      count(followUpInteraction, followUpInteraction.memberId),
+      count(groupMembership, groupMembership.memberId),
+      count(trainingEnrollment, trainingEnrollment.memberId),
+      count(giving, giving.memberId),
+      count(pledge, pledge.memberId),
+    ]);
+
+  return {
+    ok: true,
+    impact: {
+      members: ids2.length,
+      attendance,
+      followUps,
+      groupMemberships,
+      trainingEnrollments,
+      givingRecords,
+      pledges,
+    },
+  };
+}
+
+function cleanIds(
+  ids: string[],
+): { ok: true; ids: string[] } | { ok: false; error: string } {
   const clean = [...new Set((ids ?? []).filter((v) => typeof v === "string"))];
   if (clean.length === 0) return { ok: false, error: "Nothing selected." };
   if (clean.some((id) => !z.string().uuid().safeParse(id).success))
     return { ok: false, error: "Invalid selection." };
   if (clean.length > 1000)
     return { ok: false, error: "Please delete at most 1000 at a time." };
+  return { ok: true, ids: clean };
+}
 
-  const { church } = await requireChurch();
+/** Delete many members at once (church-scoped). */
+export async function deleteMembers(ids: string[]): Promise<BulkResult> {
+  const clean = cleanIds(ids);
+  if (!clean.ok) return clean;
+
+  const { church, user } = await requireChurch();
   if (!(await can("members.manage")))
     return { ok: false, error: "You don't have permission to do that." };
   try {
     const rows = await db
       .delete(member)
-      .where(and(inArray(member.id, clean), eq(member.churchId, church.id)))
-      .returning({ id: member.id });
+      .where(and(inArray(member.id, clean.ids), eq(member.churchId, church.id)))
+      .returning({ id: member.id, firstName: member.firstName, lastName: member.lastName });
     revalidatePath("/members");
     revalidatePath("/dashboard");
+
+    /*
+     * Log it. This is the most destructive thing anyone can do from the app
+     * without a superadmin, it takes two taps, and until now it left no trace
+     * of who did it — so "where did 200 members go?" had no answer.
+     */
+    if (rows.length > 0) {
+      const names = rows
+        .slice(0, 5)
+        .map((r) => [r.firstName, r.lastName].filter(Boolean).join(" "))
+        .join(", ");
+      await recordAudit({
+        actorUserId: user.id,
+        actorName: user.name,
+        action: "members.bulk_delete",
+        summary:
+          rows.length === 1
+            ? `Deleted member ${names}`
+            : `Deleted ${rows.length} members (${names}${rows.length > 5 ? ", …" : ""})`,
+        targetType: "church",
+        targetId: church.id,
+      });
+    }
+
     return { ok: true, deleted: rows.length };
   } catch (e) {
     console.error("deleteMembers failed", e);
