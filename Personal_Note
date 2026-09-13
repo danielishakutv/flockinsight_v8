@@ -1,8 +1,123 @@
-***UPDATE AND DEPLOYS***
-cd /home/flockinsight/app
-git pull && pnpm install --prod=false && pnpm db:migrate && pnpm build && pm2 restart flockinsight
+MY CHEAT SHEET — FlockInsight
+Last checked: 8 September 2026
+
+The server changed on 4 September 2026. It no longer keeps one folder that you
+update. It now downloads a fresh copy for each new version and keeps the last 5.
+That is why "git pull" does not work any more.
 
 
-****GRANT SUPERADMIN RIGHTS TO ACCOUNT VIA EMAIL****
+=============================================================
+1. LOG IN TO THE SERVER
+=============================================================
+
+ssh root@77.237.243.210
+
+(I type the password myself.)
+
+
+=============================================================
+2. DEPLOY A NEW VERSION  — the only command I need
+=============================================================
+
+First, back up the database:
+
+docker exec flockinsight-db pg_dump -U flockinsight -d flockinsight \
+  | gzip > /root/flockinsight-$(date +%F-%H%M).sql.gz
+
+Then deploy:
+
+APP_ROOT=/home/flockinsight/app DEPLOY_BRANCH=main FLOCKINSIGHT_PORT=3005 \
+  bash /home/flockinsight/app/current/deploy/deploy.sh
+
+Copy the whole block. Takes a few minutes.
+It finishes with:  ==> Deployed <code> — <the commit message>
+
+This one command does everything: downloads the new code, installs packages,
+updates the database, builds the site, tests the new version privately on a
+spare port, and only then switches the live site over.
+
+There is no separate build or restart step any more. Do not run "git pull",
+"pnpm build" or "pm2 restart" by hand — they will fail or do nothing useful.
+
+Why the two settings are needed:
+  APP_ROOT       - without it the script looks in the wrong place
+  DEPLOY_BRANCH  - my branch is "main"; the script expects "production"
+  FLOCKINSIGHT_PORT - the site runs on port 3005
+
+
+=============================================================
+3. IF THE DEPLOY FAILS
+=============================================================
+
+I do not need to do anything. The script tests the new version before going
+live. If it fails, the old version keeps running and nothing changes. If it
+fails after going live, the script puts the old version back by itself.
+
+To go back to an older version on purpose:
+
+ls /home/flockinsight/app/releases          # newest is at the bottom
+ln -sfn /home/flockinsight/app/releases/<the-one-I-want> /home/flockinsight/app/current
+pm2 startOrReload /home/flockinsight/app/shared/ecosystem.config.cjs --update-env
+
+Old versions are never deleted, only moved to releases/.trash/
+
+
+=============================================================
+4. SETTINGS AND PASSWORDS (env file)
+=============================================================
+
+One file, shared by every version:
+
+/home/flockinsight/app/shared/.env
+
+To add or change something:
+
+nano /home/flockinsight/app/shared/.env
+
+Then DEPLOY AGAIN (step 2). Restarting alone will not pick up the change.
+
+
+=============================================================
+5. MAKE SOMEONE A SUPER ADMIN
+=============================================================
+
 docker exec flockinsight-db psql -U flockinsight -d flockinsight \
-  -c "UPDATE \"user\" SET is_super_admin=true WHERE email='YOUR_EMAIL_HERE';"
+  -c "UPDATE \"user\" SET is_super_admin=true WHERE email='THE_EMAIL_HERE';"
+
+
+=============================================================
+6. QUICK CHECKS
+=============================================================
+
+pm2 list                    # is the site running? (2 workers named flockinsight)
+pm2 logs flockinsight       # see errors as they happen (Ctrl+C to stop)
+curl -s localhost:3005/api/health    # shows which version is live
+
+If the site looks broken or unstyled after a deploy, purge the Cloudflare cache.
+
+
+=============================================================
+7. THE ROADMAP
+=============================================================
+
+Where I add features I want built: flockinsight.com/superadmin/roadmap
+
+Claude reads it here (needs the key from shared/.env):
+
+curl -H "Authorization: Bearer MY_ROADMAP_KEY" https://flockinsight.com/api/roadmap
+
+Without the key, that address only shows the features I ticked as "public".
+
+
+=============================================================
+8. THINGS I MUST NEVER LOSE
+=============================================================
+
+  - /home/flockinsight/app/shared/.env        (all the site's passwords)
+  - /root/.flockinsight-backup.key            (unlocks the database backups)
+  - My GitHub login                            (all the code lives there)
+  - My Contabo login                           (the server itself)
+  - My Cloudflare login                        (the domain)
+
+Keep copies of these in a password manager, not only on this laptop.
+Database backups run every night at 02:00 and also copy to Google Drive.
