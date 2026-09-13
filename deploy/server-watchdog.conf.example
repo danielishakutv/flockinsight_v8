@@ -1,0 +1,51 @@
+# /etc/server-watchdog.conf — sourced by server-watchdog.sh
+#
+# chmod 600: this holds an API key.
+#
+# Everything here has a working default in the script; set only what differs.
+
+# --- where alerts go -------------------------------------------------------
+# Resend rather than the local MTA, because this box's DKIM key was never
+# published to DNS and Gmail rejects its mail with dsn=5.7.26. Signing locally
+# proves nothing. Verify with `server-watchdog.sh --test` and confirm the mail
+# ARRIVES, not that the script exited 0.
+ALERT_TO="talk2ishakudaniel@gmail.com"
+ALERT_FROM="FlockInsight Watchdog <alerts@flockinsight.com>"
+RESEND_API_KEY=""
+
+# --- how often it may repeat ----------------------------------------------
+# Seconds. One alert per distinct condition per hour.
+REPEAT_AFTER=3600
+
+# --- thresholds ------------------------------------------------------------
+# 1-minute load, divided by core count.
+LOAD_PER_CORE=2.0
+
+# Alert when less than this much RAM is available.
+MEM_AVAIL_MIN_PCT=15
+
+# Swap filling is the warning that comes before RAM pressure hurts.
+SWAP_USED_MAX_PCT=50
+
+# No single process should own more than this share of the machine. On
+# 2026-09-13 one Next app held 43% for five days while its process manager
+# reported it as 26MB, because it was managing the wrapper and not the server.
+PROC_RSS_MAX_PCT=25
+
+DISK_MAX_PCT=85
+
+# Kernel socket memory against its own ceiling. Exhausting this is what caused
+# the 2026-08-25 day of Cloudflare 522s.
+TCP_MEM_MAX_PCT=70
+
+# --- what to check ---------------------------------------------------------
+# Space-separated. Each must return 200.
+CHECK_URLS="https://flockinsight.com/api/health https://flockinsight.com/"
+
+CHECK_PM2=1
+PG_CHECK=1
+
+BACKUP_DIR="/var/backups/flockinsight"
+BACKUP_MAX_AGE_H=36
+
+CERT_MIN_DAYS=14

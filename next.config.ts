@@ -19,6 +19,23 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  /*
+   * Type checking during the build, unless the deploy turns it off.
+   *
+   * On by default — it is the last net under anything pushed without a local
+   * check. But it is also the single phase that runs out of memory on a
+   * constrained box, it runs in a worker that dies with "Ineffective
+   * mark-compacts near heap limit" AFTER the build prints "Compiled
+   * successfully", and it repeats work already done: `tsc --noEmit` runs
+   * before every commit.
+   *
+   * So a deploy that cannot afford the memory can set SKIP_TYPE_CHECK=1 in
+   * shared/deploy.env and get a lighter build, having decided to rely on that
+   * earlier check. Opt-in, and never the default.
+   */
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
+  },
   // Don't advertise the framework/version.
   poweredByHeader: false,
   // Version-skew protection for rolling deploys: the deploy script sets this

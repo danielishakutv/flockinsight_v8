@@ -43,6 +43,23 @@ SHARED="$APP_ROOT/shared"
 CURRENT="$APP_ROOT/current"
 MIRROR="$APP_ROOT/repo.git"
 
+# Build-time settings that must outlive any one release.
+#
+# This script is normally run as current/deploy/deploy.sh — that is, from the
+# release that is already live. It fetches the new code, but the text being
+# executed is still the OLD copy, so editing a default in this file only takes
+# effect one deploy later than you expect. That cost a deploy: the heap limit
+# was raised in git and the build kept dying at the old value, because the old
+# script was the one setting it.
+#
+# shared/ is outside every release, so anything set here applies to the very
+# next build whichever version of this script runs it. Environment still wins,
+# for a one-off.
+if [ -r "$SHARED/deploy.env" ]; then
+  # shellcheck disable=SC1091
+  . "$SHARED/deploy.env"
+fi
+
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 die() { printf '\n\033[1;31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
