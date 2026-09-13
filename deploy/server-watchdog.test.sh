@@ -45,4 +45,65 @@ echo "json_str escapes for the API payload"
 t "quotes escaped" "$(json_str 'say "hi"')" '"say \"hi\""'
 t "newline escaped"  "$(json_str "$(printf 'a\nb')")" '"a\nb"'
 
+# The other checks need a real box, but this one's whole point is what it does
+# when rclone fails — the state you cannot reproduce by hand on a server where
+# backups are working. So stub rclone and walk it through all four outcomes.
+echo "check_offsite_backup reacts to every rclone outcome"
+sed -n '/^check_offsite_backup()/,/^}/p' "$SRC" > /tmp/wd-offsite.sh
+# shellcheck disable=SC1091
+. /tmp/wd-offsite.sh
+
+STUB_DIR="$(mktemp -d)"
+PATH="$STUB_DIR:$PATH"
+cat > "$STUB_DIR/rclone" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  lsf)
+    if [ -n "${STUB_LSF_ERR:-}" ]; then echo "$STUB_LSF_ERR" >&2; exit 3; fi
+    [ -n "${STUB_LSF:-}" ] && echo "$STUB_LSF" ;;
+  about)
+    printf '%s' "${STUB_ABOUT:-}" ;;
+esac
+exit 0
+STUB
+chmod +x "$STUB_DIR/rclone"
+
+OFFSITE_REMOTE="gdrive:flockinsight-backups"
+OFFSITE_MAX_AGE_H=36
+OFFSITE_MIN_FREE_PCT=20
+STUB_LSF=""; STUB_LSF_ERR=""; STUB_ABOUT=""
+export STUB_LSF STUB_LSF_ERR STUB_ABOUT
+
+ROOMY='{"total":5368709120,"used":50139136,"free":5318569984}'
+FULL='{"total":5368709120,"used":5100000000,"free":268709120}'
+FRESH="flockinsight_20260913_020002.dump.enc"
+
+offsite() { FIRING=""; FINDINGS=""; check_offsite_backup; }
+fired() { printf '%s' "$FIRING" | tr -d '\n'; }
+
+STUB_LSF_ERR="failed to get token: oauth2: token expired"; STUB_LSF=""; STUB_ABOUT="$ROOMY"
+offsite
+t "unreachable remote alerts"   "$(fired)" "OFFSITE"
+t "  and quotes rclone's reason" "$(printf '%s' "$FINDINGS" | grep -c 'token expired')" "1"
+
+STUB_LSF_ERR=""; STUB_LSF=""; STUB_ABOUT="$ROOMY"
+offsite
+t "reachable but nothing recent alerts" "$(fired)" "OFFSITE"
+
+STUB_LSF="$FRESH"; STUB_ABOUT="$ROOMY"
+offsite
+t "fresh upload with room is silent" "$(fired)" ""
+
+STUB_LSF="$FRESH"; STUB_ABOUT="$FULL"
+offsite
+t "fresh upload but 5% left alerts" "$(fired)" "OFFSITE"
+
+STUB_LSF="$FRESH"; STUB_ABOUT=""
+offsite
+t "backend with no quota is not a problem" "$(fired)" ""
+
+OFFSITE_REMOTE=""
+offsite
+t "empty remote disables the check" "$(fired)" ""
+
 exit $fail

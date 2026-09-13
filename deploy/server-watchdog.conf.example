@@ -48,4 +48,15 @@ PG_CHECK=1
 BACKUP_DIR="/var/backups/flockinsight"
 BACKUP_MAX_AGE_H=36
 
+# The off-site copy, and the only thing watching it. backup.sh copies each
+# dump to this remote with rclone and treats failure as non-fatal, so without
+# this check a dead token or a full quota stops the off-site backup silently
+# while the local one keeps succeeding. Reads root's rclone config.
+# Set empty to disable.
+OFFSITE_REMOTE="gdrive:flockinsight-backups"
+OFFSITE_MAX_AGE_H=36
+# Nothing prunes the remote — it only grows. Warn while there is still room
+# to do something about it.
+OFFSITE_MIN_FREE_PCT=20
+
 CERT_MIN_DAYS=14

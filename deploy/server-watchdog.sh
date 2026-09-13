@@ -60,6 +60,11 @@ DISK_MAX_PCT=${DISK_MAX_PCT:-85}
 TCP_MEM_MAX_PCT=${TCP_MEM_MAX_PCT:-70}
 BACKUP_MAX_AGE_H=${BACKUP_MAX_AGE_H:-36}
 BACKUP_DIR=${BACKUP_DIR:-/var/backups/flockinsight}
+# The off-site copy. scripts/backup.sh treats its rclone step as non-fatal, so
+# nothing else would ever tell you it stopped. Empty disables the check.
+OFFSITE_REMOTE=${OFFSITE_REMOTE:-gdrive:flockinsight-backups}
+OFFSITE_MAX_AGE_H=${OFFSITE_MAX_AGE_H:-36}
+OFFSITE_MIN_FREE_PCT=${OFFSITE_MIN_FREE_PCT:-20}
 CERT_MIN_DAYS=${CERT_MIN_DAYS:-14}
 # Space-separated. Each must answer 200.
 CHECK_URLS=${CHECK_URLS:-"https://flockinsight.com/api/health"}
@@ -302,6 +307,61 @@ check_backups() {
   fi
 }
 
+# The copy that survives losing this box — and the one nothing was watching.
+#
+# scripts/backup.sh sends each dump off-site with `rclone copy` and treats
+# failure as non-fatal: it prints "(non-fatal)" and still exits 0. So an
+# expired token or a full remote stops the off-site copy while the local dump
+# keeps being written — check_backups stays quiet, cron stays quiet, and the
+# backup you would actually reach for after losing the server stopped arriving
+# weeks ago. Same shape as every incident above: the thing that broke was not
+# on the list.
+#
+# Headroom is checked too, because nothing prunes the remote. It only grows,
+# and the day it fills is the day the silent failure starts.
+check_offsite_backup() {
+  [ -n "$OFFSITE_REMOTE" ] || return 0
+  command -v rclone >/dev/null 2>&1 || return 0
+
+  local listing rc why
+  listing=$(timeout 45 rclone lsf --files-only --max-age "${OFFSITE_MAX_AGE_H}h" \
+              --retries 1 --timeout 20s "$OFFSITE_REMOTE" 2>&1)
+  rc=$?
+
+  if [ "$rc" -ne 0 ]; then
+    why="rclone exit ${rc}"
+    [ "$rc" -eq 124 ] && why="timed out after 45s"
+    note OFFSITE "cannot list ${OFFSITE_REMOTE} (${why})
+      $(printf '%s' "$listing" | grep -v '^[[:space:]]*$' | tail -2 | tr '\n' ';')
+      The local dump is unaffected. It is the off-site copy that has stopped,
+      which is the one that matters if this box is gone.
+      Check the remote: rclone about ${OFFSITE_REMOTE%%:*}:"
+    return 1
+  fi
+
+  if [ -z "$listing" ]; then
+    note OFFSITE "nothing newer than ${OFFSITE_MAX_AGE_H}h in ${OFFSITE_REMOTE}
+      Newest there: $(timeout 45 rclone lsf --files-only "$OFFSITE_REMOTE" 2>/dev/null | sort | tail -1 | tr -d '\n')
+      The remote is reachable, so uploads are failing or have stopped. Look
+      for 'rclone copy failed' in /var/log/flockinsight-backup.log"
+    return 1
+  fi
+
+  # Quota. Not every backend reports one; no numbers is not a problem.
+  local about total free pct
+  about=$(timeout 30 rclone about --json "${OFFSITE_REMOTE%%:*}:" 2>/dev/null)
+  total=$(printf '%s' "$about" | grep -o '"total":[0-9]*' | cut -d: -f2)
+  free=$(printf '%s' "$about" | grep -o '"free":[0-9]*' | cut -d: -f2)
+  [ -n "${total:-}" ] && [ -n "${free:-}" ] && [ "$total" -gt 0 ] || return 0
+  pct=$(( free * 100 / total ))
+  if [ "$pct" -lt "$OFFSITE_MIN_FREE_PCT" ]; then
+    note OFFSITE "${OFFSITE_REMOTE%%:*}: is ${pct}% free ($(( free / 1048576 ))MB of $(( total / 1048576 ))MB), limit ${OFFSITE_MIN_FREE_PCT}%
+      Nothing prunes the remote, so this only grows. When it fills, the copy
+      step fails non-fatally and the off-site backup stops without a word."
+    return 1
+  fi
+}
+
 check_cert() {
   local url host end days
   for url in $CHECK_URLS; do
@@ -326,7 +386,7 @@ if [ "${1:-}" = "--test" ]; then
 
 Sent $(date -Is) from $(hostname).
 Checks configured: load, memory, swap, per-process memory, disk, TCP memory,
-PM2, URLs, Postgres, backups, certificates."
+PM2, URLs, Postgres, backups (local and off-site), certificates."
   echo "Test alert sent to ${ALERT_TO:-<unset>}. Confirm it ARRIVES — a bounce"
   echo "is the failure this script exists to avoid."
   exit 0
@@ -341,6 +401,7 @@ check_pm2
 check_urls
 check_database
 check_backups
+check_offsite_backup
 check_cert
 
 [ -z "$FINDINGS" ] && exit 0
