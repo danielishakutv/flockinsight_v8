@@ -42,7 +42,12 @@ CONF=${WATCHDOG_CONF:-/etc/server-watchdog.conf}
 # All overridable from the conf file.
 ALERT_TO=${ALERT_TO:-}
 ALERT_FROM=${ALERT_FROM:-}
-RESEND_API_KEY=${RESEND_API_KEY:-}
+# Alerts go out through ZeptoMail — the same provider the app sends on, so
+# there is one account to keep alive instead of two.
+ZEPTOMAIL_TOKEN=${ZEPTOMAIL_TOKEN:-}
+ZEPTOMAIL_API_URL=${ZEPTOMAIL_API_URL:-}
+# Where to fall back to for the token, so it lives in exactly one place.
+APP_ENV_FILE=${APP_ENV_FILE:-/home/flockinsight/app/shared/.env}
 STATE_DIR=${STATE_DIR:-/var/lib/server-watchdog}
 # One alert per condition per hour. Long enough not to nag, short enough that
 # an ongoing problem keeps reminding you.
@@ -73,6 +78,26 @@ PG_CHECK=${PG_CHECK:-1}
 
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 
+# Read one KEY=value out of an env file. Deliberately not `source`: that would
+# execute the app's entire .env inside a root cron job.
+env_value() {
+  local key=$1 file=$2 v
+  [ -r "$file" ] || return 0
+  v=$(sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}${key}=//p" "$file" | head -1)
+  v=${v%$'\r'}
+  case "$v" in
+    \"*\") v=${v#\"}; v=${v%\"} ;;
+    \'*\') v=${v#\'}; v=${v%\'} ;;
+  esac
+  printf '%s' "$v"
+}
+
+# One token, one place. If the conf does not carry it, read the app's env —
+# rotating the token there must never quietly leave this script mute.
+[ -n "$ZEPTOMAIL_TOKEN" ] || ZEPTOMAIL_TOKEN=$(env_value ZEPTOMAIL_TOKEN "$APP_ENV_FILE")
+[ -n "$ZEPTOMAIL_API_URL" ] || ZEPTOMAIL_API_URL=$(env_value ZEPTOMAIL_API_URL "$APP_ENV_FILE")
+ZEPTOMAIL_API_URL=${ZEPTOMAIL_API_URL:-https://api.zeptomail.com/v1.1/email}
+
 FINDINGS=""
 # Categories of the checks currently firing, one per line. Kept apart from the
 # text on purpose: the rate-limit key is built from these, and findings are
@@ -90,10 +115,16 @@ note() {
 # Rate limited per condition, by a key the caller chooses. The key must be
 # stable for the same problem and different for a different one, or an ongoing
 # disk alert will suppress a new memory alert.
+# Where a condition's cooldown is recorded. Shared with the caller, which
+# clears it when a send fails.
+stamp_path() {
+  printf '%s/%s' "$STATE_DIR" "$(printf '%s' "$1" | tr -c 'a-zA-Z0-9_.-' '_')"
+}
+
 should_alert() {
   local key=$1 now stamp last
   now=$(date +%s)
-  stamp="$STATE_DIR/$(printf '%s' "$key" | tr -c 'a-zA-Z0-9_.-' '_')"
+  stamp=$(stamp_path "$key")
   last=$(cat "$stamp" 2>/dev/null || echo 0)
   if [ $((now - last)) -lt "$REPEAT_AFTER" ]; then
     return 1
@@ -102,24 +133,61 @@ should_alert() {
   return 0
 }
 
+# ZeptoMail, over its REST API — the same provider the app sends on, so there
+# is one account and one token to keep alive rather than two.
+#
+# Not the local MTA, for the reason it was never the local MTA: this box signs
+# with a DKIM key that was never published to DNS, so Gmail rejects its mail
+# outright with dsn=5.7.26. An alert that bounces is worse than no alert,
+# because it feels safe.
+#
+# Returns non-zero when the mail did not leave, and says so to syslog. Reading
+# the status rather than trusting that curl ran is the whole point: a watchdog
+# that thinks it alerted is the failure this script exists to avoid.
 send_email() {
-  local subject=$1 body=$2
-  if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERT_TO" ] || [ -z "$ALERT_FROM" ]; then
+  local subject=$1 body=$2 auth from_name from_addr html res code
+  if [ -z "$ZEPTOMAIL_TOKEN" ] || [ -z "$ALERT_TO" ] || [ -z "$ALERT_FROM" ]; then
     logger -t server-watchdog "ALERT (email not configured): $subject"
-    return 0
+    return 1
   fi
-  # Resend rather than the local MTA on purpose: this box signs with a DKIM
-  # key that was never published, so Gmail rejects its mail outright. An alert
-  # that bounces is worse than no alert, because it feels safe.
-  curl -s -o /dev/null --max-time 20 \
-    -X POST https://api.resend.com/emails \
-    -H "Authorization: Bearer $RESEND_API_KEY" \
+
+  # ZeptoMail wants the display name and the address apart, and refuses any
+  # address outside a verified domain — so only the name ever varies.
+  from_addr=$(printf '%s' "$ALERT_FROM" | sed -n 's/.*<\(.*\)>.*/\1/p')
+  from_name=$(printf '%s' "$ALERT_FROM" | sed -n 's/^[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*<.*>.*$/\1/p')
+  [ -n "$from_addr" ] || from_addr=$ALERT_FROM
+
+  # Both bodies. textbody is the alert as written; htmlbody wraps it in <pre>
+  # so a mail client keeps the line breaks that make a findings list readable.
+  html="<pre>$(printf '%s' "$body" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')</pre>"
+
+  # The console hands you the token with its scheme already attached; adding a
+  # second prefix is the easiest way to get a 401 that looks like a bad key.
+  case "$ZEPTOMAIL_TOKEN" in
+    Zoho-enczapikey*) auth=$ZEPTOMAIL_TOKEN ;;
+    *) auth="Zoho-enczapikey $ZEPTOMAIL_TOKEN" ;;
+  esac
+
+  res=$(curl -s -w '\n%{http_code}' --max-time 20 \
+    -X POST "$ZEPTOMAIL_API_URL" \
+    -H "Authorization: $auth" \
     -H "Content-Type: application/json" \
-    -d "$(printf '{"from":%s,"to":[%s],"subject":%s,"text":%s}' \
-          "$(json_str "$ALERT_FROM")" \
+    -H "Accept: application/json" \
+    -d "$(printf '{"from":{"address":%s,"name":%s},"to":[{"email_address":{"address":%s}}],"subject":%s,"textbody":%s,"htmlbody":%s}' \
+          "$(json_str "$from_addr")" \
+          "$(json_str "$from_name")" \
           "$(json_str "$ALERT_TO")" \
           "$(json_str "$subject")" \
-          "$(json_str "$body")")"
+          "$(json_str "$body")" \
+          "$(json_str "$html")")" 2>/dev/null)
+  code=$(printf '%s' "$res" | tail -n1)
+
+  case "$code" in
+    2*) return 0 ;;
+  esac
+  logger -t server-watchdog \
+    "ALERT SEND FAILED (HTTP ${code:-none}): $(printf '%s' "$res" | sed '$d' | tr -d '\n' | cut -c1-200)"
+  return 1
 }
 
 # JSON string escaping for the alert payload.
@@ -381,15 +449,21 @@ check_cert() {
 # ------------------------------------------------------------------- run it
 
 if [ "${1:-}" = "--test" ]; then
-  send_email "[watchdog] test from $(hostname)" \
+  if send_email "[watchdog] test from $(hostname)" \
     "If you are reading this, alerting works.
 
 Sent $(date -Is) from $(hostname).
 Checks configured: load, memory, swap, per-process memory, disk, TCP memory,
 PM2, URLs, Postgres, backups (local and off-site), certificates."
-  echo "Test alert sent to ${ALERT_TO:-<unset>}. Confirm it ARRIVES — a bounce"
-  echo "is the failure this script exists to avoid."
-  exit 0
+  then
+    echo "Accepted by ZeptoMail for ${ALERT_TO:-<unset>}. Now confirm it ARRIVES"
+    echo "— acceptance is not delivery, and a bounce is the failure this script"
+    echo "exists to avoid."
+    exit 0
+  fi
+  echo "FAILED to send. The alert path is down, so the watchdog cannot tell you" >&2
+  echo "anything: journalctl -t server-watchdog -n 5" >&2
+  exit 1
 fi
 
 check_load
@@ -408,7 +482,8 @@ check_cert
 
 # One alert per distinct set of problems per hour. Keyed on which checks are
 # firing, so a new problem appearing is never swallowed by an old one's
-# cooldown.
+# cooldown. A send that fails clears the stamp, so the next run — five
+# minutes — tries again instead of sitting out the hour.
 KEY=$(printf '%s' "$FIRING" | sort -u | tr '\n' '-')
 if should_alert "$KEY"; then
   send_email "[watchdog] $(hostname): $(printf '%s' "$KEY" | tr '-' ' ' | sed 's/ *$//')" \
@@ -421,7 +496,8 @@ memory  $(free -h | awk '/^Mem:/{print "used "$3" of "$2", "$7" available"}')
 swap    $(free -h | awk '/^Swap:/{print "used "$3" of "$2}')
 top     $(ps -eo rss,args --sort=-rss --no-headers | head -3 | awk '{printf "%dMB %s | ", $1/1024, $2}')
 
-Runbook: /root/SERVER-RUNBOOK.md"
+Runbook: /root/SERVER-RUNBOOK.md" \
+    || printf '0' > "$(stamp_path "$KEY")"
 fi
 
 exit 0

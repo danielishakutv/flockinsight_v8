@@ -45,6 +45,87 @@ echo "json_str escapes for the API payload"
 t "quotes escaped" "$(json_str 'say "hi"')" '"say \"hi\""'
 t "newline escaped"  "$(json_str "$(printf 'a\nb')")" '"a\nb"'
 
+# The alert path itself. It has no second chance: if send_email is wrong, the
+# watchdog is silent exactly when it matters, and nothing else in this file
+# would notice. So stub curl, keep what it was asked to send, and check the
+# request really is the shape ZeptoMail accepts.
+echo "env_value reads the app env without sourcing it"
+STUB_MAIL="$(mktemp -d)"
+PATH="$STUB_MAIL:$PATH"
+ENVF="$STUB_MAIL/app.env"
+
+printf 'OTHER=x\nZEPTOMAIL_TOKEN="Zoho-enczapikey abc123"\n' > "$ENVF"
+t "quotes stripped"            "$(env_value ZEPTOMAIL_TOKEN "$ENVF")" "Zoho-enczapikey abc123"
+printf 'ZEPTOMAIL_TOKEN=plain\r\n' > "$ENVF"
+t "a CRLF file cannot poison the token" "$(env_value ZEPTOMAIL_TOKEN "$ENVF")" "plain"
+printf 'export ZEPTOMAIL_TOKEN=exported\n' > "$ENVF"
+t "export prefix handled"      "$(env_value ZEPTOMAIL_TOKEN "$ENVF")" "exported"
+printf 'NOT_ZEPTOMAIL_TOKEN=wrong\nZEPTOMAIL_TOKEN=right\n' > "$ENVF"
+t "a longer key is not mistaken for it" "$(env_value ZEPTOMAIL_TOKEN "$ENVF")" "right"
+t "a missing file is empty, not an error" "$(env_value ZEPTOMAIL_TOKEN /nope/nope)" ""
+
+echo "send_email speaks ZeptoMail and reads the status"
+CURL_BODY_FILE="$STUB_MAIL/body"; CURL_HDR_FILE="$STUB_MAIL/hdr"
+LOGGER_FILE="$STUB_MAIL/syslog"
+export CURL_BODY_FILE CURL_HDR_FILE LOGGER_FILE CURL_RESP CURL_CODE
+cat > "$STUB_MAIL/curl" <<'STUB'
+#!/usr/bin/env bash
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    -d) printf '%s' "$a" > "$CURL_BODY_FILE" ;;
+    -H) printf '%s\n' "$a" >> "$CURL_HDR_FILE" ;;
+  esac
+  prev="$a"
+done
+printf '%s\n%s' "$CURL_RESP" "$CURL_CODE"
+STUB
+cat > "$STUB_MAIL/logger" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$LOGGER_FILE"
+STUB
+chmod +x "$STUB_MAIL/curl" "$STUB_MAIL/logger"
+
+ALERT_TO="me@example.com"
+ALERT_FROM="FlockInsight Watchdog <alerts@flockinsight.com>"
+ZEPTOMAIL_API_URL="https://api.zeptomail.com/v1.1/email"
+ZEPTOMAIL_TOKEN="testtoken"
+CURL_RESP='{"request_id":"abc"}'; CURL_CODE=201
+: > "$CURL_HDR_FILE"; : > "$LOGGER_FILE"
+
+send_email "subject here" "line one
+line two"; rc=$?
+t "a 2xx is success"        "$rc" "0"
+t "address split from name" "$(grep -c '"address":"alerts@flockinsight.com"' "$CURL_BODY_FILE")" "1"
+t "display name kept"       "$(grep -c '"name":"FlockInsight Watchdog"' "$CURL_BODY_FILE")" "1"
+t "recipient nested as zepto wants" \
+  "$(grep -c '"to":\[{"email_address":{"address":"me@example.com"}}\]' "$CURL_BODY_FILE")" "1"
+t "newlines escaped, not stripped" "$(grep -cF 'line one\nline two' "$CURL_BODY_FILE")" "1"
+t "html body carries the breaks too" "$(grep -c '<pre>' "$CURL_BODY_FILE")" "1"
+t "auth scheme added once"  "$(grep -c '^Authorization: Zoho-enczapikey testtoken$' "$CURL_HDR_FILE")" "1"
+
+: > "$CURL_HDR_FILE"
+ZEPTOMAIL_TOKEN="Zoho-enczapikey pasted-from-console"
+send_email "s" "b"
+t "a token that carries its own prefix is not doubled" \
+  "$(grep -c '^Authorization: Zoho-enczapikey pasted-from-console$' "$CURL_HDR_FILE")" "1"
+
+CURL_CODE=401; CURL_RESP='{"error":{"code":"TM_3201"}}'
+send_email "s" "b"; rc=$?
+t "a 401 is a failure, not a success" "$rc" "1"
+t "and it is logged where it will be seen" \
+  "$(grep -c 'ALERT SEND FAILED (HTTP 401)' "$LOGGER_FILE")" "1"
+
+ZEPTOMAIL_TOKEN=""; CURL_CODE=201
+send_email "s" "b"; rc=$?
+t "no token is a failure, not a quiet no-op" "$rc" "1"
+
+echo "a failed send can be re-armed"
+t "stamp path derives from the key" "$(basename "$(stamp_path 'DISK-MEMORY-')")" "DISK-MEMORY-"
+should_alert "RETRY-" >/dev/null
+printf '0' > "$(stamp_path 'RETRY-')"
+should_alert "RETRY-"; t "a cleared stamp retries at once" "$?" "0"
+
 # The other checks need a real box, but this one's whole point is what it does
 # when rclone fails — the state you cannot reproduce by hand on a server where
 # backups are working. So stub rclone and walk it through all four outcomes.

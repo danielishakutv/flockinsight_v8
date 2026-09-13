@@ -5,13 +5,21 @@
 # Everything here has a working default in the script; set only what differs.
 
 # --- where alerts go -------------------------------------------------------
-# Resend rather than the local MTA, because this box's DKIM key was never
+# ZeptoMail rather than the local MTA, because this box's DKIM key was never
 # published to DNS and Gmail rejects its mail with dsn=5.7.26. Signing locally
 # proves nothing. Verify with `server-watchdog.sh --test` and confirm the mail
 # ARRIVES, not that the script exited 0.
 ALERT_TO="talk2ishakudaniel@gmail.com"
+# Its address must be on a domain verified in ZeptoMail or every send is
+# rejected; only the display name is free to change.
 ALERT_FROM="FlockInsight Watchdog <alerts@flockinsight.com>"
-RESEND_API_KEY=""
+# Leave empty to read ZEPTOMAIL_TOKEN from the app's own env file, so the token
+# lives in exactly one place and rotating it there cannot leave this script
+# mute. Set it here only if this box ever stops hosting the app.
+ZEPTOMAIL_TOKEN=""
+#APP_ENV_FILE="/home/flockinsight/app/shared/.env"
+# Only if the ZeptoMail account is on the EU datacentre:
+#ZEPTOMAIL_API_URL="https://api.zeptomail.eu/v1.1/email"
 
 # --- how often it may repeat ----------------------------------------------
 # Seconds. One alert per distinct condition per hour.
