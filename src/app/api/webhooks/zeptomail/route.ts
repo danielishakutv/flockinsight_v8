@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
-import { applyDeliveryReport } from "@/lib/delivery-reports";
+import {
+  applyDeliveryReport,
+  applyNotificationReport,
+} from "@/lib/delivery-reports";
 import { mapZeptoEvent, zeptoReason } from "@/lib/delivery-status";
 
 export const dynamic = "force-dynamic";
@@ -117,12 +120,20 @@ export async function POST(request: Request) {
   for (const r of reports) {
     const state = mapZeptoEvent(r.event);
     if (!state) continue; // opens, clicks — deliberately not recorded
-    const res = await applyDeliveryReport({
+    const report = {
       providerMessageId: r.requestId ?? null,
       destination: r.email ?? null,
       state,
       reason: zeptoReason(r.event, r.reason),
-    });
+    };
+    /*
+     * A report belongs to exactly one of the two logs, and we cannot tell
+     * which from the payload — so try the church-side one and, only if it
+     * found nothing, the platform notification receipts. Never both: matching
+     * twice would let one report mark two unrelated messages delivered.
+     */
+    let res = await applyDeliveryReport(report);
+    if (res === "unmatched") res = await applyNotificationReport(report);
     if (res === "updated") applied++;
   }
 

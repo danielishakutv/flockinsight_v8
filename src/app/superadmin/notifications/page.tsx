@@ -20,6 +20,7 @@ import {
   type DraftRow,
 } from "@/components/superadmin/draft-broadcasts";
 import { ScheduledBroadcasts } from "@/components/superadmin/scheduled-broadcasts";
+import { NotificationReceipts } from "@/components/superadmin/notification-receipts";
 import {
   Card,
   CardContent,
@@ -80,6 +81,7 @@ export default async function SuperadminNotificationsPage({
         targetPlan: notification.targetPlan,
         targetCountry: notification.targetCountry,
         pushSent: notification.pushSent,
+        inApp: notification.inApp,
         createdAt: notification.createdAt,
         byName: user.name,
       })
@@ -165,7 +167,15 @@ export default async function SuperadminNotificationsPage({
           : [];
       prefill = {
         title: n.title,
-        body: sanitizeRichText(n.body),
+        /*
+         * The body as written, not the flattened one.
+         *
+         * `notification.body` is deliberately stripped for push banners and
+         * the notification centre, so reusing a sent notice used to hand back
+         * scattered sentences with every heading, list and link gone.
+         * `sourceBody` is the original; older rows have none, and fall back.
+         */
+        body: sanitizeRichText(n.sourceBody ?? n.body),
         category: n.category === "system" ? "system" : "general",
         audience: n.audience === "user" ? "all" : n.audience,
         targetPlan: n.targetPlan,
@@ -218,7 +228,17 @@ export default async function SuperadminNotificationsPage({
         </p>
       </div>
 
+      {/*
+        Keyed so a different prefill builds a fresh composer.
+
+        Its fields are useState(prefill…), and a state initialiser only runs on
+        first mount. Navigating from one notice to another re-rendered the same
+        instance, so clicking Reuse appeared to do nothing at all — while
+        opening it in a new tab worked, because that mounts from scratch. The
+        key makes React do the same thing in both cases.
+      */}
       <NotificationComposer
+        key={draftId ?? reuseId ?? "new"}
         churches={churches}
         countries={countries}
         prefill={prefill}
@@ -270,7 +290,9 @@ export default async function SuperadminNotificationsPage({
                       {format(n.createdAt, "MMM d, yyyy · h:mm a")}
                       {n.byName ? ` · by ${n.byName}` : ""}
                       {n.pushSent > 0 ? ` · ${n.pushSent} push` : ""}
+                      {!n.inApp ? " · email only" : ""}
                     </p>
+                    <NotificationReceipts notificationId={n.id} />
                   </div>
                   {/*
                     Reuse loads this into the composer as a NEW message —

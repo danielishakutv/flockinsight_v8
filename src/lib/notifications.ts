@@ -203,9 +203,11 @@ export async function listNotifications(
   ctx: NotificationCtx,
   opts?: { category?: "system" | "general"; limit?: number },
 ): Promise<NotificationItem[]> {
+  // An email-only broadcast is recorded but never shown here.
+  const visible = and(audienceFilter(ctx), eq(notification.inApp, true));
   const where = opts?.category
-    ? and(audienceFilter(ctx), eq(notification.category, opts.category))
-    : audienceFilter(ctx);
+    ? and(visible, eq(notification.category, opts.category))
+    : visible;
 
   const rows = await db
     .select({
@@ -251,7 +253,13 @@ export async function unreadCount(ctx: NotificationCtx): Promise<number> {
         eq(notificationRead.userId, ctx.userId),
       ),
     )
-    .where(and(audienceFilter(ctx), isNull(notificationRead.id)));
+    .where(
+      and(
+        audienceFilter(ctx),
+        eq(notification.inApp, true),
+        isNull(notificationRead.id),
+      ),
+    );
   return Number(r?.c ?? 0);
 }
 
@@ -286,12 +294,28 @@ export async function resolveAudienceUsers(input: {
   targetPlan?: string | null;
   targetCountry?: string | null;
   churchIds?: string[];
-}): Promise<{ email: string; name: string }[]> {
+}): Promise<
+  { email: string; name: string; userId: string; churchId: string }[]
+> {
+  /*
+   * DISTINCT ON the address, not on the whole row.
+   *
+   * Adding the ids to a plain DISTINCT would make somebody who is staff at two
+   * churches two separate rows — and two separate emails. One row per address,
+   * carrying whichever membership sorted first, keeps the send count honest
+   * while still giving a receipt something to point at.
+   */
   const base = db
-    .selectDistinct({ email: user.email, name: user.name })
+    .selectDistinctOn([user.email], {
+      email: user.email,
+      name: user.name,
+      userId: user.id,
+      churchId: church.id,
+    })
     .from(staff)
     .innerJoin(user, eq(user.id, staff.userId))
-    .innerJoin(church, eq(church.id, staff.organizationId));
+    .innerJoin(church, eq(church.id, staff.organizationId))
+    .orderBy(user.email);
 
   if (input.audience === "all") return base;
   if (input.audience === "plan" && input.targetPlan)

@@ -456,6 +456,20 @@
       "when": 1789291358103,
       "tag": "0064_volatile_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1789299855491,
+      "tag": "0065_blushing_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1789299984390,
+      "tag": "0066_cold_maddog",
+      "breakpoints": true
     }
   ]
 }

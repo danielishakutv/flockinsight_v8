@@ -1138,18 +1138,78 @@ export const notification = pgTable(
   {
     id: uuid().primaryKey().defaultRandom(),
     title: text().notNull(),
+    // The words, with any formatting removed. This is what the notification
+    // centre and a push banner render, and neither can show markup.
     body: text().notNull(),
+    /*
+     * The body exactly as it was written, formatting and all.
+     *
+     * `body` is deliberately stripped, which is right for a push banner and
+     * wrong for everything else: reusing a sent notice recovered only the
+     * flattened text, so a designed email came back as scattered sentences.
+     * Null for anything sent before this column existed, and for a notice that
+     * was plain to begin with.
+     */
+    sourceBody: text(),
     category: notificationCategoryEnum().notNull().default("general"),
     audience: notificationAudienceEnum().notNull().default("all"),
     targetPlan: planEnum(), // when audience = "plan"
     targetCountry: text(), // when audience = "country"
     targetUserId: text().references(() => user.id, { onDelete: "cascade" }), // when audience = "user"
     linkUrl: text(), // optional call-to-action link
+    /*
+     * Whether this belongs in the church's notification centre.
+     *
+     * An email-only send used to write no row at all, which meant it left no
+     * trace anywhere — invisible in the admin history, and with nothing for a
+     * delivery receipt to attach to. Now every send is recorded and this flag
+     * decides whether churches see it in-app. Defaults true, so every row that
+     * existed before keeps showing exactly as it did.
+     */
+    inApp: boolean().notNull().default(true),
     pushSent: integer().notNull().default(0), // count of web-push messages sent
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("notification_created_idx").on(t.createdAt)],
+);
+
+/**
+ * One row per person a notification was emailed to, and what became of it.
+ *
+ * Sending used to be fire-and-forget: a count of how many went out, and
+ * nothing about who or whether it arrived. "Did the Lagos churches get it?"
+ * had no answer.
+ *
+ * The provider's message id is kept so a later webhook can find this row
+ * without guessing, and the address is kept too — a report sometimes arrives
+ * with only the recipient, and a person may have changed their email since.
+ */
+export const notificationReceipt = pgTable(
+  "notification_receipt",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    notificationId: uuid()
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    // Kept even if the account goes: the send still happened.
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    name: text(),
+    email: text().notNull(),
+    status: deliveryStatusEnum().notNull().default("sent"),
+    // ZeptoMail's request_id, or whatever the provider in use returns.
+    providerMessageId: text(),
+    error: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_receipt_notification_idx").on(t.notificationId),
+    // The webhook looks up by provider id first, then falls back to address.
+    index("notification_receipt_provider_idx").on(t.providerMessageId),
+    index("notification_receipt_email_idx").on(t.email),
+  ],
 );
 
 // Hand-picked recipient churches (when audience = "churches").

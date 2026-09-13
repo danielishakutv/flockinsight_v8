@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { communicationRecipient } from "@/db/schema";
+import { communicationRecipient, notificationReceipt } from "@/db/schema";
 import { shouldApply, type DeliveryState } from "@/lib/delivery-status";
 
 /**
@@ -115,6 +115,66 @@ export async function applyDeliveryReport(opts: {
     return "updated";
   } catch (e) {
     console.error("[delivery] could not apply report", e);
+    return "unmatched";
+  }
+}
+
+/**
+ * Apply a report to a superadmin notification receipt.
+ *
+ * Separate from the church-side path above, and tried after it: the two live
+ * in different tables and a report belongs to exactly one of them. Same rules
+ * though — match on the provider's id first, fall back to the address, and
+ * never let a late or duplicate report undo a better outcome.
+ */
+export async function applyNotificationReport(opts: {
+  providerMessageId?: string | null;
+  destination?: string | null;
+  state: DeliveryState;
+  reason?: string | null;
+}): Promise<ApplyResult> {
+  try {
+    let row: { id: string; status: string } | undefined;
+
+    if (opts.providerMessageId) {
+      [row] = await db
+        .select({ id: notificationReceipt.id, status: notificationReceipt.status })
+        .from(notificationReceipt)
+        .where(
+          eq(notificationReceipt.providerMessageId, opts.providerMessageId),
+        )
+        .limit(1);
+    }
+
+    if (!row && opts.destination) {
+      // Newest first: the same address may have been emailed many times, and
+      // a report almost always concerns the most recent send.
+      [row] = await db
+        .select({ id: notificationReceipt.id, status: notificationReceipt.status })
+        .from(notificationReceipt)
+        .where(eq(notificationReceipt.email, opts.destination.toLowerCase()))
+        .orderBy(desc(notificationReceipt.createdAt))
+        .limit(1);
+    }
+
+    if (!row) return "unmatched";
+    if (!shouldApply(row.status, opts.state)) return "unchanged";
+
+    await db
+      .update(notificationReceipt)
+      .set({
+        status: opts.state,
+        error: opts.reason ?? null,
+        updatedAt: new Date(),
+        ...(opts.providerMessageId
+          ? { providerMessageId: opts.providerMessageId }
+          : {}),
+      })
+      .where(eq(notificationReceipt.id, row.id));
+
+    return "updated";
+  } catch (e) {
+    console.error("[delivery] could not apply notification report", e);
     return "unmatched";
   }
 }

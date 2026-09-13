@@ -1,13 +1,17 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { notification, notificationTarget } from "@/db/schema";
+import {
+  notification,
+  notificationReceipt,
+  notificationTarget,
+} from "@/db/schema";
 import {
   resolveAudienceUserIds,
   resolveAudienceUsers,
 } from "@/lib/notifications";
 import { sendPushToUsers } from "@/lib/push";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmailWithId, emailLayout } from "@/lib/mailer";
 import { richTextToEmailHtml, richTextToPlain } from "@/lib/rich-text";
 import { isFullHtmlDocument } from "@/lib/rich-text-shared";
 
@@ -60,28 +64,40 @@ export async function deliverBroadcast(
    */
   const neutralBody = richTextToPlain(fillName(d.body));
 
+  /*
+   * Every send is recorded, whichever channels it used.
+   *
+   * An email-only broadcast used to write nothing at all: it never appeared in
+   * the admin history, and there was no row for a delivery receipt to hang
+   * from. `inApp` decides whether churches see it in their notification
+   * centre; it no longer decides whether the send is remembered.
+   */
+  const [row] = await db
+    .insert(notification)
+    .values({
+      title: neutralTitle,
+      body: neutralBody,
+      // The body as written. `body` above is flattened for push banners and
+      // the notification centre; this is what reuse needs to restore.
+      sourceBody: d.body,
+      category: d.category,
+      audience: d.audience,
+      targetPlan: d.audience === "plan" ? (d.targetPlan as "starter") : null,
+      targetCountry: d.audience === "country" ? d.targetCountry : null,
+      linkUrl: d.linkUrl ?? null,
+      inApp: d.inApp,
+      createdBy: d.createdBy ?? null,
+    })
+    .returning({ id: notification.id });
+
+  if (d.audience === "churches" && churchIds.length > 0) {
+    await db
+      .insert(notificationTarget)
+      .values(churchIds.map((churchId) => ({ notificationId: row.id, churchId })))
+      .onConflictDoNothing();
+  }
+
   if (d.inApp) {
-    const [row] = await db
-      .insert(notification)
-      .values({
-        title: neutralTitle,
-        body: neutralBody,
-        category: d.category,
-        audience: d.audience,
-        targetPlan: d.audience === "plan" ? (d.targetPlan as "starter") : null,
-        targetCountry: d.audience === "country" ? d.targetCountry : null,
-        linkUrl: d.linkUrl ?? null,
-        createdBy: d.createdBy ?? null,
-      })
-      .returning({ id: notification.id });
-
-    if (d.audience === "churches" && churchIds.length > 0) {
-      await db
-        .insert(notificationTarget)
-        .values(churchIds.map((churchId) => ({ notificationId: row.id, churchId })))
-        .onConflictDoNothing();
-    }
-
     const userIds = await resolveAudienceUserIds({
       audience: d.audience,
       targetPlan: d.targetPlan,
@@ -115,7 +131,7 @@ export async function deliverBroadcast(
         : `${BASE_URL}${d.linkUrl}`
       : `${BASE_URL}/notifications`;
     const results = await Promise.allSettled(
-      recipients.map((r) => {
+      recipients.map(async (r) => {
         // Personalise per recipient: {name} → their first name.
         const subject = fillName(d.title, r.name);
         const body = fillName(d.body, r.name);
@@ -140,10 +156,43 @@ export async function deliverBroadcast(
             });
         // A text/plain part every client can read, formatting or not.
         const text = richTextToPlain(body);
-        return sendEmail({ to: r.email, subject, html, text });
+        /*
+         * sendEmailWithId rather than sendEmail, for the provider's message id.
+         *
+         * That id is the only thing a delivery webhook can match on reliably —
+         * an address is not unique enough once somebody changes theirs, and a
+         * bounce report may arrive days later.
+         */
+        const sent = await sendEmailWithId({ to: r.email, subject, html, text });
+        return { r, sent };
       }),
     );
-    emailSent = results.filter((x) => x.status === "fulfilled" && x.value).length;
+
+    const receipts: (typeof notificationReceipt.$inferInsert)[] = [];
+    for (const out of results) {
+      if (out.status !== "fulfilled") continue;
+      const { r, sent } = out.value;
+      if (sent.ok) emailSent++;
+      receipts.push({
+        notificationId: row.id,
+        userId: r.userId,
+        churchId: r.churchId,
+        name: r.name,
+        email: r.email,
+        // "sent" means we handed it over. Only the provider's webhook can
+        // upgrade that to delivered, or tell us it bounced.
+        status: sent.ok ? "sent" : "failed",
+        providerMessageId: sent.id,
+        error: sent.ok ? null : "The provider rejected it",
+      });
+    }
+    if (receipts.length > 0) {
+      // Best-effort: a send that happened must not be reported as failed
+      // because we could not write down who it went to.
+      await db.insert(notificationReceipt).values(receipts).catch((e) => {
+        console.error("[broadcast] could not record receipts", e);
+      });
+    }
   }
 
   return { pushSent, emailSent };

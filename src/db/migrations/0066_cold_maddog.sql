@@ -1,0 +1,1 @@
+ALTER TABLE "notification" ADD COLUMN "in_app" boolean DEFAULT true NOT NULL;
