@@ -2,9 +2,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { church, staff, user } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { UserDetail } from "@/components/superadmin/user-detail";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "User · Admin" };
 
 export default async function SuperadminUserPage({
@@ -13,7 +14,7 @@ export default async function SuperadminUserPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.users.view");
 
   const [u] = await db
     .select({

@@ -2,12 +2,13 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { setPlanPrice, setPlanFeatures, setStorageBundles } from "@/lib/pricing";
 import { planName, type PlanId } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
 import { setReferralRewards } from "@/lib/referrals";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const schema = z.object({
@@ -19,7 +20,7 @@ const schema = z.object({
 export type PlanPriceInput = z.infer<typeof schema>;
 
 export async function setPlanPrices(input: PlanPriceInput): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.pricing.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid price" };
@@ -53,7 +54,7 @@ const featuresSchema = z.object({
 export async function setPlanFeaturesAction(
   input: z.input<typeof featuresSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.pricing.manage");
   const parsed = featuresSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -85,7 +86,7 @@ export type StorageBundleInput = z.infer<typeof bundlesSchema>;
 export async function setStorageBundlesAction(
   input: StorageBundleInput,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.pricing.manage");
   const parsed = bundlesSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid bundle" };
@@ -120,7 +121,7 @@ export type ReferralRewardInput = z.infer<typeof referralSchema>;
 export async function setReferralRewardsAction(
   input: ReferralRewardInput,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.pricing.manage");
   const parsed = referralSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid amount" };

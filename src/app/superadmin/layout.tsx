@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowUpRight, Shield } from "lucide-react";
 import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
+import { platformAccess } from "@/lib/platform-access";
 import { Logo } from "@/components/brand";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import {
@@ -28,6 +29,11 @@ export default async function SuperadminLayout({
   await requireSuperAdmin();
   if (await getMustChangePassword()) redirect("/set-password");
 
+  // The sidebar is built from what this admin can actually reach, so a scoped
+  // role never sees a link that would bounce them straight back.
+  const access = await platformAccess();
+  const perms = [...(access?.perms ?? [])];
+
   return (
     <div data-admin className="min-h-dvh">
       <header className="bg-background/85 sticky top-0 z-30 border-b backdrop-blur">
@@ -43,7 +49,7 @@ export default async function SuperadminLayout({
               </span>
             </Link>
             <span className="bg-border hidden h-5 w-px lg:block" />
-            <SuperadminMobileNav />
+            <SuperadminMobileNav perms={perms} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
@@ -60,7 +66,7 @@ export default async function SuperadminLayout({
       </header>
 
       <div className="flex">
-        <SuperadminSidebar />
+        <SuperadminSidebar perms={perms} />
         <main className="min-w-0 flex-1 px-4 py-6 lg:px-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>

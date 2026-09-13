@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment, session, staff } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { writeActAsCookie, clearActAsCookie } from "@/lib/impersonation";
 import { activatePlan } from "@/lib/billing";
 import {
@@ -16,6 +16,7 @@ import {
 import { planName } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
@@ -25,7 +26,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * they exit. Returns an error result only on failure (otherwise it redirects).
  */
 export async function impersonateChurch(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
@@ -76,7 +77,7 @@ export async function impersonateChurch(id: string): Promise<ActionResult> {
 
 /** Stop acting as a church and return to the admin panel. */
 export async function exitImpersonation(): Promise<void> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   await clearActAsCookie();
   await db
     .update(session)
@@ -105,7 +106,7 @@ export async function adminSetBilling(input: {
   months: number;
   note?: string;
 }): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const { churchId, plan } = input;
   if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
   if (!z.string().min(1).safeParse(churchId).success)
@@ -170,7 +171,7 @@ export async function setChurchPlan(
   id: string,
   plan: (typeof PLANS)[number],
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
@@ -195,7 +196,7 @@ export async function setChurchFeatured(
   id: string,
   featured: boolean,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   await db.update(church).set({ featured }).where(eq(church.id, id));
@@ -208,7 +209,7 @@ export async function setChurchStatus(
   id: string,
   status: "active" | "suspended",
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   if (status !== "active" && status !== "suspended")
@@ -258,7 +259,7 @@ export async function deleteChurch(
   id: string,
   confirmName: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 

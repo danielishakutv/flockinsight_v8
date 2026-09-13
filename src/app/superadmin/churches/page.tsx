@@ -5,6 +5,7 @@ import { getChurchHealth } from "@/lib/platform-health";
 import { getChurchPnl } from "@/lib/platform-stats";
 import { isChurchVerified } from "@/lib/verification-shared";
 import { OnboardChurch } from "@/components/superadmin/onboard-church";
+import { requirePlatform } from "@/lib/platform-access";
 import {
   ChurchesTable,
   type ChurchRow,
@@ -14,6 +15,7 @@ export const metadata = { title: "Churches · Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function SuperadminChurchesPage() {
+  await requirePlatform("platform.churches.view");
   const [health, pnl, extras, groupCounts, givingAgg, owners] = await Promise.all([
     // Real activity + health, from every module rather than attendance/giving.
     getChurchHealth(),

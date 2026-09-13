@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { supportTicket, supportMessage } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { notifyChurchReply, notifyTicketStatus } from "@/lib/support";
 import { notifyUser } from "@/lib/notifications";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /** Post a support reply on a ticket and email the church. */
@@ -16,7 +17,7 @@ export async function respondTicket(
   ticketId: string,
   message: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.support.manage");
   if (!z.string().uuid().safeParse(ticketId).success)
     return { ok: false, error: "Invalid ticket" };
   const body = (message || "").trim();
@@ -72,7 +73,7 @@ export async function setTicketStatus(
   ticketId: string,
   status: "open" | "answered" | "closed",
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.support.manage");
   if (!z.string().uuid().safeParse(ticketId).success)
     return { ok: false, error: "Invalid ticket" };
   if (!["open", "answered", "closed"].includes(status))

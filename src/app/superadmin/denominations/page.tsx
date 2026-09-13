@@ -8,10 +8,12 @@ import { DenominationDialog } from "@/components/superadmin/denomination-dialog"
 import { DenominationRowActions } from "@/components/superadmin/denomination-row-actions";
 import { Card, CardContent } from "@/components/ui/card";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Denominations · Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function DenominationsPage() {
+  await requirePlatform("platform.churches.view");
   const [rows, unassigned] = await Promise.all([
     listDenominations(),
     unassignedChurchCount(),

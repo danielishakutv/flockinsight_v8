@@ -22,83 +22,85 @@ import {
   Newspaper,
   Rocket,
   ScrollText,
+  ShieldCheck,
   Tag,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { visibleNav } from "@/lib/platform-permissions";
+
+const ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  HeartPulse,
+  BarChart3,
+  Building2,
+  Church,
+  Users,
+  LifeBuoy,
+  Banknote,
+  Tag,
+  Bell,
+  Megaphone,
+  MessageSquare,
+  Rocket,
+  Map,
+  Newspaper,
+  ImageIcon,
+  ShieldCheck,
+  ScrollText,
+  Database,
+};
 
 type Item = { label: string; href: string; icon: LucideIcon };
 
 /**
- * Grouped so the sidebar reads as four jobs rather than sixteen links: what's
- * happening, who's on the platform, how we grow it, and how we run it.
+ * The sidebar is built from the permission catalogue, not from a list kept
+ * beside it.
+ *
+ * Two lists drift: a page gets added to the menu and not to the permissions,
+ * or a permission is revoked and the link stays there to give a redirect.
+ * Here the groups ARE the permission modules, and `visibleNav` has already
+ * dropped anything this admin cannot open.
  */
-const GROUPS: { title: string; items: Item[] }[] = [
-  {
-    title: "Platform",
-    items: [
-      { label: "Overview", href: "/superadmin", icon: LayoutDashboard },
-      { label: "Health", href: "/superadmin/health", icon: HeartPulse },
-      { label: "Usage", href: "/superadmin/usage", icon: BarChart3 },
-      { label: "Finance", href: "/superadmin/finance", icon: Banknote },
-    ],
-  },
-  {
-    title: "Customers",
-    items: [
-      { label: "Churches", href: "/superadmin/churches", icon: Building2 },
-      { label: "Denominations", href: "/superadmin/denominations", icon: Church },
-      { label: "Users", href: "/superadmin/users", icon: Users },
-      { label: "Support", href: "/superadmin/support", icon: LifeBuoy },
-    ],
-  },
-  {
-    title: "Product",
-    items: [
-      { label: "Roadmap", href: "/superadmin/roadmap", icon: Map },
-    ],
-  },
-  {
-    title: "Growth",
-    items: [
-      { label: "Pipeline", href: "/superadmin/growth", icon: Rocket },
-      { label: "Outreach", href: "/superadmin/growth/outreach", icon: Megaphone },
-      { label: "Notifications", href: "/superadmin/notifications", icon: Bell },
-      { label: "Pricing", href: "/superadmin/pricing", icon: Tag },
-    ],
-  },
-  {
-    title: "Content & ops",
-    items: [
-      { label: "Blog", href: "/superadmin/blog", icon: Newspaper },
-      { label: "Banners", href: "/superadmin/banners", icon: ImageIcon },
-      { label: "SMS", href: "/superadmin/sms", icon: MessageSquare },
-      { label: "Audit", href: "/superadmin/audit", icon: ScrollText },
-      { label: "Backups", href: "/superadmin/backups", icon: Database },
-    ],
-  },
-];
-
-const ALL_ITEMS = GROUPS.flatMap((g) => g.items);
+function useGroups(perms: string[]): { title: string; items: Item[] }[] {
+  return visibleNav(perms).map((m) => ({
+    title: m.label,
+    items: m.pages.map((pg) => ({
+      label: pg.label,
+      href: pg.href,
+      icon: ICONS[pg.icon] ?? LayoutDashboard,
+    })),
+  }));
+}
 
 /** Longest matching href wins, so /growth/outreach doesn't also light /growth. */
-function activeHref(pathname: string): string | undefined {
-  return ALL_ITEMS.map((i) => i.href)
+function activeHref(pathname: string, hrefs: string[]): string | undefined {
+  return hrefs
     .filter((href) =>
       href === "/superadmin" ? pathname === href : pathname.startsWith(href),
     )
     .sort((a, b) => b.length - a.length)[0];
 }
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavList({
+  perms,
+  onNavigate,
+}: {
+  perms: string[];
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
-  const active = activeHref(pathname);
+  const groups = useGroups(perms);
+  const active = activeHref(
+    pathname,
+    groups.flatMap((g) => g.items.map((i) => i.href)),
+  );
 
   return (
     <nav className="space-y-5">
-      {GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.title}>
           <p className="text-muted-foreground/70 px-2.5 pb-1.5 text-[10px] font-semibold tracking-[0.08em] uppercase">
             {group.title}
@@ -135,11 +137,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 /** The fixed sidebar on desktop. */
-export function SuperadminSidebar() {
+export function SuperadminSidebar({ perms }: { perms: string[] }) {
   return (
     <aside className="hidden w-56 shrink-0 border-r lg:block">
       <div className="sticky top-14 px-3 py-5">
-        <NavList />
+        <NavList perms={perms} />
       </div>
     </aside>
   );
@@ -158,11 +160,16 @@ export function SuperadminSidebar() {
  * menu doesn't open at all". The portal moves the drawer out from under the
  * blur, so `inset-0` means the viewport again.
  */
-export function SuperadminMobileNav() {
+export function SuperadminMobileNav({ perms }: { perms: string[] }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const active = activeHref(pathname);
-  const current = ALL_ITEMS.find((i) => i.href === active);
+  const groups = useGroups(perms);
+  const items = groups.flatMap((g) => g.items);
+  const active = activeHref(
+    pathname,
+    items.map((i) => i.href),
+  );
+  const current = items.find((i) => i.href === active);
 
   // Close on Escape, and don't let the page behind scroll while it's open.
   useEffect(() => {
@@ -203,7 +210,7 @@ export function SuperadminMobileNav() {
           className="min-h-0 flex-1 overflow-y-auto p-4"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
         >
-          <NavList onNavigate={() => setOpen(false)} />
+          <NavList perms={perms} onNavigate={() => setOpen(false)} />
         </div>
       </div>
     </div>

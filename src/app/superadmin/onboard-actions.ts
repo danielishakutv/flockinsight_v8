@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { account, church, staff, user } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { hashPassword } from "@/lib/admin-users";
 import { ensureMemberForUser } from "@/lib/member-link";
 import { recordAudit } from "@/lib/audit";
@@ -17,6 +17,7 @@ import {
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 
+import { requirePlatform } from "@/lib/platform-access";
 /**
  * Create a church and its owner from the admin side, ready to use.
  *
@@ -80,7 +81,7 @@ function isUniqueViolation(e: unknown): boolean {
 export async function adminOnboardChurch(
   input: OnboardInput,
 ): Promise<OnboardResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -246,7 +247,7 @@ export async function adminSetChurchVerified(input: {
   emailVerified: boolean;
   phoneVerified: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().uuid().safeParse(input.churchId).success)
     return { ok: false, error: "Invalid id" };
 

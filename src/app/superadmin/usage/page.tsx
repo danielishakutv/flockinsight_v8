@@ -1,10 +1,12 @@
 import { getUsageOverview } from "@/lib/analytics";
 import { UsageDashboard } from "@/components/superadmin/usage-dashboard";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Usage · Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function SuperadminUsagePage() {
+  await requirePlatform("platform.overview.view");
   const overview = await getUsageOverview();
 
   return (

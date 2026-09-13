@@ -2,9 +2,10 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { recordAudit } from "@/lib/audit";
 import { releases } from "@/lib/changelog";
+import { requirePlatform } from "@/lib/platform-access";
 import {
   createRoadmapItem,
   deleteRoadmapItem,
@@ -51,7 +52,7 @@ function clean(v: string | null | undefined) {
 export async function addRoadmapItem(
   input: RoadmapItemInput,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = itemSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -85,7 +86,7 @@ export async function editRoadmapItem(
   id: string,
   input: RoadmapItemInput,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = itemSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -126,7 +127,7 @@ const moveSchema = z.object({
 export async function moveRoadmapItem(
   input: z.input<typeof moveSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = moveSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -159,7 +160,7 @@ export async function moveRoadmapItem(
 
 /** Take something back out of shipped, clearing its date and frozen counts. */
 export async function unshipItem(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const before = await getRoadmapItem(id);
   if (!before) return { ok: false, error: "That item no longer exists." };
 
@@ -178,7 +179,7 @@ export async function unshipItem(id: string): Promise<ActionResult> {
 }
 
 export async function removeRoadmapItem(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const before = await getRoadmapItem(id);
   if (!before) return { ok: true };
 
@@ -197,7 +198,7 @@ export async function removeRoadmapItem(id: string): Promise<ActionResult> {
 }
 
 export async function reorderItems(ids: string[]): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.growth.manage");
   const parsed = z.array(z.string().uuid()).max(500).safeParse(ids);
   if (!parsed.success) return { ok: false, error: "Invalid order" };
   await reorderRoadmap(parsed.data);
@@ -212,7 +213,7 @@ export async function reorderItems(ids: string[]): Promise<ActionResult> {
 export async function importChangelog(): Promise<
   { ok: true; added: number } | { ok: false; error: string }
 > {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const added = await seedFromChangelog(releases, admin.id);
 
   if (added > 0) {

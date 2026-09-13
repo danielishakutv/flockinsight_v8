@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { lead } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { recordAudit } from "@/lib/audit";
 import { existingLeadKeys, logLeadActivity } from "@/lib/leads";
 import { sendOutreach, type Audience } from "@/lib/outreach";
 import { parseCsv, unescapeCsvCell } from "@/lib/csv";
 import { headerToLeadField, leadStatusMeta } from "@/lib/growth-shared";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type SaveResult = { ok: true; id: string } | { ok: false; error: string };
 export type ImportResult =
@@ -82,7 +83,7 @@ function needsContact(email: string | null, phone: string | null): string | null
 export async function createLead(
   input: z.input<typeof leadSchema>,
 ): Promise<SaveResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = leadSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -126,7 +127,7 @@ export async function updateLead(
   id: string,
   input: z.input<typeof leadSchema>,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.growth.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   const parsed = leadSchema.safeParse(input);
@@ -172,7 +173,7 @@ const statusSchema = z.object({
 export async function setLeadStatus(
   input: z.input<typeof statusSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = statusSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -226,7 +227,7 @@ const activitySchema = z.object({
 export async function logTouch(
   input: z.input<typeof activitySchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = activitySchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -268,7 +269,7 @@ const followUpSchema = z.object({
 export async function setFollowUp(
   input: z.input<typeof followUpSchema>,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.growth.manage");
   const parsed = followUpSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -303,7 +304,7 @@ export async function importLeads(
   csvText: string,
   defaultSource = "import",
 ): Promise<ImportResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   if (!csvText.trim()) return { ok: false, error: "The file was empty." };
 
   const rows = parseCsv(csvText);
@@ -462,7 +463,7 @@ function toAudience(a: z.infer<typeof audienceSchema>): Audience | string {
 export async function sendCampaign(
   input: z.input<typeof campaignSchema>,
 ): Promise<SendResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = campaignSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -510,7 +511,7 @@ const oneOffSchema = z.object({
 export async function messageLead(
   input: z.input<typeof oneOffSchema>,
 ): Promise<SendResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = oneOffSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -553,7 +554,7 @@ const bulkSchema = z.object({
 export async function bulkUpdateLeads(
   input: z.input<typeof bulkSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.growth.manage");
   const parsed = bulkSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };

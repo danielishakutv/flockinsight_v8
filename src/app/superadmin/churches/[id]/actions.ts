@@ -5,11 +5,12 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { resetChurch, restoreChurchAsNew, type ChurchBackup } from "@/lib/church-data";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
@@ -23,7 +24,7 @@ export async function resetChurchAction(
   id: string,
   confirmName: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid church." };
 
@@ -68,7 +69,7 @@ export async function resetChurchAction(
 export async function restoreChurchAction(
   backupJson: string,
 ): Promise<{ ok: true; churchId: string; name: string } | { ok: false; error: string }> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
 
   let backup: ChurchBackup;
   try {
@@ -98,7 +99,7 @@ export async function setPaymentWaived(
   id: string,
   waived: boolean,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const [c] = await db
     .select({ name: church.name })
     .from(church)
@@ -136,7 +137,7 @@ export async function setPaymentWaived(
 
 /** Extend a church's free trial by N weeks (from the later of now / current end). */
 export async function extendTrial(id: string, weeks: number): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const w = Math.max(1, Math.min(52, Math.round(weeks)));
 
   const [c] = await db
@@ -203,7 +204,7 @@ const parentSchema = z.object({
 export async function setChurchParent(
   input: z.input<typeof parentSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = parentSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };

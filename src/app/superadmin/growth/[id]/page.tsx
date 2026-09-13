@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { getLead, getLeadActivities, churchOptions } from "@/lib/leads";
 import { LeadDetail } from "@/components/superadmin/lead-detail";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Lead · Admin" };
 
 export default async function LeadPage({
@@ -12,6 +13,7 @@ export default async function LeadPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatform("platform.growth.manage");
   const { id } = await params;
   // A malformed id is simply "not found" — Postgres would otherwise reject the
   // uuid cast and turn a stale link into a server error.

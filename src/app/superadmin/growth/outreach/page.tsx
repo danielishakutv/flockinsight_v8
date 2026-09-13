@@ -11,9 +11,11 @@ import { isEmailConfigured } from "@/lib/mailer";
 import { OutreachComposer } from "@/components/superadmin/outreach-composer";
 import { CampaignHistory } from "@/components/superadmin/campaign-history";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Outreach · Admin" };
 
 export default async function OutreachPage() {
+  await requirePlatform("platform.messaging.send");
   const [churches, countryRows, sources, stats, campaigns, denominations] =
     await Promise.all([
       db

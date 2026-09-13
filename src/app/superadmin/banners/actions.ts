@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { banner } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const emptyToNull = (v: unknown) =>
@@ -25,7 +25,7 @@ const schema = z.object({
 export type BannerInput = z.input<typeof schema>;
 
 export async function saveBanner(input: BannerInput): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -50,7 +50,7 @@ export async function saveBanner(input: BannerInput): Promise<ActionResult> {
 }
 
 export async function deleteBanner(id: string): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   await db.delete(banner).where(eq(banner.id, id));

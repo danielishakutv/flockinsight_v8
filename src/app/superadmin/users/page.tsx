@@ -1,13 +1,14 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { user, staff, church } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { UsersAdmin, type UserRow } from "@/components/superadmin/users-admin";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Users · Admin" };
 
 export default async function SuperadminUsersPage() {
-  await requireSuperAdmin();
+  await requirePlatform("platform.users.view");
 
   const rows = await db
     .select({

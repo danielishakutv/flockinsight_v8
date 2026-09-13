@@ -36,6 +36,7 @@ import {
 } from "@/components/superadmin/skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Overview · Admin" };
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,8 @@ export const dynamic = "force-dynamic";
  * fold, on a phone, before any growth number. Each section streams in its own
  * Suspense boundary so a slow query cannot hold the page hostage.
  */
-export default function SuperadminOverviewPage() {
+export default async function SuperadminOverviewPage() {
+  await requirePlatform("platform.overview.view");
   return (
     <div className="space-y-6">
       <div>

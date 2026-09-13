@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Notifications · Admin" };
 
 function audienceLabel(n: {
@@ -53,6 +54,7 @@ export default async function SuperadminNotificationsPage({
    */
   searchParams: Promise<{ draft?: string; reuse?: string }>;
 }) {
+  await requirePlatform("platform.messaging.send");
   const { draft: draftId, reuse: reuseId } = await searchParams;
   const [churches, countryRows, history, scheduled, drafts] = await Promise.all([
     db

@@ -8,6 +8,7 @@ import { categoryLabel } from "@/lib/support";
 import { TicketStatusBadge } from "@/components/help/ticket-thread";
 import { cn } from "@/lib/utils";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Support · Admin" };
 
 const FILTERS = [
@@ -23,6 +24,7 @@ export default async function SuperadminSupportPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  await requirePlatform("platform.support.manage");
   const { status: filter = "active" } = await searchParams;
 
   const rows = await db

@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, denomination } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
+import { requirePlatform } from "@/lib/platform-access";
 import {
   assignChurches,
   getDenomination,
@@ -31,7 +32,7 @@ const schema = z.object({
 export async function createDenomination(
   input: z.input<typeof schema>,
 ): Promise<CreateResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -66,7 +67,7 @@ const updateSchema = schema.extend({ id: z.string().uuid() });
 export async function updateDenomination(
   input: z.input<typeof updateSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -100,7 +101,7 @@ const assignSchema = z.object({
 export async function addChurches(
   input: z.input<typeof assignSchema>,
 ): Promise<CountResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = assignSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -123,7 +124,7 @@ export async function addChurches(
 export async function removeChurches(
   input: z.input<typeof assignSchema>,
 ): Promise<CountResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.churches.manage");
   const parsed = assignSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -142,7 +143,7 @@ const oneSchema = z.object({
 export async function setChurchDenomination(
   input: z.input<typeof oneSchema>,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = oneSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -192,7 +193,7 @@ const mergeSchema = z.object({
 export async function mergeDenomination(
   input: z.input<typeof mergeSchema>,
 ): Promise<CountResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   const parsed = mergeSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -221,7 +222,7 @@ export async function mergeDenomination(
 
 /** Bring an archived denomination back into use. */
 export async function restoreDenomination(id: string): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.churches.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   await db
@@ -234,7 +235,7 @@ export async function restoreDenomination(id: string): Promise<ActionResult> {
 
 /** Archive one that's no longer used, without losing the name. */
 export async function archiveDenomination(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   await db

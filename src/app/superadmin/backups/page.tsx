@@ -4,9 +4,11 @@ import { listBackups, formatBytes, BACKUP_DIR } from "@/lib/backups";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Backups · Admin" };
 
 export default async function BackupsPage() {
+  await requirePlatform("platform.backups.manage");
   const backups = await listBackups();
 
   return (

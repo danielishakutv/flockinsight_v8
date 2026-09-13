@@ -14,6 +14,7 @@ import { LeadDialog } from "@/components/superadmin/lead-dialog";
 import { LeadImportDialog } from "@/components/superadmin/lead-import-dialog";
 import { Button } from "@/components/ui/button";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Growth · Admin" };
 
 export default async function GrowthPage({
@@ -21,6 +22,7 @@ export default async function GrowthPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  await requirePlatform("platform.growth.manage");
   const filters = parseLeadFilters(await searchParams);
   const [{ rows, count }, stats, sources, sends] = await Promise.all([
     listLeads(filters),

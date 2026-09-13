@@ -50,6 +50,7 @@ import { isChurchVerified } from "@/lib/verification-shared";
 import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { requirePlatform } from "@/lib/platform-access";
 import {
   Card,
   CardContent,
@@ -71,6 +72,7 @@ export default async function SuperadminChurchPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatform("platform.churches.view");
   const { id } = await params;
 
   const [[c], denominations, networkChurches] = await Promise.all([

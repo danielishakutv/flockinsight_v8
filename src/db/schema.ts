@@ -107,6 +107,21 @@ export const user = pgTable("user", {
   // Platform-level superadmin (FlockInsight operator), distinct from
   // per-church roles. Bootstrap manually in the DB for your account.
   isSuperAdmin: boolean().notNull().default(false),
+  /*
+   * Which admin role scopes what they can do inside /superadmin.
+   *
+   * Null with isSuperAdmin means unrestricted — that is what the original
+   * single-boolean admin was, and leaving it as the default is what stops
+   * anyone losing access the moment roles arrive.
+   */
+  platformRoleId: uuid("platform_role_id").references(
+    (): AnyPgColumn => platformRole.id,
+    // RESTRICT, not SET NULL. Null means unrestricted here, so cascading a
+    // deleted role to null would hand every holder full access — the exact
+    // opposite of what deleting their role means. The action refuses too;
+    // this is the backstop under it.
+    { onDelete: "restrict" },
+  ),
   // Set when support resets a password — forces a new password on next login.
   mustChangePassword: boolean().notNull().default(false),
   createdAt: timestamp().notNull().defaultNow(),
@@ -436,6 +451,30 @@ export const staff = pgTable("staff", {
  * Each church creates roles and grants them permission keys
  * (see src/lib/permissions.ts for the catalog). Owner is locked.
  * ========================================================== */
+
+/**
+ * An admin role for the platform side, not for a church.
+ *
+ * Deliberately a separate table from `role`: that one is scoped to a church
+ * and its permission keys mean something entirely different. Sharing it would
+ * make "finance.view" ambiguous in exactly the place ambiguity is expensive.
+ */
+export const platformRole = pgTable(
+  "platform_role",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    description: text(),
+    // Array of platform permission keys, e.g. {"platform.finance.view"}.
+    permissions: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("platform_role_name_idx").on(t.name)],
+);
 
 export const role = pgTable(
   "role",

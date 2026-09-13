@@ -1,5 +1,5 @@
 import { AlertTriangle, Banknote, Clock, Gift, Wallet } from "lucide-react";
-import { requireSuperAdmin } from "@/lib/session";
+
 import {
   getFinanceOverview,
   pendingTopups,
@@ -11,11 +11,12 @@ import { RecordPayment } from "@/components/superadmin/record-payment";
 import { FinanceTabs } from "@/components/superadmin/finance-tabs";
 import { RevenueChart } from "@/components/superadmin/revenue-chart";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Finance · Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function FinancePage() {
-  await requireSuperAdmin();
+  await requirePlatform("platform.finance.view");
   const [overview, movements, topups, gateways] = await Promise.all([
     getFinanceOverview(),
     recentWalletMovements(40),

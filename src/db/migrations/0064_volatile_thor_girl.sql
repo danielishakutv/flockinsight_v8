@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD CONSTRAINT "user_platform_role_id_platform_role_id_fk" FOREIGN KEY ("platform_role_id") REFERENCES "public"."platform_role"("id") ON DELETE restrict ON UPDATE no action;

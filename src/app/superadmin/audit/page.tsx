@@ -3,9 +3,11 @@ import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import { AuditList } from "@/components/superadmin/audit-list";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Audit log · Admin" };
 
 export default async function AuditPage() {
+  await requirePlatform("platform.audit.view");
   const rows = await db
     .select({
       id: auditLog.id,

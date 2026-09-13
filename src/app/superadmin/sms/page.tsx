@@ -7,9 +7,11 @@ import { senderIdDiagnostics } from "@/lib/sms-sender";
 import { normalizeSenderId } from "@/lib/termii-sender";
 import { SmsAdmin, type ChurchSms } from "@/components/superadmin/sms-admin";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "SMS · Admin" };
 
 export default async function SuperadminSmsPage() {
+  await requirePlatform("platform.sms.manage");
   const [price, rows, submissions] = await Promise.all([
     getSmsPrice(),
     db

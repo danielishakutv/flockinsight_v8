@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Campaign · Admin" };
 
 const STATUS_TONE: Record<string, string> = {
@@ -23,6 +24,7 @@ export default async function CampaignPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatform("platform.messaging.send");
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
 

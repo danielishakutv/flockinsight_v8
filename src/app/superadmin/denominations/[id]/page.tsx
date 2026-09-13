@@ -9,6 +9,7 @@ import {
 } from "@/lib/denominations";
 import { DenominationChurches } from "@/components/superadmin/denomination-churches";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Denomination · Admin" };
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function DenominationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatform("platform.churches.view");
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
 

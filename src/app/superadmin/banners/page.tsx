@@ -3,9 +3,11 @@ import { db } from "@/db";
 import { banner } from "@/db/schema";
 import { BannerManager } from "@/components/superadmin/banner-manager";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Banners · Admin" };
 
 export default async function SuperadminBannersPage() {
+  await requirePlatform("platform.content.manage");
   const rows = await db.select().from(banner).orderBy(asc(banner.sortOrder)).limit(100);
   return (
     <div className="space-y-6">

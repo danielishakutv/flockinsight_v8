@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { church, smsSenderSubmission, walletTxn } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
 import { platformSenderId } from "@/lib/sms-sender";
@@ -22,6 +22,7 @@ import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /** In-app + email — the church must hear about a sender-ID verdict. */
@@ -57,7 +58,7 @@ export async function sendTestSms(
   to: string,
   message: string,
 ): Promise<ActionResult & { senderId?: string }> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.sms.manage");
   if (!isSmsConfigured())
     return {
       ok: false,
@@ -70,7 +71,7 @@ export async function sendTestSms(
 }
 
 export async function setSmsPrice(price: number): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.sms.manage");
   if (!Number.isFinite(price) || price < 0 || price > 100000)
     return { ok: false, error: "Invalid price" };
   await setSetting(SMS_PRICE_KEY, String(price));
@@ -82,7 +83,7 @@ export async function setSenderId(
   churchId: string,
   senderId: string,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   const id = (senderId || "").trim();
@@ -104,7 +105,7 @@ export async function revokeSenderId(
   churchId: string,
   reason?: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   await db
@@ -155,7 +156,7 @@ export type SubmitSenderResult =
 export async function submitSenderIdToTermii(
   churchId: string,
 ): Promise<SubmitSenderResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
 
@@ -361,7 +362,7 @@ export type CheckResult =
  * reported as a failure — never as "still processing".
  */
 export async function checkSenderIdOnNetwork(churchId: string): Promise<CheckResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
 
@@ -430,7 +431,7 @@ export async function checkSenderIdOnNetwork(churchId: string): Promise<CheckRes
 export async function listSenderIdsOnNetwork(): Promise<
   { ok: true; ids: NetworkSenderId[] } | { ok: false; error: string }
 > {
-  await requireSuperAdmin();
+  await requirePlatform("platform.sms.manage");
   return await listNetworkSenderIds();
 }
 
@@ -440,7 +441,7 @@ export async function reviewSenderId(
   approve: boolean,
   reason?: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   const [c] = await db
@@ -476,7 +477,7 @@ export async function adjustWallet(
   kind: "credit" | "debit",
   note?: string,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.sms.manage");
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
   if (kind !== "credit" && kind !== "debit")

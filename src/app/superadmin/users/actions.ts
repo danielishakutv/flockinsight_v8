@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { church, staff, user } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { adminResetPassword, setUserPassword } from "@/lib/admin-users";
 import { auth } from "@/lib/auth";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 import { recordAudit } from "@/lib/audit";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ResetResult =
   | { ok: true; tempPassword: string; emailed: boolean }
   | { ok: false; error: string };
@@ -24,7 +25,7 @@ export async function updateUser(
   userId: string,
   input: { name: string; email: string },
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
   const name = (input.name || "").trim();
@@ -52,7 +53,7 @@ export async function updateUser(
 
 /** Permanently delete a user account. Can't delete your own. */
 export async function deleteUser(userId: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
   if (userId === admin.id)
@@ -81,7 +82,7 @@ export async function assignUserToChurch(
   churchId: string,
   role: (typeof ROLES)[number],
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.users.manage");
   if (!ROLES.includes(role)) return { ok: false, error: "Invalid role" };
   if (
     !z.string().min(1).safeParse(userId).success ||
@@ -122,7 +123,7 @@ export async function removeUserFromChurch(
   userId: string,
   churchId: string,
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.users.manage");
   await db
     .delete(staff)
     .where(and(eq(staff.organizationId, churchId), eq(staff.userId, userId)));
@@ -135,7 +136,7 @@ export async function removeUserFromChurch(
 export async function resetUserPasswordAction(
   userId: string,
 ): Promise<ResetResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
 
@@ -186,7 +187,7 @@ export async function setUserPasswordAction(
   password: string,
   forceChange: boolean,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
   if ((password || "").length < 8)
@@ -239,7 +240,7 @@ export async function setUserPasswordAction(
 
 /** Email the user a self-service password reset link (Better Auth flow). */
 export async function sendResetLink(userId: string): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.users.manage");
   const [u] = await db
     .select({ email: user.email })
     .from(user)
@@ -262,7 +263,7 @@ export async function setSuperAdmin(
   userId: string,
   makeAdmin: boolean,
 ): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
   if (!makeAdmin && userId === admin.id)

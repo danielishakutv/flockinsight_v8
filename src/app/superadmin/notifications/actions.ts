@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { broadcast } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import {
   deliverBroadcast,
   type BroadcastAudience,
@@ -16,6 +16,7 @@ import { draftFromReleases } from "@/lib/release-draft";
 import { releases } from "@/lib/changelog";
 import { siteUrl } from "@/lib/site";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type CreateResult =
   | { ok: true; pushSent: number; emailSent: number; scheduled?: boolean }
   | { ok: false; error: string };
@@ -76,7 +77,7 @@ function validate(d: Parsed): string | null {
 export async function createNotification(
   input: z.input<typeof schema>,
 ): Promise<CreateResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -138,7 +139,7 @@ export async function createNotification(
 }
 
 export async function cancelBroadcast(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   const [b] = await db
@@ -173,7 +174,7 @@ export async function cancelBroadcast(id: string): Promise<ActionResult> {
 export async function saveDraft(
   input: z.input<typeof schema> & { id?: string },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -234,7 +235,7 @@ export async function saveDraft(
 export async function createCatchUpDraft(
   count = 5,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   const n = Math.min(Math.max(Math.trunc(count) || 5, 2), 10);
 
   const { title, body } = draftFromReleases(releases.slice(0, n));
@@ -272,7 +273,7 @@ export async function sendDraft(
   id: string,
   when?: string | null,
 ): Promise<CreateResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
@@ -359,7 +360,7 @@ export async function sendDraft(
 }
 
 export async function deleteDraft(id: string): Promise<ActionResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.messaging.send");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 

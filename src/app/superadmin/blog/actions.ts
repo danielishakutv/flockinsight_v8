@@ -5,11 +5,12 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { blogPost } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { uniqueBlogSlug, excerptFromBody } from "@/lib/blog";
 import { deliverBroadcast } from "@/lib/broadcasts";
 import { recordAudit } from "@/lib/audit";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const emptyToNull = (v: unknown) =>
@@ -35,7 +36,7 @@ export type BlogPostInput = z.input<typeof schema>;
 export async function createPost(): Promise<
   { ok: true; id: string } | { ok: false; error: string }
 > {
-  const user = await requireSuperAdmin();
+  const user = await requirePlatform("platform.content.manage");
   const slug = await uniqueBlogSlug("untitled-post");
   // Default the byline to the signed-in admin's name (fallback: Daniel Ishaku).
   const authorName = user.name?.trim() || "Daniel Ishaku";
@@ -54,7 +55,7 @@ export async function createPost(): Promise<
 }
 
 export async function savePost(input: BlogPostInput): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -102,7 +103,7 @@ export async function setPostStatus(
   id: string,
   status: "draft" | "published",
 ): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
@@ -128,7 +129,7 @@ export async function setPostStatus(
 }
 
 export async function deletePost(id: string): Promise<ActionResult> {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
   await db.delete(blogPost).where(eq(blogPost.id, id));
@@ -157,7 +158,7 @@ export type AnnounceResult =
 export async function announcePost(
   input: z.input<typeof announceSchema>,
 ): Promise<AnnounceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.content.manage");
   const parsed = announceSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };

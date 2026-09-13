@@ -4,9 +4,11 @@ import { blogPost } from "@/db/schema";
 import { siteUrl } from "@/lib/site";
 import { BlogList } from "@/components/superadmin/blog-list";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Blog · Admin" };
 
 export default async function SuperadminBlogPage() {
+  await requirePlatform("platform.content.manage");
   const rows = await db
     .select({
       id: blogPost.id,

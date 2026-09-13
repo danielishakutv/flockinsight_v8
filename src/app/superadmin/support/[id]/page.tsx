@@ -13,6 +13,7 @@ import {
 import { AdminTicketActions } from "@/components/superadmin/admin-ticket-actions";
 import { Button } from "@/components/ui/button";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Ticket · Admin" };
 
 export default async function AdminTicketPage({
@@ -20,6 +21,7 @@ export default async function AdminTicketPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePlatform("platform.support.manage");
   const { id } = await params;
   // A malformed id is "not found", not a server error — Postgres rejects the
   // uuid cast outright.

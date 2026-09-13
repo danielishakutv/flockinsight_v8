@@ -5,12 +5,14 @@ import {
 } from "@/components/superadmin/roadmap-board";
 import { Card, CardContent } from "@/components/ui/card";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Roadmap · Admin" };
 
 /** Always current — an item added on a phone should be there on the next load. */
 export const dynamic = "force-dynamic";
 
 export default async function SuperadminRoadmapPage() {
+  await requirePlatform("platform.growth.manage");
   const [rows, size] = await Promise.all([listRoadmap(), platformSize()]);
 
   const items: BoardItem[] = rows.map((r) => ({

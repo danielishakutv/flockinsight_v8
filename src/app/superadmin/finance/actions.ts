@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { activatePlan } from "@/lib/billing";
 import { creditWallet, debitWallet } from "@/lib/wallet";
 import { recordAudit } from "@/lib/audit";
 import { planName } from "@/lib/plans";
 import { trialEndDate } from "@/lib/trial";
 
+import { requirePlatform } from "@/lib/platform-access";
 export type FinanceResult = { ok: true } | { ok: false; error: string };
 
 const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
@@ -44,7 +45,7 @@ const recordSchema = z.object({
 export async function recordOfflinePayment(
   input: z.input<typeof recordSchema>,
 ): Promise<FinanceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.finance.manage");
   const parsed = recordSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
@@ -121,7 +122,7 @@ export async function adjustWallet(input: {
   reason: string;
   asAdvance?: boolean;
 }): Promise<FinanceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.finance.manage");
   if (!z.string().min(1).safeParse(input.churchId).success)
     return { ok: false, error: "Invalid id" };
   const amount = Math.round(Number(input.amount) || 0);
@@ -195,7 +196,7 @@ export async function setTrial(input: {
   churchId: string;
   sundays: number;
 }): Promise<FinanceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.finance.manage");
   if (!z.string().min(1).safeParse(input.churchId).success)
     return { ok: false, error: "Invalid id" };
   const sundays = Math.round(Number(input.sundays) || 0);
@@ -244,7 +245,7 @@ export async function setTrial(input: {
 export async function markPaymentReceived(
   paymentId: string,
 ): Promise<FinanceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.finance.manage");
   if (!z.string().uuid().safeParse(paymentId).success)
     return { ok: false, error: "Invalid id" };
 
@@ -288,7 +289,7 @@ export async function voidPayment(
   paymentId: string,
   reason: string,
 ): Promise<FinanceResult> {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.finance.manage");
   if (!z.string().uuid().safeParse(paymentId).success)
     return { ok: false, error: "Invalid id" };
   const why = (reason || "").trim().slice(0, 200);

@@ -3,10 +3,11 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { blogPost } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { siteUrl } from "@/lib/site";
 import { BlogEditor } from "@/components/superadmin/blog-editor";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Edit post · Admin" };
 
 export default async function BlogEditorPage({
@@ -14,7 +15,7 @@ export default async function BlogEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
   const { id } = await params;
   // A malformed id is "not found", not a server error — Postgres rejects the
   // uuid cast outright.

@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { refreshFloat, saveUnitCost } from "./actions";
 import { EmailTest } from "@/components/superadmin/email-test";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Health · Admin" };
 const PROVIDER_LABEL: Record<
   ReturnType<typeof emailProvider>,
@@ -40,7 +41,8 @@ const PROVIDER_LABEL: Record<
 
 export const dynamic = "force-dynamic";
 
-export default function SuperadminHealthPage() {
+export default async function SuperadminHealthPage() {
+  await requirePlatform("platform.overview.view");
   return (
     <div className="space-y-6">
       <div>
