@@ -15,7 +15,7 @@ export function DesktopTopbar({
   canRecord?: boolean;
 }) {
   return (
-    <header className="bg-background/80 sticky top-0 z-30 hidden h-16 items-center justify-between gap-4 border-b px-6 backdrop-blur lg:flex">
+    <header className="bg-background/80 sticky top-[env(safe-area-inset-top)] z-30 hidden h-16 items-center justify-between gap-4 border-b px-6 backdrop-blur lg:flex">
       <DateTime />
       <div className="flex items-center gap-1.5">
         <LiveNotificationBell initial={unread} />

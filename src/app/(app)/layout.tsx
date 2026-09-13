@@ -65,7 +65,19 @@ export default async function AppLayout({
     standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
+      {/*
+        The status bar band. viewportFit is "cover", so the app is drawn behind
+        the clock and the Dynamic Island. The padding above starts the page
+        below them; this covers the band so content scrolling up does not run
+        under the clock, and so the topmost thing on the page — which is a
+        banner, not the header, whenever one is showing — is never the thing
+        that has to know about the notch. Zero height on anything without one.
+      */}
+      <div
+        aria-hidden
+        className="bg-background fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)]"
+      />
       {impersonating && <ImpersonationBanner churchName={church.name} />}
       {showTrialBanner && standing.daysLeft != null && (
         <TrialBanner

@@ -54,7 +54,7 @@ export function TrialGate({
   }
 
   return (
-    <div className="bg-muted/40 grid min-h-dvh place-items-center px-4 py-10">
+    <div className="bg-muted/40 grid min-h-dvh place-items-center px-4 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-10">
       <div className="w-full max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <span className="text-lg font-extrabold">
