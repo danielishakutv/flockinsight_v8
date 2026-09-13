@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Banknote,
   BarChart3,
   Bell,
   Building2,
@@ -41,6 +42,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { label: "Overview", href: "/superadmin", icon: LayoutDashboard },
       { label: "Health", href: "/superadmin/health", icon: HeartPulse },
       { label: "Usage", href: "/superadmin/usage", icon: BarChart3 },
+      { label: "Finance", href: "/superadmin/finance", icon: Banknote },
     ],
   },
   {
