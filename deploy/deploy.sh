@@ -143,7 +143,15 @@ log "Applying database migrations"
 ( cd "$RELEASE" && pnpm db:migrate )
 
 log "Building"
-( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1024}" pnpm build )
+# 1024 was enough until it wasn't: the TypeScript pass at the end of the build
+# grew past it as the app did, and died with "Ineffective mark-compacts near
+# heap limit" AFTER reporting "Compiled successfully" — which reads like the
+# build worked. Raised, and still overridable from the environment for a box
+# with less to spare.
+#
+# Check `free -h` shows swap before raising this further: a build that takes
+# the whole machine down with it is worse than one that fails.
+( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" pnpm build )
 
 # --------------------------------------------------------------- smoke test
 # Prove the new build boots and answers before anything points at it. This is

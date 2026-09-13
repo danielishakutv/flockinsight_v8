@@ -1,6 +1,7 @@
-import { requireSuperAdmin } from "@/lib/session";
+
 import { isCloudinaryConfigured, uploadToCloudinary } from "@/lib/cloudinary";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -19,7 +20,7 @@ function json(data: unknown, status = 200) {
 
 // POST /api/superadmin/blog/upload  (multipart: file)  -> { ok, url }
 export async function POST(request: Request) {
-  await requireSuperAdmin();
+  await requirePlatform("platform.content.manage");
 
   if (!isCloudinaryConfigured())
     return json(

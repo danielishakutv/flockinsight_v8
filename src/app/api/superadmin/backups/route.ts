@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { resolveBackupPath } from "@/lib/backups";
 
+import { requirePlatform } from "@/lib/platform-access";
 // Superadmin-only download of an encrypted DB backup.
 export async function GET(req: NextRequest) {
-  await requireSuperAdmin(); // redirects non-superadmins
+  await requirePlatform("platform.backups.manage"); // redirects non-superadmins
 
   const name = req.nextUrl.searchParams.get("name") ?? "";
   const full = resolveBackupPath(name);

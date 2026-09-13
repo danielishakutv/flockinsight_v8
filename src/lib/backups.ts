@@ -2,6 +2,18 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+/*
+ * Where the nightly dumps live. Absolute, and outside the app directory on
+ * purpose, so a release swap never touches them.
+ *
+ * The build warns about this module ("Encountered unexpected file in NFT
+ * list"). The file tracer cannot see through an env var, so reading a path
+ * built from BACKUP_DIR looks to it like this module could touch anything, and
+ * it gives up and traces the whole project. Nothing here can be made static —
+ * the directory is deliberately outside the app so a release swap cannot
+ * disturb the dumps — so the answer is to tell the tracer not to follow this
+ * route at all. See outputFileTracingExcludes in next.config.ts.
+ */
 export const BACKUP_DIR =
   process.env.BACKUP_DIR || "/var/backups/flockinsight";
 

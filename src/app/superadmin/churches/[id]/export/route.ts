@@ -1,8 +1,9 @@
-import { requireSuperAdmin } from "@/lib/session";
+
 import { exportChurch } from "@/lib/church-data";
 import { slugify } from "@/lib/slug";
 import { recordAudit } from "@/lib/audit";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireSuperAdmin();
+  const admin = await requirePlatform("platform.churches.view");
   const { id } = await params;
 
   const data = await exportChurch(id);

@@ -1,10 +1,11 @@
 import { desc } from "drizzle-orm";
 import { db } from "@/db";
 import { lead } from "@/db/schema";
-import { requireSuperAdmin } from "@/lib/session";
+
 import { toCsv, CSV_BOM } from "@/lib/csv";
 import { LEAD_CSV_TEMPLATE_HEADERS } from "@/lib/growth-shared";
 
+import { requirePlatform } from "@/lib/platform-access";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 // The columns match what the importer accepts, so an exported file can be
 // edited in a spreadsheet and brought straight back in.
 export async function GET() {
-  await requireSuperAdmin();
+  await requirePlatform("platform.growth.manage");
 
   const rows = await db.select().from(lead).orderBy(desc(lead.createdAt));
 
