@@ -160,7 +160,7 @@ export function VerificationManager({
                 : "Verify both your email address and your phone number to earn your church's verification tick."}
             </p>
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex w-full flex-wrap gap-1.5 sm:w-auto">
             <Badge variant={emailOk ? "success" : "warning"}>
               Email {emailOk ? "verified" : "pending"}
             </Badge>

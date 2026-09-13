@@ -189,6 +189,19 @@ export function dismissInstall() {
   patch({ mayAsk: false });
 }
 
+/**
+ * "I already have it."
+ *
+ * iOS is the whole reason this exists. Safari never fires `appinstalled`, and
+ * a standalone PWA keeps its own storage, so a phone that added the app to its
+ * home screen months ago is indistinguishable — from inside a Safari tab —
+ * from one that never did. Nobody but the person knows, so let them say it.
+ */
+export function markInstalled() {
+  persist(recordInstalled(stored));
+  patch({ installed: true, mayAsk: false });
+}
+
 function subscribe(cb: () => void) {
   start();
   listeners.add(cb);

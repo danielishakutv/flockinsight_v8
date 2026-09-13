@@ -99,6 +99,12 @@ export function stripTagsLoosely(html: string): string {
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/gi, "&")
+    // An HTML template is indented, so the tags above leave lines of pure
+    // whitespace behind. Those are not blank as far as /\n{3,}/ is concerned,
+    // which is how a three-line announcement reached the bell as seventeen
+    // lines of gaps.
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

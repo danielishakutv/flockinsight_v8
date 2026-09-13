@@ -236,7 +236,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="svc-day">Day</Label>
                 <Select value={day} onValueChange={setDay}>
                   <SelectTrigger id="svc-day" className="w-full">
@@ -252,7 +252,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="svc-time">Start time</Label>
                 <Input
                   id="svc-time"

@@ -12,6 +12,8 @@ function Toaster({ ...props }: ToasterProps) {
       className="toaster group"
       richColors
       position="top-center"
+      offset={{ top: "calc(env(safe-area-inset-top) + 1rem)" }}
+      mobileOffset={{ top: "calc(env(safe-area-inset-top) + 0.75rem)" }}
       style={
         {
           "--normal-bg": "var(--popover)",

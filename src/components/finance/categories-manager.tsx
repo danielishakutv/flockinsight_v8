@@ -186,16 +186,16 @@ export function CategoriesManager({
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border">
+              <div className="overflow-x-auto rounded-2xl border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                     <tr>
-                      <th className="px-4 py-3 font-semibold">Name</th>
-                      <th className="px-4 py-3 text-right font-semibold">
+                      <th className="px-2 py-3 font-semibold sm:px-4">Name</th>
+                      <th className="px-2 py-3 text-right font-semibold sm:px-4">
                         Records
                       </th>
-                      <th className="px-4 py-3 text-right font-semibold">Total</th>
-                      {canManage && <th className="px-4 py-3" />}
+                      <th className="px-2 py-3 text-right font-semibold sm:px-4">Total</th>
+                      {canManage && <th className="px-2 py-3 sm:px-4" />}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -204,7 +204,7 @@ export function CategoriesManager({
                         key={c.id}
                         className={cn("hover:bg-muted/30", !c.isActive && "opacity-60")}
                       >
-                        <td className="px-4 py-3 font-medium">
+                        <td className="px-2 py-3 font-medium sm:px-4">
                           {c.name}
                           {!c.isActive && (
                             <Badge
@@ -215,14 +215,14 @@ export function CategoriesManager({
                             </Badge>
                           )}
                         </td>
-                        <td className="text-muted-foreground px-4 py-3 text-right tabular-nums">
+                        <td className="text-muted-foreground px-2 py-3 text-right tabular-nums sm:px-4">
                           {c.transactionCount}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        <td className="px-2 py-3 text-right font-semibold tabular-nums sm:px-4">
                           {formatMoney(c.total, currency)}
                         </td>
                         {canManage && (
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-3 sm:px-4">
                             <div className="flex justify-end gap-1">
                               <Button
                                 variant="ghost"

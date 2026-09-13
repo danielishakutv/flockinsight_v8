@@ -15,7 +15,7 @@ export function AppTopbar({
   unread?: number;
 }) {
   return (
-    <header className="bg-background/80 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-4 backdrop-blur lg:hidden">
+    <header className="bg-background/80 sticky top-0 z-30 flex min-h-16 items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
       <Wordmark logoClassName="size-8" className="text-lg" />
       <div className="flex items-center gap-1">
         <LiveNotificationBell initial={unread} />

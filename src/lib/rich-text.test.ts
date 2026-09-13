@@ -218,6 +218,16 @@ describe("a whole pasted email template", () => {
     expect(plain).not.toMatch(/[<>]/);
   });
 
+  it("does not arrive as a column of blank lines", () => {
+    // The notification bell renders this with whitespace-pre-line, and an
+    // indented template leaves a whitespace-only line behind every closing
+    // tag. Those are not blank to /\n{3,}/, so a three-line announcement
+    // reached the bell as seventeen lines of gaps.
+    const plain = richTextToPlain(template);
+    expect(plain).not.toMatch(/\n[^\S\n]*\n[^\S\n]*\n/);
+    expect(plain.split("\n").every((l) => l === l.trim())).toBe(true);
+  });
+
   it("still drops a script hidden inside the template", () => {
     const out = sanitizeRichText(
       template.replace("</body>", "<script>steal()</script></body>"),
