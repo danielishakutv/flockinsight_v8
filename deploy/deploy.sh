@@ -146,12 +146,15 @@ log "Building"
 # 1024 was enough until it wasn't: the TypeScript pass at the end of the build
 # grew past it as the app did, and died with "Ineffective mark-compacts near
 # heap limit" AFTER reporting "Compiled successfully" — which reads like the
-# build worked. Raised, and still overridable from the environment for a box
-# with less to spare.
+# build worked.
 #
-# Check `free -h` shows swap before raising this further: a build that takes
-# the whole machine down with it is worse than one that fails.
-( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" pnpm build )
+# 2048 rather than more, on purpose. This box runs every site we have and sits
+# around 3GB available with swap already in use; a heap ceiling above what is
+# actually free does not make the build succeed, it makes the build take the
+# machine down with it — which is how a bad afternoon becomes a day of 522s.
+# A build that fails is recoverable. Raise it only against `free -h`, and
+# override from the environment rather than editing this line.
+( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}" pnpm build )
 
 # --------------------------------------------------------------- smoke test
 # Prove the new build boots and answers before anything points at it. This is
