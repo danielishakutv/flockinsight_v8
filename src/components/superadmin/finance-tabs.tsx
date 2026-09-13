@@ -6,11 +6,25 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { adjustWallet, setTrial, voidPayment } from "@/app/superadmin/finance/actions";
+import {
+  adjustWallet,
+  markPaymentReceived,
+  setTrial,
+  voidPayment,
+} from "@/app/superadmin/finance/actions";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type ChurchRow = {
@@ -89,6 +103,10 @@ export function FinanceTabs({
 }) {
   const [tab, setTab] = useState<TabId>("churches");
   const [q, setQ] = useState("");
+  const [walletFor, setWalletFor] = useState<ChurchRow | null>(null);
+  const [walletAmount, setWalletAmount] = useState("");
+  const [walletReason, setWalletReason] = useState("");
+  const [asAdvance, setAsAdvance] = useState(false);
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -97,23 +115,51 @@ export function FinanceTabs({
     return s ? churches.filter((c) => c.name.toLowerCase().includes(s)) : churches;
   }, [churches, q]);
 
-  function doAdjust(c: ChurchRow) {
-    const raw = window.prompt(
-      `Adjust ${c.name}'s wallet. They have ${formatMoney(c.walletBalance)}.\n\nEnter an amount — negative to take it back out.`,
-      "",
-    );
-    if (raw === null) return;
-    const amount = Number(raw);
-    if (!amount) return toast.error("Enter a number.");
-    const reason = window.prompt("Why? This shows on their statement.", "");
-    if (!reason?.trim()) return toast.error("A reason is required.");
+  function openAdjust(c: ChurchRow) {
+    setWalletFor(c);
+    setWalletAmount("");
+    setWalletReason("");
+    setAsAdvance(false);
+  }
+
+  function submitAdjust() {
+    if (!walletFor) return;
+    const amount = Number(walletAmount);
+    if (!amount) {
+      toast.error("Enter an amount.");
+      return;
+    }
+    if (!walletReason.trim()) {
+      toast.error("A reason is required — it shows on their statement.");
+      return;
+    }
     start(async () => {
-      const res = await adjustWallet({ churchId: c.id, amount, reason });
+      const res = await adjustWallet({
+        churchId: walletFor.id,
+        amount,
+        reason: walletReason,
+        asAdvance,
+      });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success("Wallet adjusted.");
+      toast.success(
+        amount < 0 && asAdvance ? "Advance recorded." : "Wallet adjusted.",
+      );
+      setWalletFor(null);
+      router.refresh();
+    });
+  }
+
+  function doConfirm(p: PaymentRow) {
+    start(async () => {
+      const res = await markPaymentReceived(p.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Marked as received.");
       router.refresh();
     });
   }
@@ -210,10 +256,17 @@ export function FinanceTabs({
               <span key="m" className={c.monthly === 0 ? "text-muted-foreground" : "font-semibold"}>
                 {c.monthly === 0 ? trialLabel(c) : formatMoney(c.monthly)}
               </span>,
-              formatMoney(c.walletBalance),
+              <span
+                key="w"
+                className={c.walletBalance < 0 ? "font-semibold text-amber-600 dark:text-amber-400" : ""}
+              >
+                {c.walletBalance < 0
+                  ? `${formatMoney(Math.abs(c.walletBalance))} owing`
+                  : formatMoney(c.walletBalance)}
+              </span>,
               c.planRenewsAt ? format(new Date(c.planRenewsAt), "d MMM yyyy") : "—",
               <div key="a" className="flex justify-end gap-1">
-                <Button size="sm" variant="ghost" onClick={() => doAdjust(c)}>
+                <Button size="sm" variant="ghost" onClick={() => openAdjust(c)}>
                   Wallet
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => doTrial(c)}>
@@ -237,7 +290,12 @@ export function FinanceTabs({
               </span>,
               <StatusBadge key="s" status={p.status} />,
               p.paidAt ? format(new Date(p.paidAt), "d MMM yyyy") : "—",
-              <div key="v" className="flex justify-end">
+              <div key="v" className="flex justify-end gap-1">
+                {p.status === "pending" && (
+                  <Button size="sm" variant="outline" onClick={() => doConfirm(p)}>
+                    Mark received
+                  </Button>
+                )}
                 {p.status !== "failed" && (
                   <Button size="sm" variant="ghost" onClick={() => doVoid(p)}>
                     Void
@@ -375,6 +433,76 @@ export function FinanceTabs({
           />
         )}
       </div>
+
+      <Dialog open={walletFor !== null} onOpenChange={(o) => !o && setWalletFor(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{walletFor?.name}&apos;s wallet</DialogTitle>
+            <DialogDescription>
+              {walletFor && walletFor.walletBalance < 0
+                ? `They currently owe ${formatMoney(Math.abs(walletFor.walletBalance))}.`
+                : `They currently have ${formatMoney(walletFor?.walletBalance ?? 0)}.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="wa-amount">Amount (₦)</Label>
+              <Input
+                id="wa-amount"
+                type="number"
+                value={walletAmount}
+                onChange={(e) => setWalletAmount(e.target.value)}
+                placeholder="5000, or -5000 to take it back"
+              />
+              <p className="text-muted-foreground text-xs">
+                Positive adds credit. Negative takes it away.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="wa-reason">Reason</Label>
+              <Input
+                id="wa-reason"
+                value={walletReason}
+                onChange={(e) => setWalletReason(e.target.value)}
+                placeholder="Shows on their statement"
+              />
+            </div>
+
+            {Number(walletAmount) < 0 && (
+              <label className="flex items-start gap-2.5 rounded-xl border p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={asAdvance}
+                  onChange={(e) => setAsAdvance(e.target.checked)}
+                  className="mt-0.5 size-4"
+                />
+                <span>
+                  <span className="font-semibold">
+                    Let this go below zero (an advance)
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    They end up owing the difference, and their next top-up
+                    clears it before anything else. Without this, a debit larger
+                    than their balance is refused.
+                  </span>
+                </span>
+              </label>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setWalletFor(null)}>
+              Cancel
+            </Button>
+            <Button onClick={submitAdjust} disabled={pending || !walletAmount}>
+              {pending && <Loader2 className="size-4 animate-spin" />}
+              {Number(walletAmount) < 0 && asAdvance ? "Record advance" : "Apply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -44,9 +44,15 @@ export function WalletCard({
       <CardContent className="space-y-4">
         <div className="flex items-end justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-muted-foreground text-xs">Wallet balance</p>
-            <p className="truncate text-2xl font-extrabold tabular-nums">
-              {formatMoney(walletBalance, "NGN")}
+            <p className="text-muted-foreground text-xs">
+              {walletBalance < 0 ? "Balance owing" : "Wallet balance"}
+            </p>
+            <p
+              className={`truncate text-2xl font-extrabold tabular-nums ${
+                walletBalance < 0 ? "text-amber-600 dark:text-amber-400" : ""
+              }`}
+            >
+              {formatMoney(Math.abs(walletBalance), "NGN")}
             </p>
           </div>
           <Button asChild size="sm">

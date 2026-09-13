@@ -52,6 +52,7 @@ export const walletTxnCategoryEnum = pgEnum("wallet_txn_category", [
   "topup", // money in (Paystack)
   "sms", // SMS send
   "storage", // storage add-on subscription
+  "advance", // credit extended by us, to be settled by a later top-up
   "adjustment", // admin credit/debit
   "refund",
 ]);

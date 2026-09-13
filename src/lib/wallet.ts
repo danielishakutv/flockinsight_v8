@@ -7,6 +7,7 @@ export type WalletCategory =
   | "topup"
   | "sms"
   | "storage"
+  | "advance"
   | "adjustment"
   | "refund";
 
@@ -63,6 +64,12 @@ export type DebitResult =
 /**
  * Take money from the wallet (if sufficient) and record a ledger entry.
  * Returns ok:false with the current balance when there isn't enough.
+ *
+ * `allowNegative` lets the balance go below zero — an advance, settled by the
+ * church's next top-up. It exists for one caller: a superadmin deliberately
+ * extending credit. Everything a church can trigger itself (SMS, storage) must
+ * leave it off, or any church could run up a debt by spending money it does
+ * not have, which is not a credit line so much as an accident.
  */
 export async function debitWallet(opts: {
   churchId: string;
@@ -70,6 +77,7 @@ export async function debitWallet(opts: {
   category: WalletCategory;
   reason?: string;
   createdBy?: string | null;
+  allowNegative?: boolean;
 }): Promise<DebitResult> {
   const amount = round(Math.max(0, opts.amount));
   return db.transaction(async (tx) => {
@@ -79,7 +87,7 @@ export async function debitWallet(opts: {
       .where(eq(church.id, opts.churchId))
       .limit(1);
     const balance = Number(c?.balance ?? 0);
-    if (balance < amount) {
+    if (balance < amount && !opts.allowNegative) {
       return { ok: false, error: "Insufficient wallet balance.", balance };
     }
     const newBalance = round(balance - amount);

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/session";
@@ -104,11 +104,22 @@ export async function recordOfflinePayment(
   return { ok: true };
 }
 
-/** Put credit into a church's wallet, or take it back out. */
+/**
+ * Put credit into a church's wallet, or take it back out.
+ *
+ * With `asAdvance`, a debit may take the balance below zero — the church then
+ * owes that amount, and their next top-up settles it automatically, because a
+ * credit is simply added to whatever the balance is. That is the whole
+ * mechanism: no separate loan ledger, no reconciliation step.
+ *
+ * Only ever from here. Nothing a church can trigger itself may go negative, or
+ * a credit line becomes an accident anyone can have.
+ */
 export async function adjustWallet(input: {
   churchId: string;
   amount: number;
   reason: string;
+  asAdvance?: boolean;
 }): Promise<FinanceResult> {
   const admin = await requireSuperAdmin();
   if (!z.string().min(1).safeParse(input.churchId).success)
@@ -147,14 +158,15 @@ export async function adjustWallet(input: {
     const res = await debitWallet({
       churchId: input.churchId,
       amount: Math.abs(amount),
-      category: "adjustment",
+      category: input.asAdvance ? "advance" : "adjustment",
       reason,
       createdBy: admin.id,
+      allowNegative: input.asAdvance === true,
     });
     if (!res.ok)
       return {
         ok: false,
-        error: `${target.name} only has ₦${res.balance.toLocaleString()} in their wallet.`,
+        error: `${target.name} only has ₦${res.balance.toLocaleString()}. Tick "advance" to let it go below zero.`,
       };
   }
 
@@ -162,7 +174,7 @@ export async function adjustWallet(input: {
     actorUserId: admin.id,
     actorName: admin.name,
     action: "wallet.adjust",
-    summary: `${amount > 0 ? "Credited" : "Debited"} ₦${Math.abs(amount).toLocaleString()} ${amount > 0 ? "to" : "from"} ${target.name}: ${reason}`,
+    summary: `${amount > 0 ? "Credited" : input.asAdvance ? "Advanced against" : "Debited"} ₦${Math.abs(amount).toLocaleString()} ${amount > 0 ? "to" : "from"} ${target.name}: ${reason}`,
     targetType: "church",
     targetId: input.churchId,
   });
@@ -219,6 +231,55 @@ export async function setTrial(input: {
 
   revalidatePath("/superadmin/finance");
   revalidatePath(`/superadmin/churches/${input.churchId}`);
+  return { ok: true };
+}
+
+/**
+ * Confirm a payment the gateway left hanging.
+ *
+ * A payment stuck on pending is money we may well have received while the
+ * callback never arrived — it counts nowhere until somebody says it landed.
+ * Voiding it would be wrong; this is the other half of that pair.
+ */
+export async function markPaymentReceived(
+  paymentId: string,
+): Promise<FinanceResult> {
+  const admin = await requireSuperAdmin();
+  if (!z.string().uuid().safeParse(paymentId).success)
+    return { ok: false, error: "Invalid id" };
+
+  const [row] = await db
+    .update(payment)
+    .set({ status: "success", paidAt: new Date() })
+    // Only from pending. Re-confirming a success would move its paid date and
+    // shift it into the wrong month; a failed one should be looked at first.
+    .where(and(eq(payment.id, paymentId), eq(payment.status, "pending")))
+    .returning({
+      id: payment.id,
+      churchId: payment.churchId,
+      amount: payment.amount,
+      plan: payment.plan,
+      periodMonths: payment.periodMonths,
+    });
+  if (!row)
+    return { ok: false, error: "That payment is no longer pending." };
+
+  // Honour the period the payment was for, now that it has actually landed.
+  if (row.periodMonths && row.periodMonths > 0 && row.plan) {
+    await activatePlan(row.churchId, row.plan, row.periodMonths);
+  }
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "payment.confirm",
+    summary: `Confirmed a ₦${Number(row.amount).toLocaleString()} payment the gateway left pending`,
+    targetType: "church",
+    targetId: row.churchId,
+  });
+
+  revalidatePath("/superadmin/finance");
+  revalidatePath(`/superadmin/churches/${row.churchId}`);
   return { ok: true };
 }
 

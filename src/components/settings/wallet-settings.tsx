@@ -22,7 +22,7 @@ import {
 type Txn = {
   id: string;
   kind: "credit" | "debit";
-  category: "topup" | "sms" | "storage" | "adjustment" | "refund";
+  category: "topup" | "sms" | "storage" | "advance" | "adjustment" | "refund";
   amount: number;
   balanceAfter: number;
   reason: string | null;
@@ -35,6 +35,9 @@ const CATEGORY_LABEL: Record<Txn["category"], string> = {
   topup: "Top-up",
   sms: "SMS",
   storage: "Storage",
+  // Named plainly on the church's own statement: they are being told they
+  // owe it, so "advance" is clearer than an accounting word.
+  advance: "Advance from FlockInsight",
   adjustment: "Adjustment",
   refund: "Refund",
 };
@@ -91,13 +94,23 @@ export function WalletSettings({
             </div>
             <div>
               <p className="text-muted-foreground text-xs font-semibold uppercase">
-                Wallet balance
+                {balance < 0 ? "Balance owing" : "Wallet balance"}
               </p>
-              <p className="text-2xl font-extrabold tabular-nums">
-                {formatMoney(balance, currency)}
+              {/*
+                A negative balance is an advance we extended, not a glitch. Say
+                so in words — "-₦5,000" on its own reads as a broken figure.
+              */}
+              <p
+                className={`text-2xl font-extrabold tabular-nums ${
+                  balance < 0 ? "text-amber-600 dark:text-amber-400" : ""
+                }`}
+              >
+                {formatMoney(Math.abs(balance), currency)}
               </p>
               <p className="text-muted-foreground text-xs">
-                Funds SMS, storage upgrades & more.
+                {balance < 0
+                  ? "You owe this. Your next top-up clears it first."
+                  : "Funds SMS, storage upgrades & more."}
               </p>
             </div>
           </div>

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."wallet_txn_category" ADD VALUE 'advance' BEFORE 'adjustment';
