@@ -8,6 +8,7 @@ import {
   Globe,
   ListChecks,
   HandCoins,
+  Landmark,
   BellRing,
   PartyPopper,
   HeartHandshake,
@@ -32,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type Need = "settings" | "team";
+type Need = "settings" | "team" | "finance";
 type Item = { label: string; href: string; need: Need; icon: LucideIcon };
 type Group = { title: string; items: Item[] };
 
@@ -45,6 +46,7 @@ const GROUPS: Group[] = [
       { label: "Public page", href: "/settings/public", need: "settings", icon: Globe },
       { label: "Services", href: "/settings/services", need: "settings", icon: ListChecks },
       { label: "Giving", href: "/settings/giving", need: "settings", icon: HandCoins },
+      { label: "Finance", href: "/settings/finance", need: "finance", icon: Landmark },
     ],
   },
   {
@@ -78,14 +80,17 @@ const GROUPS: Group[] = [
 export function SettingsNav({
   canSettings,
   canTeam,
+  canFinance,
 }: {
   canSettings: boolean;
   canTeam: boolean;
+  canFinance: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const allow = (need: Need) => (need === "settings" ? canSettings : canTeam);
+  const allow = (need: Need) =>
+    need === "settings" ? canSettings : need === "team" ? canTeam : canFinance;
   const groups = GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => allow(i.need)),

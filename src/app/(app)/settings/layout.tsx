@@ -11,16 +11,23 @@ export default async function SettingsLayout({
   const access = await getAccess();
   const canSettings = access.isOwner || access.perms.has("settings.manage");
   const canTeam = access.isOwner || access.perms.has("team.manage");
+  // Finance settings answer to the finance permission, not the settings one —
+  // the page behind it is the same one Finance shows, under the same gate.
+  const canFinance = access.isOwner || access.perms.has("finance.view");
   if (!canSettings && !canTeam) redirect("/dashboard");
 
   return (
     <PageContainer className="max-w-6xl">
       <PageHeader
         title="Settings"
-        description="Manage your church profile, services, giving and team."
+        description="Manage your church profile, services, giving, finances and team."
       />
       <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
-        <SettingsNav canSettings={canSettings} canTeam={canTeam} />
+        <SettingsNav
+          canSettings={canSettings}
+          canTeam={canTeam}
+          canFinance={canFinance}
+        />
         <div className="mt-6 min-w-0 lg:mt-0">{children}</div>
       </div>
     </PageContainer>
