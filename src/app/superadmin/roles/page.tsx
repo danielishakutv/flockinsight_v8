@@ -1,7 +1,7 @@
 import { asc, count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { platformRole, user } from "@/db/schema";
-import { requirePlatform } from "@/lib/platform-access";
+import { canPlatform, requirePlatform } from "@/lib/platform-access";
 import { RolesAdmin } from "@/components/superadmin/roles-admin";
 
 export const metadata = { title: "Admin roles · Admin" };
@@ -9,6 +9,10 @@ export const dynamic = "force-dynamic";
 
 export default async function RolesPage() {
   const me = await requirePlatform("platform.roles.manage");
+  // Handing out or taking away platform access is a users.manage act, so the
+  // page shows the roles either way but only offers the buttons to those who
+  // may actually use them.
+  const canManageAdmins = await canPlatform("platform.users.manage");
 
   const [roles, admins] = await Promise.all([
     db.select().from(platformRole).orderBy(asc(platformRole.name)),
@@ -60,6 +64,7 @@ export default async function RolesPage() {
           roleName: a.roleName,
           isSelf: a.id === me.id,
         }))}
+        canManageAdmins={canManageAdmins}
       />
     </div>
   );

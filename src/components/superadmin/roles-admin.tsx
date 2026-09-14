@@ -1,13 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Search,
+  ShieldAlert,
+  Trash2,
+  UserMinus,
+  UserPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
+  addAdmin,
   assignRole,
   deleteRole,
+  removeAdmin,
   saveRole,
+  searchAdminCandidates,
 } from "@/app/superadmin/roles/actions";
 import {
   PLATFORM_MODULES,
@@ -53,12 +64,17 @@ type Admin = {
 
 const FULL = "__full__";
 
+type Candidate = { id: string; name: string | null; email: string };
+
 export function RolesAdmin({
   roles,
   admins,
+  canManageAdmins,
 }: {
   roles: Role[];
   admins: Admin[];
+  /** Whether this admin may hand out or take away platform access at all. */
+  canManageAdmins: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -68,6 +84,85 @@ export function RolesAdmin({
   const [description, setDescription] = useState("");
   const [perms, setPerms] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // Adding an admin: search, pick, choose the role, all in one dialog.
+  const [addOpen, setAddOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<Candidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [picked, setPicked] = useState<Candidate | null>(null);
+  const [newRole, setNewRole] = useState<string>(FULL);
+  const [confirmRemove, setConfirmRemove] = useState<Admin | null>(null);
+
+  /*
+   * Debounced, and the response is dropped if the query moved on while it was
+   * in flight — typing "dan" fires three searches and the slowest must not be
+   * the one that wins.
+   *
+   * Every setState sits inside the timeout rather than the effect body: doing
+   * it synchronously here cascades a render on each keystroke, which the lint
+   * rule rightly refuses. A term under two characters simply schedules nothing
+   * — the list below renders the hint from `q`, so there is no state to clear.
+   */
+  useEffect(() => {
+    if (!addOpen) return;
+    const term = q.trim();
+    if (term.length < 2) return;
+    let live = true;
+    const t = setTimeout(async () => {
+      if (live) setSearching(true);
+      try {
+        const rows = await searchAdminCandidates(term);
+        if (live) setResults(rows);
+      } catch {
+        if (live) setResults([]);
+      } finally {
+        if (live) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [q, addOpen]);
+
+  function openAdd() {
+    setQ("");
+    setResults([]);
+    setPicked(null);
+    setNewRole(FULL);
+    setAddOpen(true);
+  }
+
+  function doAdd() {
+    if (!picked) return;
+    start(async () => {
+      const res = await addAdmin({
+        userId: picked.id,
+        roleId: newRole === FULL ? null : newRole,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${picked.name ?? picked.email} can now open this area.`);
+      setAddOpen(false);
+      router.refresh();
+    });
+  }
+
+  function doRemove(a: Admin) {
+    start(async () => {
+      const res = await removeAdmin(a.id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Admin access removed.");
+      setConfirmRemove(null);
+      router.refresh();
+    });
+  }
 
   function openNew() {
     setEditing(null);
@@ -239,11 +334,20 @@ export function RolesAdmin({
 
       {/* Who holds what */}
       <div className="bg-card rounded-2xl border">
-        <div className="border-b p-4">
-          <p className="text-sm font-bold">Admins</p>
-          <p className="text-muted-foreground text-xs">
-            Everyone who can open this area. Full access means no limits at all.
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+          <div>
+            <p className="text-sm font-bold">Admins</p>
+            <p className="text-muted-foreground text-xs">
+              Everyone who can open this area. Full access means no limits at
+              all.
+            </p>
+          </div>
+          {canManageAdmins && (
+            <Button size="sm" onClick={openAdd}>
+              <UserPlus className="size-4" />
+              Add admin
+            </Button>
+          )}
         </div>
         <ul className="divide-y">
           {admins.map((a) => (
@@ -270,22 +374,35 @@ export function RolesAdmin({
                   yours
                 </span>
               ) : (
-                <Select
-                  value={a.roleId ?? FULL}
-                  onValueChange={(v) => setAdminRole(a, v)}
-                >
-                  <SelectTrigger className="w-52">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={FULL}>Full access</SelectItem>
-                    {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={a.roleId ?? FULL}
+                    onValueChange={(v) => setAdminRole(a, v)}
+                  >
+                    <SelectTrigger className="w-52">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FULL}>Full access</SelectItem>
+                      {roles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {canManageAdmins && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setConfirmRemove(a)}
+                      aria-label={`Remove admin access from ${a.name ?? a.email}`}
+                    >
+                      <UserMinus className="size-4" />
+                    </Button>
+                  )}
+                </div>
               )}
             </li>
           ))}
@@ -397,6 +514,160 @@ export function RolesAdmin({
             <Button onClick={save} disabled={pending || !name.trim()}>
               {pending && <Loader2 className="size-4 animate-spin" />}
               {editing ? "Save changes" : "Create role"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add an admin */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add an admin</DialogTitle>
+            <DialogDescription>
+              Find an account that already exists and say what it may do. This
+              is not an invitation — the person already has a FlockInsight
+              login; this opens the admin area to it.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-search">Search by name or email</Label>
+              <div className="relative">
+                <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <Input
+                  id="admin-search"
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPicked(null);
+                  }}
+                  placeholder="name or email"
+                  className="pl-9"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {picked ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">
+                    {picked.name ?? picked.email}
+                  </p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {picked.email}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPicked(null)}
+                >
+                  Change
+                </Button>
+              </div>
+            ) : (
+              <div className="max-h-56 overflow-y-auto rounded-xl border">
+                {searching ? (
+                  <p className="text-muted-foreground p-3 text-sm">
+                    Searching…
+                  </p>
+                ) : q.trim().length < 2 ? (
+                  <p className="text-muted-foreground p-3 text-sm">
+                    Type at least two characters.
+                  </p>
+                ) : results.length === 0 ? (
+                  <p className="text-muted-foreground p-3 text-sm">
+                    Nobody matches. Anyone who is already an admin is on the
+                    list behind this dialog, not in here.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {results.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="hover:bg-muted w-full p-3 text-left"
+                          onClick={() => setPicked(c)}
+                        >
+                          <span className="block truncate font-medium">
+                            {c.name ?? c.email}
+                          </span>
+                          <span className="text-muted-foreground block truncate text-xs">
+                            {c.email}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="admin-role">Role</Label>
+              <Select value={newRole} onValueChange={setNewRole}>
+                <SelectTrigger id="admin-role" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FULL}>Full access</SelectItem>
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {newRole === FULL && (
+                <p className="text-muted-foreground text-xs">
+                  Full access has no limits at all — billing, backups, other
+                  admins. Choose a role unless they genuinely need everything.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={doAdd} disabled={pending || !picked}>
+              {pending && <Loader2 className="size-4 animate-spin" />}
+              Give admin access
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Take it away */}
+      <Dialog
+        open={!!confirmRemove}
+        onOpenChange={(o) => !o && setConfirmRemove(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove admin access?</DialogTitle>
+            <DialogDescription>
+              {confirmRemove?.name ?? confirmRemove?.email} keeps their
+              FlockInsight account and everything they do in their own church.
+              They lose this area, and their role here is cleared rather than
+              remembered — so giving it back later is a fresh decision.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmRemove && doRemove(confirmRemove)}
+              disabled={pending}
+            >
+              {pending && <Loader2 className="size-4 animate-spin" />}
+              Remove access
             </Button>
           </DialogFooter>
         </DialogContent>

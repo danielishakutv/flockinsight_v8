@@ -2,10 +2,14 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { count, eq } from "drizzle-orm";
+import { and, asc, count, eq, ilike, or } from "drizzle-orm";
 import { db } from "@/db";
 import { platformRole, user } from "@/db/schema";
-import { requirePlatform, platformAccess } from "@/lib/platform-access";
+import {
+  canPlatform,
+  platformAccess,
+  requirePlatform,
+} from "@/lib/platform-access";
 import { recordAudit } from "@/lib/audit";
 import { ALL_PLATFORM_PERMISSIONS } from "@/lib/platform-permissions";
 
@@ -209,4 +213,140 @@ export async function currentAdmins() {
     .leftJoin(platformRole, eq(platformRole.id, user.platformRoleId))
     .where(eq(user.isSuperAdmin, true));
   return rows.map((r) => ({ ...r, isSelf: r.id === me?.id }));
+}
+
+/**
+ * Accounts that could be made an admin, matching a search.
+ *
+ * A search rather than a list of everybody: there are thousands of accounts
+ * and only ever a handful of admins, so a dropdown of the lot is both slow to
+ * render and a good way to promote the wrong person with a common name. Two
+ * characters minimum, ten results, already-admins excluded — they are on the
+ * list below the search and do not need granting twice.
+ */
+export async function searchAdminCandidates(query: string) {
+  await requirePlatform("platform.users.manage");
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const like = `%${q}%`;
+  return db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(
+      and(
+        eq(user.isSuperAdmin, false),
+        or(ilike(user.email, like), ilike(user.name, like)),
+      ),
+    )
+    .orderBy(asc(user.email))
+    .limit(10);
+}
+
+/**
+ * Give an existing account admin access, and its role in the same step.
+ *
+ * Both at once on purpose. Granting access and then choosing what it may do
+ * used to be two screens, so the gap between them was a live account with
+ * unrestricted access — brief, but real, and easy to forget to close.
+ */
+export async function addAdmin(input: {
+  userId: string;
+  roleId: string | null;
+}): Promise<RoleResult> {
+  const admin = await requirePlatform("platform.roles.manage");
+  // Handing out platform access is a users.manage act; choosing the role is a
+  // roles.manage one. Doing both in one step needs both.
+  if (!(await canPlatform("platform.users.manage")))
+    return { ok: false, error: "You cannot grant admin access." };
+  if (!z.string().min(1).safeParse(input.userId).success)
+    return { ok: false, error: "Invalid id" };
+  if (input.roleId !== null && !z.string().uuid().safeParse(input.roleId).success)
+    return { ok: false, error: "Invalid role" };
+
+  const [target] = await db
+    .select({ name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin })
+    .from(user)
+    .where(eq(user.id, input.userId))
+    .limit(1);
+  if (!target) return { ok: false, error: "That account no longer exists." };
+  if (target.isSuperAdmin)
+    return { ok: false, error: "They already have admin access." };
+
+  let roleName = "Full access";
+  if (input.roleId) {
+    const [r] = await db
+      .select({ name: platformRole.name })
+      .from(platformRole)
+      .where(eq(platformRole.id, input.roleId))
+      .limit(1);
+    if (!r) return { ok: false, error: "That role no longer exists." };
+    roleName = r.name;
+  }
+
+  await db
+    .update(user)
+    .set({
+      isSuperAdmin: true,
+      platformRoleId: input.roleId,
+      updatedAt: new Date(),
+    })
+    .where(eq(user.id, input.userId));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "grant_superadmin",
+    summary: `Gave ${target.name ?? target.email} admin access as ${roleName}`,
+    targetType: "user",
+    targetId: input.userId,
+  });
+
+  revalidatePath("/superadmin/roles");
+  revalidatePath("/superadmin/users");
+  return { ok: true };
+}
+
+/**
+ * Take admin access away.
+ *
+ * Clears the role as well as the flag. Leaving a role behind on a revoked
+ * account means a later re-grant silently restores permissions nobody chose
+ * this time round.
+ */
+export async function removeAdmin(userId: string): Promise<RoleResult> {
+  const admin = await requirePlatform("platform.roles.manage");
+  if (!(await canPlatform("platform.users.manage")))
+    return { ok: false, error: "You cannot change admin access." };
+  if (!z.string().min(1).safeParse(userId).success)
+    return { ok: false, error: "Invalid id" };
+  // The same reason assignRole refuses: the way back is the database.
+  if (userId === admin.id)
+    return { ok: false, error: "You can't remove your own admin access." };
+
+  const [target] = await db
+    .select({ name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  if (!target) return { ok: false, error: "That account no longer exists." };
+  if (!target.isSuperAdmin)
+    return { ok: false, error: "They do not have admin access." };
+
+  await db
+    .update(user)
+    .set({ isSuperAdmin: false, platformRoleId: null, updatedAt: new Date() })
+    .where(eq(user.id, userId));
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "revoke_superadmin",
+    summary: `Removed admin access from ${target.name ?? target.email}`,
+    targetType: "user",
+    targetId: userId,
+  });
+
+  revalidatePath("/superadmin/roles");
+  revalidatePath("/superadmin/users");
+  return { ok: true };
 }
