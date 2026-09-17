@@ -162,22 +162,47 @@ FRESH="flockinsight_20260913_020002.dump.enc"
 offsite() { FIRING=""; FINDINGS=""; check_offsite_backup; }
 fired() { printf '%s' "$FIRING" | tr -d '\n'; }
 
+clear_streak() { printf '0' > "$(stamp_path offsite.fails)"; }
+
+# A blip must not alert; the same failure twice must. This is the 2026-09-17
+# behaviour: one run timed out at 45s, eight by hand straight afterwards each
+# answered in under a second, and the alert that went out said the off-site
+# backup had stopped when today's dump was sitting on the remote all along.
+clear_streak
 STUB_LSF_ERR="failed to get token: oauth2: token expired"; STUB_LSF=""; STUB_ABOUT="$ROOMY"
 offsite
-t "unreachable remote alerts"   "$(fired)" "OFFSITE"
-t "  and quotes rclone's reason" "$(printf '%s' "$FINDINGS" | grep -c 'token expired')" "1"
+t "one failed listing stays quiet" "$(fired)" ""
+offsite
+t "the same failure twice alerts"  "$(fired)" "OFFSITE"
+t "  and quotes rclone's reason"   "$(printf '%s' "$FINDINGS" | grep -c 'token expired')" "1"
+t "  and says how many runs"       "$(printf '%s' "$FINDINGS" | grep -c '2 runs in a row')" "1"
 
+# The counter must reset on success, or two unrelated blips a week apart would
+# add up to an alert.
+clear_streak
+STUB_LSF_ERR="failed to get token: oauth2: token expired"; STUB_LSF=""
+offsite
+STUB_LSF_ERR=""; STUB_LSF="$FRESH"
+offsite
+STUB_LSF_ERR="failed to get token: oauth2: token expired"; STUB_LSF=""
+offsite
+t "a good run resets the streak" "$(fired)" ""
+
+clear_streak
 STUB_LSF_ERR=""; STUB_LSF=""; STUB_ABOUT="$ROOMY"
+offsite
+t "one empty listing stays quiet"      "$(fired)" ""
 offsite
 t "reachable but nothing recent alerts" "$(fired)" "OFFSITE"
 
+clear_streak
 STUB_LSF="$FRESH"; STUB_ABOUT="$ROOMY"
 offsite
 t "fresh upload with room is silent" "$(fired)" ""
 
 STUB_LSF="$FRESH"; STUB_ABOUT="$FULL"
 offsite
-t "fresh upload but 5% left alerts" "$(fired)" "OFFSITE"
+t "a full remote alerts on the first run" "$(fired)" "OFFSITE"
 
 STUB_LSF="$FRESH"; STUB_ABOUT=""
 offsite

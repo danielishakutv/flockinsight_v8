@@ -67,4 +67,12 @@ OFFSITE_MAX_AGE_H=36
 # to do something about it.
 OFFSITE_MIN_FREE_PCT=20
 
+# Google Drive times out or 403s now and then. Alerting on one bad listing
+# says the off-site backup has stopped when it has not, and an alert you learn
+# to ignore is worse than no alert. A failure must repeat this many runs (five
+# minutes apart) before you hear about it; a real outage still speaks in ten.
+OFFSITE_FAIL_STREAK=2
+OFFSITE_RETRIES=3
+OFFSITE_TIMEOUT_S=120
+
 CERT_MIN_DAYS=14

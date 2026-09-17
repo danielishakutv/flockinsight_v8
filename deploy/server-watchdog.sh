@@ -70,6 +70,15 @@ BACKUP_DIR=${BACKUP_DIR:-/var/backups/flockinsight}
 OFFSITE_REMOTE=${OFFSITE_REMOTE:-gdrive:flockinsight-backups}
 OFFSITE_MAX_AGE_H=${OFFSITE_MAX_AGE_H:-36}
 OFFSITE_MIN_FREE_PCT=${OFFSITE_MIN_FREE_PCT:-20}
+# A single failed listing is almost always the network or a Drive API hiccup,
+# not a broken backup: on 2026-09-17 one run timed out at 45s while eight run
+# by hand straight afterwards each answered in under a second. Alerting on one
+# bad run teaches you to ignore the alert, which is worse than not having it.
+# So a failure must survive this many consecutive runs — five minutes apart —
+# before it speaks, and rclone gets real retries rather than a single attempt.
+OFFSITE_FAIL_STREAK=${OFFSITE_FAIL_STREAK:-2}
+OFFSITE_RETRIES=${OFFSITE_RETRIES:-3}
+OFFSITE_TIMEOUT_S=${OFFSITE_TIMEOUT_S:-120}
 CERT_MIN_DAYS=${CERT_MIN_DAYS:-14}
 # Space-separated. Each must answer 200.
 CHECK_URLS=${CHECK_URLS:-"https://flockinsight.com/api/health"}
@@ -391,31 +400,48 @@ check_offsite_backup() {
   [ -n "$OFFSITE_REMOTE" ] || return 0
   command -v rclone >/dev/null 2>&1 || return 0
 
-  local listing rc why
-  listing=$(timeout 45 rclone lsf --files-only --max-age "${OFFSITE_MAX_AGE_H}h" \
-              --retries 1 --timeout 20s "$OFFSITE_REMOTE" 2>&1)
+  # One bad run is not an outage. Both failure branches below are gated behind
+  # OFFSITE_FAIL_STREAK consecutive bad runs, and the counter resets the moment
+  # a listing comes back clean — so a real outage still speaks within minutes
+  # while a blip never does.
+  local listing rc why streak streak_file
+  streak_file=$(stamp_path offsite.fails)
+
+  listing=$(timeout "$OFFSITE_TIMEOUT_S" rclone lsf --files-only --max-age "${OFFSITE_MAX_AGE_H}h" \
+              --retries "$OFFSITE_RETRIES" --timeout 30s "$OFFSITE_REMOTE" 2>&1)
   rc=$?
 
-  if [ "$rc" -ne 0 ]; then
-    why="rclone exit ${rc}"
-    [ "$rc" -eq 124 ] && why="timed out after 45s"
-    note OFFSITE "cannot list ${OFFSITE_REMOTE} (${why})
+  if [ "$rc" -ne 0 ] || [ -z "$listing" ]; then
+    streak=$(( $(cat "$streak_file" 2>/dev/null || echo 0) + 1 ))
+    printf '%s' "$streak" > "$streak_file"
+    if [ "$streak" -lt "$OFFSITE_FAIL_STREAK" ]; then
+      logger -t server-watchdog \
+        "off-site check failed (${streak}/${OFFSITE_FAIL_STREAK}) - quiet until it repeats" 2>/dev/null
+      return 0
+    fi
+
+    if [ "$rc" -ne 0 ]; then
+      why="rclone exit ${rc}"
+      [ "$rc" -eq 124 ] && why="timed out after ${OFFSITE_TIMEOUT_S}s"
+      note OFFSITE "cannot list ${OFFSITE_REMOTE} (${why}), ${streak} runs in a row
       $(printf '%s' "$listing" | grep -v '^[[:space:]]*$' | tail -2 | tr '\n' ';')
       The local dump is unaffected. It is the off-site copy that has stopped,
       which is the one that matters if this box is gone.
       Check the remote: rclone about ${OFFSITE_REMOTE%%:*}:"
-    return 1
-  fi
-
-  if [ -z "$listing" ]; then
-    note OFFSITE "nothing newer than ${OFFSITE_MAX_AGE_H}h in ${OFFSITE_REMOTE}
-      Newest there: $(timeout 45 rclone lsf --files-only "$OFFSITE_REMOTE" 2>/dev/null | sort | tail -1 | tr -d '\n')
+    else
+      note OFFSITE "nothing newer than ${OFFSITE_MAX_AGE_H}h in ${OFFSITE_REMOTE}, ${streak} runs in a row
+      Newest there: $(timeout "$OFFSITE_TIMEOUT_S" rclone lsf --files-only "$OFFSITE_REMOTE" 2>/dev/null | sort | tail -1 | tr -d '\n')
       The remote is reachable, so uploads are failing or have stopped. Look
       for 'rclone copy failed' in /var/log/flockinsight-backup.log"
+    fi
     return 1
   fi
 
-  # Quota. Not every backend reports one; no numbers is not a problem.
+  printf '0' > "$streak_file"
+
+  # Quota. Not every backend reports one; no numbers is not a problem. This one
+  # speaks on the first run: it is a steady measurement, not a network call, so
+  # the streak above has nothing to protect it from.
   local about total free pct
   about=$(timeout 30 rclone about --json "${OFFSITE_REMOTE%%:*}:" 2>/dev/null)
   total=$(printf '%s' "$about" | grep -o '"total":[0-9]*' | cut -d: -f2)
