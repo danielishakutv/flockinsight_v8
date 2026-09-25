@@ -281,6 +281,30 @@ export const DATASETS: Dataset[] = [
     joins: [{ column: "member_id", target: "members.member_id" }],
   },
   {
+    id: "meetings",
+    label: "Meetings",
+    description:
+      "Virtual meetings with when they ran, how long for, and how many joined.",
+    category: "engagement",
+    perm: "meetings.view",
+    grain: "One row per meeting",
+    dateColumn: "scheduled_for",
+  },
+  {
+    id: "meeting-attendance",
+    label: "Meeting attendance",
+    description:
+      "Every visit to every meeting — who joined, when they arrived, when they left and for how long.",
+    category: "engagement",
+    perm: "meetings.view",
+    grain: "One row per person per visit",
+    dateColumn: "joined_at",
+    joins: [
+      { column: "meeting_id", target: "meetings.meeting_id" },
+      { column: "member_id", target: "members.member_id" },
+    ],
+  },
+  {
     id: "events",
     label: "Events",
     description: "Programmes and events with their venue, timing and guest count.",

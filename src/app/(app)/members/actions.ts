@@ -19,7 +19,7 @@ import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
 import { recordAction } from "@/lib/analytics";
-import { recordAudit } from "@/lib/audit";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { createHousehold, householdInChurch } from "@/lib/households";
 import {
   ensureMemberUpdateToken,
@@ -162,12 +162,41 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
 
   try {
     if (d.id) {
+      // Read it first: an update with nothing to compare against can only say
+      // "someone edited this", which is the least useful entry in a log.
+      const [before] = await db
+        .select()
+        .from(member)
+        .where(and(eq(member.id, d.id), eq(member.churchId, church.id)))
+        .limit(1);
+
       const [row] = await db
         .update(member)
         .set(fields)
         .where(and(eq(member.id, d.id), eq(member.churchId, church.id)))
         .returning({ id: member.id });
       if (!row) return { ok: false, error: "Member not found." };
+
+      if (before) {
+        const changed = diffFields(
+          before as unknown as Record<string, unknown>,
+          fields as unknown as Record<string, unknown>,
+          Object.keys(fields),
+        );
+        if (Object.keys(changed).length > 0) {
+          const who = [d.firstName, d.lastName].filter(Boolean).join(" ");
+          await audit({
+            churchId: church.id,
+            action: "members.member.update",
+            summary: `Changed ${summariseChanges(changed)} for ${who}`,
+            targetType: "member",
+            targetId: row.id,
+            targetLabel: who,
+            meta: { changed },
+          });
+        }
+      }
+
       revalidatePath("/members");
       revalidatePath(`/members/${row.id}`);
       // The guardian's profile lists their children — keep it fresh.
@@ -203,6 +232,16 @@ export async function saveMember(input: MemberInput): Promise<ActionResult> {
     } catch {
       /* analytics best-effort */
     }
+
+    await audit({
+      churchId: church.id,
+      action: "members.member.create",
+      summary: `Added ${[d.firstName, d.lastName].filter(Boolean).join(" ")} to the members list`,
+      targetType: "member",
+      targetId: row.id,
+      targetLabel: [d.firstName, d.lastName].filter(Boolean).join(" "),
+      meta: { status: d.status, householdId, isMinor: d.isMinor },
+    });
 
     revalidatePath("/members");
     revalidatePath("/dashboard");
@@ -253,6 +292,16 @@ export async function regenerateMemberUpdateLink(
     return { ok: false, error: "You don't have permission to do that." };
   const token = await regenerateMemberUpdateToken(church.id, memberId);
   if (!token) return { ok: false, error: "Member not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "members.update_link.reset",
+    summary: "Issued a new self-update link for a member — the old one stopped working",
+    targetType: "member",
+    targetId: memberId,
+    severity: "warning",
+  });
+
   revalidatePath(`/members/${memberId}`);
   return { ok: true, url: updateUrl(token) };
 }
@@ -294,6 +343,15 @@ export async function sendMemberUpdateLink(
       reason: "Member self-update link",
     });
     if (!res.ok) return { ok: false, error: res.error };
+    await audit({
+      churchId: church.id,
+      action: "members.update_link.send",
+      summary: `Texted ${m.firstName || "a member"} their self-update link`,
+      targetType: "member",
+      targetId: memberId,
+      targetLabel: m.firstName,
+      meta: { channel: "sms" },
+    });
     return { ok: true, channel: "sms" };
   }
 
@@ -312,6 +370,15 @@ export async function sendMemberUpdateLink(
   }).catch(() => false);
   if (!ok)
     return { ok: false, error: "Couldn't send the email. Please try again." };
+  await audit({
+    churchId: church.id,
+    action: "members.update_link.send",
+    summary: `Emailed ${m.firstName || "a member"} their self-update link`,
+    targetType: "member",
+    targetId: memberId,
+    targetLabel: m.firstName,
+    meta: { channel: "email" },
+  });
   return { ok: true, channel: "email" };
 }
 
@@ -423,7 +490,7 @@ export async function deleteMembers(ids: string[]): Promise<BulkResult> {
   const clean = cleanIds(ids);
   if (!clean.ok) return clean;
 
-  const { church, user } = await requireChurch();
+  const { church } = await requireChurch();
   if (!(await can("members.manage")))
     return { ok: false, error: "You don't have permission to do that." };
   try {
@@ -440,20 +507,22 @@ export async function deleteMembers(ids: string[]): Promise<BulkResult> {
      * of who did it — so "where did 200 members go?" had no answer.
      */
     if (rows.length > 0) {
-      const names = rows
-        .slice(0, 5)
-        .map((r) => [r.firstName, r.lastName].filter(Boolean).join(" "))
-        .join(", ");
-      await recordAudit({
-        actorUserId: user.id,
-        actorName: user.name,
-        action: "members.bulk_delete",
+      const all = rows.map((r) => [r.firstName, r.lastName].filter(Boolean).join(" "));
+      const names = all.slice(0, 5).join(", ");
+      await audit({
+        churchId: church.id,
+        action: "members.member.delete",
         summary:
           rows.length === 1
-            ? `Deleted member ${names}`
+            ? `Deleted the member ${names}`
             : `Deleted ${rows.length} members (${names}${rows.length > 5 ? ", …" : ""})`,
-        targetType: "church",
-        targetId: church.id,
+        targetType: "member",
+        targetId: rows.length === 1 ? rows[0].id : null,
+        targetLabel: names,
+        // Every name, not just the five that fit in the sentence: this is the
+        // entry somebody reads when asking where two hundred people went.
+        meta: { count: rows.length, names: all, ids: rows.map((r) => r.id) },
+        severity: "critical",
       });
     }
 
@@ -474,8 +543,28 @@ export async function deleteMember(id: string): Promise<ActionResult> {
     const [row] = await db
       .delete(member)
       .where(and(eq(member.id, id), eq(member.churchId, church.id)))
-      .returning({ id: member.id });
+      .returning({
+        id: member.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        phone: member.phone,
+        email: member.email,
+      });
     if (!row) return { ok: false, error: "Member not found." };
+
+    const who = [row.firstName, row.lastName].filter(Boolean).join(" ");
+    await audit({
+      churchId: church.id,
+      action: "members.member.delete",
+      summary: `Deleted the member ${who}`,
+      targetType: "member",
+      targetId: row.id,
+      targetLabel: who,
+      // Enough to recognise who it was once the row itself has gone.
+      meta: { phone: row.phone, email: row.email },
+      severity: "critical",
+    });
+
     revalidatePath("/members");
     revalidatePath("/dashboard");
     return { ok: true, id: row.id };

@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { attendanceSession } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 
 const count = z.number().int().min(0).max(1_000_000);
 
@@ -137,6 +138,24 @@ export async function recordAttendance(
         .returning({ id: attendanceSession.id });
     }
 
+    await audit({
+      churchId: church.id,
+      action: d.id ? "attendance.session.update" : "attendance.session.create",
+      summary: `${d.id ? "Updated" : "Recorded"} attendance for ${values.title ?? "a service"} on ${d.date} — ${total} present`,
+      targetType: "attendance-session",
+      targetId: row.id,
+      targetLabel: values.title ?? d.date,
+      meta: {
+        date: d.date,
+        total,
+        adults: d.maleCount + d.femaleCount,
+        teens: d.teenMaleCount + d.teenFemaleCount,
+        children,
+        firstTimers,
+        newConverts,
+      },
+    });
+
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
@@ -163,8 +182,24 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
           eq(attendanceSession.churchId, church.id),
         ),
       )
-      .returning({ id: attendanceSession.id });
+      .returning({
+        id: attendanceSession.id,
+        title: attendanceSession.title,
+        date: attendanceSession.date,
+        totalCount: attendanceSession.totalCount,
+      });
     if (!row) return { ok: false, error: "Session not found." };
+
+    await audit({
+      churchId: church.id,
+      action: "attendance.session.delete",
+      summary: `Deleted the attendance for ${row.title ?? "a service"} on ${row.date} (${row.totalCount} present)`,
+      targetType: "attendance-session",
+      targetId: row.id,
+      targetLabel: row.title ?? row.date,
+      meta: { date: row.date, total: row.totalCount },
+      severity: "critical",
+    });
 
     revalidatePath("/attendance");
     revalidatePath("/dashboard");

@@ -8,6 +8,7 @@ import { devotional, subscriber } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendDevotional } from "@/lib/devotionals";
+import { audit } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true; id?: string; sent?: number; recipients?: number }
@@ -45,6 +46,16 @@ export async function createDevotional(
       createdBy: user.id,
     })
     .returning({ id: devotional.id });
+
+  await audit({
+    churchId: church.id,
+    action: "devotionals.item.create",
+    summary: `Started a new ${t}`,
+    targetType: "devotional",
+    targetId: row.id,
+    meta: { type: t },
+  });
+
   revalidatePath("/devotionals");
   return { ok: true, id: row.id };
 }
@@ -95,6 +106,18 @@ export async function saveDevotional(
       .update(devotional)
       .set({ status: "scheduled", scheduledAt: when })
       .where(eq(devotional.id, d.id));
+
+    await audit({
+      churchId: church.id,
+      action: "devotionals.item.schedule",
+      summary: `Scheduled the ${d.type} "${d.title}" for ${when.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`,
+      targetType: "devotional",
+      targetId: d.id,
+      targetLabel: d.title,
+      meta: { audience: d.audience, scheduledAt: when.toISOString() },
+      severity: "notice",
+    });
+
     revalidatePath("/devotionals");
     return { ok: true, id: d.id };
   }
@@ -103,6 +126,18 @@ export async function saveDevotional(
     const res = await sendDevotional(d.id);
     revalidatePath("/devotionals");
     if (!res.ok) return res;
+
+    await audit({
+      churchId: church.id,
+      action: "devotionals.item.send",
+      summary: `Sent the ${d.type} "${d.title}" to ${res.sent} of ${res.recipients} recipients`,
+      targetType: "devotional",
+      targetId: d.id,
+      targetLabel: d.title,
+      meta: { audience: d.audience, sent: res.sent, recipients: res.recipients },
+      severity: "notice",
+    });
+
     return { ok: true, id: d.id, sent: res.sent, recipients: res.recipients };
   }
 
@@ -124,8 +159,25 @@ export async function deleteDevotional(id: string): Promise<ActionResult> {
   const res = await db
     .delete(devotional)
     .where(and(eq(devotional.id, id), eq(devotional.churchId, church.id)))
-    .returning({ id: devotional.id });
+    .returning({
+      id: devotional.id,
+      title: devotional.title,
+      type: devotional.type,
+      status: devotional.status,
+    });
   if (!res.length) return { ok: false, error: "Not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "devotionals.item.delete",
+    summary: `Deleted the ${res[0].type} "${res[0].title}"`,
+    targetType: "devotional",
+    targetId: id,
+    targetLabel: res[0].title,
+    meta: { wasStatus: res[0].status },
+    severity: "warning",
+  });
+
   revalidatePath("/devotionals");
   return { ok: true };
 }
@@ -153,6 +205,15 @@ export async function addSubscriber(
       target: [subscriber.churchId, subscriber.email],
       set: { status: "active", name: name.trim().slice(0, 120) || null },
     });
+
+  await audit({
+    churchId: church.id,
+    action: "devotionals.subscriber.create",
+    summary: `Added ${clean.data} to the mailing list`,
+    targetType: "subscriber",
+    targetLabel: clean.data,
+  });
+
   revalidatePath("/devotionals");
   return { ok: true };
 }
@@ -163,9 +224,21 @@ export async function removeSubscriber(id: string): Promise<ActionResult> {
     return { ok: false, error: "You don't have permission to do that." };
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id." };
-  await db
+  const removed = await db
     .delete(subscriber)
-    .where(and(eq(subscriber.id, id), eq(subscriber.churchId, church.id)));
+    .where(and(eq(subscriber.id, id), eq(subscriber.churchId, church.id)))
+    .returning({ email: subscriber.email });
+
+  await audit({
+    churchId: church.id,
+    action: "devotionals.subscriber.remove",
+    summary: `Removed ${removed[0]?.email ?? "someone"} from the mailing list`,
+    targetType: "subscriber",
+    targetId: id,
+    targetLabel: removed[0]?.email ?? null,
+    severity: "notice",
+  });
+
   revalidatePath("/devotionals");
   return { ok: true };
 }

@@ -7,6 +7,8 @@ import { db } from "@/db";
 import { member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
+import { formatMoney } from "@/lib/money";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -64,12 +66,38 @@ export async function saveProject(input: ProjectInput): Promise<ActionResult> {
   };
 
   if (d.id) {
+    const [before] = await db
+      .select()
+      .from(project)
+      .where(and(eq(project.id, d.id), eq(project.churchId, church.id)))
+      .limit(1);
     const [row] = await db
       .update(project)
       .set(fields)
       .where(and(eq(project.id, d.id), eq(project.churchId, church.id)))
       .returning({ id: project.id });
     if (!row) return { ok: false, error: "Project not found." };
+
+    const changed = before
+      ? diffFields(
+          before as unknown as Record<string, unknown>,
+          fields as unknown as Record<string, unknown>,
+          Object.keys(fields),
+        )
+      : {};
+    if (Object.keys(changed).length > 0) {
+      await audit({
+        churchId: church.id,
+        action: "giving.project.update",
+        summary: `Changed ${summariseChanges(changed)} on the project "${d.name}"`,
+        targetType: "project",
+        targetId: row.id,
+        targetLabel: d.name,
+        meta: { changed },
+        severity: "notice",
+      });
+    }
+
     revalidatePath("/giving/projects");
     revalidatePath(`/giving/projects/${row.id}`);
     return { ok: true, id: row.id };
@@ -79,6 +107,18 @@ export async function saveProject(input: ProjectInput): Promise<ActionResult> {
     .insert(project)
     .values({ churchId: church.id, ...fields, createdBy: user.id })
     .returning({ id: project.id });
+
+  await audit({
+    churchId: church.id,
+    action: "giving.project.create",
+    summary: `Started the project "${d.name}"${d.targetAmount ? ` with a target of ${formatMoney(Number(d.targetAmount), church.currency)}` : ""}`,
+    targetType: "project",
+    targetId: row.id,
+    targetLabel: d.name,
+    meta: { targetAmount: d.targetAmount, status: d.status },
+    severity: "notice",
+  });
+
   revalidatePath("/giving/projects");
   return { ok: true, id: row.id };
 }
@@ -92,8 +132,24 @@ export async function deleteProject(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(project)
     .where(and(eq(project.id, id), eq(project.churchId, church.id)))
-    .returning({ id: project.id });
+    .returning({
+      id: project.id,
+      name: project.name,
+      targetAmount: project.targetAmount,
+    });
   if (!row) return { ok: false, error: "Project not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "giving.project.delete",
+    summary: `Deleted the project "${row.name}" and every pledge to it`,
+    targetType: "project",
+    targetId: id,
+    targetLabel: row.name,
+    meta: { targetAmount: row.targetAmount ? Number(row.targetAmount) : null },
+    severity: "critical",
+  });
+
   revalidatePath("/giving/projects");
   revalidatePath("/giving");
   return { ok: true, id: row.id };
@@ -169,6 +225,18 @@ export async function savePledge(input: PledgeInput): Promise<ActionResult> {
       .where(and(eq(pledge.id, d.id), eq(pledge.churchId, church.id)))
       .returning({ id: pledge.id });
     if (!row) return { ok: false, error: "Pledge not found." };
+
+    await audit({
+      churchId: church.id,
+      action: "giving.pledge.update",
+      summary: `Updated a pledge of ${formatMoney(d.amount, church.currency)}`,
+      targetType: "pledge",
+      targetId: row.id,
+      targetLabel: giverName,
+      meta: { amount: d.amount, cadence: d.cadence, projectId: d.projectId },
+      severity: "notice",
+    });
+
     revalidatePath(`/giving/projects/${d.projectId}`);
     return { ok: true, id: row.id };
   }
@@ -182,6 +250,23 @@ export async function savePledge(input: PledgeInput): Promise<ActionResult> {
       createdBy: user.id,
     })
     .returning({ id: pledge.id });
+
+  await audit({
+    churchId: church.id,
+    action: "giving.pledge.create",
+    summary: `Recorded a pledge of ${formatMoney(d.amount, church.currency)}${giverName ? ` from ${giverName}` : ""}`,
+    targetType: "pledge",
+    targetId: row.id,
+    targetLabel: giverName,
+    meta: {
+      amount: d.amount,
+      cadence: d.cadence,
+      projectId: d.projectId,
+      memberId: d.memberId,
+    },
+    severity: "notice",
+  });
+
   revalidatePath(`/giving/projects/${d.projectId}`);
   return { ok: true, id: row.id };
 }
@@ -200,6 +285,17 @@ export async function setPledgeStatus(
     .where(and(eq(pledge.id, id), eq(pledge.churchId, church.id)))
     .returning({ id: pledge.id, projectId: pledge.projectId });
   if (!row) return { ok: false, error: "Pledge not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "giving.pledge.update",
+    summary: `Marked a pledge as ${status}`,
+    targetType: "pledge",
+    targetId: row.id,
+    meta: { status, projectId: row.projectId },
+    severity: "notice",
+  });
+
   revalidatePath(`/giving/projects/${row.projectId}`);
   return { ok: true, id: row.id };
 }
@@ -213,8 +309,30 @@ export async function deletePledge(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(pledge)
     .where(and(eq(pledge.id, id), eq(pledge.churchId, church.id)))
-    .returning({ id: pledge.id, projectId: pledge.projectId });
+    .returning({
+      id: pledge.id,
+      projectId: pledge.projectId,
+      amount: pledge.amount,
+      giverName: pledge.giverName,
+      memberId: pledge.memberId,
+    });
   if (!row) return { ok: false, error: "Pledge not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "giving.pledge.delete",
+    summary: `Deleted a pledge of ${formatMoney(Number(row.amount), church.currency)}${row.giverName ? ` from ${row.giverName}` : ""}`,
+    targetType: "pledge",
+    targetId: id,
+    targetLabel: row.giverName,
+    meta: {
+      amount: Number(row.amount),
+      projectId: row.projectId,
+      memberId: row.memberId,
+    },
+    severity: "critical",
+  });
+
   revalidatePath(`/giving/projects/${row.projectId}`);
   return { ok: true, id: row.id };
 }

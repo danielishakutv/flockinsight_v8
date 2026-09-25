@@ -6,6 +6,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { branchRequest, church, hqReportSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { audit } from "@/lib/audit";
 import { requireCan } from "@/lib/permissions";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { churchTeamEmails } from "@/lib/branches";
@@ -105,6 +106,17 @@ export async function inviteBranch(
     ),
   );
 
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.invite",
+    summary: `Invited ${target.name} to join the network as a branch`,
+    targetType: "church",
+    targetId: churchId,
+    targetLabel: target.name,
+    meta: { message, notified: emails.length },
+    severity: "notice",
+  });
+
   revalidatePath("/branches");
   return { ok: true };
 }
@@ -162,6 +174,18 @@ export async function respondToBranchRequest(
       .where(eq(church.id, mine.id));
   }
 
+  await audit({
+    churchId: mine.id,
+    action: accept ? "settings.branch.grant" : "settings.branch.revoke",
+    summary: accept
+      ? "Accepted a network invitation — the headquarters can now see roll-up totals"
+      : "Declined a network invitation",
+    targetType: "church",
+    targetId: req.parentChurchId,
+    meta: { requestId: id, accepted: accept },
+    severity: "critical",
+  });
+
   revalidatePath("/branches");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -184,6 +208,15 @@ export async function cancelBranchRequest(id: string): Promise<ActionResult> {
         eq(branchRequest.status, "pending"),
       ),
     );
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary: "Withdrew a branch invitation",
+    targetType: "branch-request",
+    targetId: id,
+  });
+
   revalidatePath("/branches");
   return { ok: true };
 }
@@ -221,6 +254,17 @@ export async function setBranchZone(
   if (updated.length === 0)
     return { ok: false, error: "That church isn't one of your branches." };
 
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary: parsed.data.zone
+      ? `Put a branch in the "${parsed.data.zone}" zone`
+      : "Removed a branch from its zone",
+    targetType: "church",
+    targetId: parsed.data.churchId,
+    meta: { zone: parsed.data.zone },
+  });
+
   revalidatePath("/branches");
   return { ok: true };
 }
@@ -249,6 +293,15 @@ export async function setBranchZones(
         eq(church.parentChurchId, hq.id),
       ),
     );
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary: `Moved ${parsed.data.churchIds.length} branch${parsed.data.churchIds.length === 1 ? "" : "es"} into ${parsed.data.zone ? `the "${parsed.data.zone}" zone` : "no zone"}`,
+    targetType: "church",
+    meta: { churchIds: parsed.data.churchIds, zone: parsed.data.zone },
+  });
+
   revalidatePath("/branches");
   return { ok: true };
 }
@@ -276,6 +329,18 @@ export async function removeBranch(churchId: string): Promise<ActionResult> {
     .returning({ id: church.id });
   if (updated.length === 0)
     return { ok: false, error: "That link no longer exists." };
+
+  await audit({
+    churchId: mine.id,
+    action: "settings.branch.revoke",
+    summary:
+      churchId === mine.id
+        ? "Left the church network"
+        : "Removed a branch from the network",
+    targetType: "church",
+    targetId: churchId,
+    severity: "critical",
+  });
 
   revalidatePath("/branches");
   revalidatePath("/dashboard");
@@ -322,6 +387,18 @@ export async function saveReportSetting(
         recipients: d.recipients,
       },
     });
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch_reports.update",
+    summary: d.enabled
+      ? `Turned ${d.frequency} branch reports on for ${d.recipients.length} recipient${d.recipients.length === 1 ? "" : "s"}`
+      : "Turned branch reports off",
+    targetType: "church",
+    targetId: hq.id,
+    meta: { enabled: d.enabled, frequency: d.frequency, recipients: d.recipients },
+    severity: "notice",
+  });
 
   revalidatePath("/branches");
   return { ok: true };

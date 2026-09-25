@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   BadgeCheck,
   UserPlus,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -73,6 +74,7 @@ const GROUPS: Group[] = [
       { label: "Sign-up link", href: "/settings/signup", need: "settings", icon: UserPlus },
       { label: "Team", href: "/settings/team", need: "team", icon: Users },
       { label: "Roles", href: "/settings/roles", need: "team", icon: ShieldCheck },
+      { label: "Activity log", href: "/settings/activity", need: "settings", icon: ScrollText },
     ],
   },
 ];

@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -99,12 +100,37 @@ export async function saveGroup(input: GroupInput): Promise<ActionResult> {
 
   try {
     if (d.id) {
+      const [before] = await db
+        .select()
+        .from(group)
+        .where(and(eq(group.id, d.id), eq(group.churchId, church.id)))
+        .limit(1);
       const [row] = await db
         .update(group)
         .set(fields)
         .where(and(eq(group.id, d.id), eq(group.churchId, church.id)))
         .returning({ id: group.id });
       if (!row) return { ok: false, error: "Group not found." };
+
+      const changed = before
+        ? diffFields(
+            before as unknown as Record<string, unknown>,
+            fields as unknown as Record<string, unknown>,
+            Object.keys(fields),
+          )
+        : {};
+      if (Object.keys(changed).length > 0) {
+        await audit({
+          churchId: church.id,
+          action: "groups.group.update",
+          summary: `Changed ${summariseChanges(changed)} on "${d.name}"`,
+          targetType: "group",
+          targetId: row.id,
+          targetLabel: d.name,
+          meta: { changed },
+        });
+      }
+
       revalidatePath("/groups");
       revalidatePath(`/groups/${row.id}`);
       return { ok: true, id: row.id };
@@ -128,6 +154,16 @@ export async function saveGroup(input: GroupInput): Promise<ActionResult> {
         .onConflictDoNothing();
     }
 
+    await audit({
+      churchId: church.id,
+      action: "groups.group.create",
+      summary: `Created the ${d.type} "${d.name}"`,
+      targetType: "group",
+      targetId: row.id,
+      targetLabel: d.name,
+      meta: { type: d.type, leaderId: d.leaderId },
+    });
+
     revalidatePath("/groups");
     return { ok: true, id: row.id };
   } catch (e) {
@@ -146,8 +182,19 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
     const [row] = await db
       .delete(group)
       .where(and(eq(group.id, id), eq(group.churchId, church.id)))
-      .returning({ id: group.id });
+      .returning({ id: group.id, name: group.name, type: group.type });
     if (!row) return { ok: false, error: "Group not found." };
+
+    await audit({
+      churchId: church.id,
+      action: "groups.group.delete",
+      summary: `Deleted the ${row.type} "${row.name}" and everyone's place in it`,
+      targetType: "group",
+      targetId: row.id,
+      targetLabel: row.name,
+      severity: "critical",
+    });
+
     revalidatePath("/groups");
     return { ok: true, id: row.id };
   } catch (e) {
@@ -184,6 +231,16 @@ export async function addMembersToGroup(
       .insert(groupMembership)
       .values(toAdd.map((memberId) => ({ groupId, memberId })))
       .onConflictDoNothing();
+
+    await audit({
+      churchId: church.id,
+      action: "groups.membership.create",
+      summary: `Added ${toAdd.length} ${toAdd.length === 1 ? "person" : "people"} to a group`,
+      targetType: "group",
+      targetId: groupId,
+      meta: { memberIds: toAdd },
+    });
+
     revalidatePath(`/groups/${groupId}`);
     revalidatePath("/groups");
     return { ok: true, id: groupId };
@@ -218,6 +275,16 @@ export async function removeMemberFromGroup(
           eq(groupMembership.memberId, memberId),
         ),
       );
+
+    await audit({
+      churchId: church.id,
+      action: "groups.membership.remove",
+      summary: "Removed someone from a group",
+      targetType: "group",
+      targetId: groupId,
+      meta: { memberId },
+    });
+
     revalidatePath(`/groups/${groupId}`);
     revalidatePath("/groups");
     return { ok: true, id: groupId };
@@ -245,6 +312,18 @@ export async function setMembershipLeader(
   if (!gid) return { ok: false, error: "Group not found." };
 
   try {
+    await audit({
+      churchId: church.id,
+      action: "groups.membership.update",
+      summary: isLeader
+        ? "Made someone a leader of a group"
+        : "Removed someone as a leader of a group",
+      targetType: "group",
+      targetId: groupId,
+      meta: { memberId, isLeader },
+      severity: "notice",
+    });
+
     await db
       .update(groupMembership)
       .set({ isLeader })
@@ -284,6 +363,17 @@ export async function setMembershipRole(
   if (!gid) return { ok: false, error: "Group not found." };
 
   try {
+    await audit({
+      churchId: church.id,
+      action: "groups.membership.update",
+      summary: cleanRole
+        ? `Set someone's role in a group to "${cleanRole}"`
+        : "Cleared someone's role in a group",
+      targetType: "group",
+      targetId: groupId,
+      meta: { memberId, role: cleanRole },
+    });
+
     await db
       .update(groupMembership)
       .set({ role: cleanRole })

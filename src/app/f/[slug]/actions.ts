@@ -14,6 +14,7 @@ import { normalizePhone } from "@/lib/sms";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import { auditSystem } from "@/lib/audit";
 
 export type SubmitResult =
   | { ok: true; message: string }
@@ -83,6 +84,20 @@ export async function submitForm(input: {
   revalidatePath("/forms");
   revalidatePath(`/forms/${f.id}`);
   revalidatePath(`/forms/${f.id}/responses`);
+
+  // A public submission has no account behind it, so it is recorded as the
+  // form itself acting rather than as a person — but it is recorded, because a
+  // member appearing from nowhere is otherwise unexplained.
+  await auditSystem({
+    churchId: f.churchId,
+    actorName: `Form: ${f.title}`,
+    action: "forms.response.create",
+    summary: `Someone submitted the form "${f.title}"${memberId ? " — a member record was created or matched" : ""}`,
+    targetType: "form",
+    targetId: f.id,
+    targetLabel: f.title,
+    meta: { memberId, createdMember: f.createMembers },
+  });
 
   // Notify (best-effort — never blocks the submitter).
   await notifyManagers(f, fields, clean).catch((e) =>

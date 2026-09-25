@@ -171,6 +171,60 @@ export const auth = betterAuth({
             },
           };
         },
+        /*
+         * A sign-in is the first line of any activity log worth having: it is
+         * what turns "somebody deleted the members" into "somebody signed in
+         * from this address at this time, then deleted the members".
+         *
+         * Imported lazily and wrapped, because this runs inside the login
+         * path — a failure to record must never stop anyone signing in.
+         */
+        after: async (createdSession) => {
+          try {
+            const { auditSystem } = await import("./audit");
+            const [u] = await db
+              .select({ name: user.name, email: user.email })
+              .from(user)
+              .where(eq(user.id, createdSession.userId))
+              .limit(1);
+            await auditSystem({
+              // Better Auth types the extra org field loosely; only a real
+              // id is useful, and anything else is treated as "no church".
+              churchId:
+                typeof createdSession.activeOrganizationId === "string"
+                  ? createdSession.activeOrganizationId
+                  : null,
+              actorName: u?.name || u?.email || "Someone",
+              action: "auth.session.login",
+              summary: `${u?.name || u?.email || "Someone"} signed in`,
+              targetType: "user",
+              targetId: createdSession.userId,
+              targetLabel: u?.email ?? null,
+              meta: { ip: createdSession.ipAddress ?? null },
+            });
+          } catch (e) {
+            console.error("[auth] sign-in audit failed", e);
+          }
+        },
+      },
+    },
+    user: {
+      create: {
+        after: async (createdUser) => {
+          try {
+            const { auditSystem } = await import("./audit");
+            await auditSystem({
+              action: "auth.account.create",
+              summary: `A new account was created for ${createdUser.email}`,
+              targetType: "user",
+              targetId: createdUser.id,
+              targetLabel: createdUser.email,
+              severity: "notice",
+            });
+          } catch (e) {
+            console.error("[auth] signup audit failed", e);
+          }
+        },
       },
     },
   },

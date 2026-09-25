@@ -68,6 +68,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "meetings",
+    label: "Meetings",
+    description:
+      "Virtual meetings — schedule them, share the link, host, and keep the recordings.",
+    perms: [
+      { key: "meetings.view", label: "View & join" },
+      { key: "meetings.manage", label: "Create & host" },
+    ],
+  },
+  {
     key: "followup",
     label: "Follow-up",
     description: "Visitor and new-member follow-up.",

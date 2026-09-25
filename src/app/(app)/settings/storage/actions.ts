@@ -9,6 +9,7 @@ import { can } from "@/lib/permissions";
 import { debitWallet } from "@/lib/wallet";
 import { getStorageBundles } from "@/lib/pricing";
 import { GB } from "@/lib/storage-bytes";
+import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -56,6 +57,16 @@ export async function subscribeStorage(gb: number): Promise<ActionResult> {
     })
     .where(eq(church.id, c.id));
 
+  await audit({
+    churchId: c.id,
+    action: "billing.storage.create",
+    summary: `Subscribed to +${bundle.gb}GB of storage at ₦${bundle.price.toLocaleString()}/month`,
+    targetType: "church",
+    targetId: c.id,
+    meta: { gb: bundle.gb, price: bundle.price },
+    severity: "notice",
+  });
+
   revalidatePath("/settings/storage");
   revalidatePath("/media");
   return { ok: true };
@@ -74,6 +85,17 @@ export async function cancelStorage(): Promise<ActionResult> {
     .update(church)
     .set({ storageExtraBytes: 0, storageMonthlyCost: 0, storageRenewsAt: null })
     .where(eq(church.id, c.id));
+
+  await audit({
+    churchId: c.id,
+    action: "billing.storage.archive",
+    summary:
+      "Cancelled the storage add-on — files are kept, but uploads stop past the free base",
+    targetType: "church",
+    targetId: c.id,
+    meta: { wasGb: Math.round(c.storageExtraBytes / (1024 * 1024 * 1024)) },
+    severity: "warning",
+  });
 
   revalidatePath("/settings/storage");
   revalidatePath("/media");

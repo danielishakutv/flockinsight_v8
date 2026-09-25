@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { reminderSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { fillTemplate } from "@/lib/service-reminders";
 
@@ -41,6 +42,15 @@ export async function saveReminders(input: ReminderInput): Promise<ActionResult>
     .insert(reminderSetting)
     .values({ churchId: church.id, ...d })
     .onConflictDoUpdate({ target: reminderSetting.churchId, set: d });
+
+  await audit({
+    churchId: church.id,
+    action: "settings.reminders.update",
+    summary: "Updated the inactivity reminder settings",
+    targetType: "church",
+    targetId: church.id,
+    meta: { ...d },
+  });
 
   revalidatePath("/settings/reminders");
   return { ok: true };

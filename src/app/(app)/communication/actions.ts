@@ -26,6 +26,7 @@ import { sendEmail, sendEmailWithId, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { recordAction } from "@/lib/analytics";
 import { sendPushToUsers } from "@/lib/push";
+import { audit } from "@/lib/audit";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -288,6 +289,29 @@ export async function sendCommunication(
     } catch {
       /* best-effort */
     }
+    await audit({
+      churchId: c.id,
+      action: "communication.sms.send",
+      summary: `Sent an SMS to ${counts.sent} of ${counts.recipients} ${d.audienceLabel.toLowerCase()}`,
+      targetType: "communication",
+      targetId: log.id,
+      targetLabel: d.audienceLabel,
+      // The message itself, because "who sent that text?" is the question this
+      // log exists to answer, and the wording is half the answer.
+      meta: {
+        channel: "sms",
+        audience: d.audience,
+        body: d.body,
+        recipients: counts.recipients,
+        sent: counts.sent,
+        failed: counts.failed,
+        skipped: counts.skipped,
+        units,
+        cost: res.cost,
+      },
+      severity: "notice",
+    });
+
     revalidatePath("/communication");
     revalidatePath("/communication/history");
     return { ok: true, sent: res.sent, failed: res.failed, cost: res.cost };
@@ -374,6 +398,26 @@ export async function sendCommunication(
   } catch {
     /* best-effort */
   }
+  await audit({
+    churchId: c.id,
+    action: "communication.email.send",
+    summary: `Emailed ${counts.sent} of ${counts.recipients} ${d.audienceLabel.toLowerCase()}${d.subject ? ` — "${d.subject}"` : ""}`,
+    targetType: "communication",
+    targetId: log.id,
+    targetLabel: d.subject || d.audienceLabel,
+    meta: {
+      channel: "email",
+      audience: d.audience,
+      subject: d.subject || null,
+      body: d.body,
+      recipients: counts.recipients,
+      sent: counts.sent,
+      failed: counts.failed,
+      skipped: counts.skipped,
+    },
+    severity: "notice",
+  });
+
   revalidatePath("/communication");
   revalidatePath("/communication/history");
   return { ok: true, sent: counts.sent, failed: counts.failed };
@@ -477,6 +521,24 @@ export async function notifyStaff(
       status: "sent" as const,
     })),
   );
+  await audit({
+    churchId: c.id,
+    action: "communication.staff.send",
+    summary: `Sent the staff notice "${d.title}" to ${userIds.length} team member${userIds.length === 1 ? "" : "s"}`,
+    targetType: "communication",
+    targetId: log.id,
+    targetLabel: d.title,
+    meta: {
+      channel: "notification",
+      title: d.title,
+      body: d.body,
+      staff: userIds.length,
+      pushSent,
+      emailSent,
+    },
+    severity: "notice",
+  });
+
   revalidatePath("/communication");
   revalidatePath("/communication/history");
   revalidatePath("/notifications");

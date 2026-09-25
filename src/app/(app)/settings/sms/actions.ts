@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { church, smsTopup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { isSmsConfigured } from "@/lib/sms";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
@@ -53,6 +54,17 @@ export async function startSmsTopup(amount: number): Promise<TopupResult> {
     metadata: { kind: "sms_topup", churchId: c.id, amount },
   });
   if (!init.ok) return init;
+
+  await audit({
+    churchId: c.id,
+    action: "billing.sms_topup.create",
+    summary: `Started an SMS top-up of ₦${amount.toLocaleString()}`,
+    targetType: "sms-topup",
+    targetLabel: reference,
+    meta: { amount, reference },
+    severity: "notice",
+  });
+
   return { ok: true, url: init.url };
 }
 
@@ -127,6 +139,17 @@ export async function applySenderId(
     })
     .where(eq(church.id, c.id));
 
+  await audit({
+    churchId: c.id,
+    action: "settings.sender_id.create",
+    summary: `Requested the SMS sender ID "${id}"`,
+    targetType: "church",
+    targetId: c.id,
+    targetLabel: id,
+    meta: { senderId: id, note: cleanNote, previous: c.smsSenderId },
+    severity: "notice",
+  });
+
   await notifySuperAdminsByEmail({
     subject: `SMS sender ID request: ${id}`,
     title: "New SMS sender ID request",
@@ -168,6 +191,18 @@ export async function checkSenderIdStatus(): Promise<StatusResult> {
         ...(lookup.status === "approved" ? { smsSenderNote: null } : {}),
       })
       .where(eq(church.id, c.id));
+
+    await audit({
+      churchId: c.id,
+      action: "settings.sender_id.update",
+      summary: `The network ${lookup.status} the sender ID "${c.smsSenderId}"`,
+      targetType: "church",
+      targetId: c.id,
+      targetLabel: c.smsSenderId,
+      meta: { status: lookup.status },
+      severity: lookup.status === "approved" ? "notice" : "warning",
+    });
+
     revalidatePath("/settings/sms");
   }
   return { ok: true, status: lookup.status };

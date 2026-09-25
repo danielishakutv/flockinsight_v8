@@ -13,6 +13,7 @@ import { readingMinutes, type Guide } from "./help/types";
 import { START_GUIDES } from "./help/start";
 import { PEOPLE_GUIDES } from "./help/people";
 import { TRAINING_GUIDES } from "./help/training";
+import { MEETING_GUIDES } from "./help/meetings";
 import { SERVICE_GUIDES } from "./help/services";
 import { MONEY_GUIDES } from "./help/money";
 import { COMMS_GUIDES } from "./help/comms";
@@ -32,6 +33,7 @@ export const GUIDE_CATEGORIES: { key: string; title: string }[] = [
   { key: "start", title: "Getting started" },
   { key: "people", title: "Members & people" },
   { key: "training", title: "Training & classes" },
+  { key: "meetings", title: "Meetings" },
   { key: "services", title: "Services & attendance" },
   { key: "giving", title: "Money" },
   { key: "comms", title: "Communication & SMS" },
@@ -44,6 +46,7 @@ const ALL: Omit<Guide, "minutes">[] = [
   ...START_GUIDES,
   ...PEOPLE_GUIDES,
   ...TRAINING_GUIDES,
+  ...MEETING_GUIDES,
   ...SERVICE_GUIDES,
   ...MONEY_GUIDES,
   ...COMMS_GUIDES,

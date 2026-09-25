@@ -25,6 +25,7 @@ import {
   BadgeCheck,
   Database,
   GraduationCap,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   verification: BadgeCheck,
   reports: Database,
   training: GraduationCap,
+  meetings: Video,
   default: BookOpen,
 };
 

@@ -10,6 +10,8 @@ import { giving, givingCategory, member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { sendGivingReceipt } from "@/lib/giving-receipts";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
+import { formatMoney } from "@/lib/money";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -139,6 +141,14 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       const { projectId: _p, pledgeId: _pl, ...editable } = fields;
       void _p;
       void _pl;
+      // The figures before the edit — money changing is exactly the thing an
+      // audit log is for, and "someone edited a gift" without the amounts is
+      // no use to anyone reconciling a Sunday.
+      const [before] = await db
+        .select()
+        .from(giving)
+        .where(and(eq(giving.id, d.id), eq(giving.churchId, church.id)))
+        .limit(1);
       const [row] = await db
         .update(giving)
         .set(editable)
@@ -156,6 +166,26 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
       // Mirror the change into the category's fund, if it has one. The amount,
       // date or category may all have moved.
       await syncGivingToFinance(church.id, row.id);
+
+      if (before) {
+        const changed = diffFields(
+          before as unknown as Record<string, unknown>,
+          editable as unknown as Record<string, unknown>,
+          Object.keys(editable),
+        );
+        if (Object.keys(changed).length > 0) {
+          await audit({
+            churchId: church.id,
+            action: "giving.record.update",
+            summary: `Changed ${summariseChanges(changed)} on a gift of ${formatMoney(Number(before.amount), church.currency)}`,
+            targetType: "giving",
+            targetId: row.id,
+            targetLabel: categoryName ?? d.giverName ?? "Gift",
+            meta: { changed, was: Number(before.amount), now: d.amount },
+            severity: "notice",
+          });
+        }
+      }
       revalidatePath("/giving");
       revalidatePath("/dashboard");
       revalidatePath("/finance");
@@ -191,6 +221,26 @@ export async function recordGiving(input: GivingInput): Promise<ActionResult> {
         date: d.date,
       });
     }
+
+    await audit({
+      churchId: church.id,
+      action: "giving.record.create",
+      summary: `Recorded ${formatMoney(d.amount, church.currency)}${categoryName ? ` to ${categoryName}` : ""}${giver ? ` from ${giver.firstName}` : d.giverName ? ` from ${d.giverName}` : ""}`,
+      targetType: "giving",
+      targetId: row.id,
+      targetLabel: categoryName ?? d.giverName ?? "Gift",
+      meta: {
+        amount: d.amount,
+        currency: church.currency,
+        category: categoryName,
+        method: d.method,
+        date: d.date,
+        memberId: d.memberId,
+        projectId,
+        pledgeId: d.pledgeId,
+        receiptSent: !!(d.sendReceipt && giver),
+      },
+    });
 
     revalidatePath("/giving");
     revalidatePath("/dashboard");
@@ -256,8 +306,34 @@ export async function deleteGiving(id: string): Promise<ActionResult> {
         id: giving.id,
         projectId: giving.projectId,
         pledgeId: giving.pledgeId,
+        amount: giving.amount,
+        date: giving.date,
+        giverName: giving.giverName,
+        memberId: giving.memberId,
+        categoryId: giving.categoryId,
       });
     if (!row) return { ok: false, error: "Giving record not found." };
+
+    await audit({
+      churchId: church.id,
+      action: "giving.record.delete",
+      summary: `Deleted a gift of ${formatMoney(Number(row.amount), church.currency)} dated ${row.date}`,
+      targetType: "giving",
+      targetId: row.id,
+      targetLabel: row.giverName ?? "Gift",
+      // Everything needed to put it back by hand, because nothing else will.
+      meta: {
+        amount: Number(row.amount),
+        currency: church.currency,
+        date: row.date,
+        giverName: row.giverName,
+        memberId: row.memberId,
+        categoryId: row.categoryId,
+        projectId: row.projectId,
+        pledgeId: row.pledgeId,
+      },
+      severity: "critical",
+    });
     // Taking a payment away can leave a pledge marked complete that no longer
     // is, which would drop it out of the outstanding report for good.
     if (row.pledgeId) await syncPledgeStatus(church.id, row.pledgeId);

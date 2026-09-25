@@ -27,6 +27,11 @@ export const CRON_JOBS = {
   broadcasts: { label: "Scheduled broadcasts", intervalMinutes: 15 },
   devotionals: { label: "Devotional delivery", intervalMinutes: 15 },
 
+  // Meeting housekeeping: closes rooms whose last person vanished, and sweeps
+  // the signalling buffer. Cheap, and wanted often — a room that shows as live
+  // for an hour after everyone left is the thing people notice.
+  meetings: { label: "Meeting housekeeping", intervalMinutes: 10 },
+
   // The float check.
   "platform-health": { label: "Platform health & float", intervalMinutes: 30 },
 } as const;

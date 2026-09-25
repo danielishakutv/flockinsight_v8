@@ -50,7 +50,7 @@ describe("permission catalogue", () => {
     const modules = PERMISSION_CATALOG.map((m) => m.key);
     for (const expected of [
       "attendance", "giving", "finance", "members", "groups",
-      "training", "followup", "communication", "analytics",
+      "training", "followup", "communication", "analytics", "meetings",
       "media", "forms", "devotionals", "settings", "team",
     ]) {
       expect(modules, `${expected} should be in the catalogue`).toContain(

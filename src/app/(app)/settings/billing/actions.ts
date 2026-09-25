@@ -8,6 +8,7 @@ import { can } from "@/lib/permissions";
 import { effectivePrice, activatePlan } from "@/lib/billing";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { notifySupport } from "@/lib/support";
+import { audit } from "@/lib/audit";
 import type { PlanId } from "@/lib/plans";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
@@ -44,6 +45,17 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
       createdBy: user.id,
       paidAt: new Date(),
     });
+    await audit({
+      churchId: c.id,
+      action: "billing.plan.update",
+      summary: `Activated the ${plan} plan at no charge`,
+      targetType: "church",
+      targetId: c.id,
+      targetLabel: plan,
+      meta: { plan, price: 0, discountPct: c.planDiscountPct },
+      severity: "critical",
+    });
+
     revalidatePath("/settings/billing");
     revalidatePath("/dashboard");
     return { ok: true, activated: true };
@@ -76,6 +88,17 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
     metadata: { churchId: c.id, plan },
   });
   if (!init.ok) return init;
+
+  await audit({
+    churchId: c.id,
+    action: "billing.checkout.create",
+    summary: `Started checkout for the ${plan} plan (₦${price.toLocaleString()})`,
+    targetType: "payment",
+    targetLabel: reference,
+    meta: { plan, price, reference },
+    severity: "notice",
+  });
+
   return { ok: true, url: init.url };
 }
 

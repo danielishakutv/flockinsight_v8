@@ -5,6 +5,7 @@ import { walletTopup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
+import { audit } from "@/lib/audit";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 const MIN_TOPUP = 100;
@@ -38,5 +39,16 @@ export async function startWalletTopup(amount: number): Promise<TopupResult> {
     metadata: { kind: "wallet_topup", churchId: c.id, amount },
   });
   if (!init.ok) return init;
+
+  await audit({
+    churchId: c.id,
+    action: "billing.wallet_topup.create",
+    summary: `Started a wallet top-up of ₦${amount.toLocaleString()}`,
+    targetType: "wallet-topup",
+    targetLabel: reference,
+    meta: { amount, reference },
+    severity: "notice",
+  });
+
   return { ok: true, url: init.url };
 }

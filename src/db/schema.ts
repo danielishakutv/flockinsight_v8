@@ -6,6 +6,7 @@ import {
   boolean,
   integer,
   bigint,
+  bigserial,
   numeric,
   date,
   uuid,
@@ -1249,19 +1250,75 @@ export const notificationRead = pgTable(
  * ========================================================== */
 
 // Record of superadmin actions, for accountability.
+/**
+ * Where an audited action happened.
+ *
+ *   platform — a FlockInsight operator acting in /superadmin.
+ *   church   — someone acting inside a church's own workspace.
+ *
+ * Both live in one table on purpose: an operator acting *as* a church writes a
+ * church-scoped row with `viaImpersonation` set, so the church's own activity
+ * log shows it rather than hiding it. Nothing a church can see is missing from
+ * the platform view, and nothing the platform does inside a church is invisible
+ * to that church.
+ */
+export const auditScopeEnum = pgEnum("audit_scope", ["platform", "church"]);
+
+/**
+ * How much a row matters when someone is scanning a long list.
+ * `warning` and `critical` are the two that get a colour.
+ */
+export const auditSeverityEnum = pgEnum("audit_severity", [
+  "info",
+  "notice",
+  "warning",
+  "critical",
+]);
+
 export const auditLog = pgTable(
   "audit_log",
   {
     id: uuid().primaryKey().defaultRandom(),
+    scope: auditScopeEnum().notNull().default("platform"),
+    /** The church this happened inside. Null for platform-wide actions. */
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
     actorUserId: text().references(() => user.id, { onDelete: "set null" }),
     actorName: text(),
-    action: text().notNull(), // e.g. "impersonate", "reset_password", "set_plan"
+    actorEmail: text(),
+    /** "owner" | "admin" | a custom role name | "system" | "guest". */
+    actorRole: text(),
+    /** True when a platform operator did this while acting as the church. */
+    viaImpersonation: boolean().notNull().default(false),
+    /** Catalog key, e.g. "member.create" / "finance.transaction.delete". */
+    action: text().notNull(),
+    /** Module the action belongs to — "members", "finance", "meetings"... */
+    module: text().notNull().default("platform"),
+    severity: auditSeverityEnum().notNull().default("info"),
+    /** One human sentence. This is what a person actually reads. */
     summary: text().notNull(),
-    targetType: text(), // "church" | "user" | "broadcast" | ...
+    targetType: text(), // "church" | "user" | "member" | "meeting" | ...
     targetId: text(),
+    /** What the thing is called, so the row still reads after a delete. */
+    targetLabel: text(),
+    /**
+     * Free-form detail: changed fields, before/after, counts. Never secrets —
+     * `recordAudit` strips anything that looks like a password or token.
+     */
+    meta: jsonb().$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    ip: text(),
+    userAgent: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_created_idx").on(t.createdAt)],
+  (t) => [
+    index("audit_created_idx").on(t.createdAt),
+    // The church activity log: newest first, for one church.
+    index("audit_church_created_idx").on(t.churchId, t.createdAt),
+    index("audit_scope_created_idx").on(t.scope, t.createdAt),
+    index("audit_actor_idx").on(t.actorUserId),
+    index("audit_action_idx").on(t.action),
+    index("audit_module_idx").on(t.module),
+    index("audit_target_idx").on(t.targetType, t.targetId),
+  ],
 );
 
 export const broadcastStatusEnum = pgEnum("broadcast_status", [
@@ -3021,3 +3078,327 @@ export const trainingEnrollment = pgTable(
     index("training_enrollment_course_idx").on(t.courseId),
   ],
 );
+
+/* ============================================================
+ * Virtual meetings
+ *
+ * A church-run video/audio room that works in the browser with nothing to
+ * install. Media travels peer-to-peer (a WebRTC mesh); the server only carries
+ * the handshake, the roster and what is currently on the shared stage. That is
+ * what keeps it cheap to run and usable on a phone in a place with a weak
+ * connection — nothing but signalling passes through us.
+ *
+ * Mesh has a real ceiling: every publisher sends its video to every other
+ * participant, so cost grows with the square of the room. `maxParticipants`
+ * exists to hold the room inside that ceiling rather than to sell a bigger
+ * number. For a congregation-sized audience the answer is a livestream, not
+ * this.
+ * ========================================================== */
+
+export const meetingStatusEnum = pgEnum("meeting_status", [
+  "scheduled",
+  "live",
+  "ended",
+  "cancelled",
+]);
+
+/** Who may get in. */
+export const meetingAccessEnum = pgEnum("meeting_access", [
+  "open", // anyone with the link
+  "passcode", // the link plus a short passcode
+  "members", // must be signed in to this church
+]);
+
+export const meetingRoleEnum = pgEnum("meeting_role", [
+  "host",
+  "cohost",
+  "speaker",
+  "attendee",
+]);
+
+/** How a participant's connection is currently faring. */
+export const meetingQualityEnum = pgEnum("meeting_quality", [
+  "good",
+  "fair",
+  "poor",
+  "lost",
+]);
+
+export const meeting = pgTable(
+  "meeting",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * The short code in the share link (/meet/<code>). Human-typable, because
+     * it gets read out from a pulpit — no vowels, no 0/O/1/l.
+     */
+    code: text().notNull(),
+    title: text().notNull(),
+    description: text(),
+    /** "service" | "prayer" | "bible-study" | "class" | "board" | "meeting". */
+    kind: text().notNull().default("meeting"),
+    status: meetingStatusEnum().notNull().default("scheduled"),
+    /** Null means "starts whenever the host opens it". */
+    scheduledFor: timestamp({ withTimezone: true }),
+    durationMin: integer().notNull().default(60),
+    startedAt: timestamp({ withTimezone: true }),
+    endedAt: timestamp({ withTimezone: true }),
+
+    hostUserId: text().references(() => user.id, { onDelete: "set null" }),
+
+    access: meetingAccessEnum().notNull().default("open"),
+    /**
+     * A room passcode, not a credential: the host reads it out, so it is
+     * stored as typed and shown back to them. It gates a room, never an
+     * account, and it is never reused anywhere else.
+     */
+    passcode: text(),
+    /**
+     * The key in the host link (/meet/<code>?h=<key>).
+     *
+     * A meeting is reached by a link, and the person running it is very often
+     * NOT signed in on the device they run it from — a pastor creates the
+     * meeting on a laptop and then joins from a phone where the app has never
+     * been opened. Without this they arrive as an ordinary attendee in their
+     * own meeting, unable to share a verse, mute anybody or end it.
+     *
+     * It is shown separately from the ordinary link, clearly marked, and can
+     * be reissued if it goes somewhere it should not.
+     */
+    hostKey: text(),
+    /** Hold arrivals until a host lets them in. */
+    lobby: boolean().notNull().default(false),
+
+    maxParticipants: integer().notNull().default(12),
+    muteOnEntry: boolean().notNull().default(true),
+    cameraOffOnEntry: boolean().notNull().default(false),
+    allowChat: boolean().notNull().default(true),
+    allowReactions: boolean().notNull().default(true),
+    /** Whether ordinary attendees may share. Hosts and co-hosts always may. */
+    allowScreenShare: boolean().notNull().default(true),
+    allowRecording: boolean().notNull().default(true),
+    /**
+     * Start everyone audio-only. The right default for a mid-week prayer
+     * meeting on mobile data, and it can be turned on mid-call by anyone.
+     */
+    lowDataDefault: boolean().notNull().default(false),
+
+    /** Write an attendance record for this meeting when it ends. */
+    recordAttendance: boolean().notNull().default(false),
+    serviceId: uuid().references(() => service.id, { onDelete: "set null" }),
+    /** Optional audience — used for the "invite the group" shortcut. */
+    groupId: uuid().references(() => group.id, { onDelete: "set null" }),
+
+    /**
+     * What is on the shared stage right now (a verse, a slide, a note, or
+     * nothing). Persisted so someone arriving late sees the same thing as
+     * everyone else instead of an empty screen. Shape: lib/meetings-shared.ts.
+     */
+    stage: jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /** Saved slide deck for this meeting: media ids, in order. */
+    slides: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+
+    /** Filled in as the meeting runs, so the summary survives the room. */
+    peakParticipants: integer().notNull().default(0),
+    totalJoins: integer().notNull().default(0),
+    notes: text(),
+
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("meeting_code_unique").on(t.code),
+    index("meeting_church_idx").on(t.churchId),
+    index("meeting_church_status_idx").on(t.churchId, t.status),
+    index("meeting_church_scheduled_idx").on(t.churchId, t.scheduledFor),
+  ],
+);
+
+/**
+ * One person in one room, for one visit. Rejoining writes a new row, which is
+ * what makes "left at 10:14, came back at 10:21" visible instead of lost.
+ */
+export const meetingParticipant = pgTable(
+  "meeting_participant",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    meetingId: uuid()
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** Random per-visit id. This is the address other peers signal to. */
+    peerId: text().notNull(),
+    /**
+     * Proves a caller owns this peer id. Held only by that browser tab and
+     * required on every write — without it anyone who could read a roster
+     * could post signals, remove people, or speak as somebody else.
+     */
+    secret: text().notNull(),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    displayName: text().notNull(),
+    role: meetingRoleEnum().notNull().default("attendee"),
+    /** False while waiting in the lobby. */
+    admitted: boolean().notNull().default(true),
+    /** Set when a host refuses or removes someone, so they can't walk back in. */
+    removed: boolean().notNull().default(false),
+
+    micOn: boolean().notNull().default(false),
+    cameraOn: boolean().notNull().default(false),
+    sharing: boolean().notNull().default(false),
+    handRaised: boolean().notNull().default(false),
+    lowData: boolean().notNull().default(false),
+    quality: meetingQualityEnum().notNull().default("good"),
+
+    joinedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Heartbeat. A row that stops beating is treated as gone. */
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    leftAt: timestamp({ withTimezone: true }),
+    durationSec: integer().notNull().default(0),
+
+    userAgent: text(),
+    ip: text(),
+  },
+  (t) => [
+    uniqueIndex("meeting_participant_peer_unique").on(t.meetingId, t.peerId),
+    index("meeting_participant_meeting_idx").on(t.meetingId),
+    index("meeting_participant_live_idx").on(t.meetingId, t.lastSeenAt),
+    index("meeting_participant_church_idx").on(t.churchId),
+  ],
+);
+
+/**
+ * The signalling mailbox — WebRTC offers, answers and ICE candidates, plus the
+ * small control messages that keep a room in step.
+ *
+ * This is a transport buffer, not a record of anything. Rows are consumed
+ * within seconds and swept a few minutes later (lib/meetings.ts `pruneSignals`,
+ * always with an age WHERE clause). What actually happened in a meeting lives
+ * in `meeting_participant`, `meeting_message` and the audit log.
+ */
+export const meetingSignal = pgTable(
+  "meeting_signal",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    meetingId: uuid()
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    fromPeer: text().notNull(),
+    /** Null = everyone in the room. */
+    toPeer: text(),
+    type: text().notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The read every listener makes: "anything newer than my cursor, for me".
+    index("meeting_signal_meeting_id_idx").on(t.meetingId, t.id),
+    index("meeting_signal_created_idx").on(t.createdAt),
+  ],
+);
+
+/** In-room chat. Kept after the meeting as the transcript. */
+export const meetingMessage = pgTable(
+  "meeting_message",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    meetingId: uuid()
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    participantId: uuid().references(() => meetingParticipant.id, {
+      onDelete: "set null",
+    }),
+    authorName: text().notNull(),
+    body: text().notNull(),
+    /** "chat" | "system" (joined, left, recording started…). */
+    kind: text().notNull().default("chat"),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("meeting_message_meeting_idx").on(t.meetingId, t.createdAt)],
+);
+
+/**
+ * A recording. The capture happens in the host's browser — the server never
+ * sees the media stream — and the finished file is uploaded here, so a church
+ * that never records pays nothing for the feature.
+ */
+export const meetingRecording = pgTable(
+  "meeting_recording",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    meetingId: uuid()
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** The media-library row holding the file. Null while still uploading. */
+    mediaId: uuid().references(() => media.id, { onDelete: "set null" }),
+    title: text().notNull(),
+    /** "video" (composited stage) or "audio" (voices only — far smaller). */
+    mode: text().notNull().default("video"),
+    /** "uploading" | "ready" | "failed" | "local-only". */
+    status: text().notNull().default("uploading"),
+    bytes: bigint({ mode: "number" }).notNull().default(0),
+    durationSec: integer().notNull().default(0),
+    url: text(),
+    error: text(),
+    startedAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("meeting_recording_meeting_idx").on(t.meetingId),
+    index("meeting_recording_church_idx").on(t.churchId, t.createdAt),
+  ],
+);
+
+/**
+ * Scripture fetched once and kept forever.
+ *
+ * A verse never changes, so the second time any church puts John 3:16 on a
+ * screen it comes from here — no network call, no wait, and it still works
+ * when the upstream API is unreachable, which on a Sunday morning in a place
+ * with a weak connection is the case that matters.
+ */
+export const scriptureVerse = pgTable(
+  "scripture_verse",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Canonical reference, e.g. "John 3:16-18". */
+    reference: text().notNull(),
+    translation: text().notNull(),
+    body: text().notNull(),
+    /** [{ verse: 16, text: "For God so loved…" }, …] */
+    verses: jsonb()
+      .$type<{ verse: number; text: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    fetchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("scripture_verse_unique").on(t.reference, t.translation)],
+);
+
+export type Meeting = typeof meeting.$inferSelect;
+export type NewMeeting = typeof meeting.$inferInsert;
+export type MeetingParticipant = typeof meetingParticipant.$inferSelect;
+export type MeetingSignal = typeof meetingSignal.$inferSelect;
+export type MeetingMessage = typeof meetingMessage.$inferSelect;
+export type MeetingRecording = typeof meetingRecording.$inferSelect;
+export type ScriptureVerse = typeof scriptureVerse.$inferSelect;
+export type AuditLog = typeof auditLog.$inferSelect;

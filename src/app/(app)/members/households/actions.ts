@@ -8,6 +8,7 @@ import { household, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { householdInChurch } from "@/lib/households";
+import { audit } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -44,6 +45,16 @@ export async function createHouseholdAction(
       .set({ householdId: row.id })
       .where(and(eq(member.churchId, g.church.id), inArray(member.id, ids)));
 
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.create",
+    summary: `Created the household "${clean}"${ids.length ? ` with ${ids.length} member${ids.length === 1 ? "" : "s"}` : ""}`,
+    targetType: "household",
+    targetId: row.id,
+    targetLabel: clean,
+    meta: { memberIds: ids },
+  });
+
   revalidatePath("/members/households");
   revalidatePath(`/members/households/${row.id}`);
   return { ok: true, id: row.id };
@@ -65,6 +76,16 @@ export async function renameHousehold(
     .where(and(eq(household.id, id), eq(household.churchId, g.church.id)))
     .returning({ id: household.id });
   if (!row) return { ok: false, error: "Household not found." };
+
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.update",
+    summary: `Renamed a household to "${clean}"`,
+    targetType: "household",
+    targetId: id,
+    targetLabel: clean,
+  });
+
   revalidatePath("/members/households");
   revalidatePath(`/members/households/${id}`);
   return { ok: true, id };
@@ -83,6 +104,15 @@ export async function setHouseholdNote(
     .where(and(eq(household.id, id), eq(household.churchId, g.church.id)))
     .returning({ id: household.id });
   if (!row) return { ok: false, error: "Household not found." };
+
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.update",
+    summary: "Updated a household's note",
+    targetType: "household",
+    targetId: id,
+  });
+
   revalidatePath(`/members/households/${id}`);
   return { ok: true, id };
 }
@@ -118,6 +148,18 @@ export async function setHouseholdHead(
     .where(and(eq(household.id, id), eq(household.churchId, g.church.id)))
     .returning({ id: household.id });
   if (!row) return { ok: false, error: "Household not found." };
+
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.update",
+    summary: memberId
+      ? "Set the head of a household"
+      : "Cleared the head of a household",
+    targetType: "household",
+    targetId: id,
+    meta: { headMemberId: memberId },
+  });
+
   revalidatePath(`/members/households/${id}`);
   return { ok: true, id };
 }
@@ -138,6 +180,16 @@ export async function addMembersToHousehold(
     .update(member)
     .set({ householdId: id })
     .where(and(eq(member.churchId, g.church.id), inArray(member.id, ids)));
+
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.update",
+    summary: `Added ${ids.length} ${ids.length === 1 ? "person" : "people"} to a household`,
+    targetType: "household",
+    targetId: id,
+    meta: { memberIds: ids },
+  });
+
   revalidatePath("/members/households");
   revalidatePath(`/members/households/${id}`);
   return { ok: true, id };
@@ -168,6 +220,15 @@ export async function removeMemberFromHousehold(
         eq(household.headMemberId, memberId),
       ),
     );
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.remove",
+    summary: "Removed someone from a household",
+    targetType: "household",
+    targetId: householdId,
+    meta: { memberId },
+  });
+
   revalidatePath("/members/households");
   revalidatePath(`/members/households/${householdId}`);
   return { ok: true, id: householdId };
@@ -181,8 +242,19 @@ export async function deleteHousehold(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(household)
     .where(and(eq(household.id, id), eq(household.churchId, g.church.id)))
-    .returning({ id: household.id });
+    .returning({ id: household.id, name: household.name });
   if (!row) return { ok: false, error: "Household not found." };
+
+  await audit({
+    churchId: g.church.id,
+    action: "members.household.delete",
+    summary: `Deleted the household "${row.name}" — its members were kept`,
+    targetType: "household",
+    targetId: id,
+    targetLabel: row.name,
+    severity: "warning",
+  });
+
   revalidatePath("/members/households");
   return { ok: true, id };
 }

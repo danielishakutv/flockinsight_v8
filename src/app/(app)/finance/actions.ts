@@ -13,6 +13,8 @@ import {
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
+import { formatMoney } from "@/lib/money";
 import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
 import {
   defaultCategoriesFor,
@@ -36,13 +38,19 @@ export type ActionResult =
  * else: removing an account or a category leaves its rows in place.
  */
 async function guard(): Promise<
-  { ok: true; churchId: string; userId: string } | { ok: false; error: string }
+  | { ok: true; churchId: string; userId: string; currency: string }
+  | { ok: false; error: string }
 > {
   const { church, user } = await requireChurch();
   if (!(await can("finance.manage"))) {
     return { ok: false, error: "You don't have permission to do that." };
   }
-  return { ok: true, churchId: church.id, userId: user.id };
+  return {
+    ok: true,
+    churchId: church.id,
+    userId: user.id,
+    currency: church.currency,
+  };
 }
 
 function refresh(): void {
@@ -109,6 +117,16 @@ export async function saveAccount(input: AccountInput): Promise<ActionResult> {
 
   try {
     if (d.id) {
+      const [before] = await db
+        .select()
+        .from(financeAccount)
+        .where(
+          and(
+            eq(financeAccount.id, d.id),
+            eq(financeAccount.churchId, g.churchId),
+          ),
+        )
+        .limit(1);
       const [row] = await db
         .update(financeAccount)
         .set(values)
@@ -120,6 +138,25 @@ export async function saveAccount(input: AccountInput): Promise<ActionResult> {
         )
         .returning({ id: financeAccount.id });
       if (!row) return { ok: false, error: "That account no longer exists." };
+      const changed = before
+        ? diffFields(
+            before as unknown as Record<string, unknown>,
+            values as unknown as Record<string, unknown>,
+            Object.keys(values),
+          )
+        : {};
+      if (Object.keys(changed).length > 0) {
+        await audit({
+          churchId: g.churchId,
+          action: "finance.account.update",
+          summary: `Changed ${summariseChanges(changed)} on the account "${d.name}"`,
+          targetType: "finance-account",
+          targetId: row.id,
+          targetLabel: d.name,
+          meta: { changed },
+          severity: "notice",
+        });
+      }
       refresh();
       return { ok: true, id: row.id };
     }
@@ -128,6 +165,16 @@ export async function saveAccount(input: AccountInput): Promise<ActionResult> {
       .insert(financeAccount)
       .values({ churchId: g.churchId, ...values, createdBy: g.userId })
       .returning({ id: financeAccount.id });
+    await audit({
+      churchId: g.churchId,
+      action: "finance.account.create",
+      summary: `Created the ${d.type.replace("_", " ")} account "${d.name}"`,
+      targetType: "finance-account",
+      targetId: row.id,
+      targetLabel: d.name,
+      meta: { type: d.type, openingBalance, institution: d.institution || null },
+      severity: "notice",
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {
@@ -162,8 +209,17 @@ export async function setAccountActive(
     .where(
       and(eq(financeAccount.id, id), eq(financeAccount.churchId, g.churchId)),
     )
-    .returning({ id: financeAccount.id });
+    .returning({ id: financeAccount.id, name: financeAccount.name });
   if (!row) return { ok: false, error: "That account no longer exists." };
+  await audit({
+    churchId: g.churchId,
+    action: isActive ? "finance.account.reopen" : "finance.account.archive",
+    summary: `${isActive ? "Reopened" : "Closed"} the account "${row.name}"`,
+    targetType: "finance-account",
+    targetId: row.id,
+    targetLabel: row.name,
+    severity: "notice",
+  });
   refresh();
   return { ok: true, id: row.id };
 }
@@ -199,8 +255,23 @@ export async function deleteAccount(id: string): Promise<ActionResult> {
     .where(
       and(eq(financeAccount.id, id), eq(financeAccount.churchId, g.churchId)),
     )
-    .returning({ id: financeAccount.id });
+    .returning({
+      id: financeAccount.id,
+      name: financeAccount.name,
+      type: financeAccount.type,
+      openingBalance: financeAccount.openingBalance,
+    });
   if (!row) return { ok: false, error: "That account no longer exists." };
+  await audit({
+    churchId: g.churchId,
+    action: "finance.account.delete",
+    summary: `Deleted the empty account "${row.name}"`,
+    targetType: "finance-account",
+    targetId: row.id,
+    targetLabel: row.name,
+    meta: { type: row.type, openingBalance: Number(row.openingBalance ?? 0) },
+    severity: "warning",
+  });
   refresh();
   return { ok: true, id: row.id };
 }
@@ -246,6 +317,14 @@ export async function saveCategory(input: CategoryInput): Promise<ActionResult> 
         )
         .returning({ id: financeCategory.id });
       if (!row) return { ok: false, error: "That category no longer exists." };
+      await audit({
+        churchId: g.churchId,
+        action: "finance.category.update",
+        summary: `Renamed a ${d.kind} category to "${d.name}"`,
+        targetType: "finance-category",
+        targetId: row.id,
+        targetLabel: d.name,
+      });
       refresh();
       return { ok: true, id: row.id };
     }
@@ -259,6 +338,14 @@ export async function saveCategory(input: CategoryInput): Promise<ActionResult> 
         isActive: d.isActive ?? true,
       })
       .returning({ id: financeCategory.id });
+    await audit({
+      churchId: g.churchId,
+      action: "finance.category.create",
+      summary: `Added the ${d.kind} category "${d.name}"`,
+      targetType: "finance-category",
+      targetId: row.id,
+      targetLabel: d.name,
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {
@@ -287,8 +374,16 @@ export async function setCategoryActive(
     .where(
       and(eq(financeCategory.id, id), eq(financeCategory.churchId, g.churchId)),
     )
-    .returning({ id: financeCategory.id });
+    .returning({ id: financeCategory.id, name: financeCategory.name });
   if (!row) return { ok: false, error: "That category no longer exists." };
+  await audit({
+    churchId: g.churchId,
+    action: isActive ? "finance.category.restore" : "finance.category.archive",
+    summary: `${isActive ? "Brought back" : "Retired"} the category "${row.name}"`,
+    targetType: "finance-category",
+    targetId: row.id,
+    targetLabel: row.name,
+  });
   refresh();
   return { ok: true, id: row.id };
 }
@@ -320,8 +415,21 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
     .where(
       and(eq(financeCategory.id, id), eq(financeCategory.churchId, g.churchId)),
     )
-    .returning({ id: financeCategory.id });
+    .returning({
+      id: financeCategory.id,
+      name: financeCategory.name,
+      kind: financeCategory.kind,
+    });
   if (!row) return { ok: false, error: "That category no longer exists." };
+  await audit({
+    churchId: g.churchId,
+    action: "finance.category.delete",
+    summary: `Deleted the unused ${row.kind} category "${row.name}"`,
+    targetType: "finance-category",
+    targetId: row.id,
+    targetLabel: row.name,
+    severity: "warning",
+  });
   refresh();
   return { ok: true, id: row.id };
 }
@@ -346,6 +454,13 @@ export async function createDefaultCategories(
       )
       // Adding these twice should be harmless, not an error.
       .onConflictDoNothing();
+    await audit({
+      churchId: g.churchId,
+      action: "finance.category.create",
+      summary: `Added the starting ${kind} categories`,
+      targetType: "finance-category",
+      meta: { kind, names: defaultCategoriesFor(kind) },
+    });
     refresh();
     return { ok: true };
   } catch (e) {
@@ -471,6 +586,16 @@ export async function saveTransaction(
 
   try {
     if (d.id) {
+      const [before] = await db
+        .select()
+        .from(financeTransaction)
+        .where(
+          and(
+            eq(financeTransaction.id, d.id),
+            eq(financeTransaction.churchId, g.churchId),
+          ),
+        )
+        .limit(1);
       const [row] = await db
         .update(financeTransaction)
         .set(values)
@@ -482,6 +607,25 @@ export async function saveTransaction(
         )
         .returning({ id: financeTransaction.id });
       if (!row) return { ok: false, error: "That record no longer exists." };
+      const changed = before
+        ? diffFields(
+            before as unknown as Record<string, unknown>,
+            values as unknown as Record<string, unknown>,
+            Object.keys(values),
+          )
+        : {};
+      if (Object.keys(changed).length > 0) {
+        await audit({
+          churchId: g.churchId,
+          action: "finance.transaction.update",
+          summary: `Changed ${summariseChanges(changed)} on ${d.kind === "income" ? "income" : "an expense"} of ${formatMoney(Number(before?.amount ?? amount), g.currency)}`,
+          targetType: "finance-transaction",
+          targetId: row.id,
+          targetLabel: d.party || d.reference || d.date,
+          meta: { changed, was: Number(before?.amount ?? 0), now: amount },
+          severity: "notice",
+        });
+      }
       refresh();
       return { ok: true, id: row.id };
     }
@@ -490,6 +634,25 @@ export async function saveTransaction(
       .insert(financeTransaction)
       .values({ churchId: g.churchId, ...values, recordedBy: g.userId })
       .returning({ id: financeTransaction.id });
+    await audit({
+      churchId: g.churchId,
+      action: "finance.transaction.create",
+      summary: `Recorded ${d.kind === "income" ? "income" : "an expense"} of ${formatMoney(amount, g.currency)}${d.party ? ` — ${d.party}` : ""}`,
+      targetType: "finance-transaction",
+      targetId: row.id,
+      targetLabel: d.party || d.reference || d.date,
+      meta: {
+        kind: d.kind,
+        amount,
+        currency: g.currency,
+        date: d.date,
+        accountId,
+        categoryId,
+        method: values.method,
+        reference: d.reference || null,
+      },
+      severity: "notice",
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {
@@ -512,8 +675,40 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
           eq(financeTransaction.churchId, g.churchId),
         ),
       )
-      .returning({ id: financeTransaction.id });
+      .returning({
+        id: financeTransaction.id,
+        kind: financeTransaction.kind,
+        amount: financeTransaction.amount,
+        date: financeTransaction.date,
+        party: financeTransaction.party,
+        reference: financeTransaction.reference,
+        accountId: financeTransaction.accountId,
+        categoryId: financeTransaction.categoryId,
+        note: financeTransaction.note,
+      });
     if (!row) return { ok: false, error: "That record no longer exists." };
+    await audit({
+      churchId: g.churchId,
+      action: "finance.transaction.delete",
+      summary: `Deleted ${row.kind === "income" ? "income" : "an expense"} of ${formatMoney(Number(row.amount), g.currency)} dated ${row.date}`,
+      targetType: "finance-transaction",
+      targetId: row.id,
+      targetLabel: row.party || row.reference || row.date,
+      // The whole row: a deleted financial record has to be reconstructable
+      // from the log, because nothing else keeps it.
+      meta: {
+        kind: row.kind,
+        amount: Number(row.amount),
+        currency: g.currency,
+        date: row.date,
+        party: row.party,
+        reference: row.reference,
+        accountId: row.accountId,
+        categoryId: row.categoryId,
+        note: row.note,
+      },
+      severity: "critical",
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {
@@ -607,6 +802,17 @@ export async function createFundForCategory(
       category.name,
     );
 
+    await audit({
+      churchId: g.churchId,
+      action: "finance.fund.create",
+      summary: `Created the fund account "${name}" for the "${category.name}" giving category, pulling in ${created} past gift${created === 1 ? "" : "s"}`,
+      targetType: "finance-account",
+      targetId: account.id,
+      targetLabel: name,
+      meta: { givingCategoryId: categoryId, backfilled: created },
+      severity: "notice",
+    });
+
     refresh();
     revalidatePath("/settings/giving");
     return { ok: true, id: account.id, created };
@@ -642,8 +848,18 @@ export async function unlinkFund(accountId: string): Promise<ActionResult> {
         eq(financeAccount.churchId, g.churchId),
       ),
     )
-    .returning({ id: financeAccount.id });
+    .returning({ id: financeAccount.id, name: financeAccount.name });
   if (!row) return { ok: false, error: "That account no longer exists." };
+
+  await audit({
+    churchId: g.churchId,
+    action: "finance.fund.unlink",
+    summary: `Detached "${row.name}" from its giving category — new giving stops feeding it`,
+    targetType: "finance-account",
+    targetId: row.id,
+    targetLabel: row.name,
+    severity: "warning",
+  });
 
   refresh();
   revalidatePath("/settings/giving");
@@ -720,6 +936,22 @@ export async function recordTransfer(
         recordedBy: g.userId,
       })
       .returning({ id: financeTransfer.id });
+    await audit({
+      churchId: g.churchId,
+      action: "finance.transfer.create",
+      summary: `Moved ${formatMoney(amount, g.currency)} between accounts`,
+      targetType: "finance-transfer",
+      targetId: row.id,
+      meta: {
+        amount,
+        currency: g.currency,
+        date: d.date,
+        fromAccountId: d.fromAccountId,
+        toAccountId: d.toAccountId,
+        reference: d.reference || null,
+      },
+      severity: "notice",
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {
@@ -742,8 +974,29 @@ export async function deleteTransfer(id: string): Promise<ActionResult> {
           eq(financeTransfer.churchId, g.churchId),
         ),
       )
-      .returning({ id: financeTransfer.id });
+      .returning({
+        id: financeTransfer.id,
+        amount: financeTransfer.amount,
+        date: financeTransfer.date,
+        fromAccountId: financeTransfer.fromAccountId,
+        toAccountId: financeTransfer.toAccountId,
+      });
     if (!row) return { ok: false, error: "That transfer no longer exists." };
+    await audit({
+      churchId: g.churchId,
+      action: "finance.transfer.delete",
+      summary: `Deleted a transfer of ${formatMoney(Number(row.amount), g.currency)} dated ${row.date}`,
+      targetType: "finance-transfer",
+      targetId: row.id,
+      meta: {
+        amount: Number(row.amount),
+        currency: g.currency,
+        date: row.date,
+        fromAccountId: row.fromAccountId,
+        toAccountId: row.toAccountId,
+      },
+      severity: "critical",
+    });
     refresh();
     return { ok: true, id: row.id };
   } catch (e) {

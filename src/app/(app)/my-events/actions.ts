@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { event } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -54,12 +55,37 @@ export async function saveEvent(input: EventInput): Promise<ActionResult> {
   };
 
   if (d.id) {
+    const [before] = await db
+      .select()
+      .from(event)
+      .where(and(eq(event.id, d.id), eq(event.churchId, church.id)))
+      .limit(1);
     const [row] = await db
       .update(event)
       .set(fields)
       .where(and(eq(event.id, d.id), eq(event.churchId, church.id)))
       .returning({ id: event.id });
     if (!row) return { ok: false, error: "Event not found." };
+
+    const changed = before
+      ? diffFields(
+          before as unknown as Record<string, unknown>,
+          fields as unknown as Record<string, unknown>,
+          Object.keys(fields),
+        )
+      : {};
+    if (Object.keys(changed).length > 0) {
+      await audit({
+        churchId: church.id,
+        action: "events.event.update",
+        summary: `Changed ${summariseChanges(changed)} on the event "${d.title}"`,
+        targetType: "event",
+        targetId: row.id,
+        targetLabel: d.title,
+        meta: { changed },
+      });
+    }
+
     revalidatePath("/my-events");
     revalidatePath(`/events/${row.id}`);
     revalidatePath("/events");
@@ -70,6 +96,17 @@ export async function saveEvent(input: EventInput): Promise<ActionResult> {
     .insert(event)
     .values({ churchId: church.id, ...fields, createdBy: user.id })
     .returning({ id: event.id });
+
+  await audit({
+    churchId: church.id,
+    action: "events.event.create",
+    summary: `Created the event "${d.title}" on ${d.date}${d.isPublic ? " (public)" : ""}`,
+    targetType: "event",
+    targetId: row.id,
+    targetLabel: d.title,
+    meta: { date: d.date, venue: d.venue, isPublic: d.isPublic },
+  });
+
   revalidatePath("/my-events");
   revalidatePath("/events");
   return { ok: true, id: row.id };
@@ -84,8 +121,19 @@ export async function deleteEvent(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(event)
     .where(and(eq(event.id, id), eq(event.churchId, church.id)))
-    .returning({ id: event.id });
+    .returning({ id: event.id, title: event.title, date: event.date });
   if (!row) return { ok: false, error: "Event not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "events.event.delete",
+    summary: `Deleted the event "${row.title}" (${row.date})`,
+    targetType: "event",
+    targetId: row.id,
+    targetLabel: row.title,
+    severity: "warning",
+  });
+
   revalidatePath("/my-events");
   revalidatePath("/events");
   return { ok: true, id: row.id };

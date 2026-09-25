@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { memberSignup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { ensureSignup, regenerateSignupSlug } from "@/lib/member-signup";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -54,6 +55,18 @@ export async function saveSignupSettings(
     .set(parsed.data)
     .where(eq(memberSignup.churchId, church.id));
 
+  await audit({
+    churchId: church.id,
+    action: "settings.signup_link.update",
+    summary: parsed.data.enabled
+      ? "Turned the public member sign-up link on"
+      : "Turned the public member sign-up link off",
+    targetType: "church",
+    targetId: church.id,
+    meta: { enabled: parsed.data.enabled },
+    severity: "notice",
+  });
+
   revalidatePath("/settings/signup");
   revalidatePath("/members");
   return { ok: true };
@@ -67,6 +80,17 @@ export async function regenerateSlug(): Promise<
     return { ok: false, error: "You don't have permission to do that." };
   await ensureSignup({ id: church.id, name: church.name, handle: church.handle });
   const slug = await regenerateSignupSlug(church.id, church.handle || church.name);
+
+  await audit({
+    churchId: church.id,
+    action: "settings.signup_link.reset",
+    summary: "Issued a new member sign-up link — the old one stopped working",
+    targetType: "church",
+    targetId: church.id,
+    meta: { slug },
+    severity: "warning",
+  });
+
   revalidatePath("/settings/signup");
   return { ok: true, slug };
 }

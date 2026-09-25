@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { firstTimerSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -46,6 +47,15 @@ export async function saveFirstTimers(
     .insert(firstTimerSetting)
     .values({ churchId: church.id, ...d })
     .onConflictDoUpdate({ target: firstTimerSetting.churchId, set: d });
+
+  await audit({
+    churchId: church.id,
+    action: "settings.first_timers.update",
+    summary: "Updated the first-timer follow-up sequence",
+    targetType: "church",
+    targetId: church.id,
+    meta: { ...d },
+  });
 
   revalidatePath("/settings/first-timers");
   return { ok: true };

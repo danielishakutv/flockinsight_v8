@@ -15,6 +15,7 @@ import { requireChurch } from "@/lib/session";
 import { fundAccountFor } from "@/lib/finance-giving-sync";
 import { createFundForCategory } from "@/app/(app)/finance/actions";
 import { can, canAny } from "@/lib/permissions";
+import { audit, diffFields, summariseChanges } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true }
@@ -55,16 +56,35 @@ export async function updateChurchProfile(input: {
 
   const { church: c } = await requireChurch();
   if (!(await can("settings.manage"))) return NO_SETTINGS;
-  await db
-    .update(church)
-    .set({
-      name: parsed.data.name,
-      timezone: parsed.data.timezone,
-      currency: parsed.data.currency,
-      country: parsed.data.country,
-      state: parsed.data.state,
-    })
-    .where(eq(church.id, c.id));
+
+  const next = {
+    name: parsed.data.name,
+    timezone: parsed.data.timezone,
+    currency: parsed.data.currency,
+    country: parsed.data.country,
+    state: parsed.data.state,
+  };
+  await db.update(church).set(next).where(eq(church.id, c.id));
+
+  const changed = diffFields(
+    c as unknown as Record<string, unknown>,
+    next as unknown as Record<string, unknown>,
+    Object.keys(next),
+  );
+  if (Object.keys(changed).length > 0) {
+    await audit({
+      churchId: c.id,
+      action: "settings.profile.update",
+      // The currency is the one that matters here: changing it re-labels every
+      // figure in the church's history without converting any of them.
+      summary: `Changed the church ${summariseChanges(changed)}`,
+      targetType: "church",
+      targetId: c.id,
+      targetLabel: parsed.data.name,
+      meta: { changed },
+      severity: changed.currency ? "critical" : "notice",
+    });
+  }
 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
@@ -99,12 +119,25 @@ export async function createService(input: {
     .from(service)
     .where(eq(service.churchId, c.id));
 
-  await db.insert(service).values({
+  const [created] = await db
+    .insert(service)
+    .values({
+      churchId: c.id,
+      name: parsed.data.name,
+      dayOfWeek: parsed.data.dayOfWeek,
+      startTime: parsed.data.startTime,
+      sortOrder: existing.length,
+    })
+    .returning({ id: service.id });
+
+  await audit({
     churchId: c.id,
-    name: parsed.data.name,
-    dayOfWeek: parsed.data.dayOfWeek,
-    startTime: parsed.data.startTime,
-    sortOrder: existing.length,
+    action: "settings.service.create",
+    summary: `Added the service "${parsed.data.name}"`,
+    targetType: "service",
+    targetId: created?.id,
+    targetLabel: parsed.data.name,
+    meta: { dayOfWeek: parsed.data.dayOfWeek, startTime: parsed.data.startTime },
   });
 
   revalidatePath("/settings/services");
@@ -139,6 +172,20 @@ export async function updateService(input: {
     .returning({ id: service.id });
   if (!row) return { ok: false, error: "Service not found." };
 
+  await audit({
+    churchId: c.id,
+    action: "settings.service.update",
+    summary: `Updated the service "${parsed.data.name}"`,
+    targetType: "service",
+    targetId: row.id,
+    targetLabel: parsed.data.name,
+    meta: {
+      dayOfWeek: parsed.data.dayOfWeek,
+      startTime: parsed.data.startTime,
+      isActive: parsed.data.isActive,
+    },
+  });
+
   revalidatePath("/settings/services");
   revalidatePath("/attendance/record");
   return { ok: true };
@@ -153,8 +200,18 @@ export async function deleteService(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(service)
     .where(and(eq(service.id, id), eq(service.churchId, c.id)))
-    .returning({ id: service.id });
+    .returning({ id: service.id, name: service.name });
   if (!row) return { ok: false, error: "Service not found." };
+
+  await audit({
+    churchId: c.id,
+    action: "settings.service.delete",
+    summary: `Deleted the service "${row.name}"`,
+    targetType: "service",
+    targetId: row.id,
+    targetLabel: row.name,
+    severity: "warning",
+  });
 
   revalidatePath("/settings/services");
   revalidatePath("/attendance/record");
@@ -206,6 +263,16 @@ export async function createGivingCategory(input: {
     await createFundForCategory(created.id);
   }
 
+  await audit({
+    churchId: c.id,
+    action: "giving.category.create",
+    summary: `Added the giving category "${parsed.data.name}"`,
+    targetType: "giving-category",
+    targetId: created?.id,
+    targetLabel: parsed.data.name,
+    meta: { autoFinanceAccount },
+  });
+
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
   revalidatePath("/finance");
@@ -242,6 +309,14 @@ export async function createGivingCategories(
     })),
   );
 
+  await audit({
+    churchId: c.id,
+    action: "giving.category.create",
+    summary: `Added ${clean.length} giving categor${clean.length === 1 ? "y" : "ies"}`,
+    targetType: "giving-category",
+    meta: { names: clean },
+  });
+
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
   return { ok: true };
@@ -277,6 +352,16 @@ export async function updateGivingCategory(input: {
     .returning({ id: givingCategory.id });
   if (!row) return { ok: false, error: "Category not found." };
 
+  await audit({
+    churchId: c.id,
+    action: "giving.category.update",
+    summary: `Updated the giving category "${parsed.data.name}"`,
+    targetType: "giving-category",
+    targetId: row.id,
+    targetLabel: parsed.data.name,
+    meta: { isActive: parsed.data.isActive },
+  });
+
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
   return { ok: true };
@@ -304,8 +389,18 @@ export async function deleteGivingCategory(id: string): Promise<ActionResult> {
   const [row] = await db
     .delete(givingCategory)
     .where(and(eq(givingCategory.id, id), eq(givingCategory.churchId, c.id)))
-    .returning({ id: givingCategory.id });
+    .returning({ id: givingCategory.id, name: givingCategory.name });
   if (!row) return { ok: false, error: "Category not found." };
+
+  await audit({
+    churchId: c.id,
+    action: "giving.category.delete",
+    summary: `Deleted the giving category "${row.name}"`,
+    targetType: "giving-category",
+    targetId: row.id,
+    targetLabel: row.name,
+    severity: "warning",
+  });
 
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
@@ -340,6 +435,18 @@ export async function saveGivingReceiptSettings(
     .values({ churchId: c.id, ...d })
     .onConflictDoUpdate({ target: givingReceiptSetting.churchId, set: d });
 
+  await audit({
+    churchId: c.id,
+    action: "giving.receipts.update",
+    summary: d.enabled
+      ? `Turned giving receipts on (${[d.email && "email", d.sms && "SMS"].filter(Boolean).join(" and ") || "no channel"})`
+      : "Turned giving receipts off",
+    targetType: "church",
+    targetId: c.id,
+    meta: { enabled: d.enabled, email: d.email, sms: d.sms },
+    severity: "notice",
+  });
+
   revalidatePath("/settings/giving");
   revalidatePath("/giving");
   return { ok: true };
@@ -372,6 +479,18 @@ export async function savePledgeReminderSettings(
     .insert(pledgeReminderSetting)
     .values({ churchId: c.id, ...d })
     .onConflictDoUpdate({ target: pledgeReminderSetting.churchId, set: d });
+
+  await audit({
+    churchId: c.id,
+    action: "giving.pledge_reminders.update",
+    summary: d.enabled
+      ? "Turned pledge reminders on"
+      : "Turned pledge reminders off",
+    targetType: "church",
+    targetId: c.id,
+    meta: { enabled: d.enabled, email: d.email, sms: d.sms },
+    severity: "notice",
+  });
 
   revalidatePath("/settings/giving");
   return { ok: true };

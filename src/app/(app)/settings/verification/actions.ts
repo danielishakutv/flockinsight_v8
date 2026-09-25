@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -93,6 +94,15 @@ export async function confirmCode(
   if (!res.ok) return res;
 
   await announceIfNowVerified(church.id);
+
+  await audit({
+    churchId: church.id,
+    action: "settings.verification.update",
+    summary: "Confirmed a verification code",
+    targetType: "church",
+    targetId: church.id,
+    severity: "notice",
+  });
 
   revalidatePath("/settings/verification");
   revalidatePath("/dashboard");

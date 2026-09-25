@@ -11,6 +11,7 @@ import { sendChurchSms } from "@/lib/church-sms";
 import { notifyUser } from "@/lib/notifications";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -95,6 +96,20 @@ export async function logInteraction(
         })
         .where(eq(member.id, d.memberId));
     });
+    await audit({
+      churchId: church.id,
+      action: "followup.interaction.create",
+      summary: `Logged a ${d.type} with a member${d.outcome ? ` — ${d.outcome.replace("_", " ")}` : ""}`,
+      targetType: "member",
+      targetId: d.memberId,
+      meta: {
+        type: d.type,
+        outcome: d.outcome,
+        occurredAt: d.occurredAt,
+        notes: d.notes,
+      },
+    });
+
     revalidatePath("/follow-up");
     revalidatePath(`/follow-up/${d.memberId}`);
     return { ok: true };
@@ -160,6 +175,17 @@ export async function sendSmsToMember(
     // The SMS was sent; just couldn't log it. Don't fail the user action.
     console.error("sms logged-interaction failed", e);
   }
+
+  await audit({
+    churchId: church.id,
+    action: "followup.sms.send",
+    summary: "Texted a member from follow-up",
+    targetType: "member",
+    targetId: memberId,
+    meta: { message, phone: m.phone },
+    severity: "notice",
+  });
+
   revalidatePath("/follow-up");
   revalidatePath(`/follow-up/${memberId}`);
   return { ok: true };
@@ -181,6 +207,16 @@ export async function setFollowUpStatus(
     .update(member)
     .set({ followUpStatus: status })
     .where(and(eq(member.id, memberId), eq(member.churchId, church.id)));
+
+  await audit({
+    churchId: church.id,
+    action: "followup.status.update",
+    summary: `Moved a member to "${status.replace("_", " ")}" in follow-up`,
+    targetType: "member",
+    targetId: memberId,
+    meta: { status },
+  });
+
   revalidatePath("/follow-up");
   revalidatePath(`/follow-up/${memberId}`);
   return { ok: true };
@@ -222,6 +258,21 @@ export async function assignFollowUp(
     .update(member)
     .set({ assignedToId: userId })
     .where(and(eq(member.id, memberId), eq(member.churchId, church.id)));
+
+  const memberLabel =
+    [m.firstName, m.lastName].filter(Boolean).join(" ") || "a member";
+  await audit({
+    churchId: church.id,
+    action: "followup.assignment.update",
+    summary: userId
+      ? `Assigned ${memberLabel} to someone for follow-up`
+      : `Unassigned ${memberLabel} from follow-up`,
+    targetType: "member",
+    targetId: memberId,
+    targetLabel: memberLabel,
+    meta: { assignedToId: userId, previousAssigneeId: m.assignedToId },
+  });
+
   revalidatePath("/follow-up");
   revalidatePath(`/follow-up/${memberId}`);
 
@@ -287,6 +338,18 @@ export async function setInFollowUp(
       followUpStatus: inFollowUp ? (m.followUpStatus ?? "new") : m.followUpStatus,
     })
     .where(and(eq(member.id, memberId), eq(member.churchId, church.id)));
+
+  await audit({
+    churchId: church.id,
+    action: "followup.member.update",
+    summary: inFollowUp
+      ? "Put a member into follow-up"
+      : "Took a member out of follow-up",
+    targetType: "member",
+    targetId: memberId,
+    meta: { inFollowUp },
+  });
+
   revalidatePath("/follow-up");
   return { ok: true };
 }

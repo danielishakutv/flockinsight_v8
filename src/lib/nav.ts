@@ -20,6 +20,7 @@ import {
   Network,
   Database,
   GraduationCap,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,7 @@ const REPORT_PERMS = [
   "finance.view",
   "groups.view",
   "training.view",
+  "meetings.view",
   "followup.view",
   "communication.view",
   "forms.view",
@@ -84,6 +86,7 @@ export const mainNav: NavItem[] = [
     icon: GraduationCap,
     perm: "training.view",
   },
+  { label: "Meetings", href: "/meetings", icon: Video, perm: "meetings.view" },
   { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
   { label: "Finance", href: "/finance", icon: Wallet, perm: "finance.view" },
   {
@@ -261,6 +264,14 @@ export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
         description: "Classes, worker training & who has completed what",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
         perm: "training.view",
+      },
+      {
+        label: "Meetings",
+        href: "/meetings",
+        icon: Video,
+        description: "Video & audio meetings in the browser",
+        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+        perm: "meetings.view",
       },
       {
         label: "Follow-up",

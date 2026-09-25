@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { THEME_BY_ID } from "@/lib/church-themes";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -125,6 +126,25 @@ export async function savePublicProfile(
       socials,
     })
     .where(eq(church.id, c.id));
+
+  await audit({
+    churchId: c.id,
+    action: "settings.public_page.update",
+    summary: d.publicEnabled
+      ? `Updated the public church page (/c/${d.handle})`
+      : "Took the public church page offline",
+    targetType: "church",
+    targetId: c.id,
+    targetLabel: d.handle,
+    meta: {
+      handle: d.handle,
+      publicEnabled: d.publicEnabled,
+      theme: d.theme,
+      // The handle is the public address; changing it breaks every shared link.
+      handleChanged: c.handle !== d.handle ? { from: c.handle, to: d.handle } : undefined,
+    },
+    severity: c.handle !== d.handle ? "warning" : "notice",
+  });
 
   revalidatePath("/settings/public");
   revalidatePath(`/c/${d.handle}`);

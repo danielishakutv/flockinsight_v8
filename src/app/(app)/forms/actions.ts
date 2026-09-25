@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { event, form } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { slugify, randomSuffix } from "@/lib/slug";
 
 /** Resolve an event id to itself + title if it belongs to this church. */
@@ -141,6 +142,16 @@ export async function createForm(eventId?: string): Promise<ActionResult> {
     })
     .returning({ id: form.id });
 
+  await audit({
+    churchId: church.id,
+    action: "forms.form.create",
+    summary: `Created the form "${title}"`,
+    targetType: "form",
+    targetId: row.id,
+    targetLabel: title,
+    meta: { slug, eventId: ev?.id ?? null },
+  });
+
   revalidatePath("/forms");
   if (ev) revalidatePath("/my-events");
   return { ok: true, id: row.id };
@@ -170,6 +181,18 @@ export async function setFormEvent(
     .where(and(eq(form.id, formId), eq(form.churchId, church.id)))
     .returning({ id: form.id });
   if (!res.length) return { ok: false, error: "Form not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "forms.form.update",
+    summary: linked
+      ? "Attached a form to an event"
+      : "Detached a form from its event",
+    targetType: "form",
+    targetId: formId,
+    meta: { eventId: linked },
+  });
+
   revalidatePath("/forms");
   revalidatePath(`/forms/${formId}`);
   revalidatePath("/my-events");
@@ -238,6 +261,25 @@ export async function updateForm(input: FormUpdateInput): Promise<ActionResult> 
     })
     .where(and(eq(form.id, d.id), eq(form.churchId, church.id)));
 
+  await audit({
+    churchId: church.id,
+    action: "forms.form.update",
+    summary: `Edited the form "${d.title}" (${fields.length} question${fields.length === 1 ? "" : "s"}, ${d.status})`,
+    targetType: "form",
+    targetId: d.id,
+    targetLabel: d.title,
+    meta: {
+      status: d.status,
+      slug,
+      questions: fields.length,
+      createMembers: d.createMembers,
+      addToFollowUp: d.addToFollowUp,
+      renamedLink: slug !== existing.slug ? { from: existing.slug, to: slug } : undefined,
+    },
+    // Renaming the link breaks every copy of it already shared.
+    severity: slug !== existing.slug ? "warning" : "info",
+  });
+
   revalidatePath("/forms");
   revalidatePath(`/forms/${d.id}`);
   revalidatePath("/my-events");
@@ -261,6 +303,22 @@ export async function setFormStatus(
     .where(and(eq(form.id, id), eq(form.churchId, church.id)))
     .returning({ id: form.id });
   if (!res.length) return { ok: false, error: "Form not found." };
+
+  await audit({
+    churchId: church.id,
+    action: status === "open" ? "forms.form.publish" : "forms.form.update",
+    summary:
+      status === "open"
+        ? "Opened a form for responses"
+        : status === "closed"
+          ? "Closed a form to new responses"
+          : "Put a form back into draft",
+    targetType: "form",
+    targetId: id,
+    meta: { status },
+    severity: "notice",
+  });
+
   revalidatePath("/forms");
   revalidatePath(`/forms/${id}`);
   return { ok: true };
@@ -276,8 +334,20 @@ export async function deleteForm(id: string): Promise<ActionResult> {
   const res = await db
     .delete(form)
     .where(and(eq(form.id, id), eq(form.churchId, church.id)))
-    .returning({ id: form.id });
+    .returning({ id: form.id, title: form.title, slug: form.slug });
   if (!res.length) return { ok: false, error: "Form not found." };
+
+  await audit({
+    churchId: church.id,
+    action: "forms.form.delete",
+    summary: `Deleted the form "${res[0].title}" and every response to it`,
+    targetType: "form",
+    targetId: id,
+    targetLabel: res[0].title,
+    meta: { slug: res[0].slug },
+    severity: "critical",
+  });
+
   revalidatePath("/forms");
   return { ok: true };
 }

@@ -14,6 +14,7 @@ import {
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { BADGE_COLOR_KEYS, TRAINING_BADGE_ICONS } from "@/lib/training-shared";
+import { audit } from "@/lib/audit";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -140,6 +141,17 @@ export async function saveCourse(input: CourseInput): Promise<ActionResult> {
         isActive: d.isActive,
       })
       .where(eq(trainingCourse.id, d.id));
+
+    await audit({
+      churchId: g.churchId,
+      action: "training.course.update",
+      summary: `Updated the ${d.kind} "${d.name}"`,
+      targetType: "training-course",
+      targetId: d.id,
+      targetLabel: d.name,
+      meta: { level: d.level, isActive: d.isActive, passMark: d.passMark },
+    });
+
     refresh(undefined, d.id);
     return { ok: true, id: d.id };
   }
@@ -162,6 +174,16 @@ export async function saveCourse(input: CourseInput): Promise<ActionResult> {
       createdBy: g.userId,
     })
     .returning({ id: trainingCourse.id });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.course.create",
+    summary: `Created the ${d.kind} "${d.name}"`,
+    targetType: "training-course",
+    targetId: row.id,
+    targetLabel: d.name,
+    meta: { level: d.level, issuesCertificate: d.issuesCertificate },
+  });
 
   refresh();
   return { ok: true, id: row.id };
@@ -186,7 +208,21 @@ export async function deleteCourse(id: string): Promise<ActionResult> {
       error: `${n} enrolment${n === 1 ? " has" : "s have"} been recorded against this course. Mark it inactive instead — deleting it would erase who completed it.`,
     };
 
-  await db.delete(trainingCourse).where(eq(trainingCourse.id, id));
+  const [gone] = await db
+    .delete(trainingCourse)
+    .where(eq(trainingCourse.id, id))
+    .returning({ name: trainingCourse.name, kind: trainingCourse.kind });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.course.delete",
+    summary: `Deleted the ${gone?.kind ?? "course"} "${gone?.name ?? "(untitled)"}"`,
+    targetType: "training-course",
+    targetId: id,
+    targetLabel: gone?.name,
+    severity: "warning",
+  });
+
   refresh();
   return { ok: true };
 }
@@ -255,6 +291,17 @@ export async function saveCohort(input: CohortInput): Promise<ActionResult> {
       .update(trainingCohort)
       .set(values)
       .where(eq(trainingCohort.id, d.id));
+
+    await audit({
+      churchId: g.churchId,
+      action: "training.cohort.update",
+      summary: `Updated the class "${d.name}" (${d.status})`,
+      targetType: "training-cohort",
+      targetId: d.id,
+      targetLabel: d.name,
+      meta: { status: d.status, startDate: d.startDate, endDate: d.endDate },
+    });
+
     refresh(d.id, d.courseId);
     return { ok: true, id: d.id };
   }
@@ -263,6 +310,16 @@ export async function saveCohort(input: CohortInput): Promise<ActionResult> {
     .insert(trainingCohort)
     .values({ ...values, churchId: g.churchId, createdBy: g.userId })
     .returning({ id: trainingCohort.id });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.cohort.create",
+    summary: `Opened the class "${d.name}"`,
+    targetType: "training-cohort",
+    targetId: row.id,
+    targetLabel: d.name,
+    meta: { courseId: d.courseId, status: d.status, capacity: d.capacity },
+  });
 
   refresh(row.id, d.courseId);
   return { ok: true, id: row.id };
@@ -290,7 +347,21 @@ export async function deleteCohort(id: string): Promise<ActionResult> {
       error: `${n} ${n === 1 ? "person has" : "people have"} completed this class. Mark it completed or cancelled instead — deleting it would take their badges with it.`,
     };
 
-  await db.delete(trainingCohort).where(eq(trainingCohort.id, id));
+  const [gone] = await db
+    .delete(trainingCohort)
+    .where(eq(trainingCohort.id, id))
+    .returning({ name: trainingCohort.name });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.cohort.delete",
+    summary: `Deleted the class "${gone?.name ?? "(untitled)"}"`,
+    targetType: "training-cohort",
+    targetId: id,
+    targetLabel: gone?.name,
+    severity: "warning",
+  });
+
   refresh(undefined, found.courseId);
   return { ok: true };
 }
@@ -341,6 +412,15 @@ export async function addInstructor(
     return { ok: false, error: "They're already listed on this class." };
   }
 
+  await audit({
+    churchId: g.churchId,
+    action: "training.instructor.create",
+    summary: `Added ${d.name ?? "a member"} as ${d.role ?? "an instructor"} on a class`,
+    targetType: "training-cohort",
+    targetId: d.cohortId,
+    meta: { memberId: d.memberId, name: d.name, role: d.role },
+  });
+
   refresh(d.cohortId, cohort.courseId);
   return { ok: true };
 }
@@ -362,6 +442,15 @@ export async function removeInstructor(
         eq(trainingInstructor.cohortId, cohortId),
       ),
     );
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.instructor.remove",
+    summary: "Removed an instructor from a class",
+    targetType: "training-cohort",
+    targetId: cohortId,
+    meta: { instructorId: id },
+  });
 
   refresh(cohortId, cohort.courseId);
   return { ok: true };
@@ -430,6 +519,15 @@ export async function enrolMembers(
     // error worth failing the whole batch for.
     .onConflictDoNothing();
 
+  await audit({
+    churchId: g.churchId,
+    action: "training.enrolment.create",
+    summary: `Enrolled ${ids.length} ${ids.length === 1 ? "person" : "people"} in a class`,
+    targetType: "training-cohort",
+    targetId: cohortId,
+    meta: { memberIds: ids, courseId: cohort.courseId },
+  });
+
   refresh(cohortId, cohort.courseId);
   return { ok: true };
 }
@@ -496,6 +594,23 @@ export async function saveResult(input: ResultInput): Promise<ActionResult> {
       ),
     );
 
+  await audit({
+    churchId: g.churchId,
+    action: "training.result.update",
+    summary: `Recorded a result: ${d.status}${d.score != null ? ` (${d.score}%)` : ""}${d.grade ? ` — ${d.grade}` : ""}`,
+    targetType: "training-enrolment",
+    targetId: d.id,
+    meta: {
+      status: d.status,
+      score: d.score,
+      grade: d.grade,
+      certificateNo: d.certificateNo,
+      cohortId: d.cohortId,
+    },
+    // A completion puts a badge beside somebody's name for good.
+    severity: d.status === "completed" ? "notice" : "info",
+  });
+
   refresh(d.cohortId, cohort.courseId);
   return { ok: true };
 }
@@ -508,7 +623,7 @@ export async function completeAll(cohortId: string): Promise<ActionResult> {
   if (!cohort) return { ok: false, error: "That class no longer exists." };
 
   const today = new Date().toISOString().slice(0, 10);
-  await db
+  const finished = await db
     .update(trainingEnrollment)
     .set({ status: "completed", completedAt: today })
     .where(
@@ -519,7 +634,18 @@ export async function completeAll(cohortId: string): Promise<ActionResult> {
         // finished" means everyone still taking it, not a rewrite of history.
         inArray(trainingEnrollment.status, ["enrolled", "in_progress"]),
       ),
-    );
+    )
+    .returning({ id: trainingEnrollment.id });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.result.update",
+    summary: `Marked a whole class complete — ${finished.length} ${finished.length === 1 ? "person" : "people"}`,
+    targetType: "training-cohort",
+    targetId: cohortId,
+    meta: { completed: finished.length, courseId: cohort.courseId, on: today },
+    severity: "notice",
+  });
 
   refresh(cohortId, cohort.courseId);
   return { ok: true };
@@ -534,7 +660,7 @@ export async function removeEnrollment(
   const cohort = await cohortInChurch(cohortId, g.churchId);
   if (!cohort) return { ok: false, error: "That class no longer exists." };
 
-  await db
+  const [gone] = await db
     .delete(trainingEnrollment)
     .where(
       and(
@@ -542,7 +668,21 @@ export async function removeEnrollment(
         eq(trainingEnrollment.cohortId, cohortId),
         eq(trainingEnrollment.churchId, g.churchId),
       ),
-    );
+    )
+    .returning({
+      memberId: trainingEnrollment.memberId,
+      status: trainingEnrollment.status,
+    });
+
+  await audit({
+    churchId: g.churchId,
+    action: "training.enrolment.remove",
+    summary: `Took someone off a class register${gone?.status === "completed" ? " — their badge went with it" : ""}`,
+    targetType: "training-cohort",
+    targetId: cohortId,
+    meta: { memberId: gone?.memberId, wasStatus: gone?.status },
+    severity: gone?.status === "completed" ? "warning" : "info",
+  });
 
   refresh(cohortId, cohort.courseId);
   return { ok: true };

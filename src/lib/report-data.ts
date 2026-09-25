@@ -20,6 +20,8 @@ import {
   groupMembership,
   household,
   media,
+  meeting,
+  meetingParticipant,
   member,
   payment,
   pledge,
@@ -1142,6 +1144,154 @@ const BUILDERS: Record<string, Builder> = {
         f.byId,
         f.byName,
         f.notes,
+      ]),
+    };
+  },
+
+  /* ----------------------------- Meetings ----------------------------- */
+
+  meetings: async (churchId, range) => {
+    const host = alias(user, "meeting_host");
+    const rows = await db
+      .select({
+        id: meeting.id,
+        code: meeting.code,
+        title: meeting.title,
+        kind: meeting.kind,
+        status: meeting.status,
+        access: meeting.access,
+        scheduledFor: meeting.scheduledFor,
+        durationMin: meeting.durationMin,
+        startedAt: meeting.startedAt,
+        endedAt: meeting.endedAt,
+        peak: meeting.peakParticipants,
+        joins: meeting.totalJoins,
+        maxParticipants: meeting.maxParticipants,
+        lowData: meeting.lowDataDefault,
+        recordingAllowed: meeting.allowRecording,
+        hostId: meeting.hostUserId,
+        hostName: host.name,
+        createdAt: meeting.createdAt,
+      })
+      .from(meeting)
+      .leftJoin(host, eq(host.id, meeting.hostUserId))
+      .where(
+        and(
+          eq(meeting.churchId, churchId),
+          ...rangeWhere(meeting.scheduledFor, range, "timestamp"),
+        ),
+      )
+      .orderBy(desc(meeting.createdAt));
+
+    return {
+      columns: [
+        "meeting_id",
+        "join_code",
+        "title",
+        "kind",
+        "status",
+        "who_can_join",
+        "scheduled_for",
+        "planned_minutes",
+        "started_at",
+        "ended_at",
+        "actual_minutes",
+        "peak_participants",
+        "total_joins",
+        "room_limit",
+        "low_data_default",
+        "recording_allowed",
+        "host_user_id",
+        "host_name",
+        "created_at",
+      ],
+      rows: rows.map((m) => [
+        m.id,
+        m.code,
+        m.title,
+        m.kind,
+        m.status,
+        m.access,
+        m.scheduledFor?.toISOString() ?? "",
+        m.durationMin,
+        m.startedAt?.toISOString() ?? "",
+        m.endedAt?.toISOString() ?? "",
+        m.startedAt && m.endedAt
+          ? Math.round((m.endedAt.getTime() - m.startedAt.getTime()) / 60000)
+          : "",
+        m.peak,
+        m.joins,
+        m.maxParticipants,
+        bool(m.lowData),
+        bool(m.recordingAllowed),
+        m.hostId,
+        m.hostName,
+        m.createdAt.toISOString(),
+      ]),
+    };
+  },
+
+  "meeting-attendance": async (churchId, range) => {
+    const rows = await db
+      .select({
+        id: meetingParticipant.id,
+        meetingId: meetingParticipant.meetingId,
+        meetingTitle: meeting.title,
+        name: meetingParticipant.displayName,
+        role: meetingParticipant.role,
+        userId: meetingParticipant.userId,
+        memberId: meetingParticipant.memberId,
+        joinedAt: meetingParticipant.joinedAt,
+        leftAt: meetingParticipant.leftAt,
+        seconds: meetingParticipant.durationSec,
+        admitted: meetingParticipant.admitted,
+        removed: meetingParticipant.removed,
+        lowData: meetingParticipant.lowData,
+      })
+      .from(meetingParticipant)
+      .innerJoin(meeting, eq(meeting.id, meetingParticipant.meetingId))
+      .where(
+        and(
+          eq(meetingParticipant.churchId, churchId),
+          ...rangeWhere(meetingParticipant.joinedAt, range, "timestamp"),
+        ),
+      )
+      .orderBy(desc(meetingParticipant.joinedAt));
+
+    return {
+      columns: [
+        "attendance_id",
+        "meeting_id",
+        "meeting_title",
+        "display_name",
+        "role",
+        "user_id",
+        "member_id",
+        "was_signed_in",
+        "joined_at",
+        "left_at",
+        "minutes",
+        "admitted",
+        "removed",
+        "low_data",
+      ],
+      rows: rows.map((p) => [
+        p.id,
+        p.meetingId,
+        p.meetingTitle,
+        p.name,
+        p.role,
+        p.userId,
+        p.memberId,
+        bool(!!p.userId),
+        p.joinedAt.toISOString(),
+        p.leftAt?.toISOString() ?? "",
+        p.leftAt
+          ? Math.round((p.leftAt.getTime() - p.joinedAt.getTime()) / 60000)
+          : Math.round(Number(p.seconds ?? 0) / 60),
+        bool(p.admitted),
+        bool(p.removed),
+        bool(p.lowData),
       ]),
     };
   },

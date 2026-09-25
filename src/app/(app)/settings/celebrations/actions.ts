@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { celebrationSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { fillTemplate } from "@/lib/service-reminders";
 
@@ -41,6 +42,15 @@ export async function saveCelebrations(
     .insert(celebrationSetting)
     .values({ churchId: church.id, ...d })
     .onConflictDoUpdate({ target: celebrationSetting.churchId, set: d });
+
+  await audit({
+    churchId: church.id,
+    action: "settings.celebrations.update",
+    summary: "Updated the birthday and anniversary greeting settings",
+    targetType: "church",
+    targetId: church.id,
+    meta: { ...d },
+  });
 
   revalidatePath("/settings/celebrations");
   return { ok: true };
