@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/brand";
+import { MakerFooter } from "@/components/maker-footer";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function AuthLayout({
@@ -18,9 +19,7 @@ export default function AuthLayout({
         <Wordmark logoClassName="size-10" className="text-2xl" />
       </Link>
       <div className="w-full max-w-md">{children}</div>
-      <p className="text-muted-foreground mt-8 text-center text-xs">
-        © {new Date().getFullYear()} Toko Technologies · FlockInsight
-      </p>
+      <MakerFooter />
       <Toaster />
     </div>
   );

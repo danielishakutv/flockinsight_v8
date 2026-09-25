@@ -29,6 +29,35 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.63.0",
+    date: "2026-09-26",
+    summary:
+      "Hold a meeting in your browser — video, voice, screen sharing and scripture on screen, built to survive a weak connection. Plus an activity log of everything that happens in your church's workspace.",
+    changes: {
+      Added: [
+        "Meetings. Create one, share the link, and people join in their browser \u2014 no app, no account, nothing to install. Video, voice, screen sharing, chat, reactions and a raised hand. It runs from a phone as well as a laptop.",
+        "Low data mode. One tap turns off video in both directions and keeps the voices, using roughly a tenth of the data. Set it as the default on a meeting and everybody starts that way \u2014 the right setting for a midweek prayer meeting most people join on mobile data. The meeting also lowers its own quality as the room grows and when your connection weakens, so a call degrades instead of freezing.",
+        "Put a Bible verse on everyone's screen. Type \u201cJohn 3:16\u201d, \u201cPs 23\u201d or \u201c1 cor 13:4-7\u201d, pick a translation, and it appears large enough to read from the back of a room. Six public-domain translations, and you can paste your own text when you need a different one \u2014 which also means it works with no internet at all. Verses are kept after the first fetch, so the second time anyone uses one it is instant.",
+        "Share slides from your media library, or a plain note in very large type \u2014 a hymn number, an announcement, a name to pray for. Anyone joining late sees the same thing as everyone else.",
+        "Record a meeting, as video or as audio only. The recording is made on the host's own computer, so it costs no bandwidth during the call, and everyone in the room is told the moment it starts. Save it to your media library or download it. Audio-only recordings are about a twentieth of the size \u2014 usually what you want for a sermon.",
+        "Host controls: mute one person or everyone, a lobby you let people into one at a time, co-hosts, and removing somebody so the link will not let them back in. Raised hands go to the top of the list so nobody is missed.",
+        "Every meeting keeps a register \u2014 who joined, when they arrived and left, and for how long \u2014 and one button turns it into an attendance record. \u201cRun it again\u201d copies a finished meeting's settings into a fresh one, which is the weekly prayer meeting in one tap.",
+        "Activity log. Settings \u2192 Activity log now shows everything that happens in your church's workspace: who added, changed, deleted, sent, exported or signed in, when, and what actually changed \u2014 field by field, with the old value beside the new one. Filter by area, by person or by date, search it, and download it as a CSV. Nothing in it is ever edited or removed.",
+        "When our support team works inside your church, it is marked as ours in your own log rather than hidden. Anything we do on your behalf, you can see.",
+        "Two new downloads in Reports: every meeting, and every visit to every meeting.",
+      ],
+      Improved: [
+        "The platform audit log now covers church activity as well as operator actions, with filters, search and an export \u2014 and a download of the log is itself recorded.",
+        "Settings has an \u201cAbout this software\u201d card: what the platform is, who built it, and the terms in plain words \u2014 including the one that matters, which is that the data belongs to the church and to nobody else.",
+      ],
+      Security: [
+        "A deleted member, gift, financial record, transfer or pledge is now recorded with enough detail to reconstruct it by hand. Until now the most destructive things in the app left no trace of who did them.",
+        "Sign-ins are recorded, so \u201cwho deleted this?\u201d has an answer that starts before the deletion.",
+        "The activity log strips anything that looks like a password, token or key before it is stored \u2014 a log more people can read must never become the place a credential leaks.",
+      ],
+    },
+  },
+  {
     version: "0.62.0",
     date: "2026-09-11",
     summary:

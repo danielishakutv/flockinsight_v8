@@ -3,6 +3,7 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getPlanPrice } from "@/lib/pricing";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { AboutSoftware } from "@/components/settings/about-software";
 
 export const metadata = { title: "Settings" };
 
@@ -20,14 +21,17 @@ export default async function GeneralSettingsPage() {
   }
   const planPrice = await getPlanPrice(church.plan);
   return (
-    <ProfileForm
-      initialName={church.name}
-      initialTimezone={church.timezone}
-      initialCurrency={church.currency}
-      initialCountry={church.country}
-      initialState={church.state}
-      plan={church.plan}
-      planPriceLabel={priceLabel(planPrice)}
-    />
+    <div className="space-y-6">
+      <ProfileForm
+        initialName={church.name}
+        initialTimezone={church.timezone}
+        initialCurrency={church.currency}
+        initialCountry={church.country}
+        initialState={church.state}
+        plan={church.plan}
+        planPriceLabel={priceLabel(planPrice)}
+      />
+      <AboutSoftware churchName={church.name} />
+    </div>
   );
 }
