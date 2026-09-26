@@ -29,6 +29,28 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.65.0",
+    date: "2026-09-26",
+    summary:
+      "Four in five people use FlockInsight on a phone, so the phone is where it now works best — nothing runs off the side of the screen, every column of every table can be reached, and every button is big enough to hit with a thumb.",
+    changes: {
+      Fixed: [
+        "Text no longer runs off the right-hand edge. Long things — an email address, a file path, a column name, a website — now wrap instead of pushing the page sideways, and no page scrolls sideways at any width, down to the narrowest phone we support.",
+        "Every column of every table can now be reached. Wide tables scroll on their own, with a fade at the edge and a line of text the first time so it is clear there is more, and the first column — the date, the name, the account — stays put while you scroll, so a row of figures still belongs to somebody.",
+        "A giving project's Raised, Pledged and Target figures were being cut short with an ellipsis on a phone, which hid the very number you opened the page to see. They now have the full width of the screen.",
+        "Buttons that only appeared when you hovered a mouse — delete a task, remove a photo, pin someone in a meeting — were invisible on a touch screen, which meant the feature simply was not there on a phone. They are always visible on touch now.",
+        "A long list in a dropdown — a list of members, say — could open partly off the side of a narrow screen. It now stays on screen.",
+        "A tall form in a dialog ran off the top and bottom of a short screen with no way to scroll to the buttons. Dialogs now fit the screen and scroll their own contents, with the close button always in reach.",
+        "The event date and time fields were squeezed into three columns on a phone, too narrow for the date picker to render. The date now takes its own row.",
+      ],
+      Improved: [
+        "Every button, link and icon you can tap is at least 44px — the size a thumb actually needs — while staying the same size on a desktop, where a mouse does not need the room.",
+        "Phone number, amount, email and website fields now bring up the right keyboard. Entering a membership roll on a phone is a numeric keypad rather than a full QWERTY one.",
+        "Every icon-only button now tells a screen reader what it does.",
+      ],
+    },
+  },
+  {
     version: "0.64.0",
     date: "2026-09-26",
     summary:
