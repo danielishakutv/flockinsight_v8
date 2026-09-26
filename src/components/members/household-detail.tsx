@@ -206,6 +206,7 @@ export function HouseholdDetail({
                       disabled={pending}
                       onClick={() => removeMember(m.id)}
                       title="Remove from household"
+                      aria-label="Remove from household"
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <UserMinus className="size-4" />

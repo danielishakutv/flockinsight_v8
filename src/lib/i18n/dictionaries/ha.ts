@@ -763,6 +763,7 @@ export const ha: Dictionary = {
     showOlder: "Nuna na baya",
     noMatches: "Babu abin da ya dace da waɗannan tacewa.",
     last30Days: "Kwanaki 30 da suka wuce",
+    whatChanged: "Abin da ya sauya",
     field: "Filin",
     was: "Ya kasance",
     now: "Yanzu",

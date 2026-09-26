@@ -146,7 +146,7 @@ export function MobileNav({
                 type="button"
                 onClick={() => setMoreOpen(false)}
                 aria-label={t("common.close")}
-                className="bg-muted/60 text-muted-foreground hover:text-foreground grid size-9 place-items-center rounded-full"
+                className="bg-muted/60 text-muted-foreground hover:text-foreground grid size-11 place-items-center rounded-full"
               >
                 <X className="size-5" />
               </button>

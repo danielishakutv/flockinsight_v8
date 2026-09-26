@@ -187,7 +187,7 @@ export function GivingFilters({
                   type="button"
                   aria-label="Clear search"
                   onClick={() => setQ("")}
-                  className="text-muted-foreground hover:text-foreground grid size-6 place-items-center rounded-md"
+                  className="text-muted-foreground hover:text-foreground relative grid size-6 place-items-center rounded-md after:absolute after:-inset-2.5 after:content-['']"
                 >
                   <X className="size-4" />
                 </button>

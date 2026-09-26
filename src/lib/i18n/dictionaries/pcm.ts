@@ -771,6 +771,7 @@ export const pcm: Dictionary = {
     showOlder: "Show old ones",
     noMatches: "Nothing match dose filters.",
     last30Days: "Last 30 days",
+    whatChanged: "Wetin change",
     field: "Field",
     was: "Before",
     now: "Now",

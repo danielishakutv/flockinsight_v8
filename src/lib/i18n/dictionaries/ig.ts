@@ -763,6 +763,7 @@ export const ig: Dictionary = {
     showOlder: "Gosi nke ochie",
     noMatches: "Ọ dịghị ihe dabara na nzacha ndị ahụ.",
     last30Days: "Ụbọchị 30 gara aga",
+    whatChanged: "Ihe gbanwere",
     field: "Ebe",
     was: "Ọ bụ",
     now: "Ugbu a",

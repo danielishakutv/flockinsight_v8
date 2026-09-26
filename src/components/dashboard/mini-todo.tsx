@@ -143,7 +143,7 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
                 <button
                   onClick={() => remove(t)}
                   aria-label="Delete task"
-                  className="text-muted-foreground hover:text-destructive shrink-0 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                  className="text-muted-foreground hover:text-destructive grid size-11 shrink-0 place-items-center transition-opacity pointer-fine:size-auto pointer-fine:p-1 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                 >
                   <Trash2 className="size-4" />
                 </button>

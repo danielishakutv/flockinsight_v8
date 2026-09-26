@@ -765,6 +765,7 @@ export const fr: Dictionary = {
     showOlder: "Afficher plus anciennes",
     noMatches: "Rien ne correspond à ces filtres.",
     last30Days: "30 derniers jours",
+    whatChanged: "Ce qui a changé",
     field: "Champ",
     was: "Avant",
     now: "Après",

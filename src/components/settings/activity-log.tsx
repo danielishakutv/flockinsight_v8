@@ -29,7 +29,7 @@ import {
 } from "@/lib/audit-catalog";
 import { cn } from "@/lib/utils";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
-import { useT } from "@/components/i18n-provider";
+import { useOptionalT } from "@/components/i18n-provider";
 
 export type ActivityEntry = {
   id: string;
@@ -252,7 +252,7 @@ function Entry({
   entry: ActivityEntry;
   showChurch?: boolean;
 }) {
-  const t = useT();
+  const t = useOptionalT();
   const [open, setOpen] = useState(false);
   const changed = entry.meta?.changed as Record<string, { from: unknown; to: unknown }> | undefined;
   const hasDetail =
@@ -269,7 +269,9 @@ function Entry({
         aria-expanded={hasDetail ? open : undefined}
       >
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-sm font-medium">{entry.summary}</span>
+          <span className="min-w-0 text-sm font-medium wrap-anywhere">
+            {entry.summary}
+          </span>
           {entry.severity !== "info" && (
             <span
               className={cn(
@@ -289,11 +291,13 @@ function Entry({
 
         <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
           {/*
-            An actor is often an email address, which is one unbreakable token
-            of 20-30 characters. `min-w-0` is what lets it shrink inside the
-            flex row at all, and `break-words` is what lets it wrap once it has.
+            An actor is often an email address: one unbreakable token of 20-30
+            characters. `min-w-0` is what lets it shrink inside the flex row at
+            all, and `wrap-anywhere` is what gives it somewhere to break —
+            `break-words` would not, because it leaves min-content width at the
+            full length of the token.
           */}
-          <span className="min-w-0 font-medium break-words">
+          <span className="min-w-0 font-medium wrap-anywhere">
             {entry.actorName ?? "Someone"}
           </span>
           {entry.actorRole && <span>· {entry.actorRole}</span>}
@@ -343,7 +347,7 @@ function Entry({
              * comparing the two values, and an ellipsis on both hides exactly
              * what somebody opened the row to see.
              */
-            <ScrollableTable hint={t("common.scrollForMore")} label={t("activity.title")}>
+            <ScrollableTable hint={t("common.scrollForMore")} label={t("activity.whatChanged")}>
             <table className="w-full min-w-[22rem]">
               <thead>
                 <tr className="text-muted-foreground text-left">

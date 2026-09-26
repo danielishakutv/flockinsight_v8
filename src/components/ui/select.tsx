@@ -480,7 +480,7 @@ function SelectSearchField({
               onValueChange("");
               ref.current?.focus({ preventScroll: true });
             }}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground absolute right-1 flex size-6 items-center justify-center rounded-md transition-colors"
+            className="text-muted-foreground hover:bg-accent hover:text-foreground absolute right-1 flex size-6 items-center justify-center rounded-md transition-colors after:absolute after:-inset-2.5 after:content-['']"
           >
             <XIcon className="size-3.5" />
           </button>

@@ -394,7 +394,14 @@ function MediaCard({
           <IconBtn title="Copy link" onClick={copyLink}>
             <Link2 className="size-4" />
           </IconBtn>
-          <Button asChild variant="ghost" size="icon" className="size-7" title="Download">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="size-11 sm:size-7"
+            title="Download"
+            aria-label="Download this file"
+          >
             <a href={`${link}?download=1`}>
               <Download className="size-4" />
             </a>
@@ -430,8 +437,9 @@ function IconBtn({
       type="button"
       variant="ghost"
       size="icon"
-      className={cn("size-7", className)}
+      className={cn("size-11 sm:size-7", className)}
       title={title}
+      aria-label={title}
       onClick={onClick}
     >
       {children}

@@ -276,10 +276,12 @@ export function PricingAdmin({
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive size-11 sm:size-10"
                 onClick={() =>
                   setBundles((prev) => prev.filter((_, j) => j !== i))
                 }
+                aria-label="Remove this bundle"
+                title="Remove"
               >
                 <X className="size-4" />
               </Button>
@@ -376,7 +378,7 @@ function FeaturesEditor({
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:text-destructive size-8"
+              className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
               aria-label="Remove"
               onClick={() => remove(i)}
             >

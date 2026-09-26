@@ -299,8 +299,8 @@ export function EventsManager({
               value={form.flyerUrl ?? null}
               onChange={(url) => set({ flyerUrl: url })}
             />
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="col-span-2 space-y-2 sm:col-span-1">
                 <Label htmlFor="ev-date">Date</Label>
                 <Input
                   id="ev-date"

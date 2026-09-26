@@ -816,6 +816,7 @@ export const en = {
     showOlder: "Show older",
     noMatches: "Nothing matches those filters.",
     last30Days: "Last 30 days",
+    whatChanged: "What changed",
     field: "Field",
     was: "Was",
     now: "Now",

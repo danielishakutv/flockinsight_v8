@@ -224,6 +224,7 @@ function PostCard({ d, canManage }: { d: Devo; canManage: boolean }) {
               onClick={remove}
               className="text-muted-foreground hover:text-destructive"
               title="Delete"
+              aria-label="Delete this devotional"
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -369,10 +370,11 @@ function Subscribers({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-muted-foreground hover:text-destructive size-8"
+                    className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
                     onClick={() => remove(s.id)}
                     disabled={pending}
                     title="Remove"
+                    aria-label="Remove this subscriber"
                   >
                     <Trash2 className="size-4" />
                   </Button>

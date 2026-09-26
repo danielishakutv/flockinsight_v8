@@ -119,7 +119,7 @@ export function VideoTile({
             "absolute top-2 right-2 rounded-full p-1.5 text-white transition",
             pinned
               ? "bg-indigo-500"
-              : "bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+              : "bg-black/50 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100",
           )}
         >
           <Pin className="size-3.5" />

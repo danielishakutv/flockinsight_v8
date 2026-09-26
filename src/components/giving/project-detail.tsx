@@ -115,7 +115,7 @@ export function ProjectDetail({
 
       <Card>
         <CardContent className="space-y-3 py-5">
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="grid gap-2 text-center sm:grid-cols-3 sm:gap-3">
             <Stat label="Raised" value={formatMoney(p.raised, currency)} accent />
             <Stat label="Pledged" value={formatMoney(p.pledged, currency)} />
             <Stat
@@ -243,7 +243,12 @@ export function ProjectDetail({
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-xl border p-2">
-      <p className={cn("truncate text-lg font-extrabold tabular-nums", accent && "text-primary")}>
+      <p
+        className={cn(
+          "text-lg font-extrabold break-words tabular-nums sm:truncate",
+          accent && "text-primary",
+        )}
+      >
         {value}
       </p>
       <p className="text-muted-foreground text-xs">{label}</p>
@@ -309,7 +314,13 @@ function PledgeCard({
             </Button>
           )}
           <div className="relative ml-auto">
-            <Button variant="ghost" size="icon" onClick={() => setMenu((v) => !v)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMenu((v) => !v)}
+              aria-label="Project actions"
+              aria-expanded={menu}
+            >
               <MoreVertical className="size-4" />
             </Button>
             {menu && (

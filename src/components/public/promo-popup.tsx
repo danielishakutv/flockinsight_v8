@@ -96,7 +96,7 @@ export function PromoPopup() {
           type="button"
           onClick={close}
           aria-label="Close"
-          className="bg-background/70 text-muted-foreground hover:text-foreground absolute right-3 top-3 z-10 grid size-8 place-items-center rounded-full backdrop-blur"
+          className="bg-background/70 text-muted-foreground hover:text-foreground absolute top-3 right-3 z-10 grid size-11 place-items-center rounded-full backdrop-blur sm:size-8"
         >
           <X className="size-4" />
         </button>

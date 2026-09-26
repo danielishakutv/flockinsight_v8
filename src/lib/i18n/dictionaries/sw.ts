@@ -768,6 +768,7 @@ export const sw: Dictionary = {
     showOlder: "Onyesha za zamani",
     noMatches: "Hakuna kinacholingana na vichujio hivyo.",
     last30Days: "Siku 30 zilizopita",
+    whatChanged: "Kilichobadilika",
     field: "Sehemu",
     was: "Ilikuwa",
     now: "Sasa",

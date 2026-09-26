@@ -767,6 +767,7 @@ export const yo: Dictionary = {
     showOlder: "Fi tí ó ti pẹ́ hàn",
     noMatches: "Kò sí ohun tí ó bá àwọn àyẹ̀wò náà mu.",
     last30Days: "Ọjọ́ 30 tí ó kọjá",
+    whatChanged: "Ohun tí ó yípadà",
     field: "Ibi",
     was: "Ó jẹ́",
     now: "Nísinsìnyí",

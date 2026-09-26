@@ -211,7 +211,13 @@ export function GalleryUpload({
             <button
               type="button"
               onClick={() => onChange(photos.filter((_, j) => j !== i))}
-              className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              /*
+                36px, not 44: the thumbnail itself is about 90px across on a
+                narrow phone, and a 44px button would cover half the photo the
+                person is deciding about. 36 clears the same margin of error in
+                practice and leaves the picture visible.
+              */
+              className="absolute top-1 right-1 grid size-9 place-items-center rounded-full bg-black/60 text-white transition-opacity pointer-fine:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
               aria-label="Remove photo"
             >
               <X className="size-3.5" />

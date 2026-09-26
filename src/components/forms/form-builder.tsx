@@ -406,29 +406,32 @@ function FieldEditor({
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="size-11 sm:size-8"
               disabled={index === 0}
               onClick={() => onMove(-1)}
               title="Move up"
+              aria-label="Move this question up"
             >
               <ChevronUp className="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="size-11 sm:size-8"
               disabled={index === total - 1}
               onClick={() => onMove(1)}
               title="Move down"
+              aria-label="Move this question down"
             >
               <ChevronDown className="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:text-destructive size-8"
+              className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
               onClick={onRemove}
               title="Remove"
+              aria-label="Remove this question"
             >
               <Trash2 className="size-4" />
             </Button>
@@ -504,8 +507,10 @@ function OptionsEditor({
           <Button
             variant="ghost"
             size="icon"
-            className="text-muted-foreground hover:text-destructive size-8"
+            className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
             onClick={() => onChange(options.filter((_, j) => j !== i))}
+            aria-label={`Remove option ${i + 1}`}
+            title="Remove option"
           >
             <X className="size-4" />
           </Button>

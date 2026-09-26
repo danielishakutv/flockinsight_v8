@@ -61,7 +61,7 @@ export function InstallNotice() {
         <Button
           size="icon"
           variant="ghost"
-          className="text-muted-foreground size-8 shrink-0"
+          className="text-muted-foreground size-11 shrink-0 sm:size-8"
           title="I already have it installed"
           aria-label="I already have FlockInsight installed — stop showing this"
           onClick={markInstalled}

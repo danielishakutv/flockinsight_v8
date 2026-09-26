@@ -223,6 +223,7 @@ function FormCard({
                 onClick={remove}
                 className="text-muted-foreground hover:text-destructive"
                 title="Delete"
+                aria-label="Delete this form"
               >
                 {pending ? (
                   <Loader2 className="size-4 animate-spin" />
