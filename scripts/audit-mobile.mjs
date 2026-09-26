@@ -182,6 +182,27 @@ function rigidGridColumns(cls) {
  */
 const LONG_TOKEN = /[^\s<>&]{22,}/;
 
+/**
+ * Whether a grid's column count cannot be the problem, from its first child.
+ *
+ * Two cases, both real and both on the same page:
+ *
+ *   - It is empty. The demo church has uploaded no photos, so the gallery
+ *     renders as an open and closing tag with nothing between them. Nothing
+ *     there can overflow.
+ *   - Its cells are fixed-ratio media tiles. Three photos across is how a phone
+ *     gallery is meant to look; three columns of figures is not.
+ *
+ * Deliberately shallow — one element, no parsing. It only has to tell a gallery
+ * of photos from a row of numbers.
+ */
+function gridCannotOverflow(html, from) {
+  const next = /<(\/?)([a-zA-Z][^\s/>]*)([^>]*)>/.exec(html.slice(from, from + 600));
+  if (!next) return true;
+  if (next[1] === "/") return true; // closed straight away: no children
+  return classesOf(next[3]).some((c) => /^aspect-/.test(c));
+}
+
 function scan(path, html) {
   const findings = [];
   const stack = [];
@@ -269,8 +290,11 @@ function scan(path, html) {
     }
 
     // --- a grid that keeps too many columns on a phone ---
+    //
+    // Three columns is a defect when the cells hold words or figures, and
+    // correct when they hold square thumbnails, and moot when the grid is empty.
     const cols = rigidGridColumns(cls);
-    if (cols >= 3) {
+    if (cols >= 3 && !gridCannotOverflow(html, lastIndex)) {
       add("MEDIUM", "grid-too-many-columns", {
         columns: cols,
         perColumnAt320: `${Math.round(CONTENT_AT_320 / cols)}px`,
