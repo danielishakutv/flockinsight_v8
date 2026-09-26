@@ -385,6 +385,8 @@ export const pt: Dictionary = {
     leaveThisMeetingHint: "Pode voltar com o mesmo link.",
     stayInMeeting: "Ficar",
     mediaBlocked: "O seu navegador est\u00e1 a bloquear o {device}. Toque no cadeado ou em \u201caA\u201d na barra de endere\u00e7o, permita e recarregue esta p\u00e1gina.",
+    mediaBlockedDesktop: "O seu navegador est\u00e1 a bloquear {device}. Clique no \u00edcone da c\u00e2mara no fim da barra de endere\u00e7o, ou no \u00edcone antes do endere\u00e7o, permita e recarregue esta p\u00e1gina.",
+    deviceCameraAndMic: "a c\u00e2mara e o microfone",
     mediaMissing: "N\u00e3o foi encontrado nenhum {device} neste dispositivo.",
     mediaInUse: "Outra aplica\u00e7\u00e3o est\u00e1 a usar o seu {device} \u2014 normalmente uma chamada ou outro separador. Feche-a e tente de novo.",
     mediaUnreachable: "N\u00e3o conseguimos aceder ao seu {device}. Verifique a permiss\u00e3o no navegador e tente de novo.",

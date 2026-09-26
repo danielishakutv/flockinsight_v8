@@ -268,6 +268,14 @@ export type JoinResult = {
   secret: string;
   role: MeetingRole;
   admitted: boolean;
+  /**
+   * Peer ids this join retired — earlier sessions from the same browser.
+   *
+   * The room is told to drop them at once. Left to the presence timeout they
+   * would sit there as frozen tiles for the best part of a minute, which is
+   * precisely the "why am I in here twice" people were reporting.
+   */
+  replaced: string[];
 };
 
 /**
@@ -277,6 +285,53 @@ export type JoinResult = {
  * that the caller is this peer. It is minted here, handed to that one browser
  * tab, and never shown in a roster.
  */
+/**
+ * End any live session this device already has in this room.
+ *
+ * Returns the peer ids that were retired, so the caller can tell the room to
+ * drop their tiles at once rather than waiting out the presence timeout.
+ *
+ * This is what stops one person appearing three times. A tab that crashed, a
+ * phone that went to sleep, a link opened twice: each of those leaves a row
+ * that still looks live, because the browser never got to say goodbye. Rather
+ * than guessing from a name or an IP — a family on one router shares an IP,
+ * and two Daniels is a real thing — this matches on the id the browser keeps
+ * for itself, which only ever means "this is me again".
+ *
+ * A device with no id (private mode, storage blocked) retires nothing. That is
+ * the safe direction: a duplicate tile is a blemish, and throwing somebody out
+ * of a meeting because two people in the room both failed to store an id would
+ * be a genuine failure.
+ */
+async function retireDeviceSessions(
+  meetingId: string,
+  deviceId: string | null,
+): Promise<string[]> {
+  if (!deviceId) return [];
+
+  const rows = await db
+    .update(meetingParticipant)
+    .set({
+      leftAt: new Date(),
+      lastSeenAt: new Date(),
+      micOn: false,
+      cameraOn: false,
+      sharing: false,
+      handRaised: false,
+      durationSec: sql`greatest(0, extract(epoch from (now() - ${meetingParticipant.joinedAt}))::int)`,
+    })
+    .where(
+      and(
+        eq(meetingParticipant.meetingId, meetingId),
+        eq(meetingParticipant.deviceId, deviceId),
+        isNull(meetingParticipant.leftAt),
+      ),
+    )
+    .returning({ peerId: meetingParticipant.peerId });
+
+  return rows.map((r) => r.peerId);
+}
+
 export async function joinMeeting(opts: {
   meetingId: string;
   churchId: string;
@@ -285,6 +340,7 @@ export async function joinMeeting(opts: {
   admitted: boolean;
   userId?: string | null;
   memberId?: string | null;
+  deviceId?: string | null;
   micOn: boolean;
   cameraOn: boolean;
   lowData: boolean;
@@ -293,6 +349,10 @@ export async function joinMeeting(opts: {
 }): Promise<JoinResult> {
   const peerId = randomUUID();
   const secret = randomBytes(24).toString("base64url");
+
+  // Before the new row, not after: for the brief moment both exist the room
+  // would otherwise show the duplicate this exists to prevent.
+  const replaced = await retireDeviceSessions(opts.meetingId, opts.deviceId ?? null);
 
   const [row] = await db
     .insert(meetingParticipant)
@@ -303,6 +363,7 @@ export async function joinMeeting(opts: {
       secret,
       userId: opts.userId ?? null,
       memberId: opts.memberId ?? null,
+      deviceId: opts.deviceId ?? null,
       displayName: opts.displayName.slice(0, 80),
       role: opts.role,
       admitted: opts.admitted,
@@ -327,7 +388,14 @@ export async function joinMeeting(opts: {
     await refreshPeak(opts.meetingId);
   }
 
-  return { participantId: row.id, peerId, secret, role: opts.role, admitted: opts.admitted };
+  return {
+    participantId: row.id,
+    peerId,
+    secret,
+    role: opts.role,
+    admitted: opts.admitted,
+    replaced,
+  };
 }
 
 /**

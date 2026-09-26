@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  deviceId,
   EMPTY_STAGE,
   formatDuration,
   isHostRole,
@@ -43,7 +44,12 @@ import {
   type RosterEntry,
   type Stage,
 } from "@/lib/meetings-shared";
-import { MeetingClient, type LocalState, type RemoteMedia } from "@/lib/meeting-client";
+import {
+  MeetingClient,
+  type LocalState,
+  type MediaFault,
+  type RemoteMedia,
+} from "@/lib/meeting-client";
 import {
   downloadRecording,
   MeetingRecorder,
@@ -51,7 +57,11 @@ import {
   type RecorderMode,
   type RecordingResult,
 } from "@/lib/meeting-recorder";
-import { JoinScreen, type JoinValues, MEDIA_FAULT_KEY } from "@/components/meetings/join-screen";
+import {
+  JoinScreen,
+  type JoinValues,
+  mediaFaultKey,
+} from "@/components/meetings/join-screen";
 import { VideoTile } from "@/components/meetings/video-tile";
 import { StageView } from "@/components/meetings/stage-view";
 import { ChatPanel, type ChatMessage } from "@/components/meetings/chat-panel";
@@ -177,6 +187,60 @@ export function MeetingRoom(props: {
    * Room events that arrive before anything else is set up
    * ========================================================== */
 
+  /**
+   * A device that would not open, said once and left on screen.
+   *
+   * Three things this does that a plain toast did not.
+   *
+   * It says it once. The camera and the microphone are refused by the same
+   * permission dialog, so a blocked browser produced two stacked red boxes
+   * saying the same thing about two different words.
+   *
+   * It stays. Everything here is something the person has to leave the page to
+   * fix, and a message that fades after eight seconds is gone before they have
+   * found the setting — leaving them in a room with no sound and no
+   * explanation of why.
+   *
+   * And it offers the retry, because the obvious move after changing a
+   * permission is to reload, and reloading drops them out of the meeting.
+   */
+  const reportMediaFault = useCallback(
+    (fault: MediaFault, device: "microphone" | "camera") => {
+      // Keyed on the fault, not the device: `blocked` for the camera and
+      // `blocked` for the microphone are one problem with one fix.
+      const id = `media-${fault}`;
+      const both = fault === "blocked" || fault === "unsupported";
+
+      toast.error(
+        t(mediaFaultKey(fault), {
+          device: both
+            ? t("meetings.deviceCameraAndMic")
+            : t(
+                device === "camera"
+                  ? "meetings.deviceCamera"
+                  : "meetings.deviceMicrophone",
+              ),
+        }),
+        {
+          id,
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: t("common.tryAgain"),
+            onClick: () => {
+              toast.dismiss(id);
+              const c = clientRef.current;
+              if (!c) return;
+              if (device === "camera") void c.setCamera(true);
+              else void c.setMic(true);
+            },
+          },
+        },
+      );
+    },
+    [t],
+  );
+
   /** A reaction someone tapped, drifting up the screen and gone. */
   function addFloater(emoji: string) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -218,7 +282,13 @@ export function MeetingRoom(props: {
         const res = await fetch(`/api/meet/${props.code}/join`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...values, hostKey: props.hostKey ?? undefined }),
+          body: JSON.stringify({
+            ...values,
+            hostKey: props.hostKey ?? undefined,
+            // So a reload, a crashed tab or a second click on the link is this
+            // device coming back rather than another person in the room.
+            deviceId: deviceId(),
+          }),
         });
         const data: JoinResponse = await res.json();
         if (!data.ok || !data.me || !data.meeting || !data.ice) {
@@ -290,20 +360,7 @@ export function MeetingRoom(props: {
               setPhase("ended");
             },
             onError: (message) => toast.error(message),
-            // A device that would not open, said in the reader's language.
-            // Long, because "check your settings" is no help to somebody
-            // whose actual problem is that a phone call has the microphone.
-            onMediaFault: (fault, device) =>
-              toast.error(
-                t(MEDIA_FAULT_KEY[fault], {
-                  device: t(
-                    device === "camera"
-                      ? "meetings.deviceCamera"
-                      : "meetings.deviceMicrophone",
-                  ),
-                }),
-                { duration: 8000 },
-              ),
+            onMediaFault: (fault, device) => reportMediaFault(fault, device),
             onTransport: setTransport,
           },
         });
@@ -323,7 +380,7 @@ export function MeetingRoom(props: {
         setJoining(false);
       }
     },
-    [props.code, props.hostKey, t],
+    [props.code, props.hostKey, t, reportMediaFault],
   );
 
   /* ============================================================

@@ -3268,6 +3268,25 @@ export const meetingParticipant = pgTable(
       .references(() => church.id, { onDelete: "cascade" }),
     /** Random per-visit id. This is the address other peers signal to. */
     peerId: text().notNull(),
+
+    /**
+     * Which browser this is, as that browser remembers itself.
+     *
+     * A peer id is per JOIN. This is per BROWSER PROFILE, kept in local
+     * storage, so a tab that crashed and a tab that was reloaded are the same
+     * device coming back rather than a second person in the room. Joining
+     * retires whatever this device was already doing here, which is what stops
+     * one person appearing three times.
+     *
+     * Nullable, and treated as absent when it is: a browser in private mode,
+     * or with storage blocked, cannot keep one, and refusing those people
+     * entry would be a far worse bug than a duplicate tile.
+     *
+     * It identifies a browser, never a person. Two people sharing a laptop in
+     * the same profile are one device and the second displaces the first,
+     * which is the correct reading of what actually happened.
+     */
+    deviceId: text(),
     /**
      * Proves a caller owns this peer id. Held only by that browser tab and
      * required on every write — without it anyone who could read a roster
@@ -3303,6 +3322,9 @@ export const meetingParticipant = pgTable(
     uniqueIndex("meeting_participant_peer_unique").on(t.meetingId, t.peerId),
     index("meeting_participant_meeting_idx").on(t.meetingId),
     index("meeting_participant_live_idx").on(t.meetingId, t.lastSeenAt),
+    // Every join looks this up, so it is on the critical path of walking into
+    // a room — including the fifty people who arrive in the same minute.
+    index("meeting_participant_device_idx").on(t.meetingId, t.deviceId),
     index("meeting_participant_church_idx").on(t.churchId),
   ],
 );

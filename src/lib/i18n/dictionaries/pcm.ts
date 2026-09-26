@@ -398,6 +398,8 @@ export const pcm: Dictionary = {
     leaveThisMeetingHint: "You fit come back with the same link.",
     stayInMeeting: "Stay",
     mediaBlocked: "Your browser dey block the {device}. Tap the padlock or \u201caA\u201d for the address bar, allow am, then reload this page.",
+    mediaBlockedDesktop: "Your browser dey block {device}. Click the camera icon for the end of the address bar, or the icon wey dey before the address, allow am, then reload this page.",
+    deviceCameraAndMic: "camera and microphone",
     mediaMissing: "We no see any {device} for this device.",
     mediaInUse: "Another thing dey use your {device} \u2014 usually call or another tab. Close am make you try again.",
     mediaUnreachable: "We no fit reach your {device}. Check the permission for your browser make you try again.",

@@ -38,6 +38,8 @@ type Body = {
   micOn?: unknown;
   cameraOn?: unknown;
   lowData?: unknown;
+  /** This browser's own id — see the schema note on `meetingParticipant.deviceId`. */
+  deviceId?: unknown;
 };
 
 /**
@@ -117,6 +119,12 @@ export async function POST(
     admitted: verdict.admitted,
     userId,
     memberId: standing.memberId,
+    // Bounded and shape-checked rather than trusted: it is written by the
+    // browser and ends up in a WHERE clause on every join.
+    deviceId:
+      typeof body.deviceId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(body.deviceId)
+        ? body.deviceId
+        : null,
     micOn,
     cameraOn,
     lowData,
@@ -126,6 +134,18 @@ export async function POST(
 
   // Tell the room. A roster signal is the trigger for everyone already here to
   // work out that there is a new peer to call.
+  //
+  // A `bye` per replaced session goes first, so nobody ever renders this
+  // device twice — not even for the second between the two signals.
+  await postSignals(
+    m.id,
+    me.peerId,
+    me.replaced.map((peerId) => ({
+      toPeer: null,
+      type: "bye" as const,
+      payload: { peerId, reason: "replaced" },
+    })),
+  );
   await postSignals(m.id, me.peerId, [
     {
       type: verdict.admitted ? "roster" : "control",

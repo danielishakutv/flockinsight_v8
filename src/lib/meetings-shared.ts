@@ -517,3 +517,66 @@ export function isJoinable(m: {
   const now = Date.now();
   return now >= start - 10 * 60_000 && now <= start + (m.durationMin + 120) * 60_000;
 }
+
+/**
+ * Roughly where the permission controls live on this device.
+ *
+ * Only two answers, because only two matter for instructions: a phone or
+ * tablet, where the permission sits behind the padlock or the "aA" in the
+ * address bar, and a desktop, where it is an icon at the end of the address
+ * bar. Any finer distinction is a lie half the time — Chrome on Android and
+ * Safari on iPhone differ, but "tap the padlock or aA" covers both without
+ * having to guess which.
+ *
+ * `maxTouchPoints` rather than the user agent: a user agent tells you what a
+ * browser wants to be taken for, and Chrome on a touchscreen laptop is not a
+ * phone no matter what it says.
+ */
+export function pointerKind(): "touch" | "desktop" {
+  if (typeof window === "undefined") return "desktop";
+  const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+  return coarse && navigator.maxTouchPoints > 0 ? "touch" : "desktop";
+}
+
+/* ============================================================
+ * Which browser this is
+ * ========================================================== */
+
+const DEVICE_KEY = "fi_meet_device";
+
+/**
+ * A stable id for this browser profile, made once and kept.
+ *
+ * Not a person and not a session: a peer id is minted per join, and this
+ * outlives all of them. It is what lets the server tell "Daniel's laptop is
+ * back after a crash" from "a second Daniel has walked in" — the difference
+ * between one tile and two, and the reason somebody could appear three times
+ * in their own meeting.
+ *
+ * Deliberately not derived from anything about the device. A fingerprint built
+ * from screen size, fonts and user agent would survive clearing storage, which
+ * is exactly why it would be the wrong thing to build: this is a convenience
+ * for the person in the room, not an identifier to follow them with. A random
+ * value they can erase by clearing site data is the whole design.
+ *
+ * Returns null when storage is unavailable — private mode, or a browser set to
+ * block site data. The server treats that as "no device" and retires nothing,
+ * because a duplicate tile is a blemish and refusing somebody entry to their
+ * own church's meeting is not.
+ */
+export function deviceId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const existing = window.localStorage.getItem(DEVICE_KEY);
+    // Re-issue anything that does not match what the server will accept, so a
+    // value left behind by an older build cannot wedge somebody out of the
+    // de-duplication for ever.
+    if (existing && /^[A-Za-z0-9_-]{8,64}$/.test(existing)) return existing;
+
+    const fresh = crypto.randomUUID().replace(/-/g, "");
+    window.localStorage.setItem(DEVICE_KEY, fresh);
+    return fresh;
+  } catch {
+    return null;
+  }
+}

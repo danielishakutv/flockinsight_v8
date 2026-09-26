@@ -388,6 +388,8 @@ export const ig: Dictionary = {
     leaveThisMeetingHint: "Ị nwere ike iji otu njikọ ahụ laghachi.",
     stayInMeeting: "Nọrọ",
     mediaBlocked: "Ihe nchọgharị gị na-egbochi {device}. Pịa mkpọchi ma ọ bụ \u201caA\u201d na mpempe adreesị, kwe ya, wee tọgharịa ibe a.",
+    mediaBlockedDesktop: "Ihe nchọgharị gị na-egbochi {device}. Pịa akara igwefoto na njedebe nke mpempe adreesị, ma ọ bụ akara dị n'ihu adreesị ahụ, kwe ya, wee tọgharịa ibe a.",
+    deviceCameraAndMic: "igwefoto na maikrofon",
     mediaMissing: "Achọtaghị {device} ọ bụla na ngwaọrụ a.",
     mediaInUse: "Ihe ọzọ na-eji {device} gị \u2014 ọtụtụ mgbe ọ bụ oku ma ọ bụ mpempe ọzọ. Mechie ya ma nwaa ọzọ.",
     mediaUnreachable: "Anyị enweghị ike iru {device} gị. Lelee ikike dị na ihe nchọgharị gị ma nwaa ọzọ.",

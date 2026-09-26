@@ -18,6 +18,7 @@ import { initialsOf } from "@/lib/meetings-shared";
 import { useT } from "@/components/i18n-provider";
 import { cn } from "@/lib/utils";
 import { mediaFault, type MediaFault } from "@/lib/meeting-client";
+import { pointerKind } from "@/lib/meetings-shared";
 import type { TKey } from "@/lib/i18n/translate";
 
 export type JoinValues = {
@@ -37,14 +38,27 @@ export type JoinValues = {
  * hard-up connection choose audio-only BEFORE a camera has ever been opened —
  * which is the difference between joining and giving up.
  */
-/** One sentence per way a device can fail to open. */
-export const MEDIA_FAULT_KEY = {
-  blocked: "meetings.mediaBlocked",
-  missing: "meetings.mediaMissing",
-  inUse: "meetings.mediaInUse",
-  unknown: "meetings.mediaUnreachable",
-  unsupported: "meetings.mediaUnsupported",
-} as const satisfies Record<MediaFault, TKey>;
+/**
+ * One sentence per way a device can fail to open.
+ *
+ * "blocked" is the only one that depends on the device, because it is the only
+ * one that asks the person to go and change something — and where they go is
+ * an icon in a different place on a phone and on a desktop.
+ */
+export function mediaFaultKey(fault: MediaFault): TKey {
+  if (fault === "blocked") {
+    return pointerKind() === "touch"
+      ? "meetings.mediaBlocked"
+      : "meetings.mediaBlockedDesktop";
+  }
+  const rest = {
+    missing: "meetings.mediaMissing",
+    inUse: "meetings.mediaInUse",
+    unknown: "meetings.mediaUnreachable",
+    unsupported: "meetings.mediaUnsupported",
+  } as const satisfies Record<Exclude<MediaFault, "blocked">, TKey>;
+  return rest[fault];
+}
 
 export function JoinScreen({
   title,
@@ -122,7 +136,7 @@ export function JoinScreen({
           // browser settings" is no help to somebody whose problem is that
           // another app has the camera.
           setDeviceError(
-            t(MEDIA_FAULT_KEY[mediaFault(e)], { device: t("meetings.deviceCamera") }),
+            t(mediaFaultKey(mediaFault(e)), { device: t("meetings.deviceCamera") }),
           );
           setCameraOn(false);
         }

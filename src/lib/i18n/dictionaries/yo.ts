@@ -390,6 +390,8 @@ export const yo: Dictionary = {
     leaveThisMeetingHint: "O lè padà wá pẹ̀lú ọ̀nà kan náà.",
     stayInMeeting: "Dúró",
     mediaBlocked: "Aṣàwákiri rẹ ń dí {device} lọ́wọ́. Tẹ àmì kọ́kọ́rọ́ tàbí \u201caA\u201d ní pẹpẹ àdírẹ́sì, fàyègbà á, kí o sì tún ojú ìwé yìí ṣí.",
+    mediaBlockedDesktop: "Aṣàwákiri rẹ ń dí {device} lọ́wọ́. Tẹ àmì kámẹ́rà ní ìparí pẹpẹ àdírẹ́sì, tàbí àmì tí ó wà ṣíwájú àdírẹ́sì náà, fàyègbà á, kí o sì tún ojú ìwé yìí ṣí.",
+    deviceCameraAndMic: "kámẹ́rà àti gbohùngbohùn",
     mediaMissing: "A kò rí {device} kankan lórí ẹ̀rọ yìí.",
     mediaInUse: "Ohun mìíràn ń lo {device} rẹ \u2014 ọ̀pọ̀ ìgbà ìpè tàbí táàbù mìíràn. Ti í, kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
     mediaUnreachable: "A kò lè dé {device} rẹ. Ṣàyẹ̀wò àṣẹ nínú aṣàwákiri rẹ kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",

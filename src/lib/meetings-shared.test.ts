@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AUDIO_ONLY_PROFILE,
+  deviceId,
   EMPTY_STAGE,
   formatDuration,
   generateMeetingCode,
@@ -307,5 +308,64 @@ describe("small helpers", () => {
     expect(isJoinable({ status: "ended", scheduledFor: soon, durationMin: 60 })).toBe(
       false,
     );
+  });
+});
+
+/* ============================================================
+ * Which browser this is
+ * ========================================================== */
+
+describe("deviceId", () => {
+  const store = new Map<string, string>();
+
+  beforeEach(() => {
+    store.clear();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+      },
+      matchMedia: () => ({ matches: false }),
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps the same id across calls, which is the whole point", () => {
+    const first = deviceId();
+    expect(first).not.toBeNull();
+    expect(deviceId()).toBe(first);
+  });
+
+  it("issues one the server will accept", () => {
+    // The join route validates against exactly this shape and drops anything
+    // else, so an id that fails here is an id that silently stops
+    // de-duplicating anybody.
+    expect(deviceId()).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  });
+
+  it("replaces a value an older build left behind", () => {
+    store.set("fi_meet_device", "not a valid id!!");
+    const fresh = deviceId();
+    expect(fresh).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    // And it sticks, rather than being re-issued on every join.
+    expect(deviceId()).toBe(fresh);
+  });
+
+  it("returns null rather than throwing when storage is blocked", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () => {
+          throw new Error("SecurityError");
+        },
+        setItem: () => {
+          throw new Error("SecurityError");
+        },
+      },
+    });
+    // Private mode, or a browser set to block site data. The server treats
+    // null as "no device" and retires nothing — a duplicate tile is a
+    // blemish, being unable to join your own church's meeting is not.
+    expect(deviceId()).toBeNull();
   });
 });

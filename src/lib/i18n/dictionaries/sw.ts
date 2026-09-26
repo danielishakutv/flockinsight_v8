@@ -390,6 +390,8 @@ export const sw: Dictionary = {
     leaveThisMeetingHint: "Unaweza kurudi na kiungo kilekile.",
     stayInMeeting: "Baki",
     mediaBlocked: "Kivinjari chako kinazuia {device}. Gusa kufuli au \u201caA\u201d kwenye upau wa anwani, ruhusu, kisha upakie ukurasa huu upya.",
+    mediaBlockedDesktop: "Kivinjari chako kinazuia {device}. Bofya aikoni ya kamera mwishoni mwa upau wa anwani, au aikoni iliyo kabla ya anwani, ruhusu, kisha upakie ukurasa huu upya.",
+    deviceCameraAndMic: "kamera na maikrofoni",
     mediaMissing: "Hakuna {device} iliyopatikana kwenye kifaa hiki.",
     mediaInUse: "Kitu kingine kinatumia {device} yako \u2014 mara nyingi simu au kichupo kingine. Kifunge kisha ujaribu tena.",
     mediaUnreachable: "Hatukuweza kufikia {device} yako. Angalia ruhusa kwenye kivinjari chako kisha ujaribu tena.",

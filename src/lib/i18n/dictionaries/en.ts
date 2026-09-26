@@ -429,6 +429,8 @@ export const en = {
     leaveThisMeetingHint: "You can come back with the same link.",
     stayInMeeting: "Stay",
     mediaBlocked: "Your browser is blocking the {device}. Tap the padlock or \u201caA\u201d in the address bar, allow it, then reload this page.",
+    mediaBlockedDesktop: "Your browser is blocking the {device}. Click the camera icon at the end of the address bar, or the icon just before the web address, allow it, then reload this page.",
+    deviceCameraAndMic: "camera and microphone",
     mediaMissing: "No {device} was found on this device.",
     mediaInUse: "Something else is using your {device} \u2014 usually a phone call or another tab. Close it and try again.",
     mediaUnreachable: "We couldn't reach your {device}. Check the permission in your browser and try again.",

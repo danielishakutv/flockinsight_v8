@@ -389,6 +389,8 @@ export const ha: Dictionary = {
     leaveThisMeetingHint: "Za ka iya dawowa da wannan hanyar.",
     stayInMeeting: "Ka zauna",
     mediaBlocked: "Burauzar ka na toshe {device}. Danna makulli ko \u201caA\u201d a sandar adireshi, ba da izini, sannan ka sake loda shafin.",
+    mediaBlockedDesktop: "Burauzar ka na toshe {device}. Danna alamar kyamara a \u0199arshen sandar adireshi, ko alamar da ke gaban adireshin, ba da izini, sannan ka sake loda shafin.",
+    deviceCameraAndMic: "kyamara da makarufo",
     mediaMissing: "Ba a sami {device} a wannan na'urar ba.",
     mediaInUse: "Wani abu yana amfani da {device} naka \u2014 yawanci kira ko wani shafi. Rufe shi ka sake gwadawa.",
     mediaUnreachable: "Ba mu iya kaiwa ga {device} naka ba. Duba izini a burauzar ka ka sake gwadawa.",
