@@ -256,16 +256,28 @@ input[type="number"] {
 }
 
 /* Controls sit closer to the text they act on. Buttons keep their own sizes —
-   only the default one is trimmed, so `size="lg"` still means large. */
-[data-admin] [data-slot="select-trigger"][data-size="default"] {
-  height: 2.25rem;
-}
-[data-admin] [data-slot="button"].h-10 {
-  height: 2.25rem;
-  font-size: 0.8125rem;
-}
-[data-admin] [data-slot="button"].h-9 {
-  font-size: 0.8125rem;
+   only the default one is trimmed, so `size="lg"` still means large.
+ *
+ * From `sm` up only, and that is the point rather than an accident. 36px is a
+ * comfortable target under a mouse and a poor one under a thumb, and platform
+ * admin is used from a phone — the roadmap gets added to from one. So the
+ * density is a desktop choice, and a narrow screen keeps the 44px controls.
+ *
+ * `.h-11` is the class to key on: the default button is `h-11 sm:h-10`, so
+ * `.h-10` alone stopped matching the moment the touch height went in. Both are
+ * listed, because a handful of places still write `h-10` by hand. */
+@media (width >= 40rem) {
+  [data-admin] [data-slot="select-trigger"][data-size="default"] {
+    height: 2.25rem;
+  }
+  [data-admin] [data-slot="button"].h-11,
+  [data-admin] [data-slot="button"].h-10 {
+    height: 2.25rem;
+    font-size: 0.8125rem;
+  }
+  [data-admin] [data-slot="button"].h-9 {
+    font-size: 0.8125rem;
+  }
 }
 
 /* ------------------------------------------------------------------
