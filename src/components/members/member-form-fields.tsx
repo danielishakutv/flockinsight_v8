@@ -436,6 +436,8 @@ export function MemberFormFields({
             <Label htmlFor="phone">Phone</Label>
             <Input
               id="phone"
+              type="tel"
+              inputMode="tel"
               value={form.phone}
               onChange={(e) => set({ phone: e.target.value })}
             />

@@ -186,6 +186,8 @@ export function OnboardChurch() {
                   <Label htmlFor="ob-phone">Church phone (optional)</Label>
                   <Input
                     id="ob-phone"
+                    type="tel"
+                    inputMode="tel"
                     value={contactPhone}
                     onChange={(e) => setContactPhone(e.target.value)}
                     placeholder="08012345678"

@@ -370,6 +370,7 @@ export function NotificationComposer({
           <Label htmlFor="n-link">Link (optional)</Label>
           <Input
             id="n-link"
+            inputMode="url"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             placeholder="/giving or https://…"

@@ -164,6 +164,8 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
               <Label htmlFor="b-image">Image URL</Label>
               <Input
                 id="b-image"
+                type="url"
+                inputMode="url"
                 value={f.imageUrl}
                 onChange={(e) => set({ imageUrl: e.target.value })}
                 placeholder="https://… (wide image, e.g. 1200×300)"
@@ -173,6 +175,8 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
               <Label htmlFor="b-link">Link URL</Label>
               <Input
                 id="b-link"
+                type="url"
+                inputMode="url"
                 value={f.linkUrl}
                 onChange={(e) => set({ linkUrl: e.target.value })}
                 placeholder="https://… where it should go"

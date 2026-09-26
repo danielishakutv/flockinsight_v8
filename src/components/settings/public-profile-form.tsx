@@ -397,6 +397,8 @@ export function PublicProfileForm({
               <Label htmlFor="pphone">Phone</Label>
               <Input
                 id="pphone"
+                type="tel"
+                inputMode="tel"
                 value={f.publicPhone}
                 onChange={(e) => set({ publicPhone: e.target.value })}
               />
@@ -414,6 +416,8 @@ export function PublicProfileForm({
               <Label htmlFor="website">Website</Label>
               <Input
                 id="website"
+                type="url"
+                inputMode="url"
                 value={f.website}
                 placeholder="https://…"
                 onChange={(e) => set({ website: e.target.value })}
