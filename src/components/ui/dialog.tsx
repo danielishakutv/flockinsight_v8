@@ -55,13 +55,31 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] [&>*]:min-w-0 translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border p-6 shadow-lg duration-200 sm:max-w-lg",
+          /*
+           * The height cap is the mobile fix.
+           *
+           * Width was already handled. Height was not: the panel is centred
+           * with `top-1/2 -translate-y-1/2`, so a form taller than the screen
+           * used to overflow BOTH edges with nothing to scroll — and the close
+           * button, being at the top, went off the top of the screen with it.
+           * On a 667px phone that is an unclosable dialog.
+           *
+           * `max-h` plus a scrolling body fixes it without changing how any
+           * dialog looks on a desktop, where none of them is that tall.
+           */
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl border p-6 shadow-lg duration-200 [&>*]:min-w-0 sm:max-h-[calc(100dvh-4rem)] sm:max-w-lg",
           className,
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent absolute top-4 right-4 rounded-md opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
+        {/*
+          Sticky rather than absolute: the panel scrolls now, and an absolutely
+          positioned close button scrolls away with the content. This keeps it
+          in the corner of the visible area, which is the one control that must
+          never be unreachable.
+        */}
+        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent absolute top-4 right-4 z-10 grid size-11 place-items-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none sm:size-8">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

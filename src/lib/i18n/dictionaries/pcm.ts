@@ -98,6 +98,7 @@ export const pcm: Dictionary = {
     notFound: "We no see am.",
     nothingYet: "Nothing dey here yet",
     offline: "You no dey online",
+    scrollForMore: "Slide am sideways make you see more",
     people: { one: "{count} person", other: "{count} people" },
     selected: { one: "you pick {count}", other: "you pick {count}" },
   },

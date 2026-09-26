@@ -85,6 +85,7 @@ export const pt: Dictionary = {
     notFound: "Não encontrámos isso.",
     nothingYet: "Ainda nada aqui",
     offline: "Está sem ligação",
+    scrollForMore: "Deslize para o lado para ver mais",
     people: { one: "{count} pessoa", other: "{count} pessoas" },
     selected: { one: "{count} selecionado", other: "{count} selecionados" },
   },

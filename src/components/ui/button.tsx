@@ -20,12 +20,24 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      /*
+       * Two of these grow on touch and shrink again from `sm:` up, so a thumb
+       * gets the 44px it needs and the desktop layout is byte-for-byte what it
+       * was. `default` and `icon` were 40px, which is the size people miss —
+       * and an icon-only button is the worst case, because there is no label
+       * beside it to catch a near miss.
+       *
+       * `sm` is left alone deliberately: it is used for dense row actions that
+       * sit inside a card with its own padding, where growing every one of them
+       * would push the content it belongs to off the screen. Those get spacing
+       * instead, at the call site.
+       */
       size: {
-        default: "h-10 px-4 py-2 has-[>svg]:px-3",
+        default: "h-11 px-4 py-2 has-[>svg]:px-3 sm:h-10",
         sm: "h-9 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
         lg: "h-12 rounded-lg px-6 text-base has-[>svg]:px-4",
         xl: "h-14 rounded-xl px-8 text-lg font-bold has-[>svg]:px-6",
-        icon: "size-10",
+        icon: "size-11 sm:size-10",
         "icon-lg": "size-12 rounded-xl",
       },
     },

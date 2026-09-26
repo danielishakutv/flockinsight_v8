@@ -91,6 +91,7 @@ export const yo: Dictionary = {
     notFound: "A kò rí ohun náà.",
     nothingYet: "Kò sí ohunkóhun síbẹ̀",
     offline: "O kò sí lórí ìtàkùn",
+    scrollForMore: "Fà sí ẹ̀gbẹ́ láti rí sí i",
     people: { one: "ènìyàn {count}", other: "ènìyàn {count}" },
     selected: { one: "{count} ti yàn", other: "{count} ti yàn" },
   },

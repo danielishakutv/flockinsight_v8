@@ -90,6 +90,7 @@ export const ha: Dictionary = {
     notFound: "Ba mu samu wannan ba.",
     nothingYet: "Babu kome tukuna",
     offline: "Ba ka kan layi",
+    scrollForMore: "Zazzaga gefe don ganin ƙari",
     people: { one: "mutum {count}", other: "mutane {count}" },
     selected: { one: "an zaɓi {count}", other: "an zaɓi {count}" },
   },

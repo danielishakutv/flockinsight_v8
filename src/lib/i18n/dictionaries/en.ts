@@ -97,6 +97,7 @@ export const en = {
     notFound: "We couldn't find that.",
     nothingYet: "Nothing here yet",
     offline: "You're offline",
+    scrollForMore: "Scroll sideways for more",
     people: { one: "{count} person", other: "{count} people" },
     selected: { one: "{count} selected", other: "{count} selected" },
   },

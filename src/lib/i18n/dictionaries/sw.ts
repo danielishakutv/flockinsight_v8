@@ -91,6 +91,7 @@ export const sw: Dictionary = {
     notFound: "Hatukupata hilo.",
     nothingYet: "Hakuna kitu bado",
     offline: "Hauko mtandaoni",
+    scrollForMore: "Sogeza kando kuona zaidi",
     people: { one: "mtu {count}", other: "watu {count}" },
     selected: { one: "{count} imechaguliwa", other: "{count} zimechaguliwa" },
   },

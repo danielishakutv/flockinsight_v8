@@ -89,6 +89,7 @@ export const ig: Dictionary = {
     notFound: "Anyị ahụghị nke ahụ.",
     nothingYet: "Ọ dịghị ihe dị ebe a",
     offline: "Ị nọghị n'ịntanetị",
+    scrollForMore: "Pịa gaa n'akụkụ ka ị hụ ihe ndị ọzọ",
     people: { one: "mmadụ {count}", other: "mmadụ {count}" },
     selected: { one: "ahọrọ {count}", other: "ahọrọ {count}" },
   },
