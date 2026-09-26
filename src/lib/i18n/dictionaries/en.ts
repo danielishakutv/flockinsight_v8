@@ -425,6 +425,7 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    screenShareUnsupported: "This device can't share a screen — iPhones and iPads don't allow it from a web page. Put a Bible verse, a note or your slides on the screen instead: that works everywhere.",
     tapToPlay: "Tap to play",
     diagCameraOff: "your camera is off",
     diagTheySaveData: "they are in Data Saver",

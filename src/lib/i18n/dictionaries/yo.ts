@@ -386,6 +386,7 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    screenShareUnsupported: "Ẹ̀rọ yìí kò lè pín ojú-iṣẹ́ — iPhone àti iPad kò gbà á láti ojú-ìwé wẹ́ẹ̀bù. Dípò rẹ̀, fi ẹsẹ Bíbélì, àkọsílẹ̀ tàbí sìláìdì rẹ sí ojú-iṣẹ́: ìyẹn ń ṣiṣẹ́ níbi gbogbo.",
     tapToPlay: "Tẹ láti ṣàfihàn",
     diagCameraOff: "kámẹ́rà rẹ ti pa",
     diagTheySaveData: "wọ́n wà nínú Olùdáàbòbò Dátà",

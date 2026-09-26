@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Circle,
   Download,
@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  canShareScreen,
   deviceId,
   EMPTY_STAGE,
   formatDuration,
@@ -122,6 +123,9 @@ type PendingSave = RecordingResult & {
   mode: RecorderMode;
 };
 
+/** A store that never emits. For reading a fact the browser will not change. */
+const NEVER_CHANGES = () => () => {};
+
 export function MeetingRoom(props: {
   code: string;
   title: string;
@@ -164,6 +168,23 @@ export function MeetingRoom(props: {
   const [pinned, setPinned] = useState<string | null>(null);
   /** Asked before the back gesture takes somebody out of a live call. */
   const [confirmLeave, setConfirmLeave] = useState(false);
+  /**
+   * Whether this browser can share a screen at all. False on every iPhone and
+   * iPad, where `getDisplayMedia` does not exist — so the control is not
+   * offered rather than offered and dead.
+   *
+   * `useSyncExternalStore` rather than state set from an effect: it is a fact
+   * about the browser that never changes, and the server snapshot says yes so
+   * the button does not flash in and out during hydration. The second half is
+   * the runtime override, for a browser that has the method and still refuses.
+   */
+  const shareCapable = useSyncExternalStore(
+    NEVER_CHANGES,
+    canShareScreen,
+    () => true,
+  );
+  const [shareRefused, setShareRefused] = useState(false);
+  const screenShareable = shareCapable && !shareRefused;
   /** What the host has put on the main screen for the whole room. */
   const [spotlight, setSpotlight] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -381,6 +402,10 @@ export function MeetingRoom(props: {
             },
             onError: (message) => toast.error(message),
             onMediaFault: (fault, device) => reportMediaFault(fault, device),
+            onShareUnsupported: () => {
+              setShareRefused(true);
+              toast.error(t("meetings.screenShareUnsupported"), { duration: 9000 });
+            },
             onTransport: setTransport,
           },
         });
@@ -507,6 +532,22 @@ export function MeetingRoom(props: {
   useEffect(() => {
     panelRef.current = panel;
   }, [panel]);
+
+  /*
+   * Re-take the camera when the phone is turned.
+   *
+   * The capture is asked for in the shape the device is held in, so a rotation
+   * needs a fresh one or a person who turns their phone sideways stays in a
+   * tall strip. `replaceTrack` under the hood, so nobody renegotiates and the
+   * room just sees the picture change shape.
+   */
+  useEffect(() => {
+    if (phase !== "live") return;
+    const onRotate = () => void clientRef.current?.handleRotation();
+    const mql = window.matchMedia("(orientation: portrait)");
+    mql.addEventListener("change", onRotate);
+    return () => mql.removeEventListener("change", onRotate);
+  }, [phase]);
 
   useEffect(() => {
     if (panel !== "people") return;
@@ -1187,7 +1228,7 @@ export function MeetingRoom(props: {
             {local?.cameraOn ? <Video /> : <VideoOff />}
           </ControlButton>
 
-          {meeting?.allowScreenShare && (
+          {meeting?.allowScreenShare && screenShareable && (
             <ControlButton
               active={!!local?.sharing}
               label={
@@ -1248,7 +1289,7 @@ export function MeetingRoom(props: {
             canHost={canHost}
             allowReactions={!!meeting?.allowReactions}
             allowRecording={!!meeting?.allowRecording}
-            allowScreenShare={!!meeting?.allowScreenShare}
+            allowScreenShare={!!meeting?.allowScreenShare && screenShareable}
             recording={!!recording}
             cameraOn={!!local?.cameraOn}
             onReact={react}

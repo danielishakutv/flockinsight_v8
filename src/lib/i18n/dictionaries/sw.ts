@@ -386,6 +386,7 @@ export const sw: Dictionary = {
 
   meetings: {
     title: "Mikutano",
+    screenShareUnsupported: "Kifaa hiki hakiwezi kushiriki skrini — iPhone na iPad haziruhusu kutoka ukurasa wa wavuti. Badala yake weka aya ya Biblia, dokezo au slaidi zako kwenye skrini: hiyo hufanya kazi kila mahali.",
     tapToPlay: "Gusa ili kucheza",
     diagCameraOff: "kamera yako imezimwa",
     diagTheySaveData: "wako kwenye Kiokoa Data",

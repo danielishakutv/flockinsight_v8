@@ -394,6 +394,7 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    screenShareUnsupported: "This device no fit share screen — iPhone and iPad no dey allow am from web page. Instead put Bible verse, note or your slides for screen: that one dey work everywhere.",
     tapToPlay: "Tap make e play",
     diagCameraOff: "your camera off",
     diagTheySaveData: "dem dey for Data Saver",

@@ -381,6 +381,7 @@ export const pt: Dictionary = {
 
   meetings: {
     title: "Reuniões",
+    screenShareUnsupported: "Este dispositivo não consegue partilhar o ecrã — iPhones e iPads não o permitem a partir de uma página web. Coloque antes um versículo, uma nota ou os seus slides: isso funciona em todo o lado.",
     tapToPlay: "Toque para reproduzir",
     diagCameraOff: "a sua câmara está desligada",
     diagTheySaveData: "estão em Poupança de dados",

@@ -385,6 +385,7 @@ export const ha: Dictionary = {
 
   meetings: {
     title: "Tarurruka",
+    screenShareUnsupported: "Wannan na'urar ba za ta iya raba allo ba — iPhone da iPad ba sa yarda daga shafin yanar gizo. Maimakon haka sai ka sanya ayar Littafi, rubutu ko silaidi a allo: wannan yana aiki ko'ina.",
     tapToPlay: "Danna don kunnawa",
     diagCameraOff: "kyamararka a kashe take",
     diagTheySaveData: "suna cikin Tattalin Data",

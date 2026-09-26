@@ -532,6 +532,35 @@ export function isJoinable(m: {
  * browser wants to be taken for, and Chrome on a touchscreen laptop is not a
  * phone no matter what it says.
  */
+/**
+ * Can this browser share a screen at all?
+ *
+ * iOS Safari — and therefore every browser on an iPhone or iPad, since they are
+ * all Safari underneath — does not implement `getDisplayMedia`. Not "asks and
+ * is refused": the method is not there. The share button was calling it,
+ * throwing, and being swallowed by a catch meant for "the person cancelled the
+ * picker", so the control did nothing at all and said nothing about why.
+ *
+ * Checked rather than sniffed for a user agent, so a browser that gains the
+ * feature gets it the day it ships.
+ */
+export function canShareScreen(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return typeof navigator.mediaDevices?.getDisplayMedia === "function";
+}
+
+/**
+ * Is the device being held upright?
+ *
+ * Used for the camera, which has to be asked for a portrait frame explicitly —
+ * see `setCamera`. `matchMedia` rather than comparing window dimensions,
+ * because a keyboard opening changes the height and is not a rotation.
+ */
+export function isPortrait(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(orientation: portrait)")?.matches ?? false;
+}
+
 export function pointerKind(): "touch" | "desktop" {
   if (typeof window === "undefined") return "desktop";
   const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;

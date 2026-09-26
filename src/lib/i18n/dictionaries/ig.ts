@@ -384,6 +384,7 @@ export const ig: Dictionary = {
 
   meetings: {
     title: "Nzukọ",
+    screenShareUnsupported: "Ngwaọrụ a enweghị ike ịkekọrịta ihuenyo — iPhone na iPad anaghị ekwe ya site na ibe weebụ. Kama tinye amaokwu Baịbụl, ndetu ma ọ bụ slaidị gị na ihuenyo: nke ahụ na-arụ ọrụ ebe niile.",
     tapToPlay: "Pịa ka ọ malite",
     diagCameraOff: "igwefoto gị gbanyụrụ",
     diagTheySaveData: "ha nọ na Nchekwa Data",

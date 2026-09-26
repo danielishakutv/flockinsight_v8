@@ -15,7 +15,9 @@
  */
 
 import {
+  canShareScreen,
   isPolite,
+  isPortrait,
   profileFor,
   rateLink,
   shouldInitiate,
@@ -120,6 +122,12 @@ export type MeetingClientEvents = {
   onMediaFault?: (fault: MediaFault, device: "microphone" | "camera") => void;
   /** Transport health, so the UI can say "reconnecting" honestly. */
   onTransport?: (state: "online" | "retrying" | "offline") => void;
+  /**
+   * This browser cannot share a screen and never will — iPhones and iPads,
+   * where the method simply does not exist. Separate from `onError` so the UI
+   * can point at what DOES work on that device instead of apologising.
+   */
+  onShareUnsupported?: () => void;
 };
 
 export type MeetingClientInit = {
@@ -226,6 +234,8 @@ export class MeetingClient {
   private rosterCache: RosterEntry[] = [];
 
   private micStream: MediaStream | null = null;
+  /** Which way up the camera was last asked for — see `handleRotation`. */
+  private capturedPortrait = false;
   private camStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
 
@@ -1043,18 +1053,36 @@ export class MeetingClient {
       this.stopStream(this.camStream);
       this.camStream = null;
       const p = this.state.profile;
+
+      /*
+       * Ask for the shape the device is actually held in.
+       *
+       * The profile is written landscape, because that is how a laptop sees
+       * the world. Asking a phone held upright for 640x360 gets a landscape
+       * frame: the person ends up as a small figure in a wide strip, and the
+       * tile — which is tall on a phone — crops most of it away. Swapping the
+       * two asks for 360x640 and fills the tile with a face.
+       *
+       * Pixel count is unchanged, so this costs no extra bandwidth; it is the
+       * same budget spent on the part of the scene somebody is in.
+       */
+      const upright = isPortrait();
+      const width = upright ? p.maxHeight : p.maxWidth;
+      const height = upright ? p.maxWidth : p.maxHeight;
+
       this.camStream = await this.capture(
         {
           video: {
             facingMode: wanted,
-            width: { ideal: p.maxWidth, max: 1280 },
-            height: { ideal: p.maxHeight, max: 720 },
+            width: { ideal: width, max: 1280 },
+            height: { ideal: height, max: 1280 },
             frameRate: { ideal: p.frameRate, max: 30 },
           },
         },
         { video: { facingMode: wanted } },
         "camera",
       );
+      this.capturedPortrait = upright;
       if (!this.camStream) return;
       this.state.facing = wanted;
     }
@@ -1071,6 +1099,20 @@ export class MeetingClient {
     this.pushState();
   }
 
+  /**
+   * The device was rotated. Re-take the camera in the new shape.
+   *
+   * `replaceTrack` on the existing sender, so there is no renegotiation and
+   * nobody else in the room notices anything but the picture changing shape.
+   * Does nothing when the camera is off, or when the orientation has not
+   * actually changed — a keyboard opening is not a rotation.
+   */
+  async handleRotation(): Promise<void> {
+    if (!this.state.cameraOn) return;
+    if (isPortrait() === this.capturedPortrait) return;
+    await this.setCamera(true, this.state.facing);
+  }
+
   /** Flip between the front and back camera. Only meaningful on a phone. */
   async flipCamera(): Promise<void> {
     if (!this.state.cameraOn) return;
@@ -1084,6 +1126,13 @@ export class MeetingClient {
       this.state.sharing = false;
       this.attachEverywhere();
       this.pushState();
+      return false;
+    }
+
+    if (!canShareScreen()) {
+      // Not supported, which is a different thing from refused or cancelled,
+      // and the only one of the three the person can do anything about.
+      this.events.onShareUnsupported?.();
       return false;
     }
 
