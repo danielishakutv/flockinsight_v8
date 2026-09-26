@@ -21,6 +21,7 @@ import {
   BadgeCheck,
   UserPlus,
   ScrollText,
+  Languages,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -33,48 +34,51 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
+import type { TKey } from "@/lib/i18n/translate";
 
 type Need = "settings" | "team" | "finance";
-type Item = { label: string; href: string; need: Need; icon: LucideIcon };
-type Group = { title: string; items: Item[] };
+type Item = { labelKey: TKey; href: string; need: Need; icon: LucideIcon };
+type Group = { titleKey: TKey; items: Item[] };
 
 const GROUPS: Group[] = [
   {
-    title: "Church",
+    titleKey: "settings.sectionChurch",
     items: [
-      { label: "General", href: "/settings", need: "settings", icon: Building2 },
-      { label: "Verification", href: "/settings/verification", need: "settings", icon: BadgeCheck },
-      { label: "Public page", href: "/settings/public", need: "settings", icon: Globe },
-      { label: "Services", href: "/settings/services", need: "settings", icon: ListChecks },
-      { label: "Giving", href: "/settings/giving", need: "settings", icon: HandCoins },
-      { label: "Finance", href: "/settings/finance", need: "finance", icon: Landmark },
+      { labelKey: "settings.general", href: "/settings", need: "settings", icon: Building2 },
+      { labelKey: "settings.verification", href: "/settings/verification", need: "settings", icon: BadgeCheck },
+      { labelKey: "settings.publicPage", href: "/settings/public", need: "settings", icon: Globe },
+      { labelKey: "settings.services", href: "/settings/services", need: "settings", icon: ListChecks },
+      { labelKey: "settings.givingCategories", href: "/settings/giving", need: "settings", icon: HandCoins },
+      { labelKey: "settings.financeSetup", href: "/settings/finance", need: "finance", icon: Landmark },
+      { labelKey: "settings.language", href: "/settings/language", need: "settings", icon: Languages },
     ],
   },
   {
-    title: "Engagement",
+    titleKey: "settings.sectionEngagement",
     items: [
-      { label: "Reminders", href: "/settings/reminders", need: "settings", icon: BellRing },
-      { label: "First-timers", href: "/settings/first-timers", need: "settings", icon: HeartHandshake },
-      { label: "Celebrations", href: "/settings/celebrations", need: "settings", icon: PartyPopper },
-      { label: "SMS", href: "/settings/sms", need: "settings", icon: MessageSquare },
+      { labelKey: "settings.reminders", href: "/settings/reminders", need: "settings", icon: BellRing },
+      { labelKey: "settings.firstTimers", href: "/settings/first-timers", need: "settings", icon: HeartHandshake },
+      { labelKey: "settings.celebrationSettings", href: "/settings/celebrations", need: "settings", icon: PartyPopper },
+      { labelKey: "settings.smsSettings", href: "/settings/sms", need: "settings", icon: MessageSquare },
     ],
   },
   {
-    title: "Billing",
+    titleKey: "settings.sectionBilling",
     items: [
-      { label: "Wallet", href: "/settings/wallet", need: "settings", icon: Wallet },
-      { label: "Storage", href: "/settings/storage", need: "settings", icon: HardDrive },
-      { label: "Plan & billing", href: "/settings/billing", need: "settings", icon: CreditCard },
-      { label: "Referrals", href: "/settings/referrals", need: "settings", icon: Gift },
+      { labelKey: "settings.wallet", href: "/settings/wallet", need: "settings", icon: Wallet },
+      { labelKey: "settings.storage", href: "/settings/storage", need: "settings", icon: HardDrive },
+      { labelKey: "settings.planBilling", href: "/settings/billing", need: "settings", icon: CreditCard },
+      { labelKey: "settings.referrals", href: "/settings/referrals", need: "settings", icon: Gift },
     ],
   },
   {
-    title: "People",
+    titleKey: "settings.sectionPeople",
     items: [
-      { label: "Sign-up link", href: "/settings/signup", need: "settings", icon: UserPlus },
-      { label: "Team", href: "/settings/team", need: "team", icon: Users },
-      { label: "Roles", href: "/settings/roles", need: "team", icon: ShieldCheck },
-      { label: "Activity log", href: "/settings/activity", need: "settings", icon: ScrollText },
+      { labelKey: "settings.signupLink", href: "/settings/signup", need: "settings", icon: UserPlus },
+      { labelKey: "settings.team", href: "/settings/team", need: "team", icon: Users },
+      { labelKey: "settings.roles", href: "/settings/roles", need: "team", icon: ShieldCheck },
+      { labelKey: "settings.activityLog", href: "/settings/activity", need: "settings", icon: ScrollText },
     ],
   },
 ];
@@ -88,6 +92,7 @@ export function SettingsNav({
   canTeam: boolean;
   canFinance: boolean;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -106,22 +111,22 @@ export function SettingsNav({
       {/* Mobile: a dropdown (no horizontal scrolling) */}
       <div className="lg:hidden">
         <label className="text-muted-foreground mb-1.5 block text-xs font-semibold uppercase">
-          Settings
+          {t("settings.title")}
         </label>
         <Select value={active} onValueChange={(href) => router.push(href)}>
           <SelectTrigger
-            aria-label="Settings section"
+            aria-label={t("settings.chooseSection")}
             className="bg-background w-full rounded-xl font-medium"
           >
-            <SelectValue placeholder="Choose a section" />
+            <SelectValue placeholder={t("settings.chooseSection")} />
           </SelectTrigger>
-          <SelectContent searchPlaceholder="Search settings…">
+          <SelectContent searchPlaceholder={t("common.searchPlaceholder")}>
             {groups.map((g) => (
-              <SelectGroup key={g.title}>
-                <SelectLabel>{g.title}</SelectLabel>
+              <SelectGroup key={g.titleKey}>
+                <SelectLabel>{t(g.titleKey)}</SelectLabel>
                 {g.items.map((i) => (
                   <SelectItem key={i.href} value={i.href}>
-                    {i.label}
+                    {t(i.labelKey)}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -134,9 +139,9 @@ export function SettingsNav({
       <nav className="hidden lg:block">
         <div className="sticky top-6 space-y-5">
           {groups.map((g) => (
-            <div key={g.title}>
+            <div key={g.titleKey}>
               <p className="text-muted-foreground mb-1.5 px-3 text-xs font-bold uppercase tracking-wide">
-                {g.title}
+                {t(g.titleKey)}
               </p>
               <div className="space-y-0.5">
                 {g.items.map((i) => {
@@ -153,7 +158,7 @@ export function SettingsNav({
                       )}
                     >
                       <i.icon className="size-4 shrink-0" />
-                      {i.label}
+                      {t(i.labelKey)}
                     </Link>
                   );
                 })}

@@ -5,11 +5,13 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FollowUpList, type FollowUpPerson } from "@/components/follow-up/follow-up-list";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Follow-up" };
 
 export default async function FollowUpPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("followup.view");
   const canManage = await can("followup.manage");
 
@@ -79,8 +81,8 @@ export default async function FollowUpPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Follow-up"
-        description={`${rows.length} ${rows.length === 1 ? "person" : "people"} to follow up`}
+        title={t("followUp.title")}
+        description={t("common.people", { count: rows.length })}
       />
       <FollowUpList
         canManage={canManage}

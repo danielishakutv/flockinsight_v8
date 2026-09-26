@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.64.0",
+    date: "2026-09-26",
+    summary:
+      "FlockInsight now speaks eight languages, including Hausa, Igbo, Yoruba and Nigerian Pidgin. Pick yours in Settings, or set one for your whole church.",
+    changes: {
+      Added: [
+        "Eight languages: English, French, Portuguese, Hausa, Igbo, Yoruba, Swahili and Nigerian Pidgin. Choose yours under Settings → Language, or from the menu beside your name — two taps from anywhere.",
+        "Every language is listed in its own writing, so somebody looking for Yorùbá is looking at “Yorùbá” and not at the English word for it in an interface they cannot read yet.",
+        "A default for your whole church. Somebody newly invited to the team opens the app in the language your church works in, rather than in English, and can still set their own afterwards.",
+        "“Follow my device” uses whatever language your phone or browser asks for, which means a first-time visitor to a meeting link often gets their own language before they have chosen anything at all.",
+        "Nigerian Pidgin is treated as the language it is, not as a joke. For a great many congregations it is what the service is actually conducted in.",
+        "Dates, times and numbers now follow the chosen language too. Money does not — the currency belongs to the church, not to the person reading.",
+      ],
+      Improved: [
+        "French and Portuguese have been checked by a fluent speaker. Hausa, Igbo, Yoruba, Swahili and Pidgin are written carefully but not yet reviewed, and the app says so plainly beside each one rather than presenting unchecked work as finished. If something reads wrong, tell us and we will fix it.",
+        "Your language choice is saved to your account as well as to the browser, so it follows you to a new phone instead of being made again.",
+      ],
+    },
+  },
+  {
     version: "0.63.0",
     date: "2026-09-26",
     summary:

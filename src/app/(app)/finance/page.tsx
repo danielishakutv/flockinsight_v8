@@ -13,6 +13,7 @@ import {
 import { readFinanceFilters } from "@/lib/finance-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FinanceClient } from "@/components/finance/finance-client";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Finance" };
 
@@ -22,6 +23,7 @@ export default async function FinancePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("finance.view");
   const canManage = await can("finance.manage");
 
@@ -57,8 +59,8 @@ export default async function FinancePage({
   return (
     <PageContainer>
       <PageHeader
-        title="Finance"
-        description="What came in, what went out, and what each account holds."
+        title={t("finance.title")}
+        description={t("finance.subtitle")}
       />
       <FinanceClient
         canManage={canManage}

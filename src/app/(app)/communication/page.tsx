@@ -13,11 +13,13 @@ import {
   CommunicationClient,
   type CommMember,
 } from "@/components/communication/communication-client";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Communication" };
 
 export default async function CommunicationPage() {
   const { church: c } = await requireChurch();
+  const t = await getT();
   await requireCan("communication.view");
   const canManage = await can("communication.manage");
 
@@ -82,8 +84,8 @@ export default async function CommunicationPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Communication"
-        description="Send SMS, email and notices to your church."
+        title={t("communication.title")}
+        description={t("communication.subtitle")}
         action={
           <Button asChild variant="outline">
             <Link href="/communication/history">

@@ -5,11 +5,13 @@ import {
   NotificationsClient,
   type NotificationView,
 } from "@/components/notifications/notifications-client";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Notifications" };
 
 export default async function NotificationsPage() {
   const { church, user } = await requireChurch();
+  const t = await getT();
 
   const items = await listNotifications({
     churchId: church.id,
@@ -33,9 +35,11 @@ export default async function NotificationsPage() {
   return (
     <PageContainer className="max-w-2xl">
       <PageHeader
-        title="Notifications"
+        title={t("notifications.title")}
         description={
-          unread > 0 ? `${unread} unread` : "Updates from the FlockInsight team"
+          unread > 0
+            ? `${unread} ${t("notifications.unread").toLowerCase()}`
+            : t("notifications.subtitle")
         }
       />
       <NotificationsClient items={views} />

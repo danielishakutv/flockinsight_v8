@@ -5,11 +5,13 @@ import { allowedDatasets } from "@/lib/report-catalog";
 import { getDatasetCounts } from "@/lib/report-data";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { ReportsBrowser } from "@/components/reports/reports-browser";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Reports & data" };
 
 export default async function ReportsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
 
   // The list is built from what this person may actually see, so nothing is
   // offered that the download route will then refuse.
@@ -22,8 +24,8 @@ export default async function ReportsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Reports & data"
-        description="Download any part of your church's data as a spreadsheet or a PDF — or take the whole thing in one file for analysis."
+        title={t("reports.title")}
+        description={t("reports.subtitle")}
       />
       <ReportsBrowser datasets={datasets} counts={counts} />
     </PageContainer>

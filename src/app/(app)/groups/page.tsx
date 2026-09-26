@@ -5,11 +5,13 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { GroupsList, type GroupRow } from "@/components/groups/groups-list";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Groups & Ministries" };
 
 export default async function GroupsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("groups.view");
   const canManage = await can("groups.manage");
 
@@ -80,8 +82,8 @@ export default async function GroupsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Groups & Ministries"
-        description={`${groups.length} total · ${ministries} ${ministries === 1 ? "ministry" : "ministries"}`}
+        title={t("groups.title")}
+        description={`${groups.length} ${t("common.total").toLowerCase()} · ${ministries} ${t("groups.kindMinistry").toLowerCase()}`}
       />
       <GroupsList
         groups={groups}

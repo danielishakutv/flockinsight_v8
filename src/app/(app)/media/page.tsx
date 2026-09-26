@@ -7,11 +7,13 @@ import { getStorageInfo } from "@/lib/storage";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { MediaLibrary } from "@/components/media/media-library";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Media" };
 
 export default async function MediaPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("media.view");
   const access = await getAccess();
   const canManage = access.isOwner || access.perms.has("media.manage");
@@ -43,8 +45,8 @@ export default async function MediaPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Media library"
-        description="Sermons, photos, documents and other files for your church."
+        title={t("media.title")}
+        description={t("media.subtitle")}
       />
       <MediaLibrary
         configured={isCloudinaryConfigured()}

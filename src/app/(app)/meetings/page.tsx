@@ -8,6 +8,7 @@ import { siteUrl } from "@/lib/site";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { MeetingsList, type MeetingRow } from "@/components/meetings/meetings-list";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Meetings" };
 
@@ -28,6 +29,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 export default async function MeetingsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("meetings.view");
   const canManage = await can("meetings.manage");
 
@@ -115,8 +117,8 @@ export default async function MeetingsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Meetings"
-        description="Video and audio meetings that run in the browser. Share a link — nothing to install, and it holds up on a weak connection."
+        title={t("meetings.title")}
+        description={t("meetings.subtitle")}
       />
 
       <Card className="mb-5">

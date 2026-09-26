@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Analytics" };
 
@@ -38,6 +39,7 @@ function isoDaysBefore(base: Date, days: number) {
 
 export default async function AnalyticsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("analytics.view");
 
   // The 12-week window normally ends today, but shifts back to the newest
@@ -74,7 +76,7 @@ export default async function AnalyticsPage() {
   if (raw.length === 0) {
     return (
       <PageContainer>
-        <PageHeader title="Analytics" description="Trends and breakdowns." />
+        <PageHeader title={t("analytics.title")} description={t("analytics.subtitle")} />
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
             <div className="bg-primary/10 text-primary grid size-16 place-items-center rounded-2xl">

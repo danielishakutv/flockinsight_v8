@@ -10,11 +10,13 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AttendanceExportMenu } from "@/components/attendance/export-menu";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Attendance" };
 
 export default async function AttendancePage() {
   const { church, user } = await requireChurch();
+  const t = await getT();
   await requireCan("attendance.view");
   const canManage = await can("attendance.manage");
 
@@ -49,8 +51,8 @@ export default async function AttendancePage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Attendance"
-        description={`${rows.length} recorded ${rows.length === 1 ? "service" : "services"}`}
+        title={t("attendance.title")}
+        description={t("attendance.subtitle")}
         action={
           <>
             <AttendanceExportMenu

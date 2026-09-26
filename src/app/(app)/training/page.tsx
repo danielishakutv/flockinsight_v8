@@ -10,6 +10,7 @@ import {
   type CourseListRow,
 } from "@/components/training/courses-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Training & Classes" };
 
@@ -26,6 +27,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 export default async function TrainingPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("training.view");
   const canManage = await can("training.manage");
 
@@ -62,8 +64,8 @@ export default async function TrainingPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Training & Classes"
-        description="Foundation, Baptism, Pre-Marital, leadership training — who is taking what, and who has finished."
+        title={t("training.title")}
+        description={t("training.subtitle")}
       />
 
       <Card className="mb-5">

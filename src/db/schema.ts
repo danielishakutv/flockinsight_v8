@@ -125,6 +125,15 @@ export const user = pgTable("user", {
   ),
   // Set when support resets a password — forces a new password on next login.
   mustChangePassword: boolean().notNull().default(false),
+  /**
+   * The language this person reads the app in.
+   *
+   * On the account rather than only in a cookie, so the choice follows somebody
+   * to a new phone instead of being made again. Null means "not chosen" — the
+   * church's default answers, then the browser's Accept-Language.
+   * See lib/i18n/server.ts for the full order.
+   */
+  locale: text(),
   createdAt: timestamp().notNull().defaultNow(),
   updatedAt: timestamp().notNull().defaultNow(),
 });
@@ -238,6 +247,11 @@ export const church = pgTable("church", {
   metadata: text(),
   // ----- FlockInsight additional fields -----
   timezone: text().notNull().default("Africa/Lagos"),
+  /**
+   * The language a team member sees before they have chosen one, and what
+   * somebody newly invited starts with. Null means English.
+   */
+  defaultLocale: text(),
   currency: text().notNull().default("NGN"),
   country: text().notNull().default("Nigeria"),
   state: text(),

@@ -59,6 +59,8 @@ import { PeoplePanel } from "@/components/meetings/people-panel";
 import { SharePanel } from "@/components/meetings/share-panel";
 import { useSpeaking } from "@/components/meetings/use-speaking";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
+import type { TFunction } from "@/lib/i18n/translate";
 
 type Phase = "join" | "lobby" | "live" | "ended";
 type Panel = "chat" | "people" | "share" | null;
@@ -111,6 +113,7 @@ export function MeetingRoom(props: {
   signInHref: string;
   manageHref: string | null;
 }) {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>("join");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -196,7 +199,7 @@ export function MeetingRoom(props: {
         });
         const data: JoinResponse = await res.json();
         if (!data.ok || !data.me || !data.meeting || !data.ice) {
-          setJoinError(data.error ?? "We couldn't get you into that meeting.");
+          setJoinError(data.error ?? t("common.somethingWentWrong"));
           setJoining(false);
           return;
         }
@@ -244,11 +247,22 @@ export function MeetingRoom(props: {
             onControl: (payload) => handleControl(payload),
             onRecording: (payload) => {
               if (payload.state === "started")
-                toast.info(`${payload.by ?? "The host"} is recording this meeting.`);
-              if (payload.state === "stopped") toast.info("Recording stopped.");
+                toast.info(
+                  t("meetings.recordingStarted", {
+                    name: String(payload.by ?? t("meetings.host")),
+                  }),
+                );
+              if (payload.state === "stopped")
+                toast.info(t("meetings.recordingStopped"));
             },
             onEnded: (reason) => {
-              setEndedReason(reason);
+              /*
+               * The engine reports in English because it has no dictionary.
+               * Mapped here to the translated sentence, with the original kept
+               * as the fallback so a reason we have not seen before still says
+               * something true rather than nothing.
+               */
+              setEndedReason(endedMessage(reason, t));
               setPhase("ended");
             },
             onError: (message) => toast.error(message),
@@ -266,12 +280,12 @@ export function MeetingRoom(props: {
 
         setPhase(data.me.admitted ? "live" : "lobby");
       } catch {
-        setJoinError("We couldn't reach the meeting. Check your connection and try again.");
+        setJoinError(t("common.offline"));
       } finally {
         setJoining(false);
       }
     },
-    [props.code, props.hostKey],
+    [props.code, props.hostKey, t],
   );
 
   /* ============================================================
@@ -308,9 +322,9 @@ export function MeetingRoom(props: {
     client?.leave();
     await client?.stop();
     clientRef.current = null;
-    setEndedReason("You left the meeting.");
+    setEndedReason(t("meetings.youLeft"));
     setPhase("ended");
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const onUnload = () => clientRef.current?.leave(true);
@@ -403,11 +417,9 @@ export function MeetingRoom(props: {
     void c.setLowData(next);
     setLocalStream(c.localStreams().camera);
     toast.info(
-      next
-        ? "Low data mode on — voices only, both ways."
-        : "Low data mode off — video is back on.",
+      next ? t("meetings.lowDataModeHint") : t("meetings.cameraOn2"),
     );
-  }, []);
+  }, [t]);
 
   const toggleHand = useCallback(() => {
     const c = clientRef.current;
@@ -470,9 +482,7 @@ export function MeetingRoom(props: {
     async (mode: RecorderMode) => {
       if (!meeting || !me) return;
       if (!recordingSupported(mode)) {
-        toast.error(
-          "This browser can't record. Chrome or Firefox on a laptop works best.",
-        );
+        toast.error(t("common.somethingWentWrong"));
         return;
       }
 
@@ -526,12 +536,10 @@ export function MeetingRoom(props: {
       setRecording({ id: (res?.recordingId as string) ?? null, mode });
       setRecordingElapsed(0);
       toast.success(
-        mode === "audio"
-          ? "Recording audio. Everyone has been told."
-          : "Recording. Everyone has been told.",
+        t("meetings.recordingStarted", { name: t("meetings.host") }),
       );
     },
-    [meeting, me, props.churchName, props.title, runAction],
+    [meeting, me, props.churchName, props.title, runAction, t],
   );
 
   const stopRecording = useCallback(async () => {
@@ -565,18 +573,18 @@ export function MeetingRoom(props: {
         });
         const data = await res.json();
         if (data.ok) {
-          toast.success("Recording saved to your media library.");
+          toast.success(t("meetings.savedToLibrary"));
           setPendingSave(null);
         } else {
-          toast.error(data.error ?? "We couldn't save it here.");
+          toast.error(data.error ?? t("common.somethingWentWrong"));
         }
       } catch {
-        toast.error("The upload failed. Download it instead — it's still here.");
+        toast.error(t("common.somethingWentWrong"));
       } finally {
         setSavingRecording(false);
       }
     },
-    [pendingSave, me, recording, props.code],
+    [pendingSave, me, recording, props.code, t],
   );
 
   /* ============================================================
@@ -608,13 +616,12 @@ export function MeetingRoom(props: {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-slate-950 px-6 text-center text-white">
         <div className="size-14 animate-pulse rounded-full bg-indigo-500/30" />
-        <h1 className="text-xl font-bold">Waiting for the host to let you in</h1>
+        <h1 className="text-xl font-bold">{t("meetings.waitingForHost")}</h1>
         <p className="max-w-sm text-sm text-slate-400">
-          You&apos;re in the lobby for &ldquo;{props.title}&rdquo;. Keep this page
-          open — you&apos;ll go straight in.
+          {t("meetings.waitingForHostHint")}
         </p>
         <Button variant="secondary" onClick={leave}>
-          Leave
+          {t("meetings.leave")}
         </Button>
         <Toaster />
       </div>
@@ -625,33 +632,44 @@ export function MeetingRoom(props: {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-slate-950 px-6 text-center text-white">
         <PhoneOff className="size-10 text-slate-500" />
-        <h1 className="text-xl font-bold">{endedReason || "The meeting has ended."}</h1>
+        <h1 className="text-xl font-bold">
+          {endedReason || t("meetings.meetingEnded")}
+        </h1>
         {pendingSave && (
           <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white/5 p-4 text-left">
             <p className="text-sm font-semibold">
-              Your recording is ready ({formatDuration(pendingSave.durationSec)})
+              {t("meetings.recordingReady", {
+                duration: formatDuration(pendingSave.durationSec),
+              })}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              It&apos;s on this device. Save a copy to the church media library,
-              or download it.
+              {t("meetings.recordingReadyHint")}
             </p>
             <div className="mt-3 flex gap-2">
-              <Button size="sm" disabled={savingRecording} onClick={() => saveRecording(false)}>
-                {savingRecording ? "Saving…" : "Save to library"}
+              <Button
+                size="sm"
+                disabled={savingRecording}
+                onClick={() => saveRecording(false)}
+              >
+                {savingRecording ? t("common.saving") : t("meetings.saveToLibrary")}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => downloadRecording(pendingSave)}>
-                Download
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => downloadRecording(pendingSave)}
+              >
+                {t("common.download")}
               </Button>
             </div>
           </div>
         )}
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => window.location.reload()}>
-            <RefreshCcw className="size-4" /> Rejoin
+            <RefreshCcw className="size-4" /> {t("meetings.rejoin")}
           </Button>
           {props.manageHref && (
             <Button asChild>
-              <a href={props.manageHref}>Back to meetings</a>
+              <a href={props.manageHref}>{t("meetings.backToMeetings")}</a>
             </Button>
           )}
         </div>
@@ -686,13 +704,11 @@ export function MeetingRoom(props: {
           <p className="flex items-center gap-2 text-[11px] text-slate-400">
             <span>{formatDuration(elapsed)}</span>
             <span aria-hidden>·</span>
-            <span>
-              {roster.length} {roster.length === 1 ? "person" : "people"}
-            </span>
+            <span>{t("common.people", { count: roster.length })}</span>
             {local?.lowData && (
               <>
                 <span aria-hidden>·</span>
-                <span className="text-emerald-400">Low data</span>
+                <span className="text-emerald-400">{t("meetings.lowData")}</span>
               </>
             )}
           </p>
@@ -705,7 +721,11 @@ export function MeetingRoom(props: {
           </span>
         )}
 
-        <ConnectionPill quality={local?.quality ?? "good"} transport={transport} />
+        <ConnectionPill
+          quality={local?.quality ?? "good"}
+          transport={transport}
+          t={t}
+        />
       </header>
 
       {/* Body */}
@@ -738,7 +758,7 @@ export function MeetingRoom(props: {
               handRaised={handRaised}
               quality={local?.quality ?? "good"}
               lowData={local?.lowData}
-              roleLabel={canHost ? "Host" : null}
+              roleLabel={canHost ? t("meetings.host") : null}
               className={showStage ? "" : "min-h-0"}
             />
             {tiles.map((r) => {
@@ -753,7 +773,7 @@ export function MeetingRoom(props: {
                   speaking={speaking.has(r.peerId)}
                   quality={r.quality}
                   lowData={r.lowData}
-                  roleLabel={isHostRole(r.role) ? "Host" : null}
+                  roleLabel={isHostRole(r.role) ? t("meetings.host") : null}
                   pinned={pinned === r.peerId}
                   onPin={showStage ? undefined : () => setPinned((p) => (p === r.peerId ? null : r.peerId))}
                   className={showStage ? "" : "min-h-0"}
@@ -764,7 +784,7 @@ export function MeetingRoom(props: {
 
           {others.length === 0 && !showStage && (
             <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-sm text-slate-500">
-              You&apos;re the only one here. Share the link to bring people in.
+              {t("meetings.onlyOneHere")}
             </p>
           )}
 
@@ -785,7 +805,7 @@ export function MeetingRoom(props: {
         {/* Desktop panel */}
         {panel && (
           <aside className="hidden w-80 shrink-0 border-l border-white/10 lg:flex lg:flex-col">
-            <PanelHeader panel={panel} onClose={() => setPanel(null)} />
+            <PanelHeader panel={panel} onClose={() => setPanel(null)} t={t} />
             <div className="min-h-0 flex-1">{renderPanel()}</div>
           </aside>
         )}
@@ -804,7 +824,7 @@ export function MeetingRoom(props: {
             onClick={() => setPanel(null)}
           />
           <div className="flex h-[72dvh] flex-col rounded-t-2xl border-t border-white/10 bg-slate-950 pb-[env(safe-area-inset-bottom)]">
-            <PanelHeader panel={panel} onClose={() => setPanel(null)} />
+            <PanelHeader panel={panel} onClose={() => setPanel(null)} t={t} />
             <div className="min-h-0 flex-1">{renderPanel()}</div>
           </div>
         </div>
@@ -816,7 +836,7 @@ export function MeetingRoom(props: {
           <ControlButton
             active={!!local?.micOn}
             danger={!local?.micOn}
-            label={local?.micOn ? "Mute (M)" : "Unmute (M)"}
+            label={local?.micOn ? t("meetings.mute") : t("meetings.unmute")}
             onClick={toggleMic}
           >
             {local?.micOn ? <Mic /> : <MicOff />}
@@ -826,7 +846,11 @@ export function MeetingRoom(props: {
             active={!!local?.cameraOn}
             danger={!local?.cameraOn}
             disabled={local?.lowData}
-            label={local?.cameraOn ? "Turn camera off (V)" : "Turn camera on (V)"}
+            label={
+              local?.cameraOn
+                ? t("meetings.cameraOff2")
+                : t("meetings.cameraOn2")
+            }
             onClick={toggleCamera}
           >
             {local?.cameraOn ? <Video /> : <VideoOff />}
@@ -835,7 +859,11 @@ export function MeetingRoom(props: {
           {meeting?.allowScreenShare && (
             <ControlButton
               active={!!local?.sharing}
-              label={local?.sharing ? "Stop sharing" : "Share your screen"}
+              label={
+                local?.sharing
+                  ? t("meetings.stopSharing")
+                  : t("meetings.shareScreen")
+              }
               onClick={toggleScreenShare}
               className="hidden sm:flex"
             >
@@ -845,7 +873,7 @@ export function MeetingRoom(props: {
 
           <ControlButton
             active={handRaised}
-            label={handRaised ? "Lower your hand" : "Raise your hand"}
+            label={handRaised ? t("meetings.lowerHand") : t("meetings.raiseHand")}
             onClick={toggleHand}
           >
             <Hand />
@@ -853,7 +881,7 @@ export function MeetingRoom(props: {
 
           <ControlButton
             active={panel === "people"}
-            label="People"
+            label={t("meetings.people")}
             badge={waiting.length || undefined}
             onClick={() => setPanel((p) => (p === "people" ? null : "people"))}
           >
@@ -863,7 +891,7 @@ export function MeetingRoom(props: {
           {meeting?.allowChat && (
             <ControlButton
               active={panel === "chat"}
-              label="Chat"
+              label={t("meetings.chat")}
               badge={panel === "chat" ? undefined : unread || undefined}
               onClick={() => {
                 setPanel((p) => (p === "chat" ? null : "chat"));
@@ -877,7 +905,7 @@ export function MeetingRoom(props: {
           {canHost && (
             <ControlButton
               active={panel === "share"}
-              label="Put something on the screen"
+              label={t("meetings.shareToScreen")}
               onClick={() => setPanel((p) => (p === "share" ? null : "share"))}
             >
               <Presentation />
@@ -885,12 +913,12 @@ export function MeetingRoom(props: {
           )}
 
           <MoreMenu
+            t={t}
             canHost={canHost}
             allowReactions={!!meeting?.allowReactions}
             allowRecording={!!meeting?.allowRecording}
             allowScreenShare={!!meeting?.allowScreenShare}
             recording={!!recording}
-            lowData={!!local?.lowData}
             cameraOn={!!local?.cameraOn}
             onReact={react}
             onToggleLowData={toggleLowData}
@@ -899,14 +927,14 @@ export function MeetingRoom(props: {
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
             onEndForAll={async () => {
-              if (!confirm("End this meeting for everyone?")) return;
+              if (!confirm(t("meetings.endForEveryone"))) return;
               await runAction("end");
             }}
             onCopyLink={() => {
               void navigator.clipboard
                 .writeText(window.location.href)
-                .then(() => toast.success("Meeting link copied."))
-                .catch(() => toast.error("Couldn't copy the link."));
+                .then(() => toast.success(t("common.copied")))
+                .catch(() => toast.error(t("common.somethingWentWrong")));
             }}
           />
 
@@ -914,7 +942,7 @@ export function MeetingRoom(props: {
             variant="destructive"
             size="icon-lg"
             onClick={leave}
-            aria-label="Leave the meeting"
+            aria-label={t("meetings.leave")}
             className="ml-1 rounded-full"
           >
             <LogOut />
@@ -969,6 +997,21 @@ export function MeetingRoom(props: {
   }
 }
 
+/**
+ * The engine reports why a call ended in English, because it has no dictionary
+ * and no business carrying one — it is transport, not interface. This is the one
+ * place those sentences become the reader's language, and anything unrecognised
+ * passes through unchanged so a new reason still says something true.
+ */
+function endedMessage(reason: string, t: TFunction): string {
+  if (reason.includes("removed you")) return t("meetings.youWereRemoved");
+  if (reason.includes("host ended")) return t("meetings.hostEnded");
+  if (reason.includes("has ended")) return t("meetings.meetingEnded");
+  if (reason.includes("left the meeting")) return t("meetings.youLeft");
+  if (reason.includes("signed out")) return t("common.somethingWentWrong");
+  return reason;
+}
+
 /* ============================================================
  * Small pieces
  * ========================================================== */
@@ -984,15 +1027,28 @@ function AudioSink({ stream }: { stream: MediaStream }) {
   return <audio ref={ref} autoPlay playsInline className="hidden" />;
 }
 
-function PanelHeader({ panel, onClose }: { panel: Panel; onClose: () => void }) {
-  const title = panel === "chat" ? "Chat" : panel === "people" ? "People" : "Share to screen";
+function PanelHeader({
+  panel,
+  onClose,
+  t,
+}: {
+  panel: Panel;
+  onClose: () => void;
+  t: TFunction;
+}) {
+  const title =
+    panel === "chat"
+      ? t("meetings.chat")
+      : panel === "people"
+        ? t("meetings.people")
+        : t("meetings.shareToScreen");
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2.5">
       <h2 className="text-sm font-bold">{title}</h2>
       <button
         type="button"
         onClick={onClose}
-        aria-label="Close"
+        aria-label={t("common.close")}
         className="rounded-md p-1 text-slate-400 hover:bg-white/10 hover:text-white"
       >
         <X className="size-4" />
@@ -1004,15 +1060,19 @@ function PanelHeader({ panel, onClose }: { panel: Panel; onClose: () => void }) 
 function ConnectionPill({
   quality,
   transport,
+  t,
 }: {
   quality: MeetingQuality;
   transport: "online" | "retrying" | "offline";
+  t: TFunction;
 }) {
   if (transport !== "online") {
     return (
       <span className="flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-300">
         <span className="size-2 animate-pulse rounded-full bg-amber-400" />
-        {transport === "retrying" ? "Reconnecting" : "Offline"}
+        {transport === "retrying"
+          ? t("meetings.reconnecting")
+          : t("common.offline")}
       </span>
     );
   }
@@ -1027,7 +1087,11 @@ function ConnectionPill({
     <span className={cn("flex items-center gap-1 text-[11px] font-semibold", tone)}>
       <Icon className="size-4" />
       <span className="hidden sm:inline">
-        {quality === "good" ? "Good" : quality === "fair" ? "Weak" : "Very weak"}
+        {quality === "good"
+          ? t("meetings.connectionGood")
+          : quality === "fair"
+            ? t("meetings.connectionWeak")
+            : t("meetings.connectionVeryWeak")}
       </span>
     </span>
   );
@@ -1081,12 +1145,12 @@ function ControlButton({
 }
 
 function MoreMenu({
+  t,
   canHost,
   allowReactions,
   allowRecording,
   allowScreenShare,
   recording,
-  lowData,
   cameraOn,
   onReact,
   onToggleLowData,
@@ -1097,12 +1161,12 @@ function MoreMenu({
   onEndForAll,
   onCopyLink,
 }: {
+  t: TFunction;
   canHost: boolean;
   allowReactions: boolean;
   allowRecording: boolean;
   allowScreenShare: boolean;
   recording: boolean;
-  lowData: boolean;
   cameraOn: boolean;
   onReact: (emoji: string) => void;
   onToggleLowData: () => void;
@@ -1118,7 +1182,7 @@ function MoreMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="More"
+          aria-label={t("nav.more")}
           className="flex size-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:size-12 [&_svg]:size-5"
         >
           <MoreHorizontal />
@@ -1133,7 +1197,7 @@ function MoreMenu({
                   key={r}
                   type="button"
                   onClick={() => onReact(r)}
-                  aria-label={`React ${r}`}
+                  aria-label={r}
                   className="rounded-md p-1.5 text-xl hover:bg-accent"
                 >
                   {r}
@@ -1146,23 +1210,23 @@ function MoreMenu({
 
         <DropdownMenuItem onClick={onToggleLowData}>
           <Signal className="size-4" />
-          {lowData ? "Turn off low data mode" : "Low data mode (audio only)"}
+          {t("meetings.lowDataMode")}
         </DropdownMenuItem>
 
         {cameraOn && (
           <DropdownMenuItem onClick={onFlipCamera}>
-            <SwitchCamera className="size-4" /> Flip camera
+            <SwitchCamera className="size-4" /> {t("meetings.flipCamera")}
           </DropdownMenuItem>
         )}
 
         {allowScreenShare && (
           <DropdownMenuItem onClick={onToggleScreen} className="sm:hidden">
-            <MonitorUp className="size-4" /> Share your screen
+            <MonitorUp className="size-4" /> {t("meetings.shareScreen")}
           </DropdownMenuItem>
         )}
 
         <DropdownMenuItem onClick={onCopyLink}>
-          <MessageSquare className="size-4" /> Copy the meeting link
+          <MessageSquare className="size-4" /> {t("common.copyLink")}
         </DropdownMenuItem>
 
         {canHost && allowRecording && (
@@ -1170,15 +1234,17 @@ function MoreMenu({
             <DropdownMenuSeparator />
             {recording ? (
               <DropdownMenuItem onClick={onStopRecording}>
-                <Circle className="size-4 fill-current text-rose-500" /> Stop recording
+                <Circle className="size-4 fill-current text-rose-500" />{" "}
+                {t("meetings.stopRecording")}
               </DropdownMenuItem>
             ) : (
               <>
                 <DropdownMenuItem onClick={() => onStartRecording("video")}>
-                  <Circle className="size-4 text-rose-500" /> Record video
+                  <Circle className="size-4 text-rose-500" />{" "}
+                  {t("meetings.recordVideo")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onStartRecording("audio")}>
-                  <Mic className="size-4" /> Record audio only (much smaller)
+                  <Mic className="size-4" /> {t("meetings.recordAudioOnly")}
                 </DropdownMenuItem>
               </>
             )}
@@ -1189,7 +1255,7 @@ function MoreMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onEndForAll}>
-              <PhoneOff className="size-4" /> End for everyone
+              <PhoneOff className="size-4" /> {t("meetings.endForEveryone")}
             </DropdownMenuItem>
           </>
         )}

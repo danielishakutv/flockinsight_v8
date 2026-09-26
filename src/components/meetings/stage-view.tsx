@@ -6,6 +6,7 @@ import { translationShort } from "@/lib/scripture-shared";
 import type { Stage } from "@/lib/meetings-shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The shared screen — a verse, a slide, a note, or somebody's desktop.
@@ -31,6 +32,7 @@ export function StageView({
   onClear?: () => void;
   className?: string;
 }) {
+  const t = useT();
   const [zoom, setZoom] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -53,7 +55,7 @@ export function StageView({
           className="size-full bg-black object-contain"
         />
         {screenOwner && (
-          <Caption>{screenOwner} is sharing their screen</Caption>
+          <Caption>{t("meetings.isSharingScreen", { name: screenOwner })}</Caption>
         )}
       </Wrapper>
     );
@@ -132,14 +134,17 @@ export function StageView({
           className="size-full bg-black object-contain"
         />
         <Caption>
-          Slide {stage.index + 1} of {stage.urls.length}
+          {t("meetings.slideOf", {
+            index: stage.index + 1,
+            total: stage.urls.length,
+          })}
         </Caption>
         {canControl && onSlide && stage.urls.length > 1 && (
           <div className="absolute inset-y-0 right-0 left-0 flex items-center justify-between px-2">
             <Button
               size="icon"
               variant="secondary"
-              aria-label="Previous slide"
+              aria-label={t("common.previous")}
               disabled={stage.index === 0}
               onClick={() => onSlide(stage.index - 1)}
               className="rounded-full opacity-80"
@@ -149,7 +154,7 @@ export function StageView({
             <Button
               size="icon"
               variant="secondary"
-              aria-label="Next slide"
+              aria-label={t("common.next")}
               disabled={stage.index >= last}
               onClick={() => onSlide(stage.index + 1)}
               className="rounded-full opacity-80"
@@ -178,6 +183,9 @@ function Wrapper({
   onZoom: () => void;
   onClear?: () => void;
 }) {
+  const t = useT();
+  const clearLabel = t("meetings.clearScreen");
+  const zoomLabel = zoom ? t("common.close") : t("common.view");
   return (
     <div
       className={cn(
@@ -195,7 +203,7 @@ function Wrapper({
           <button
             type="button"
             onClick={onClear}
-            aria-label="Clear the screen"
+            aria-label={clearLabel}
             className="rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
           >
             <X className="size-4" />
@@ -204,7 +212,7 @@ function Wrapper({
         <button
           type="button"
           onClick={onZoom}
-          aria-label={zoom ? "Exit full screen" : "Full screen"}
+          aria-label={zoomLabel}
           className="rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
         >
           {zoom ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}

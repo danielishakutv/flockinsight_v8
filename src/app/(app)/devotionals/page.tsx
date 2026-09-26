@@ -5,11 +5,13 @@ import { requireChurch } from "@/lib/session";
 import { requireCan, getAccess } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { DevotionalsClient } from "@/components/devotionals/devotionals-client";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Devotionals & Newsletters" };
 
 export default async function DevotionalsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("devotionals.view");
   const access = await getAccess();
   const canManage = access.isOwner || access.perms.has("devotionals.manage");
@@ -53,8 +55,8 @@ export default async function DevotionalsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Devotionals & Newsletters"
-        description="Write devotionals and newsletters, then send them to your members and subscribers."
+        title={t("devotionals.title")}
+        description={t("devotionals.subtitle")}
       />
       <DevotionalsClient
         canManage={canManage}

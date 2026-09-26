@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { initialsOf, type RosterEntry } from "@/lib/meetings-shared";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Who is here, plus the host's controls over them.
@@ -52,6 +53,7 @@ export function PeoplePanel({
   onMuteAll: () => void;
   onLowerHands: () => void;
 }) {
+  const t = useT();
   const hands = roster.filter((r) => r.handRaised);
   const rest = roster.filter((r) => !r.handRaised);
 
@@ -60,14 +62,14 @@ export function PeoplePanel({
       {canHost && waiting.length > 0 && (
         <div className="border-b border-white/10 bg-amber-500/10 p-3">
           <p className="mb-2 text-xs font-bold tracking-wide text-amber-300 uppercase">
-            Waiting to be let in ({waiting.length})
+            {t("meetings.waitingToBeLetIn")} ({waiting.length})
           </p>
           <ul className="space-y-2">
             {waiting.map((w) => (
               <li key={w.participantId} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm text-white">{w.name}</span>
                 <Button size="sm" onClick={() => onAdmit(w.participantId)}>
-                  Let in
+                  {t("meetings.letIn")}
                 </Button>
                 <Button
                   size="sm"
@@ -75,7 +77,7 @@ export function PeoplePanel({
                   className="text-slate-300 hover:text-white"
                   onClick={() => onDeny(w.participantId)}
                 >
-                  No
+                  {t("common.no")}
                 </Button>
               </li>
             ))}
@@ -85,7 +87,7 @@ export function PeoplePanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {hands.length > 0 && (
-          <Section title={`Hands up (${hands.length})`}>
+          <Section title={`${t("meetings.handsUp")} (${hands.length})`}>
             {hands.map((p) => (
               <Row
                 key={p.peerId}
@@ -99,7 +101,7 @@ export function PeoplePanel({
             ))}
           </Section>
         )}
-        <Section title={`In the meeting (${roster.length})`}>
+        <Section title={`${t("meetings.inTheMeeting")} (${roster.length})`}>
           {rest.map((p) => (
             <Row
               key={p.peerId}
@@ -117,7 +119,7 @@ export function PeoplePanel({
       {canHost && (
         <div className="flex gap-2 border-t border-white/10 p-3">
           <Button variant="secondary" size="sm" className="flex-1" onClick={onMuteAll}>
-            <MicOff className="size-4" /> Mute everyone
+            <MicOff className="size-4" /> {t("meetings.muteEveryone")}
           </Button>
           <Button
             variant="secondary"
@@ -126,7 +128,7 @@ export function PeoplePanel({
             onClick={onLowerHands}
             disabled={hands.length === 0}
           >
-            <Hand className="size-4" /> Lower hands
+            <Hand className="size-4" /> {t("meetings.lowerHands")}
           </Button>
         </div>
       )}
@@ -160,6 +162,7 @@ function Row({
   onRemove: (id: string) => void;
   onPromote: (id: string, role: "cohost" | "attendee") => void;
 }) {
+  const t = useT();
   const isHost = person.role === "host" || person.role === "cohost";
 
   return (
@@ -174,11 +177,16 @@ function Row({
             {isSelf && " (you)"}
           </span>
           {isHost && (
-            <ShieldCheck className="size-3.5 shrink-0 text-indigo-400" aria-label="Host" />
+            <ShieldCheck
+              className="size-3.5 shrink-0 text-indigo-400"
+              aria-label={t("meetings.host")}
+            />
           )}
         </span>
         {person.lowData && (
-          <span className="text-[11px] text-slate-500">Audio only</span>
+          <span className="text-[11px] text-slate-500">
+            {t("meetings.audioOnlyCameraStays")}
+          </span>
         )}
       </span>
 
@@ -199,27 +207,27 @@ function Row({
               variant="ghost"
               size="icon"
               className="size-7 shrink-0 text-slate-400 hover:text-white"
-              aria-label={`Options for ${person.name}`}
+              aria-label={person.name}
             >
               <MoreVertical className="size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onMute(person.id)} disabled={!person.micOn}>
-              <MicOff className="size-4" /> Mute
+              <MicOff className="size-4" /> {t("meetings.mute")}
             </DropdownMenuItem>
             {person.role === "attendee" ? (
               <DropdownMenuItem onClick={() => onPromote(person.id, "cohost")}>
-                <UserPlus className="size-4" /> Make co-host
+                <UserPlus className="size-4" /> {t("meetings.makeCohost")}
               </DropdownMenuItem>
             ) : person.role === "cohost" ? (
               <DropdownMenuItem onClick={() => onPromote(person.id, "attendee")}>
-                <UserMinus className="size-4" /> Remove co-host
+                <UserMinus className="size-4" /> {t("meetings.removeCohost")}
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => onRemove(person.id)}>
-              <UserMinus className="size-4" /> Remove from meeting
+              <UserMinus className="size-4" /> {t("meetings.removeFromMeeting")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

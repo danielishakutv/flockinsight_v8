@@ -6,6 +6,7 @@ import { getUpcomingCelebrations } from "@/lib/celebrations";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { CelebrationsDirectory } from "@/components/celebrations/celebrations-directory";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Celebrations" };
 
@@ -13,6 +14,7 @@ const WINDOW_DAYS = 90;
 
 export default async function CelebrationsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("members.view");
   const canSettings = await can("settings.manage");
 
@@ -21,8 +23,8 @@ export default async function CelebrationsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Celebrations"
-        description={`Upcoming birthdays & anniversaries in the next ${WINDOW_DAYS} days.`}
+        title={t("celebrations.title")}
+        description={t("celebrations.subtitle")}
         action={
           canSettings ? (
             <Button variant="outline" asChild>

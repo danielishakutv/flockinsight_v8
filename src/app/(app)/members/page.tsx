@@ -12,11 +12,13 @@ import type { EarnedBadge } from "@/lib/training-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { MembersList, type MemberRow } from "@/components/members/members-list";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Members" };
 
 export default async function MembersPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("members.view");
   const canManage = await can("members.manage");
 
@@ -92,8 +94,15 @@ export default async function MembersPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Members"
-        description={`${rows.length} total · ${active} active · ${visitors} visitor${visitors === 1 ? "" : "s"}${children ? ` · ${children} child${children === 1 ? "" : "ren"}` : ""}`}
+        title={t("members.title")}
+        description={[
+          `${rows.length} ${t("common.total").toLowerCase()}`,
+          `${active} ${t("common.active").toLowerCase()}`,
+          `${visitors} ${t("members.visitor").toLowerCase()}`,
+          children ? `${children} ${t("members.minor").toLowerCase()}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         action={
           <Button asChild variant="outline">
             <Link href="/members/households">

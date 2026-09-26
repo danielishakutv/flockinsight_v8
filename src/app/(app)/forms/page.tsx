@@ -10,11 +10,13 @@ import { ensureSignup, signupUrl } from "@/lib/member-signup";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FormsList } from "@/components/forms/forms-list";
 import { MemberSignupLink } from "@/components/members/member-signup-link";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Forms" };
 
 export default async function FormsPage() {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("forms.view");
   const access = await getAccess();
   const canManage = access.isOwner || access.perms.has("forms.manage");
@@ -42,8 +44,8 @@ export default async function FormsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Forms"
-        description="Build forms to collect registrations, feedback and more — then share a link."
+        title={t("forms.title")}
+        description={t("forms.subtitle")}
       />
 
       {signup && (

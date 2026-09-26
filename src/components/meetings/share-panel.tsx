@@ -21,6 +21,7 @@ import {
   TRANSLATIONS,
 } from "@/lib/scripture-shared";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type Tab = "verse" | "slides" | "note";
 type LibraryItem = { id: string; title: string; url: string };
@@ -53,19 +54,20 @@ export function SharePanel({
   onClear: () => void;
   hasStage: boolean;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("verse");
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex gap-1 border-b border-white/10 p-2">
         <TabButton active={tab === "verse"} onClick={() => setTab("verse")}>
-          <BookOpen className="size-4" /> Verse
+          <BookOpen className="size-4" /> {t("meetings.verse")}
         </TabButton>
         <TabButton active={tab === "slides"} onClick={() => setTab("slides")}>
-          <Images className="size-4" /> Slides
+          <Images className="size-4" /> {t("meetings.slides")}
         </TabButton>
         <TabButton active={tab === "note"} onClick={() => setTab("note")}>
-          <StickyNote className="size-4" /> Note
+          <StickyNote className="size-4" /> {t("meetings.noteTab")}
         </TabButton>
       </div>
 
@@ -80,7 +82,7 @@ export function SharePanel({
       {hasStage && (
         <div className="border-t border-white/10 p-3">
           <Button variant="secondary" size="sm" className="w-full" onClick={onClear}>
-            <X className="size-4" /> Clear the screen
+            <X className="size-4" /> {t("meetings.clearScreen")}
           </Button>
         </div>
       )}
@@ -123,6 +125,7 @@ function VerseTab({
   busy: boolean;
   onVerse: (input: { reference: string; translation: string; text?: string }) => void;
 }) {
+  const t = useT();
   const [reference, setReference] = useState("");
   const [translation, setTranslation] = useState<string>(DEFAULT_TRANSLATION);
   const [pasting, setPasting] = useState(false);
@@ -154,7 +157,7 @@ function VerseTab({
     <form onSubmit={submit} className="space-y-3">
       <div>
         <Label htmlFor="verse-ref" className="mb-1.5 block text-slate-300">
-          Reference
+          {t("meetings.reference")}
         </Label>
         <Input
           id="verse-ref"
@@ -184,7 +187,9 @@ function VerseTab({
       </div>
 
       <div>
-        <Label className="mb-1.5 block text-slate-300">Translation</Label>
+        <Label className="mb-1.5 block text-slate-300">
+          {t("meetings.translation")}
+        </Label>
         <Select value={translation} onValueChange={setTranslation}>
           <SelectTrigger className="border-white/15 bg-white/5 text-white">
             <SelectValue />
@@ -202,7 +207,7 @@ function VerseTab({
       {pasting && (
         <div>
           <Label htmlFor="verse-text" className="mb-1.5 block text-slate-300">
-            The text
+            {t("meetings.theText")}
           </Label>
           <Textarea
             id="verse-text"
@@ -217,7 +222,7 @@ function VerseTab({
 
       <Button type="submit" disabled={busy || (!pasting && !check?.ok)} className="w-full">
         {busy ? <Loader2 className="animate-spin" /> : <BookOpen className="size-4" />}
-        Put it on the screen
+        {t("meetings.putOnScreen")}
       </Button>
 
       <button
@@ -225,14 +230,12 @@ function VerseTab({
         onClick={() => setPasting((v) => !v)}
         className="w-full text-center text-xs text-slate-400 underline-offset-2 hover:underline"
       >
-        {pasting
-          ? "Look the verse up instead"
-          : "Use my own translation — type or paste the text"}
+        {pasting ? t("meetings.lookUpInstead") : t("meetings.ownTranslation")}
       </button>
 
       <div>
         <p className="mb-2 text-xs font-bold tracking-wide text-slate-400 uppercase">
-          Often used
+          {t("meetings.oftenUsed")}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_VERSES.map((v) => (
@@ -269,6 +272,7 @@ function SlidesTab({
   busy: boolean;
   onSlides: (ids: string[]) => void;
 }) {
+  const t = useT();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -306,7 +310,7 @@ function SlidesTab({
   if (items === null) {
     return (
       <p className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
-        <Loader2 className="size-4 animate-spin" /> Loading your images…
+        <Loader2 className="size-4 animate-spin" /> {t("common.loading")}
       </p>
     );
   }
@@ -315,7 +319,7 @@ function SlidesTab({
     return (
       <div className="py-6 text-center">
         <p className="text-sm text-slate-400">
-          {error ?? "There are no images in your media library yet."}
+          {error ?? t("meetings.noImages")}
         </p>
         <p className="mt-2 text-xs text-slate-500">
           Upload slides under Media, then they&apos;ll appear here. Exported a
@@ -327,9 +331,7 @@ function SlidesTab({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-400">
-        Tap in the order you want them shown.
-      </p>
+      <p className="text-xs text-slate-400">{t("meetings.pickSlides")}</p>
       <div className="grid grid-cols-3 gap-2">
         {items.map((it) => {
           const at = picked.indexOf(it.id);
@@ -360,7 +362,8 @@ function SlidesTab({
         onClick={() => onSlides(picked)}
       >
         {busy ? <Loader2 className="animate-spin" /> : <Images className="size-4" />}
-        Show {picked.length || ""} slide{picked.length === 1 ? "" : "s"}
+        {t("meetings.showSlides")}
+        {picked.length > 0 && ` (${picked.length})`}
       </Button>
     </div>
   );
@@ -377,6 +380,7 @@ function NoteTab({
   busy: boolean;
   onNote: (input: { title: string; body: string }) => void;
 }) {
+  const t = useT();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
@@ -391,7 +395,8 @@ function NoteTab({
     >
       <div>
         <Label htmlFor="note-title" className="mb-1.5 block text-slate-300">
-          Heading <span className="text-slate-500">(optional)</span>
+          {t("meetings.heading")}{" "}
+          <span className="text-slate-500">({t("common.optional")})</span>
         </Label>
         <Input
           id="note-title"
@@ -404,7 +409,7 @@ function NoteTab({
       </div>
       <div>
         <Label htmlFor="note-body" className="mb-1.5 block text-slate-300">
-          What should everyone see?
+          {t("meetings.whatShouldEveryoneSee")}
         </Label>
         <Textarea
           id="note-body"
@@ -418,7 +423,7 @@ function NoteTab({
       </div>
       <Button type="submit" className="w-full" disabled={busy || !body.trim()}>
         {busy ? <Loader2 className="animate-spin" /> : <StickyNote className="size-4" />}
-        Put it on the screen
+        {t("meetings.putOnScreen")}
       </Button>
     </form>
   );

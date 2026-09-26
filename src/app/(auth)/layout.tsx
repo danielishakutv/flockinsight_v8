@@ -2,13 +2,17 @@ import Link from "next/link";
 import { Wordmark } from "@/components/brand";
 import { MakerFooter } from "@/components/maker-footer";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/components/i18n-provider";
+import { getI18n } from "@/lib/i18n/server";
 
-export default function AuthLayout({
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { locale, dict } = await getI18n();
   return (
+    <I18nProvider locale={locale} dict={dict}>
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-4 py-10">
       {/* soft brand glow */}
       <div
@@ -22,5 +26,6 @@ export default function AuthLayout({
       <MakerFooter />
       <Toaster />
     </div>
+    </I18nProvider>
   );
 }

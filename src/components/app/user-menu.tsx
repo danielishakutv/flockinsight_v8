@@ -6,6 +6,8 @@ import { LogOut, Settings, Moon, Sun, Laptop, Shield } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
+import { useT } from "@/components/i18n-provider";
+import { LanguageMenu } from "@/components/app/language-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -37,12 +39,13 @@ export function UserMenu({
   className?: string;
   isSuperAdmin?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const { setTheme } = useTheme();
 
   async function handleSignOut() {
     await signOut();
-    toast.success("Signed out");
+    toast.success(t("nav.signedOut"));
     router.push("/login");
     router.refresh();
   }
@@ -73,33 +76,36 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings />
-            Settings
+            {t("nav.settings")}
           </Link>
         </DropdownMenuItem>
         {isSuperAdmin && (
           <DropdownMenuItem asChild>
             <Link href="/superadmin">
               <Shield />
-              Platform Admin
+              {t("nav.platformAdmin")}
             </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
-          Theme
+          {t("nav.theme")}
         </DropdownMenuLabel>
         <DropdownMenuItem onClick={() => setTheme("light")}>
-          <Sun /> Light
+          <Sun /> {t("nav.themeLight")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
-          <Moon /> Dark
+          <Moon /> {t("nav.themeDark")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
-          <Laptop /> System
+          <Laptop /> {t("nav.themeSystem")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuSeparator />
+        <LanguageMenu />
+        <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-          <LogOut /> Sign out
+          <LogOut /> {t("nav.signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

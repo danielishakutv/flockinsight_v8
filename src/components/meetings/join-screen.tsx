@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { initialsOf } from "@/lib/meetings-shared";
+import { useT } from "@/components/i18n-provider";
 import { cn } from "@/lib/utils";
 
 export type JoinValues = {
@@ -59,6 +60,7 @@ export function JoinScreen({
   onJoin: (values: JoinValues) => void;
   signInHref: string;
 }) {
+  const t = useT();
   const [name, setName] = useState(defaultName);
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(!lowDataDefault);
@@ -163,7 +165,9 @@ export function JoinScreen({
                   {initialsOf(name || "Guest")}
                 </div>
                 <p className="text-sm text-slate-400">
-                  {lowData ? "Audio only — your camera stays off" : "Your camera is off"}
+                  {lowData
+                    ? t("meetings.audioOnlyCameraStays")
+                    : t("meetings.cameraOff")}
                 </p>
               </div>
             )}
@@ -174,7 +178,7 @@ export function JoinScreen({
                 onClick={() => setMicOn((v) => !v)}
                 onIcon={<Mic className="size-5" />}
                 offIcon={<MicOff className="size-5" />}
-                label={micOn ? "Turn microphone off" : "Turn microphone on"}
+                label={micOn ? t("meetings.mute") : t("meetings.unmute")}
               />
               <RoundToggle
                 on={cameraOn && !lowData}
@@ -182,7 +186,9 @@ export function JoinScreen({
                 onClick={() => setCameraOn((v) => !v)}
                 onIcon={<Camera className="size-5" />}
                 offIcon={<CameraOff className="size-5" />}
-                label={cameraOn ? "Turn camera off" : "Turn camera on"}
+                label={
+                  cameraOn ? t("meetings.cameraOff2") : t("meetings.cameraOn2")
+                }
               />
             </div>
           </div>
@@ -191,7 +197,7 @@ export function JoinScreen({
           <form onSubmit={submit} className="space-y-4">
             <div>
               <Label htmlFor="join-name" className="mb-1.5 block text-slate-300">
-                Your name
+                {t("meetings.yourName")}
               </Label>
               <Input
                 id="join-name"
@@ -204,14 +210,14 @@ export function JoinScreen({
                 className="border-white/15 bg-white/5 text-white placeholder:text-slate-500"
               />
               <p className="mt-1 text-xs text-slate-500">
-                This is what everyone else will see.
+                {t("meetings.yourNameHint")}
               </p>
             </div>
 
             {needsPasscode && (
               <div>
                 <Label htmlFor="join-passcode" className="mb-1.5 block text-slate-300">
-                  Meeting passcode
+                  {t("meetings.meetingPasscode")}
                 </Label>
                 <Input
                   id="join-passcode"
@@ -233,25 +239,23 @@ export function JoinScreen({
                   setLowData(v);
                   if (v) setCameraOn(false);
                 }}
-                aria-label="Low data mode"
+                aria-label={t("meetings.lowDataMode")}
                 className="mt-0.5"
               />
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-sm font-semibold">
                   <Signal className="size-4 text-emerald-400" />
-                  Low data mode
+                  {t("meetings.lowDataMode")}
                 </span>
                 <span className="mt-0.5 block text-xs text-slate-400">
-                  Voices only, no video either way. Uses about a tenth of the data
-                  and holds up on a weak network.
+                  {t("meetings.lowDataModeHint")}
                 </span>
               </span>
             </label>
 
             {devicesBlocked && (
               <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                We couldn&apos;t open your camera. You can still join and be heard —
-                check the camera permission in your browser if you want video.
+                {t("meetings.cameraBlocked")}
               </p>
             )}
 
@@ -263,24 +267,22 @@ export function JoinScreen({
 
             {needsSignIn ? (
               <Button asChild size="lg" className="w-full">
-                <a href={signInHref}>Sign in to join</a>
+                <a href={signInHref}>{t("meetings.signInToJoin")}</a>
               </Button>
             ) : (
               <Button type="submit" size="lg" disabled={joining} className="w-full">
                 {joining ? (
                   <>
-                    <Loader2 className="animate-spin" /> Joining…
+                    <Loader2 className="animate-spin" /> {t("meetings.joining")}
                   </>
                 ) : (
-                  "Join meeting"
+                  t("meetings.joinMeeting")
                 )}
               </Button>
             )}
 
             <p className="text-center text-[11px] leading-relaxed text-slate-500">
-              Audio and video go straight between the people in the meeting.
-              Nothing is recorded unless the host starts a recording, and
-              everyone is told when they do.
+              {t("meetings.privacyNote")}
             </p>
           </form>
         </div>

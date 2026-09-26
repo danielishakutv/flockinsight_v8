@@ -7,6 +7,8 @@ import { church } from "@/db/schema";
 import { getMeetingByCode, standingInChurch } from "@/lib/meetings";
 import { getSession } from "@/lib/session";
 import { MeetingRoom } from "@/components/meetings/meeting-room";
+import { I18nProvider } from "@/components/i18n-provider";
+import { getI18n } from "@/lib/i18n/server";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +36,13 @@ export default async function MeetPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { code } = await params;
+  /*
+   * A meeting link reaches people with no account at all, so the language here
+   * comes from the cookie or from their browser rather than from a profile. It
+   * is also the one page in the product a stranger is most likely to open, and
+   * the pre-join screen is where they decide whether they can use it.
+   */
+  const { locale, dict, t } = await getI18n();
   const sp = await searchParams;
   // The host link. Handed straight to the room, which sends it back when it
   // joins — the server decides whether it is real, never the page.
@@ -43,8 +52,8 @@ export default async function MeetPage({
   if (!m) {
     return (
       <Shell
-        title="We couldn't find that meeting"
-        body="Check the link, or ask whoever invited you to send it again. Meeting links look like flockinsight.com/meet/abc-defg-hij."
+        title={t("meetings.notFound")}
+        body={t("meetings.notFoundHint")}
       />
     );
   }
@@ -52,12 +61,12 @@ export default async function MeetPage({
   if (m.status === "cancelled" || m.status === "ended") {
     return (
       <Shell
-        title={m.status === "ended" ? "This meeting has ended" : "This meeting was cancelled"}
-        body={
+        title={
           m.status === "ended"
-            ? `"${m.title}" is over. If it was recorded, the host can share it with you.`
-            : `"${m.title}" is no longer happening.`
+            ? t("meetings.meetingEnded")
+            : t("meetings.wasCancelled")
         }
+        body={m.title}
       />
     );
   }
@@ -89,20 +98,23 @@ export default async function MeetPage({
       <Shell
         icon={<CalendarClock className="size-8 text-indigo-400" />}
         title={m.title}
-        body={`This meeting starts at ${m.scheduledFor.toLocaleString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}. Come back to this link a few minutes before — it will open on its own.`}
+        body={t("meetings.startsAt", {
+          when: m.scheduledFor.toLocaleString(t.intl, {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        })}
         footer={c?.name ?? undefined}
       />
     );
   }
 
   return (
-    <MeetingRoom
+    <I18nProvider locale={locale} dict={dict}>
+      <MeetingRoom
       code={m.code}
       title={m.title}
       churchName={c?.name ?? ""}
@@ -113,9 +125,10 @@ export default async function MeetPage({
       defaultName={session?.user?.name ?? ""}
       lowDataDefault={m.lowDataDefault}
       hostKey={hostKey}
-      signInHref={`/login?next=${encodeURIComponent(`/meet/${m.code}`)}`}
-      manageHref={isHost ? `/meetings` : null}
-    />
+        signInHref={`/login?next=${encodeURIComponent(`/meet/${m.code}`)}`}
+        manageHref={isHost ? `/meetings` : null}
+      />
+    </I18nProvider>
   );
 }
 

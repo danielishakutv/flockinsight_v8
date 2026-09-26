@@ -1,3 +1,4 @@
+import type { TKey } from "@/lib/i18n/translate";
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -25,7 +26,15 @@ import {
 } from "lucide-react";
 
 export type NavItem = {
-  label: string;
+  /**
+   * A key into the `nav` section of the dictionary, not a label.
+   *
+   * The English words used to live here, which meant the sidebar was the one
+   * part of the app that could not be translated without rewriting the nav.
+   * Now `lib/i18n/dictionaries/en.ts` holds the wording and this holds the
+   * name of it, so every language gets the same menu.
+   */
+  labelKey: TKey;
   href: string;
   icon: LucideIcon;
   /** Permission(s) needed to see this. Undefined = always visible. */
@@ -69,53 +78,53 @@ const REPORT_PERMS = [
 
 /** Full navigation (desktop sidebar). */
 export const mainNav: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   {
-    label: "Attendance",
+    labelKey: "nav.attendance",
     href: "/attendance",
     icon: ClipboardCheck,
     perm: "attendance.view",
   },
-  { label: "Analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view" },
-  { label: "Members", href: "/members", icon: Users, perm: "members.view" },
-  { label: "Groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
-  { label: "Celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
+  { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view" },
+  { labelKey: "nav.members", href: "/members", icon: Users, perm: "members.view" },
+  { labelKey: "nav.groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
+  { labelKey: "nav.celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
   {
-    label: "Training",
+    labelKey: "nav.training",
     href: "/training",
     icon: GraduationCap,
     perm: "training.view",
   },
-  { label: "Meetings", href: "/meetings", icon: Video, perm: "meetings.view" },
-  { label: "Giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
-  { label: "Finance", href: "/finance", icon: Wallet, perm: "finance.view" },
+  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view" },
+  { labelKey: "nav.giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
+  { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view" },
   {
-    label: "Follow-up",
+    labelKey: "nav.followUp",
     href: "/follow-up",
     icon: HeartHandshake,
     perm: "followup.view",
   },
-  { label: "Media", href: "/media", icon: FolderOpen, perm: "media.view" },
-  { label: "Forms", href: "/forms", icon: FileText, perm: "forms.view" },
+  { labelKey: "nav.media", href: "/media", icon: FolderOpen, perm: "media.view" },
+  { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view" },
   {
-    label: "Devotionals",
+    labelKey: "nav.devotionals",
     href: "/devotionals",
     icon: BookOpen,
     perm: "devotionals.view",
   },
   {
-    label: "Branches",
+    labelKey: "nav.branches",
     href: "/branches",
     icon: Network,
     perm: ["settings.manage", "analytics.view"],
   },
-  { label: "Reports", href: "/reports", icon: Database, perm: REPORT_PERMS },
-  { label: "Settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
+  { labelKey: "nav.reports", href: "/reports", icon: Database, perm: REPORT_PERMS },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
 /** The primary fast action — needs permission to record attendance. */
 export const recordAction: NavItem = {
-  label: "Record",
+  labelKey: "nav.record",
   href: "/attendance/record",
   icon: PlusCircle,
   perm: "attendance.manage",
@@ -123,205 +132,205 @@ export const recordAction: NavItem = {
 
 /** Bottom nav on mobile: 2 left, [Record], then Members + a "More" sheet. */
 export const mobileNavLeft: NavItem[] = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.home", href: "/dashboard", icon: LayoutDashboard },
   {
-    label: "Attendance",
+    labelKey: "nav.attendance",
     href: "/attendance",
     icon: ClipboardCheck,
     perm: "attendance.view",
   },
 ];
 export const mobileNavRight: NavItem[] = [
-  { label: "Members", href: "/members", icon: Users, perm: "members.view" },
+  { labelKey: "nav.members", href: "/members", icon: Users, perm: "members.view" },
 ];
 
 /**
  * Grouped menu for the mobile "More" sheet. `tile` holds full literal
  * Tailwind classes (so they aren't purged) for each item's coloured icon.
  */
-export type MenuItem = NavItem & { description: string; tile: string };
+export type MenuItem = NavItem & { descriptionKey: TKey; tile: string };
 
-export const mobileMenuSections: { title: string; items: MenuItem[] }[] = [
+export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
   {
-    title: "Overview",
+    titleKey: "nav.sectionOverview",
     items: [
       {
-        label: "Dashboard",
+        labelKey: "nav.dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
-        description: "Your church at a glance",
+        descriptionKey: "nav.dashboardDesc",
         tile: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
       },
       {
-        label: "Analytics",
+        labelKey: "nav.analytics",
         href: "/analytics",
         icon: BarChart3,
-        description: "Trends & breakdowns",
+        descriptionKey: "nav.analyticsDesc",
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
       },
       {
-        label: "Reports",
+        labelKey: "nav.reports",
         href: "/reports",
         icon: Database,
-        description: "Download your data as CSV or PDF",
+        descriptionKey: "nav.reportsDesc",
         tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
         perm: REPORT_PERMS,
       },
     ],
   },
   {
-    title: "Records",
+    titleKey: "nav.sectionRecords",
     items: [
       {
-        label: "Attendance",
+        labelKey: "nav.attendance",
         href: "/attendance",
         icon: ClipboardCheck,
-        description: "Headcounts & history",
+        descriptionKey: "nav.attendanceDesc",
         tile: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
         perm: "attendance.view",
       },
       {
-        label: "Giving",
+        labelKey: "nav.giving",
         href: "/giving",
         icon: HandCoins,
-        description: "Offerings, tithes & donations",
+        descriptionKey: "nav.givingDesc",
         tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         perm: "giving.view",
       },
       {
-        label: "Finance",
+        labelKey: "nav.finance",
         href: "/finance",
         icon: Wallet,
-        description: "Income, expenses & accounts",
+        descriptionKey: "nav.financeDesc",
         tile: "bg-lime-500/15 text-lime-600 dark:text-lime-400",
         perm: "finance.view",
       },
       {
-        label: "Events",
+        labelKey: "nav.events",
         href: "/my-events",
         icon: CalendarDays,
-        description: "Programs, flyers & public listings",
+        descriptionKey: "nav.eventsDesc",
         tile: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
         perm: "settings.manage",
       },
       {
-        label: "Media",
+        labelKey: "nav.media",
         href: "/media",
         icon: FolderOpen,
-        description: "Sermons, photos & files",
+        descriptionKey: "nav.mediaDesc",
         tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
         perm: "media.view",
       },
       {
-        label: "Forms",
+        labelKey: "nav.forms",
         href: "/forms",
         icon: FileText,
-        description: "Build forms & collect responses",
+        descriptionKey: "nav.formsDesc",
         tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
         perm: "forms.view",
       },
       {
-        label: "Devotionals",
+        labelKey: "nav.devotionals",
         href: "/devotionals",
         icon: BookOpen,
-        description: "Devotionals, newsletters & subscribers",
+        descriptionKey: "nav.devotionalsDesc",
         tile: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
         perm: "devotionals.view",
       },
     ],
   },
   {
-    title: "People",
+    titleKey: "nav.sectionPeople",
     items: [
       {
-        label: "Members",
+        labelKey: "nav.members",
         href: "/members",
         icon: Users,
-        description: "Your congregation",
+        descriptionKey: "nav.membersDesc",
         tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
         perm: "members.view",
       },
       {
-        label: "Groups",
+        labelKey: "nav.groups",
         href: "/groups",
         icon: UsersRound,
-        description: "Ministries & groups",
+        descriptionKey: "nav.groupsDesc",
         tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
         perm: "groups.view",
       },
       {
-        label: "Celebrations",
+        labelKey: "nav.celebrations",
         href: "/celebrations",
         icon: PartyPopper,
-        description: "Upcoming birthdays & anniversaries",
+        descriptionKey: "nav.celebrationsDesc",
         tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
         perm: "members.view",
       },
       {
-        label: "Training",
+        labelKey: "nav.training",
         href: "/training",
         icon: GraduationCap,
-        description: "Classes, worker training & who has completed what",
+        descriptionKey: "nav.trainingDesc",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
         perm: "training.view",
       },
       {
-        label: "Meetings",
+        labelKey: "nav.meetings",
         href: "/meetings",
         icon: Video,
-        description: "Video & audio meetings in the browser",
+        descriptionKey: "nav.meetingsDesc",
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
         perm: "meetings.view",
       },
       {
-        label: "Follow-up",
+        labelKey: "nav.followUp",
         href: "/follow-up",
         icon: HeartHandshake,
-        description: "Visitor care",
+        descriptionKey: "nav.followUpDesc",
         tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
         perm: "followup.view",
       },
       {
-        label: "Communication",
+        labelKey: "nav.communication",
         href: "/communication",
         icon: MessagesSquare,
-        description: "SMS, email & staff notices",
+        descriptionKey: "nav.communicationDesc",
         tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
         perm: "communication.view",
       },
     ],
   },
   {
-    title: "Account",
+    titleKey: "nav.sectionAccount",
     items: [
       {
-        label: "Notifications",
+        labelKey: "nav.notifications",
         href: "/notifications",
         icon: Bell,
-        description: "Updates from FlockInsight",
+        descriptionKey: "nav.notificationsDesc",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
       },
       {
-        label: "Branches",
+        labelKey: "nav.branches",
         href: "/branches",
         icon: Network,
-        description: "Your church network at a glance",
+        descriptionKey: "nav.branchesDesc",
         tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
         perm: ["settings.manage", "analytics.view"],
       },
       {
-        label: "Settings",
+        labelKey: "nav.settings",
         href: "/settings",
         icon: Settings,
-        description: "Profile, services & team",
+        descriptionKey: "nav.settingsDesc",
         tile: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
         perm: SETTINGS_PERMS,
       },
       {
-        label: "Help & Support",
+        labelKey: "nav.help",
         href: "/help",
         icon: LifeBuoy,
-        description: "Guides, tutorials & contact us",
+        descriptionKey: "nav.helpDesc",
         tile: "bg-green-500/15 text-green-600 dark:text-green-400",
       },
     ],

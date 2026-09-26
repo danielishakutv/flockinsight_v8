@@ -19,6 +19,8 @@ import { WhatsNewBanner } from "@/components/app/whats-new-banner";
 import { PageTracker } from "@/components/analytics/page-tracker";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/components/i18n-provider";
+import { getI18n } from "@/lib/i18n/server";
 
 export default async function AppLayout({
   children,
@@ -27,6 +29,7 @@ export default async function AppLayout({
 }) {
   if (await getMustChangePassword()) redirect("/set-password");
   const { user, church, impersonating } = await requireChurch();
+  const { locale, dict } = await getI18n();
   const [isSuperAdmin, access, unread] = await Promise.all([
     getIsSuperAdmin(),
     getAccess(),
@@ -54,17 +57,20 @@ export default async function AppLayout({
         priceLabel: planPriceLabel(p),
       }));
     return (
-      <TrialGate
-        churchName={church.name}
-        canManageBilling={canManageBilling}
-        plans={plans}
-      />
+      <I18nProvider locale={locale} dict={dict}>
+        <TrialGate
+          churchName={church.name}
+          canManageBilling={canManageBilling}
+          plans={plans}
+        />
+      </I18nProvider>
     );
   }
   const showTrialBanner =
     standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
 
   return (
+    <I18nProvider locale={locale} dict={dict}>
     <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
       {/*
         The status bar band. viewportFit is "cover", so the app is drawn behind
@@ -126,5 +132,6 @@ export default async function AppLayout({
         role={access.isOwner ? "owner" : "member"}
       />
     </div>
+    </I18nProvider>
   );
 }

@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export type ChatMessage = {
   id: string;
@@ -30,6 +31,7 @@ export function ChatPanel({
   onSend: (body: string) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -66,7 +68,7 @@ export function ChatPanel({
       >
         {messages.length === 0 && (
           <p className="py-8 text-center text-sm text-slate-500">
-            No messages yet. Say hello.
+            {t("meetings.noMessages")}
           </p>
         )}
         {messages.map((m) =>
@@ -106,13 +108,20 @@ export function ChatPanel({
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={disabled ? "Chat is off" : "Message everyone…"}
+          placeholder={
+            disabled ? t("meetings.chatOff") : t("meetings.messageEveryone")
+          }
           maxLength={2000}
           disabled={disabled}
-          aria-label="Message"
+          aria-label={t("communication.message")}
           className="border-white/15 bg-white/5 text-white placeholder:text-slate-500"
         />
-        <Button type="submit" size="icon" disabled={disabled || !draft.trim()} aria-label="Send">
+        <Button
+          type="submit"
+          size="icon"
+          disabled={disabled || !draft.trim()}
+          aria-label={t("communication.send")}
+        >
           <Send className="size-4" />
         </Button>
       </form>

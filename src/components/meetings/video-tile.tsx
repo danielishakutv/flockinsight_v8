@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Hand, MicOff, Signal, SignalLow, SignalMedium, Pin } from "lucide-react";
 import { initialsOf, type MeetingQuality } from "@/lib/meetings-shared";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export type TileProps = {
   name: string;
@@ -93,10 +94,7 @@ export function VideoTile({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/70 to-transparent p-2">
         <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-white">
           {!micOn && <MicOff className="size-3.5 shrink-0 text-rose-400" />}
-          <span className="truncate">
-            {name}
-            {isSelf && " (you)"}
-          </span>
+          <span className="truncate">{name}</span>
           {roleLabel && (
             <span className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase">
               {roleLabel}
@@ -116,7 +114,7 @@ export function VideoTile({
         <button
           type="button"
           onClick={onPin}
-          aria-label={pinned ? `Unpin ${name}` : `Pin ${name}`}
+          aria-label={name}
           className={cn(
             "absolute top-2 right-2 rounded-full p-1.5 text-white transition",
             pinned
@@ -145,13 +143,14 @@ function QualityDot({
   quality: MeetingQuality;
   lowData?: boolean;
 }) {
+  const t = useT();
   if (lowData) {
     return (
       <span
-        title="Audio only (low data)"
+        title={t("meetings.lowDataMode")}
         className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold text-white"
       >
-        AUDIO
+        {t("meetings.lowData")}
       </span>
     );
   }
@@ -165,9 +164,9 @@ function QualityDot({
         : "text-rose-400";
   const label =
     quality === "good"
-      ? "Good connection"
+      ? t("meetings.connectionGood")
       : quality === "fair"
-        ? "Weak connection"
-        : "Very weak connection";
+        ? t("meetings.connectionWeak")
+        : t("meetings.connectionVeryWeak");
   return <Icon className={cn("size-4 shrink-0", tone)} aria-label={label} />;
 }

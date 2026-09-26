@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, LayoutGrid, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 import {
   mobileMenuSections,
   mobileNavLeft,
@@ -19,6 +20,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const t = useT();
   const active = isActive(pathname, item.href);
   return (
     <Link
@@ -29,7 +31,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       )}
     >
       <item.icon className={cn("size-6", active && "fill-primary/10")} />
-      {item.label}
+      {t(item.labelKey)}
     </Link>
   );
 }
@@ -41,6 +43,7 @@ export function MobileNav({
   perms?: string[];
   isOwner?: boolean;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const recordActive = isActive(pathname, recordAction.href);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -82,7 +85,7 @@ export function MobileNav({
           <div className="flex w-20 shrink-0 justify-center">
             <Link
               href={recordAction.href}
-              aria-label="Record attendance"
+              aria-label={t("dashboard.recordAttendance")}
               className={cn(
                 "border-background -mt-6 grid size-16 place-items-center rounded-full border-4 shadow-lg transition-transform active:scale-95",
                 recordActive
@@ -102,7 +105,7 @@ export function MobileNav({
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            aria-label="More menu"
+            aria-label={t("nav.more")}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
               moreActive ? "text-primary" : "text-muted-foreground",
@@ -111,7 +114,7 @@ export function MobileNav({
             <LayoutGrid
               className={cn("size-6", moreActive && "fill-primary/10")}
             />
-            More
+            {t("nav.more")}
           </button>
         </div>
       </nav>
@@ -121,7 +124,7 @@ export function MobileNav({
           {/* Backdrop */}
           <button
             type="button"
-            aria-label="Close menu"
+            aria-label={t("common.close")}
             onClick={() => setMoreOpen(false)}
             className="animate-in fade-in fixed inset-0 z-40 bg-black/50 backdrop-blur-sm duration-200"
           />
@@ -132,15 +135,17 @@ export function MobileNav({
             <div className="bg-muted mx-auto mt-3 h-1.5 w-12 shrink-0 rounded-full" />
             <div className="flex shrink-0 items-center justify-between px-5 pt-3 pb-2">
               <div>
-                <p className="text-xl font-extrabold tracking-tight">Menu</p>
+                <p className="text-xl font-extrabold tracking-tight">
+                  {t("nav.menu")}
+                </p>
                 <p className="text-muted-foreground text-xs">
-                  Jump to any part of FlockInsight
+                  {t("settings.chooseSection")}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="bg-muted/60 text-muted-foreground hover:text-foreground grid size-9 place-items-center rounded-full"
               >
                 <X className="size-5" />
@@ -154,9 +159,9 @@ export function MobileNav({
               }}
             >
               {sections.map((section) => (
-                <div key={section.title}>
+                <div key={section.titleKey}>
                   <p className="text-muted-foreground mb-1.5 px-2 text-[11px] font-bold tracking-wider uppercase">
-                    {section.title}
+                    {t(section.titleKey)}
                   </p>
                   <div className="bg-card overflow-hidden rounded-2xl border">
                     {section.items.map((item, i) => {
@@ -187,10 +192,10 @@ export function MobileNav({
                                 active && "text-primary",
                               )}
                             >
-                              {item.label}
+                              {t(item.labelKey)}
                             </p>
                             <p className="text-muted-foreground truncate text-xs">
-                              {item.description}
+                              {t(item.descriptionKey)}
                             </p>
                           </div>
                           <ChevronRight className="text-muted-foreground/60 size-4 shrink-0" />

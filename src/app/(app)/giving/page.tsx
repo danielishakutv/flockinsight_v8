@@ -16,6 +16,7 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { GivingClient, type GivingRow } from "@/components/giving/giving-client";
 import { GivingDataMenu } from "@/components/giving/giving-data-menu";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Giving" };
 
@@ -25,6 +26,7 @@ export default async function GivingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("giving.view");
   const canManage = await can("giving.manage");
 
@@ -140,8 +142,8 @@ export default async function GivingPage({
   return (
     <PageContainer>
       <PageHeader
-        title="Giving"
-        description="Record offerings, tithes, donations and project gifts."
+        title={t("giving.title")}
+        description={t("giving.subtitle")}
         action={
           <>
             <Button asChild variant="outline">

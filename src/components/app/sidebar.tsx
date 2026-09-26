@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { mobileMenuSections, navAllowed } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
+import { useT } from "@/components/i18n-provider";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -27,6 +28,7 @@ export function Sidebar({
   perms?: string[];
   isOwner?: boolean;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const sections = mobileMenuSections
     .map((s) => ({
@@ -51,9 +53,9 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-5 overflow-y-auto p-3 pt-4">
         {sections.map((section) => (
-          <div key={section.title}>
+          <div key={section.titleKey}>
             <p className="text-sidebar-foreground/45 mb-1.5 px-2.5 text-[10px] font-bold tracking-wider uppercase">
-              {section.title}
+              {t(section.titleKey)}
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
@@ -86,10 +88,10 @@ export function Sidebar({
                             : "text-sidebar-foreground/90",
                         )}
                       >
-                        {item.label}
+                        {t(item.labelKey)}
                       </p>
                       <p className="text-sidebar-foreground/50 truncate text-[11px] leading-tight">
-                        {item.description}
+                        {t(item.descriptionKey)}
                       </p>
                     </div>
                   </Link>
