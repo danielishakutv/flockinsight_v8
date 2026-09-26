@@ -68,6 +68,17 @@ export type PeerDiagnostics = {
   audioInKbps: number;
   /** What the relay decided: "host" is direct, "relay" went through TURN. */
   transport: string | null;
+  /**
+   * Frames actually decoded from this peer, in total.
+   *
+   * Separate from bytes on purpose. Bytes arriving says the network works;
+   * frames decoded says the picture exists. Zero frames with healthy bytes is
+   * a codec or decoder problem, and frames with a black tile is a rendering
+   * problem — two completely different investigations that look identical
+   * without this number.
+   */
+  framesDecoded: number;
+  framesDropped: number;
 };
 
 export type MeetingClientEvents = {
@@ -1149,6 +1160,8 @@ export class MeetingClient {
     p: PeerState,
     bytes: { videoOut: number; audioOut: number; videoIn: number; audioIn: number },
     transport: string | null,
+    framesDecoded: number,
+    framesDropped: number,
   ): PeerDiagnostics {
     const now = Date.now();
     const prev = p.lastBytes;
@@ -1170,6 +1183,8 @@ export class MeetingClient {
       videoInKbps: prev ? kbps(bytes.videoIn, prev.videoIn) : 0,
       audioInKbps: prev ? kbps(bytes.audioIn, prev.audioIn) : 0,
       transport,
+      framesDecoded,
+      framesDropped,
     };
 
     p.lastBytes = { at: now, ...bytes };
@@ -1190,6 +1205,8 @@ export class MeetingClient {
           videoInKbps: 0,
           audioInKbps: 0,
           transport: null,
+          framesDecoded: 0,
+          framesDropped: 0,
         },
     );
   }
@@ -1210,6 +1227,8 @@ export class MeetingClient {
         // Bytes per kind, so the panel can say which media is moving.
         const bytes = { videoOut: 0, audioOut: 0, videoIn: 0, audioIn: 0 };
         let transport: string | null = null;
+        let framesDecoded = 0;
+        let framesDropped = 0;
 
         stats.forEach((r) => {
           const report = r as unknown as Record<string, number | string>;
@@ -1226,7 +1245,15 @@ export class MeetingClient {
           }
           if (report.type === "inbound-rtp") {
             const n = Number(report.bytesReceived ?? 0);
-            if (report.kind === "video") bytes.videoIn += n;
+            if (report.kind === "video") {
+              bytes.videoIn += n;
+              // Bytes arriving and frames decoding are different facts, and
+              // the gap between them is a whole class of bug: a stream that
+              // arrives and cannot be decoded looks exactly like one that is
+              // decoded and not painted.
+              framesDecoded += Number(report.framesDecoded ?? 0);
+              framesDropped += Number(report.framesDropped ?? 0);
+            }
             if (report.kind === "audio") bytes.audioIn += n;
           }
           if (report.type === "candidate-pair" && report.state === "succeeded") {
@@ -1240,7 +1267,7 @@ export class MeetingClient {
           }
         });
 
-        p.diagnostics = this.rateFlow(p, bytes, transport);
+        p.diagnostics = this.rateFlow(p, bytes, transport, framesDecoded, framesDropped);
 
         // Loss since the previous sample, not since the call began — a rough
         // first ten seconds must not condemn the next hour.

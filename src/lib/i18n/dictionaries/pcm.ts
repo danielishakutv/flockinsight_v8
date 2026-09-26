@@ -394,6 +394,7 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    tapToPlay: "Tap make e play",
     diagCameraOff: "your camera off",
     diagTheySaveData: "dem dey for Data Saver",
     savingToLibrary: "Dey save am for your media library…",

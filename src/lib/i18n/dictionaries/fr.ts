@@ -381,6 +381,7 @@ export const fr: Dictionary = {
 
   meetings: {
     title: "Réunions",
+    tapToPlay: "Appuyez pour lire",
     diagCameraOff: "votre caméra est éteinte",
     diagTheySaveData: "l'Économiseur est actif chez eux",
     savingToLibrary: "Enregistrement dans votre médiathèque…",

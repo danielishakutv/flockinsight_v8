@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { initialsOf, type RosterEntry } from "@/lib/meetings-shared";
 import type { PeerDiagnostics } from "@/lib/meeting-client";
 import { useT } from "@/components/i18n-provider";
+import { cn } from "@/lib/utils";
 
 /**
  * Who is here, plus the host's controls over them.
@@ -200,6 +201,18 @@ function LinkLine({ link, cameraOn }: { link: PeerDiagnostics; cameraOn: boolean
         {link.videoAttached ? "" : " · no video track sent"}
         {why ? ` · ${why}` : ""}
       </span>
+      {/*
+        Bytes arriving and frames decoding are different facts. Healthy bytes
+        with zero frames is a decoder problem; frames with a black tile is a
+        rendering problem. Without this line the two are indistinguishable,
+        which is how a week goes.
+      */}
+      {link.videoInKbps > 0 && (
+        <span className={cn("block", link.framesDecoded === 0 && "text-rose-400")}>
+          {`${link.framesDecoded} frames decoded`}
+          {link.framesDropped > 0 ? ` · ${link.framesDropped} dropped` : ""}
+        </span>
+      )}
     </span>
   );
 }

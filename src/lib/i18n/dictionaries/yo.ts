@@ -386,6 +386,7 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    tapToPlay: "Tẹ láti ṣàfihàn",
     diagCameraOff: "kámẹ́rà rẹ ti pa",
     diagTheySaveData: "wọ́n wà nínú Olùdáàbòbò Dátà",
     savingToLibrary: "À ń fọ̀ sí ilé-ìwé rẹ…",

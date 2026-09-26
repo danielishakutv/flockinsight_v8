@@ -1047,6 +1047,7 @@ export function MeetingRoom(props: {
                     !!local?.lowData && r.cameraOn && !m?.hasCamera
                   }
                   dataSaverNote={t("meetings.videoOffInDataSaver")}
+                  tapToPlay={t("meetings.tapToPlay")}
                   roleLabel={isHostRole(r.role) ? t("meetings.host") : null}
                   pinned={focus === r.peerId}
                   spotlit={spotlight === r.peerId}

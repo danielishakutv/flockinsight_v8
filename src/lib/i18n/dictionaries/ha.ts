@@ -385,6 +385,7 @@ export const ha: Dictionary = {
 
   meetings: {
     title: "Tarurruka",
+    tapToPlay: "Danna don kunnawa",
     diagCameraOff: "kyamararka a kashe take",
     diagTheySaveData: "suna cikin Tattalin Data",
     savingToLibrary: "Ana ajiyewa a ƙundin ka…",

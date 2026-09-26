@@ -425,6 +425,7 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    tapToPlay: "Tap to play",
     diagCameraOff: "your camera is off",
     diagTheySaveData: "they are in Data Saver",
     savingToLibrary: "Saving to your media library…",

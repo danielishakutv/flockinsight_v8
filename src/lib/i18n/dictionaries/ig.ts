@@ -384,6 +384,7 @@ export const ig: Dictionary = {
 
   meetings: {
     title: "Nzukọ",
+    tapToPlay: "Pịa ka ọ malite",
     diagCameraOff: "igwefoto gị gbanyụrụ",
     diagTheySaveData: "ha nọ na Nchekwa Data",
     savingToLibrary: "Na-echekwa n'ụlọ akwụkwọ gị…",

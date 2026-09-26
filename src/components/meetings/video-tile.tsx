@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Hand, MicOff, Pin, Signal, SignalLow, SignalMedium, Star } from "lucide-react";
 import { initialsOf, type MeetingQuality } from "@/lib/meetings-shared";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,8 @@ export type TileProps = {
    * tile is also rendered on the join screen's preview, outside the provider.
    */
   dataSaverNote?: string;
+  /** Shown when the browser refuses to start the video. */
+  tapToPlay?: string;
   /** Only a host gets this: it changes what everybody else is looking at. */
   onSpotlight?: () => void;
   className?: string;
@@ -63,10 +65,15 @@ export function VideoTile({
   onSpotlight,
   hiddenByDataSaver,
   dataSaverNote,
+  tapToPlay = "Tap to play",
   className,
   contain,
 }: TileProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  /** True once the element has decoded a frame with real dimensions. */
+  const [painting, setPainting] = useState(false);
+  /** The browser refused to start it. Recoverable, with a tap. */
+  const [blocked, setBlocked] = useState(false);
 
   // The identity of the track, not of the stream. `publishable` in the client
   // now gives a new stream whenever the tracks change, so these move together
@@ -91,17 +98,42 @@ export function VideoTile({
      * sit black for ever with no trace of why.
      */
     let cancelled = false;
+    setPainting(el.videoWidth > 0 && !el.paused);
+    setBlocked(false);
+
     const onGesture = () => {
       if (!cancelled) void el.play().catch(() => {});
     };
 
     void el.play().catch(() => {
       if (cancelled) return;
+      // Say so, and take the next tap anywhere on the page as permission.
+      setBlocked(true);
       document.addEventListener("pointerdown", onGesture, { once: true });
     });
 
+    /*
+     * `onPlaying` fires before there is necessarily a picture, and a tile that
+     * uncovers an element with no frames in it is the black rectangle all over
+     * again. `videoWidth` is the only honest answer — it is zero until a frame
+     * has been decoded — so it is polled briefly after the stream arrives
+     * rather than trusted from the event alone.
+     */
+    let tries = 0;
+    const check = setInterval(() => {
+      if (cancelled) return;
+      if (el.videoWidth > 0) {
+        setPainting(true);
+        setBlocked(false);
+        clearInterval(check);
+      } else if (++tries > 40) {
+        clearInterval(check);
+      }
+    }, 250);
+
     return () => {
       cancelled = true;
+      clearInterval(check);
       document.removeEventListener("pointerdown", onGesture);
     };
   }, [stream, videoTrackId]);
@@ -116,11 +148,32 @@ export function VideoTile({
         className,
       )}
     >
-      {hasVideo ? (
+      {/*
+        The avatar is ALWAYS here, underneath. Three different bugs this week
+        each presented as a tile showing nothing, and from the outside they
+        were indistinguishable — no stream, a paused element, or frames
+        arriving and not being painted. A black rectangle tells nobody
+        anything; initials are at least correct and calm. The video covers
+        this only once it has genuinely painted.
+      */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-3">
+        <div className="flex size-16 items-center justify-center rounded-full bg-slate-700 text-lg font-bold text-white sm:size-20 sm:text-xl">
+          {initialsOf(name)}
+        </div>
+        {hiddenByDataSaver && !hasVideo && (
+          <p className="text-center text-[11px] leading-tight text-emerald-400/90">
+            {dataSaverNote}
+          </p>
+        )}
+      </div>
+
+      {hasVideo && (
         <video
           ref={ref}
           autoPlay
           playsInline
+          onPlaying={() => setPainting(true)}
+          onEmptied={() => setPainting(false)}
           /*
            * Always muted, and that is not a bug — it is the reason tiles play
            * at all.
@@ -139,22 +192,37 @@ export function VideoTile({
            */
           muted
           className={cn(
-            "size-full",
+            "absolute inset-0 size-full transition-opacity duration-200",
             contain ? "object-contain" : "object-cover",
             isSelf && !contain && "-scale-x-100",
+            // Transparent until it has actually painted. `onPlaying` alone is
+            // not enough — an element can report playing with no frames — so
+            // the width of the decoded picture is what decides.
+            painting ? "opacity-100" : "opacity-0",
           )}
         />
-      ) : (
-        <div className="flex size-full flex-col items-center justify-center gap-3 px-3">
-          <div className="flex size-16 items-center justify-center rounded-full bg-slate-700 text-lg font-bold text-white sm:size-20 sm:text-xl">
-            {initialsOf(name)}
-          </div>
-          {hiddenByDataSaver && (
-            <p className="text-center text-[11px] leading-tight text-emerald-400/90">
-              {dataSaverNote}
-            </p>
-          )}
-        </div>
+      )}
+
+      {/*
+        The browser refused to play it. This used to be swallowed and the tile
+        simply stayed black for ever; now it says so and fixes itself on a tap,
+        which is the one thing a browser will always honour.
+      */}
+      {blocked && (
+        <button
+          type="button"
+          onClick={() => {
+            const el = ref.current;
+            if (!el) return;
+            void el.play().then(
+              () => setBlocked(false),
+              () => {},
+            );
+          }}
+          className="absolute inset-0 grid place-items-center bg-black/50 text-xs font-semibold text-white"
+        >
+          <span className="rounded-full bg-white/15 px-3 py-1.5">{tapToPlay}</span>
+        </button>
       )}
 
       {/* Name plate */}
