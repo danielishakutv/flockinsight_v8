@@ -15,13 +15,27 @@ import { createHmac } from "node:crypto";
  * Without TURN configured, roughly 10–20% of pairs fail to connect, and the
  * failures look random to the people experiencing them. Set it up.
  *
+ * Three ways to have one, in the order you should try them.
+ *
+ *   1. Cloudflare Realtime TURN. Nothing to run, nothing to patch, anycast
+ *      relays close to whoever is calling, and it listens on 443/TCP and
+ *      443/UDP — which is what gets through a corporate or campus firewall
+ *      that blocks 3478. Set CLOUDFLARE_TURN_KEY_ID and
+ *      CLOUDFLARE_TURN_API_TOKEN and this module does the rest.
+ *   2. Your own coturn, via TURN_URLS + TURN_STATIC_AUTH_SECRET. Free, and
+ *      you pay in bandwidth and in somebody remembering it exists.
+ *   3. TURN_USERNAME/TURN_PASSWORD. Simplest, least safe: a credential lifted
+ *      out of somebody's browser works until you change it.
+ *
  * Env:
- *   TURN_URLS               comma-separated, e.g.
- *                           "turn:turn.example.com:3478,turns:turn.example.com:5349"
- *   TURN_STATIC_AUTH_SECRET coturn's `static-auth-secret` — preferred
- *   TURN_USERNAME/PASSWORD  long-lived credentials — simpler, less safe
- *   TURN_ONLY=true          force relay (for testing that TURN really works)
- *   STUN_URLS               override the public STUN list
+ *   CLOUDFLARE_TURN_KEY_ID      the TURN key's id
+ *   CLOUDFLARE_TURN_API_TOKEN   its API token
+ *   TURN_URLS                   comma-separated, e.g.
+ *                               "turn:turn.example.com:3478,turns:turn.example.com:5349"
+ *   TURN_STATIC_AUTH_SECRET     coturn's `static-auth-secret`
+ *   TURN_USERNAME/PASSWORD      long-lived credentials
+ *   TURN_ONLY=true              force relay (to verify TURN really works)
+ *   STUN_URLS                   override the public STUN list
  */
 
 export type IceServer = {
@@ -76,6 +90,91 @@ export function turnCredentials(
   const username = `${expiry}:${label}`;
   const credential = createHmac("sha1", secret).update(username).digest("base64");
   return { username, credential, expiresAt: expiry };
+}
+
+const CF_ENDPOINT = "https://rtc.live.cloudflare.com/v1/turn/keys";
+
+/**
+ * One set of Cloudflare credentials, reused for a while.
+ *
+ * Minting per join would put an external HTTP call on the critical path of
+ * every person entering a room — including the fifty who arrive in the same
+ * minute when a service starts. The credentials are short-lived relay
+ * credentials, not identity, so one set shared across a window is the right
+ * trade. The cache is dropped well before the credentials expire, so nobody
+ * is ever handed one that is about to stop working mid-call.
+ */
+let cfCache: { servers: IceServer[]; until: number } | null = null;
+
+/** How long a cached set is reused. A quarter of its life, so it is never stale. */
+const CF_CACHE_MS = (TURN_TTL_SECONDS / 4) * 1000;
+
+/**
+ * Ask Cloudflare for relay credentials.
+ *
+ * Returns null on any failure, deliberately and quietly: a meeting that falls
+ * back to STUN works for most pairs, where a meeting that refuses to start
+ * because an API call timed out works for nobody. The warning is logged once
+ * per failure so it is visible in the logs without drowning them.
+ */
+async function cloudflareIceServers(): Promise<IceServer[] | null> {
+  const keyId = process.env.CLOUDFLARE_TURN_KEY_ID;
+  const token = process.env.CLOUDFLARE_TURN_API_TOKEN;
+  if (!keyId || !token) return null;
+
+  const now = Date.now();
+  if (cfCache && cfCache.until > now) return cfCache.servers;
+
+  try {
+    const res = await fetch(
+      `${CF_ENDPOINT}/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ttl: TURN_TTL_SECONDS }),
+        // Do not let a slow third party hold up a join.
+        signal: AbortSignal.timeout(4000),
+      },
+    );
+    if (!res.ok) {
+      console.warn(`[ice] Cloudflare TURN refused the request: ${res.status}`);
+      return null;
+    }
+    const data = (await res.json()) as { iceServers?: IceServer | IceServer[] };
+    // The API returns a single object, not a list, which is easy to get wrong.
+    const raw = data.iceServers;
+    const servers = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    if (servers.length === 0) return null;
+
+    cfCache = { servers, until: now + CF_CACHE_MS };
+    return servers;
+  } catch (e) {
+    console.warn("[ice] could not reach Cloudflare TURN", e);
+    return null;
+  }
+}
+
+/**
+ * The config handed to one participant, Cloudflare first.
+ *
+ * This is what routes should call. `iceConfigFor` stays for the cases that
+ * cannot await — it covers options 2 and 3 only.
+ */
+export async function resolveIceConfig(label: string): Promise<IceConfig> {
+  const cf = await cloudflareIceServers();
+  if (!cf) return iceConfigFor(label);
+
+  return {
+    // Cloudflare's payload already carries its own STUN entry, and the public
+    // list stays as a second chance if their anycast is unreachable.
+    iceServers: [{ urls: list(process.env.STUN_URLS, DEFAULT_STUN) }, ...cf],
+    iceTransportPolicy: process.env.TURN_ONLY === "true" ? "relay" : "all",
+    hasTurn: true,
+    ttl: TURN_TTL_SECONDS,
+  };
 }
 
 /**

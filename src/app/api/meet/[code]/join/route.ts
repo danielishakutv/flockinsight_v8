@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church } from "@/db/schema";
 import { getSession } from "@/lib/session";
-import { iceConfigFor } from "@/lib/ice";
+import { resolveIceConfig } from "@/lib/ice";
 import {
   addMessage,
   evaluateAdmission,
@@ -204,7 +204,7 @@ export async function POST(
       lowData,
       isStaff: standing.isStaff,
     },
-    ice: iceConfigFor(`m-${m.code}`),
+    ice: await resolveIceConfig(`m-${m.code}`),
     roster: people,
     stage: parseStage(m.stage),
     slides: m.slides ?? [],
