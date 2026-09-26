@@ -308,6 +308,7 @@ export const yo: Dictionary = {
     account: "Àkọọ́nti",
     transfer: "Ìfiránṣẹ́",
     transfers: "Àwọn ìfiránṣẹ́",
+    categories: "Àwọn ẹ̀ka",
     newTransaction: "Àkọsílẹ̀ tuntun",
     party: "A fi fún / a gbà lọ́wọ́",
     reference: "Nọ́mbà ìtọ́kasí",

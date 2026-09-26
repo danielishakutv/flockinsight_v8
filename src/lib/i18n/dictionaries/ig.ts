@@ -306,6 +306,7 @@ export const ig: Dictionary = {
     account: "Akaụntụ",
     transfer: "Mbufe",
     transfers: "Mbufe ego",
+    categories: "Ụdị",
     newTransaction: "Ndekọ ọhụrụ",
     party: "Enyere / enwetara n'aka",
     reference: "Nọmba ndekọ",

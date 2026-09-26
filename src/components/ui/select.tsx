@@ -193,6 +193,7 @@ function SelectContent({
   emptyMessage = "No matches found",
   searchThreshold = AUTO_SEARCH_THRESHOLD,
   onEscapeKeyDown,
+  collisionPadding = 8,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content> & {
   /** `true` always shows the search field, `false` never, `"auto"` past `searchThreshold` options. */
@@ -368,12 +369,16 @@ function SelectContent({
             data-slot="select-content"
             ref={contentRef}
             className={cn(
-              "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-hidden rounded-xl border shadow-lg",
+              "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 relative z-50 max-h-(--radix-select-content-available-height) max-w-[calc(100vw-1rem)] min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-hidden rounded-xl border shadow-lg",
               position === "popper" &&
                 "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
               className,
             )}
             position={position}
+            // Same reasoning as the dropdown menu: a list of member names is
+            // as wide as its longest name, and on a phone that is wider than
+            // the screen.
+            collisionPadding={collisionPadding}
             onKeyDownCapture={handleContentKeyDownCapture}
             onEscapeKeyDown={handleEscapeKeyDown}
             {...props}

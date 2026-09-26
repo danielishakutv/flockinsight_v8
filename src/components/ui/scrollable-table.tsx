@@ -32,6 +32,7 @@ export function ScrollableTable({
   className,
   label,
   hint,
+  stickyColumnTone = "card",
 }: {
   children: React.ReactNode;
   /**
@@ -53,6 +54,17 @@ export function ScrollableTable({
    * pass `t("common.scrollForMore")`.
    */
   hint?: string;
+  /**
+   * What the frozen column paints with while columns slide under it.
+   *
+   * A closed set of two rather than a free-form class, because Tailwind reads
+   * class names out of the source: a name built at runtime is never generated,
+   * and the cell would come out transparent. `"card"` is right inside the app.
+   * The printable report pages are built in flat slate rather than theme tokens
+   * and stripe their rows, so they take the row's own colour — a frozen cell
+   * has to match the row it belongs to or it reads as a seam down the table.
+   */
+  stickyColumnTone?: "card" | "inherit";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -98,8 +110,20 @@ export function ScrollableTable({
           // A visible ring when a keyboard focuses the scroller, so it is clear
           // what the arrow keys are about to move.
           "focus-visible:ring-ring/50 rounded-lg focus-visible:ring-2 focus-visible:outline-none",
+          // Only while it actually scrolls. A sticky cell needs an opaque
+          // background to sit over the columns sliding under it, and that
+          // background paints over the row's hover tint — which would be a
+          // visible desktop regression on a table that never scrolls. Gating it
+          // on `scrollable` means desktop keeps its hover, and the first column
+          // becomes opaque exactly when it starts covering something.
           stickyFirstColumn &&
-            "[&_td:first-child]:bg-card [&_th:first-child]:bg-card [&_td:first-child]:sticky [&_th:first-child]:sticky [&_td:first-child]:left-0 [&_th:first-child]:left-0 [&_td:first-child]:z-10 [&_th:first-child]:z-20",
+            scrollable &&
+            cn(
+              "[&_td:first-child]:sticky [&_th:first-child]:sticky [&_td:first-child]:left-0 [&_th:first-child]:left-0 [&_td:first-child]:z-10 [&_th:first-child]:z-20",
+              stickyColumnTone === "card"
+                ? "[&_td:first-child]:bg-card [&_th:first-child]:bg-card"
+                : "[&_td:first-child]:bg-inherit [&_th:first-child]:bg-inherit",
+            ),
         )}
       >
         {children}

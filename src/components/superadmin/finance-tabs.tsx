@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 
 type ChurchRow = {
   id: string;
@@ -233,7 +234,7 @@ export function FinanceTabs({
         {pending && <Loader2 className="text-muted-foreground size-4 animate-spin" />}
       </div>
 
-      <div className="bg-card overflow-x-auto rounded-2xl border">
+      <div className="bg-card overflow-hidden rounded-2xl border">
         {tab === "churches" && (
           <Table
             head={["Church", "Plan", "Per month", "Wallet", "Renews", ""]}
@@ -578,7 +579,12 @@ function Table({
     ) : null;
   }
   return (
-    <table className="w-full text-sm">
+    // One helper behind seven tabs, so the column count varies from two to six.
+    // No floor on the width: a table forced to 34rem would scroll a
+    // two-column list for no reason, while one that genuinely needs more room
+    // already grows past its container on its own and the scroller catches it.
+    <ScrollableTable stickyFirstColumn label={head[0]}>
+      <table className="w-full text-sm">
       <thead className="text-muted-foreground border-b text-left text-xs">
         <tr>
           {head.map((h, i) => (
@@ -599,6 +605,7 @@ function Table({
           </tr>
         ))}
       </tbody>
-    </table>
+      </table>
+    </ScrollableTable>
   );
 }

@@ -6,6 +6,7 @@ import {
   summarizeAttendance,
 } from "@/lib/attendance-export";
 import { ReportToolbar } from "@/components/attendance/report-toolbar";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 
 export const metadata = { title: "Attendance Report" };
 
@@ -140,7 +141,20 @@ export default async function AttendanceReportPage() {
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
                 Service-by-service
               </h2>
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              {/*
+                No translator here: this page is a shareable link, rendered
+                outside the app shell and outside the i18n provider, so the
+                hint is passed as plain text. The rows stripe white/slate-50,
+                so the frozen date column takes the stripe colour rather than
+                `bg-card`, which would draw a seam down the table.
+              */}
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <ScrollableTable
+                  stickyFirstColumn
+                  stickyColumnTone="inherit"
+                  hint="Scroll sideways for the rest"
+                  label="Service by service"
+                >
                 <table className="w-full min-w-[36rem] border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
@@ -210,6 +224,7 @@ export default async function AttendanceReportPage() {
                     </tr>
                   </tfoot>
                 </table>
+                </ScrollableTable>
               </div>
             </section>
           </>

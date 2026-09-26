@@ -17,6 +17,8 @@ import {
 } from "@/lib/finance-shared";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { useT } from "@/components/i18n-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +58,7 @@ export function CategoriesManager({
   categories: CategoryRow[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -186,8 +189,13 @@ export function CategoriesManager({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border">
-                <table className="w-full text-sm">
+              <div className="overflow-hidden rounded-2xl border">
+                <ScrollableTable
+                  stickyFirstColumn
+                  hint={t("common.scrollForMore")}
+                  label={t("finance.categories")}
+                >
+                <table className="w-full min-w-[32rem] text-sm">
                   <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                     <tr>
                       <th className="px-2 py-3 font-semibold sm:px-4">Name</th>
@@ -255,6 +263,7 @@ export function CategoriesManager({
                     ))}
                   </tbody>
                 </table>
+                </ScrollableTable>
               </div>
             )}
           </section>

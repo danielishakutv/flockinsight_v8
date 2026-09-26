@@ -308,6 +308,7 @@ export const sw: Dictionary = {
     account: "Akaunti",
     transfer: "Uhamisho",
     transfers: "Uhamisho",
+    categories: "Aina",
     newTransaction: "Kumbukumbu mpya",
     party: "Kulipwa kwa / kupokelewa kutoka",
     reference: "Namba ya kumbukumbu",

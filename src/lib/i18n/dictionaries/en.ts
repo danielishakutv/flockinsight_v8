@@ -338,6 +338,7 @@ export const en = {
     account: "Account",
     transfer: "Transfer",
     transfers: "Transfers",
+    categories: "Categories",
     newTransaction: "New record",
     party: "Paid to / received from",
     reference: "Reference",

@@ -316,6 +316,7 @@ export const pcm: Dictionary = {
     account: "Account",
     transfer: "Transfer",
     transfers: "Transfers",
+    categories: "Categories",
     newTransaction: "New entry",
     party: "Who we pay / who give us",
     reference: "Reference",

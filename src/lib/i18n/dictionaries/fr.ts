@@ -303,6 +303,7 @@ export const fr: Dictionary = {
     account: "Compte",
     transfer: "Transfert",
     transfers: "Transferts",
+    categories: "Catégories",
     newTransaction: "Nouvelle écriture",
     party: "Versé à / reçu de",
     reference: "Référence",

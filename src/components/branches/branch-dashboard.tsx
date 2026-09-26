@@ -23,6 +23,8 @@ import {
 } from "@/lib/branches-shared";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { useT } from "@/components/i18n-provider";
 import { BranchReportSettings } from "@/components/branches/branch-report-settings";
 import { InviteBranchDialog } from "@/components/branches/invite-branch-dialog";
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,7 @@ export function BranchDashboard({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [term, setTerm] = useState(filters.q);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -254,8 +257,18 @@ export function BranchDashboard({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            /*
+             * Eight columns of figures. The branch name is frozen so a row of
+             * numbers two screens to the right still has a church attached to
+             * it — except when the select-all checkbox is the first column,
+             * where freezing spends the width on nothing.
+             */
+            <ScrollableTable
+              stickyFirstColumn={!canManage}
+              hint={t("common.scrollForMore")}
+              label={t("nav.branches")}
+            >
+              <table className="w-full min-w-[46rem] text-sm">
                 <thead className="text-muted-foreground border-b text-left text-xs uppercase">
                   <tr>
                     {canManage && <th className="w-8 px-3 py-2" />}
@@ -324,7 +337,7 @@ export function BranchDashboard({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollableTable>
           )}
         </CardContent>
       </Card>

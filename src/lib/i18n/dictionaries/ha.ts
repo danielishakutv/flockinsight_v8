@@ -307,6 +307,7 @@ export const ha: Dictionary = {
     account: "Asusu",
     transfer: "Canja wuri",
     transfers: "Canja wurare",
+    categories: "Rukunoni",
     newTransaction: "Sabon rubutu",
     party: "An biya wa / an karɓa daga",
     reference: "Lamba ta shaida",
