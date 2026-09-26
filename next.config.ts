@@ -13,8 +13,31 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-DNS-Prefetch-Control", value: "on" },
   {
+    /*
+     * Permissions-Policy, and the one line in this file it is worth reading
+     * carefully.
+     *
+     * `camera=()` is an EMPTY ALLOWLIST. It does not mean "ask first" — it
+     * means nobody may use the camera on this site, this site included, and
+     * `getUserMedia` is rejected with NotAllowedError before any prompt is
+     * shown. It was set that way for a security score and it silently
+     * disabled the entire meetings module on Chrome, Edge, Firefox and every
+     * Android browser. It kept working on iOS Safari alone, because Safari's
+     * support for this header on top-level documents is partial — which is
+     * exactly the shape of the bug report: "works on my iPhone, has never
+     * worked on a PC".
+     *
+     * `(self)` is the value that means what `()` was assumed to mean: this
+     * origin may ask, a third party in an iframe may not. `display-capture`
+     * is named explicitly for screen sharing rather than left to its default,
+     * so nobody tightens this again without seeing it.
+     *
+     * If you add a permission to this list, say so in a `()` only when you are
+     * certain no page here uses it.
+     */
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(self), browsing-topics=()",
+    value:
+      "camera=(self), microphone=(self), display-capture=(self), geolocation=(self), browsing-topics=()",
   },
 ];
 
