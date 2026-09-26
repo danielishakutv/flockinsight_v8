@@ -78,12 +78,32 @@ export function VideoTile({
     const el = ref.current;
     if (!el) return;
     if (el.srcObject !== stream) el.srcObject = stream;
-    if (stream) {
-      // Autoplay can still be refused on iOS until the first interaction; the
-      // room has already had one by the time a tile exists, so this rarely
-      // fires — and a failed play must not throw into React.
-      void el.play().catch(() => {});
-    }
+    if (!stream) return;
+
+    /*
+     * Play it, and if the browser says no, play it on the next tap.
+     *
+     * Autoplay is only granted freely to a MUTED element, which every tile now
+     * is — see the `muted` attribute below. This remains as a safety net for
+     * iOS, which can still refuse until the document has been interacted with,
+     * and for the case where a tile mounts before that has happened. A
+     * rejected play used to be swallowed entirely, which meant a tile could
+     * sit black for ever with no trace of why.
+     */
+    let cancelled = false;
+    const onGesture = () => {
+      if (!cancelled) void el.play().catch(() => {});
+    };
+
+    void el.play().catch(() => {
+      if (cancelled) return;
+      document.addEventListener("pointerdown", onGesture, { once: true });
+    });
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("pointerdown", onGesture);
+    };
   }, [stream, videoTrackId]);
 
   const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.readyState === "live");
@@ -101,7 +121,23 @@ export function VideoTile({
           ref={ref}
           autoPlay
           playsInline
-          muted={isSelf}
+          /*
+           * Always muted, and that is not a bug — it is the reason tiles play
+           * at all.
+           *
+           * Every peer's voice comes out of its own `<AudioSink>`, which is
+           * mounted once per peer and never unmounts, so a voice keeps playing
+           * when a tile is scrolled away or a camera goes off. This element is
+           * therefore pictures only, and leaving it unmuted did two bad things:
+           * it played every voice a second time, and — the one that cost a
+           * day — it made the element subject to Chrome's autoplay policy,
+           * which refuses to start an UNMUTED media element without user
+           * activation. `muted={isSelf}` meant exactly one tile in the room
+           * was allowed to play: your own. Everybody else was a black
+           * rectangle while `getStats` reported 300 kilobits a second
+           * arriving.
+           */
+          muted
           className={cn(
             "size-full",
             contain ? "object-contain" : "object-cover",
