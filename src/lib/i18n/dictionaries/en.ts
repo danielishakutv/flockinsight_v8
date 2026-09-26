@@ -425,6 +425,9 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    leaveThisMeeting: "Leave this meeting?",
+    leaveThisMeetingHint: "You can come back with the same link.",
+    stayInMeeting: "Stay",
     mediaBlocked: "Your browser is blocking the {device}. Tap the padlock or \u201caA\u201d in the address bar, allow it, then reload this page.",
     mediaMissing: "No {device} was found on this device.",
     mediaInUse: "Something else is using your {device} \u2014 usually a phone call or another tab. Close it and try again.",
@@ -448,7 +451,7 @@ export const en = {
     openRoom: "Open the room",
     live: "LIVE",
     cancelled: "Cancelled",
-    lowData: "Low data",
+    lowData: "Data Saver",
     runAgain: "Run it again",
     endNow: "End it now",
     endForEveryone: "End for everyone",
@@ -498,7 +501,7 @@ export const en = {
     /* --- the pre-join screen --- */
     yourName: "Your name",
     yourNameHint: "This is what everyone else will see.",
-    lowDataMode: "Low data mode",
+    lowDataMode: "Data Saver",
     lowDataModeHint:
       "Voices only, no video either way. Uses about a tenth of the data and holds up on a weak network.",
     cameraOff: "Your camera is off",

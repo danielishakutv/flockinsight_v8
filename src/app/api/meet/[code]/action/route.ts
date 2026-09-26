@@ -9,10 +9,12 @@ import {
   getStage,
   heartbeat,
   lowerAllHands,
+  participantByPeerId,
   postSignals,
   removeParticipant,
   requestMute,
   setParticipantRole,
+  setSpotlight,
   setStage,
   startRecordingRow,
 } from "@/lib/meetings";
@@ -113,6 +115,31 @@ export async function POST(
         createdAt: row.createdAt.toISOString(),
       });
       return json({ ok: true, id: row.id, createdAt: row.createdAt.toISOString() });
+    }
+
+    /* ----------------------------------------------------- spotlight */
+    case "spotlight": {
+      if (!host) return deny();
+      const wanted = str(body?.peerId, 64) || null;
+
+      // A spotlight on somebody who is not in the room is a blank screen for
+      // everybody, so it is checked against the roster rather than trusted.
+      let name: string | null = null;
+      if (wanted) {
+        const row = await participantByPeerId(m.id, wanted);
+        if (!row) return fail("They have already left the meeting.", 404);
+        name = row.displayName;
+      }
+
+      await setSpotlight(m.id, wanted);
+      await broadcast("control", { action: "spotlight", peerId: wanted });
+      await log({
+        action: "meetings.stage.update",
+        summary: wanted
+          ? `Put ${name} on the main screen in "${m.title}"`
+          : `Cleared the main screen in "${m.title}"`,
+      });
+      return json({ ok: true, spotlightPeerId: wanted });
     }
 
     /* --------------------------------------------------------- stage */

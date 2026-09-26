@@ -381,6 +381,9 @@ export const fr: Dictionary = {
 
   meetings: {
     title: "Réunions",
+    leaveThisMeeting: "Quitter cette r\u00e9union\u00a0?",
+    leaveThisMeetingHint: "Vous pouvez revenir avec le m\u00eame lien.",
+    stayInMeeting: "Rester",
     mediaBlocked: "Votre navigateur bloque le {device}. Touchez le cadenas ou \u00ab\u00a0aA\u00a0\u00bb dans la barre d'adresse, autorisez-le, puis rechargez la page.",
     mediaMissing: "Aucun {device} n'a \u00e9t\u00e9 trouv\u00e9 sur cet appareil.",
     mediaInUse: "Une autre application utilise votre {device} \u2014 g\u00e9n\u00e9ralement un appel ou un autre onglet. Fermez-la et r\u00e9essayez.",
@@ -404,7 +407,7 @@ export const fr: Dictionary = {
     openRoom: "Ouvrir la salle",
     live: "EN DIRECT",
     cancelled: "Annulée",
-    lowData: "Données réduites",
+    lowData: "\u00c9conomiseur",
     runAgain: "La refaire",
     endNow: "Y mettre fin maintenant",
     endForEveryone: "Terminer pour tous",
@@ -453,7 +456,7 @@ export const fr: Dictionary = {
     kindBoard: "Conseil / responsables",
     yourName: "Votre nom",
     yourNameHint: "C'est ce que les autres verront.",
-    lowDataMode: "Mode données réduites",
+    lowDataMode: "\u00c9conomiseur de donn\u00e9es",
     lowDataModeHint:
       "Voix seulement, pas de vidéo dans un sens ni dans l'autre. Consomme environ un dixième des données et tient sur un réseau faible.",
     cameraOff: "Votre caméra est éteinte",

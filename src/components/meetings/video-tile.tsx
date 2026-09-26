@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Hand, MicOff, Signal, SignalLow, SignalMedium, Pin } from "lucide-react";
+import { Hand, MicOff, Pin, Signal, SignalLow, SignalMedium, Star } from "lucide-react";
 import { initialsOf, type MeetingQuality } from "@/lib/meetings-shared";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
@@ -19,6 +19,10 @@ export type TileProps = {
   roleLabel?: string | null;
   pinned?: boolean;
   onPin?: () => void;
+  /** This person is on the main screen for the whole room, not just for me. */
+  spotlit?: boolean;
+  /** Only a host gets this: it changes what everybody else is looking at. */
+  onSpotlight?: () => void;
   className?: string;
   /** Screen shares are letterboxed; faces are cropped to fill. */
   contain?: boolean;
@@ -43,6 +47,8 @@ export function VideoTile({
   roleLabel,
   pinned,
   onPin,
+  spotlit,
+  onSpotlight,
   className,
   contain,
 }: TileProps) {
@@ -110,20 +116,58 @@ export function VideoTile({
         </div>
       )}
 
-      {onPin && (
-        <button
-          type="button"
-          onClick={onPin}
-          aria-label={name}
-          className={cn(
-            "absolute top-2 right-2 rounded-full p-1.5 text-white transition",
-            pinned
-              ? "bg-indigo-500"
-              : "bg-black/50 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100",
+      {/*
+        Two different things, so two buttons rather than one that changes
+        meaning. Pin is mine and nobody else's; spotlight puts this person on
+        everybody's main screen, which is why only a host is offered it.
+      */}
+      {(onPin || onSpotlight) && (
+        <div className="absolute top-2 right-2 flex gap-1.5">
+          {onSpotlight && (
+            <button
+              type="button"
+              onClick={onSpotlight}
+              aria-label={
+                spotlit
+                  ? `Take ${name} off everyone's main screen`
+                  : `Put ${name} on everyone's main screen`
+              }
+              title={spotlit ? "Stop spotlighting" : "Spotlight for everyone"}
+              className={cn(
+                "grid size-9 place-items-center rounded-full text-white transition sm:size-8",
+                spotlit
+                  ? "bg-amber-500"
+                  : "bg-black/50 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100",
+              )}
+            >
+              <Star className={cn("size-4", spotlit && "fill-current")} />
+            </button>
           )}
-        >
-          <Pin className="size-3.5" />
-        </button>
+          {onPin && (
+            <button
+              type="button"
+              onClick={onPin}
+              aria-label={pinned ? `Unpin ${name}` : `Pin ${name} for myself`}
+              title={pinned ? "Unpin" : "Pin for me"}
+              className={cn(
+                "grid size-9 place-items-center rounded-full text-white transition sm:size-8",
+                pinned
+                  ? "bg-indigo-500"
+                  : "bg-black/50 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100",
+              )}
+            >
+              <Pin className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Somebody the host has put up. Said out loud, because otherwise the
+          room has no idea why its layout changed under it. */}
+      {spotlit && (
+        <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase">
+          <Star className="size-3 fill-current" /> On screen
+        </span>
       )}
     </div>
   );

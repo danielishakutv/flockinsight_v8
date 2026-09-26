@@ -429,6 +429,72 @@ export async function leaveMeeting(participantId: string): Promise<void> {
     .where(and(eq(meetingParticipant.id, participantId), isNull(meetingParticipant.leftAt)));
 }
 
+/**
+ * One person in a room, by the id the room knows them as.
+ *
+ * Unauthenticated on purpose: this answers "is this peer in this meeting and
+ * what are they called", which is what a host needs before pointing the whole
+ * room at somebody. It never returns the secret.
+ */
+export async function participantByPeerId(
+  meetingId: string,
+  peerId: string,
+): Promise<{ id: string; displayName: string; role: MeetingRole } | null> {
+  const [row] = await db
+    .select({
+      id: meetingParticipant.id,
+      displayName: meetingParticipant.displayName,
+      role: meetingParticipant.role,
+      removed: meetingParticipant.removed,
+      leftAt: meetingParticipant.leftAt,
+    })
+    .from(meetingParticipant)
+    .where(
+      and(
+        eq(meetingParticipant.meetingId, meetingId),
+        eq(meetingParticipant.peerId, peerId),
+      ),
+    )
+    .limit(1);
+
+  if (!row || row.removed || row.leftAt) return null;
+  return { id: row.id, displayName: row.displayName, role: row.role as MeetingRole };
+}
+
+/**
+ * Put one person on the main screen for the whole room, or clear it.
+ *
+ * `null` clears. Nothing here checks who is asking — the route does that, as
+ * it does for every other thing that changes what a room is looking at.
+ */
+export async function setSpotlight(
+  meetingId: string,
+  peerId: string | null,
+): Promise<void> {
+  await db
+    .update(meeting)
+    .set({ spotlightPeerId: peerId })
+    .where(eq(meeting.id, meetingId));
+}
+
+/**
+ * Drop the spotlight if it is pointing at this person.
+ *
+ * Called on the way out. A spotlight on somebody who has gone is a black
+ * rectangle where the preacher was, and nobody but the host can clear it —
+ * so the room clears it itself. Scoped to the one peer, so somebody else
+ * leaving never disturbs a spotlight that is working.
+ */
+export async function clearSpotlightFor(
+  meetingId: string,
+  peerId: string,
+): Promise<void> {
+  await db
+    .update(meeting)
+    .set({ spotlightPeerId: null })
+    .where(and(eq(meeting.id, meetingId), eq(meeting.spotlightPeerId, peerId)));
+}
+
 /** Who is in the room right now. */
 export async function roster(meetingId: string): Promise<RosterEntry[]> {
   const rows = await db

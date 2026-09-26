@@ -385,6 +385,9 @@ export const ha: Dictionary = {
 
   meetings: {
     title: "Tarurruka",
+    leaveThisMeeting: "Ka bar wannan taron?",
+    leaveThisMeetingHint: "Za ka iya dawowa da wannan hanyar.",
+    stayInMeeting: "Ka zauna",
     mediaBlocked: "Burauzar ka na toshe {device}. Danna makulli ko \u201caA\u201d a sandar adireshi, ba da izini, sannan ka sake loda shafin.",
     mediaMissing: "Ba a sami {device} a wannan na'urar ba.",
     mediaInUse: "Wani abu yana amfani da {device} naka \u2014 yawanci kira ko wani shafi. Rufe shi ka sake gwadawa.",
@@ -408,7 +411,7 @@ export const ha: Dictionary = {
     openRoom: "Buɗe ɗakin",
     live: "KAI TSAYE",
     cancelled: "An soke",
-    lowData: "Ƙarancin data",
+    lowData: "Tattalin data",
     runAgain: "Sake yin shi",
     endNow: "Kawo ƙarshe yanzu",
     endForEveryone: "Kawo ƙarshe ga kowa",
@@ -457,7 +460,7 @@ export const ha: Dictionary = {
     kindBoard: "Majalisa / shugabanni",
     yourName: "Sunanka",
     yourNameHint: "Wannan ne abin da sauran za su gani.",
-    lowDataMode: "Yanayin ƙarancin data",
+    lowDataMode: "Mai Tattalin Data",
     lowDataModeHint:
       "Murya kaɗai, babu bidiyo ta kowace hanya. Yana amfani da kusan kashi ɗaya bisa goma na data kuma yana aiki a kan layi mai rauni.",
     cameraOff: "Kamararka a kashe take",

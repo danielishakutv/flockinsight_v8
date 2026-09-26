@@ -172,7 +172,12 @@ export async function POST(
   const [people, current] = await Promise.all([
     roster(m.id),
     db
-      .select({ status: meeting.status, stage: meeting.stage, slides: meeting.slides })
+      .select({
+        status: meeting.status,
+        stage: meeting.stage,
+        slides: meeting.slides,
+        spotlightPeerId: meeting.spotlightPeerId,
+      })
       .from(meeting)
       .where(eq(meeting.id, m.id))
       .limit(1),
@@ -187,6 +192,7 @@ export async function POST(
     roster: people,
     stage: parseStage(room?.stage),
     slides: room?.slides ?? [],
+    spotlightPeerId: room?.spotlightPeerId ?? null,
     status: room?.status ?? m.status,
     ended: room?.status === "ended" || room?.status === "cancelled",
     serverTime: new Date().toISOString(),

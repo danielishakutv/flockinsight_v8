@@ -138,9 +138,21 @@ export function MeetingRoom(props: {
   const [local, setLocal] = useState<LocalState | null>(null);
   const [transport, setTransport] = useState<"online" | "retrying" | "offline">("online");
   const [panel, setPanel] = useState<Panel>(null);
+  /*
+   * A mirror of `panel` for the back-gesture listener below. That listener
+   * pushes a history entry when it registers, so re-registering it on every
+   * panel change would stack up an entry per tap — the ref lets it read the
+   * current panel while staying registered once.
+   */
+  const panelRef = useRef<Panel>(null);
   const [unread, setUnread] = useState(0);
   const [handRaised, setHandRaised] = useState(false);
+  /** What I chose to look at. Mine alone, and only while nothing is spotlit. */
   const [pinned, setPinned] = useState<string | null>(null);
+  /** Asked before the back gesture takes somebody out of a live call. */
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  /** What the host has put on the main screen for the whole room. */
+  const [spotlight, setSpotlight] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [busyStage, setBusyStage] = useState(false);
@@ -255,6 +267,7 @@ export function MeetingRoom(props: {
               if (msg.kind === "chat") setUnread((u) => u + 1);
             },
             onReaction: (_peer, emoji) => addFloater(emoji),
+            onSpotlight: setSpotlight,
             onControl: (payload) => handleControl(payload),
             onRecording: (payload) => {
               if (payload.state === "started")
@@ -361,6 +374,48 @@ export function MeetingRoom(props: {
       clientRef.current = null;
     };
   }, []);
+
+  /**
+   * The back gesture should close a panel, not the meeting.
+   *
+   * Somebody opens the meeting link from WhatsApp, so the room is the first
+   * page in that tab's history. On Android, back on the first page closes the
+   * tab; on iOS it goes back to WhatsApp and Safari suspends the page. Either
+   * way the person is out of the call, mid-sentence, having pressed the button
+   * they press for "close this thing I just opened".
+   *
+   * An extra history entry is pushed when the room opens, so there is always
+   * something to go back TO. Back then pops that entry, which is caught here
+   * and turned into the thing they almost certainly meant: close the panel if
+   * one is open, otherwise ask whether to leave. The entry is pushed again
+   * either way, so the trap survives being sprung.
+   *
+   * No `beforeunload` prompt: browsers only honour it after an interaction,
+   * it cannot be worded, and on a phone it usually does not appear at all.
+   */
+  useEffect(() => {
+    if (phase !== "live") return;
+
+    window.history.pushState({ meeting: true }, "");
+
+    const onPop = () => {
+      // Re-arm first, so a second press is caught too.
+      window.history.pushState({ meeting: true }, "");
+
+      if (panelRef.current) {
+        setPanel(null);
+        return;
+      }
+      setConfirmLeave(true);
+    };
+
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [phase]);
+
+  useEffect(() => {
+    panelRef.current = panel;
+  }, [panel]);
 
   /* ============================================================
    * Derived view state
@@ -740,9 +795,19 @@ export function MeetingRoom(props: {
 
   /* ------------------------------------------------------------ live */
 
+  /*
+   * What the big tile shows.
+   *
+   * The host's spotlight wins over a personal pin, and that is the whole
+   * point of it: when the host puts the preacher up, everybody is looking at
+   * the preacher. Clearing it hands each person back whatever they had chosen
+   * for themselves, rather than dumping the room back to the grid.
+   */
+  const focus = spotlight ?? pinned;
+
   const tiles = [
-    ...(pinned ? others.filter((r) => r.peerId === pinned) : []),
-    ...others.filter((r) => !pinned || r.peerId !== pinned),
+    ...(focus ? others.filter((r) => r.peerId === focus) : []),
+    ...others.filter((r) => !focus || r.peerId !== focus),
   ];
   const cols = tileColumns(
     tiles.length + 1,
@@ -834,8 +899,23 @@ export function MeetingRoom(props: {
                   quality={r.quality}
                   lowData={r.lowData}
                   roleLabel={isHostRole(r.role) ? t("meetings.host") : null}
-                  pinned={pinned === r.peerId}
-                  onPin={showStage ? undefined : () => setPinned((p) => (p === r.peerId ? null : r.peerId))}
+                  pinned={focus === r.peerId}
+                  spotlit={spotlight === r.peerId}
+                  onPin={
+                    showStage
+                      ? undefined
+                      : () => setPinned((p) => (p === r.peerId ? null : r.peerId))
+                  }
+                  // Only a host sees this, because it changes what everybody
+                  // else is looking at.
+                  onSpotlight={
+                    canHost && !showStage
+                      ? () =>
+                          void runAction("spotlight", {
+                            peerId: spotlight === r.peerId ? null : r.peerId,
+                          })
+                      : undefined
+                  }
                   className={showStage ? "" : "min-h-0"}
                 />
               );
@@ -1014,6 +1094,49 @@ export function MeetingRoom(props: {
           </Button>
         </div>
       </footer>
+
+      {/*
+        The back gesture asks rather than acts. Somebody who opened this link
+        from WhatsApp is one tap from being out of the call, and "back" is the
+        button people press to close a thing they just opened — so it has to
+        mean "are you sure", not "goodbye".
+      */}
+      {confirmLeave && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+          onClick={() => setConfirmLeave(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 w-full max-w-sm rounded-2xl p-5 text-white ring-1 ring-white/10"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
+          >
+            <p className="text-lg font-bold">{t("meetings.leaveThisMeeting")}</p>
+            <p className="mt-1 text-sm text-slate-400">
+              {t("meetings.leaveThisMeetingHint")}
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setConfirmLeave(false);
+                  void leave();
+                }}
+              >
+                {t("meetings.leave")}
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => setConfirmLeave(false)}
+              >
+                {t("meetings.stayInMeeting")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toaster />
     </div>

@@ -394,6 +394,9 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    leaveThisMeeting: "You wan comot for this meeting?",
+    leaveThisMeetingHint: "You fit come back with the same link.",
+    stayInMeeting: "Stay",
     mediaBlocked: "Your browser dey block the {device}. Tap the padlock or \u201caA\u201d for the address bar, allow am, then reload this page.",
     mediaMissing: "We no see any {device} for this device.",
     mediaInUse: "Another thing dey use your {device} \u2014 usually call or another tab. Close am make you try again.",
@@ -417,7 +420,7 @@ export const pcm: Dictionary = {
     openRoom: "Open di room",
     live: "LIVE",
     cancelled: "Dem cancel am",
-    lowData: "Small data",
+    lowData: "Data Saver",
     runAgain: "Do am again",
     endNow: "End am now",
     endForEveryone: "End am for everybody",
@@ -466,7 +469,7 @@ export const pcm: Dictionary = {
     kindBoard: "Board / leaders",
     yourName: "Your name",
     yourNameHint: "Na dis one everybody else go see.",
-    lowDataMode: "Small data mode",
+    lowDataMode: "Data Saver",
     lowDataModeHint:
       "Voice only, no video for both side. E dey use like one-tenth of data and e dey hold when network weak.",
     cameraOff: "Your camera off",

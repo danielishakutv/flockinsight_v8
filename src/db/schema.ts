@@ -3218,6 +3218,20 @@ export const meeting = pgTable(
     /** Saved slide deck for this meeting: media ids, in order. */
     slides: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
 
+    /**
+     * Who the host has put on the main screen for everyone.
+     *
+     * A peer id, not a participant id, because it is compared against the
+     * roster on every client and the roster speaks in peer ids. It is cleared
+     * when that person leaves — a spotlight pointing at nobody is a blank
+     * screen for the whole room.
+     *
+     * Persisted rather than held in memory so that somebody joining halfway
+     * through the sermon is looking at the preacher like everybody else, and
+     * so a restart does not silently scatter the room.
+     */
+    spotlightPeerId: text(),
+
     /** Filled in as the meeting runs, so the summary survives the room. */
     peakParticipants: integer().notNull().default(0),
     totalJoins: integer().notNull().default(0),

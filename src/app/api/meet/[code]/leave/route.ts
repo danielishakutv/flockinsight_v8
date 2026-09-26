@@ -1,5 +1,6 @@
 import {
   addMessage,
+  clearSpotlightFor,
   getMeetingByCode,
   leaveMeeting,
   postSignals,
@@ -46,6 +47,8 @@ export async function POST(
   if (!peer) return json({ ok: true });
 
   await leaveMeeting(peer.id);
+  // If the room was looking at them, it is now looking at nothing.
+  await clearSpotlightFor(m.id, peer.peerId);
   await postSignals(m.id, peer.peerId, [
     { toPeer: null, type: "bye", payload: { peerId: peer.peerId } },
   ]);

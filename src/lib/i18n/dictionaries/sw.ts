@@ -386,6 +386,9 @@ export const sw: Dictionary = {
 
   meetings: {
     title: "Mikutano",
+    leaveThisMeeting: "Uondoke kwenye mkutano huu?",
+    leaveThisMeetingHint: "Unaweza kurudi na kiungo kilekile.",
+    stayInMeeting: "Baki",
     mediaBlocked: "Kivinjari chako kinazuia {device}. Gusa kufuli au \u201caA\u201d kwenye upau wa anwani, ruhusu, kisha upakie ukurasa huu upya.",
     mediaMissing: "Hakuna {device} iliyopatikana kwenye kifaa hiki.",
     mediaInUse: "Kitu kingine kinatumia {device} yako \u2014 mara nyingi simu au kichupo kingine. Kifunge kisha ujaribu tena.",
@@ -409,7 +412,7 @@ export const sw: Dictionary = {
     openRoom: "Fungua chumba",
     live: "MUBASHARA",
     cancelled: "Imeghairiwa",
-    lowData: "Data kidogo",
+    lowData: "Kiokoa data",
     runAgain: "Ufanye tena",
     endNow: "Umalize sasa",
     endForEveryone: "Maliza kwa kila mtu",
@@ -458,7 +461,7 @@ export const sw: Dictionary = {
     kindBoard: "Baraza / viongozi",
     yourName: "Jina lako",
     yourNameHint: "Hili ni jina ambalo wengine wataona.",
-    lowDataMode: "Hali ya data kidogo",
+    lowDataMode: "Kiokoa Data",
     lowDataModeHint:
       "Sauti tu, hakuna video upande wowote. Inatumia takribani sehemu ya kumi ya data na inavumilia mtandao dhaifu.",
     cameraOff: "Kamera yako imezimwa",

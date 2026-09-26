@@ -386,6 +386,9 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    leaveThisMeeting: "Ṣé o fẹ́ kúrò nínú ìpàdé yìí?",
+    leaveThisMeetingHint: "O lè padà wá pẹ̀lú ọ̀nà kan náà.",
+    stayInMeeting: "Dúró",
     mediaBlocked: "Aṣàwákiri rẹ ń dí {device} lọ́wọ́. Tẹ àmì kọ́kọ́rọ́ tàbí \u201caA\u201d ní pẹpẹ àdírẹ́sì, fàyègbà á, kí o sì tún ojú ìwé yìí ṣí.",
     mediaMissing: "A kò rí {device} kankan lórí ẹ̀rọ yìí.",
     mediaInUse: "Ohun mìíràn ń lo {device} rẹ \u2014 ọ̀pọ̀ ìgbà ìpè tàbí táàbù mìíràn. Ti í, kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
@@ -409,7 +412,7 @@ export const yo: Dictionary = {
     openRoom: "Ṣí yàrá náà",
     live: "LÁYÈ",
     cancelled: "A fagilé",
-    lowData: "Dátà kékeré",
+    lowData: "Olùdáàbòbò",
     runAgain: "Tún ṣe",
     endNow: "Parí nísinsìnyí",
     endForEveryone: "Parí fún gbogbo ènìyàn",
@@ -458,7 +461,7 @@ export const yo: Dictionary = {
     kindBoard: "Ìgbìmọ̀ / àwọn olórí",
     yourName: "Orúkọ rẹ",
     yourNameHint: "Èyí ni ohun tí àwọn yòókù yóò rí.",
-    lowDataMode: "Ipò dátà kékeré",
+    lowDataMode: "Olùdáàbòbò Dátà",
     lowDataModeHint:
       "Ohùn nìkan, kò sí fídíò ní ẹ̀gbẹ́ kankan. Ó ń lo ìdámẹ́wàá dátà, ó sì ń ṣiṣẹ́ lórí ìtàkùn tí kò lágbára.",
     cameraOff: "Kámẹ́rà rẹ ti pa",

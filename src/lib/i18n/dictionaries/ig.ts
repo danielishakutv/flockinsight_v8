@@ -384,6 +384,9 @@ export const ig: Dictionary = {
 
   meetings: {
     title: "Nzukọ",
+    leaveThisMeeting: "Ị ga-apụ na nzukọ a?",
+    leaveThisMeetingHint: "Ị nwere ike iji otu njikọ ahụ laghachi.",
+    stayInMeeting: "Nọrọ",
     mediaBlocked: "Ihe nchọgharị gị na-egbochi {device}. Pịa mkpọchi ma ọ bụ \u201caA\u201d na mpempe adreesị, kwe ya, wee tọgharịa ibe a.",
     mediaMissing: "Achọtaghị {device} ọ bụla na ngwaọrụ a.",
     mediaInUse: "Ihe ọzọ na-eji {device} gị \u2014 ọtụtụ mgbe ọ bụ oku ma ọ bụ mpempe ọzọ. Mechie ya ma nwaa ọzọ.",
@@ -407,7 +410,7 @@ export const ig: Dictionary = {
     openRoom: "Mepee ụlọ ahụ",
     live: "NA NDỊ DỊ NDỤ",
     cancelled: "Akagburu",
-    lowData: "Data nta",
+    lowData: "Nchekwa data",
     runAgain: "Mee ya ọzọ",
     endNow: "Kwụsị ya ugbu a",
     endForEveryone: "Kwụsị maka onye ọ bụla",
@@ -456,7 +459,7 @@ export const ig: Dictionary = {
     kindBoard: "Kọmitii / ndị isi",
     yourName: "Aha gị",
     yourNameHint: "Nke a bụ ihe ndị ọzọ ga-ahụ.",
-    lowDataMode: "Ụdị data nta",
+    lowDataMode: "Onye Nchekwa Data",
     lowDataModeHint:
       "Naanị olu, ọ dịghị vidiyo n'akụkụ ọ bụla. Ọ na-eji ihe dị ka otu ụzọ n'iri nke data, ọ na-arụkwa ọrụ na netwọk na-adịghị ike.",
     cameraOff: "Igwefoto gị gbanyụrụ",

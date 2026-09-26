@@ -64,6 +64,14 @@ export type MeetingClientEvents = {
     createdAt: string;
   }) => void;
   onReaction?: (peerId: string, emoji: string) => void;
+  /**
+   * Who the host has put on the main screen, or null for nobody.
+   *
+   * Arrives two ways and needs to: as a broadcast when the host changes it,
+   * so the room reacts at once, and on every poll, so somebody joining late
+   * or reconnecting lands on the same screen as everybody else.
+   */
+  onSpotlight?: (peerId: string | null) => void;
   onControl?: (payload: Record<string, unknown>) => void;
   onRecording?: (payload: Record<string, unknown>) => void;
   onEnded?: (reason: string) => void;
@@ -385,6 +393,12 @@ export class MeetingClient {
       return;
     }
     if (data.stage) this.events.onStage?.(data.stage);
+    // Always, including when it is null: clearing has to travel too.
+    if ("spotlightPeerId" in data) {
+      this.events.onSpotlight?.(
+        typeof data.spotlightPeerId === "string" ? data.spotlightPeerId : null,
+      );
+    }
     if (data.roster) {
       this.rosterCache = data.roster;
       this.events.onRoster?.(data.roster);
@@ -589,6 +603,13 @@ export class MeetingClient {
 
   private onControlSignal(s: SignalEnvelope): void {
     const action = String(s.payload.action ?? "");
+
+    if (action === "spotlight") {
+      this.events.onSpotlight?.(
+        typeof s.payload.peerId === "string" ? s.payload.peerId : null,
+      );
+      return;
+    }
 
     if (action === "mute") {
       const peers = Array.isArray(s.payload.peers) ? (s.payload.peers as string[]) : [];
