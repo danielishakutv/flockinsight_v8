@@ -112,3 +112,50 @@ describe("who keeps the slot", () => {
     expect(incomingWins(newCam, [oldCam])).toBe(true);
   });
 });
+
+/* ============================================================
+ * Is somebody really sharing their screen?
+ * ========================================================== */
+
+/**
+ * Every peer keeps a screen transceiver open whether or not anybody is
+ * sharing, so "there is a live track in the screen slot" is not the same
+ * question as "they are sharing their screen". Inferring one from the other
+ * announced a screen share, over a black stage, that no amount of turning the
+ * camera off would clear — because the track was still sitting there.
+ *
+ * Sharing is a deliberate act. The person doing it tells the server, and the
+ * roster carries it on every poll. That is the authority; the track is only
+ * how the pixels arrive.
+ */
+function isSharing(
+  media: { hasScreen: boolean; screenStream: unknown },
+  entry: { sharing: boolean } | undefined,
+): boolean {
+  return !!(media.hasScreen && media.screenStream && entry?.sharing);
+}
+
+describe("screen share detection", () => {
+  const withTrack = { hasScreen: true, screenStream: {} };
+
+  it("believes a share the person has declared", () => {
+    expect(isSharing(withTrack, { sharing: true })).toBe(true);
+  });
+
+  it("ignores a live track nobody said was a share", () => {
+    // The bug: an idle track in the always-open screen slot flickers unmuted
+    // once, and the whole room is told somebody is sharing.
+    expect(isSharing(withTrack, { sharing: false })).toBe(false);
+  });
+
+  it("ignores a declared share with nothing arriving yet", () => {
+    // The other direction: do not put up a black stage on a promise.
+    expect(isSharing({ hasScreen: false, screenStream: null }, { sharing: true })).toBe(
+      false,
+    );
+  });
+
+  it("ignores a peer who has left the roster entirely", () => {
+    expect(isSharing(withTrack, undefined)).toBe(false);
+  });
+});

@@ -883,6 +883,38 @@ export class MeetingClient {
   }
 
   private publishMedia(peerId: string, p: PeerState): void {
+    /*
+     * Heal a video track that was guessed into the wrong slot.
+     *
+     * Slotting is by transceiver identity and then by `mid`, and both are
+     * reliable — but there is still a last resort that guesses, and a wrong
+     * guess here is expensive: a camera in the screen slot is a blank tile and
+     * a phantom "sharing their screen", which is precisely the shape of bug
+     * that has taken all day.
+     *
+     * So it is checked against what the person says they are doing. If they
+     * are not sharing a screen, nothing belongs in their screen slot, and a
+     * track carrying pictures there is their camera in the wrong place. Moving
+     * it is cheap and the condition is narrow enough that it cannot fire on a
+     * real share.
+     */
+    const theirs = this.rosterCache.find((r) => r.peerId === peerId);
+    if (theirs && !theirs.sharing) {
+      const stranded = p.screenStream
+        .getVideoTracks()
+        .filter((t) => t.readyState === "live" && !t.muted);
+      const cameraIsEmpty = !p.stream
+        .getVideoTracks()
+        .some((t) => t.readyState === "live" && !t.muted);
+
+      if (stranded.length > 0 && cameraIsEmpty) {
+        for (const t of stranded) {
+          p.screenStream.removeTrack(t);
+          p.stream.addTrack(t);
+        }
+      }
+    }
+
     const audio = p.stream.getAudioTracks().some((t) => !t.muted);
     const camera = p.stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted);
     const screen = p.screenStream

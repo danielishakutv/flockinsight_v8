@@ -540,9 +540,30 @@ export function MeetingRoom(props: {
 
   const sharer = useMemo(() => {
     for (const [peerId, m] of media) {
-      if (m.hasScreen && m.screenStream) {
-        return { peerId, stream: m.screenStream, name: roster.find((r) => r.peerId === peerId)?.name ?? "Someone" };
-      }
+      if (!m.hasScreen || !m.screenStream) continue;
+
+      /*
+       * They must SAY they are sharing, not merely appear to be.
+       *
+       * A screen share used to be inferred from "there is a live, unmuted
+       * track in the screen slot". Every peer has a screen transceiver open
+       * whether or not anybody is sharing, so an idle track sitting in that
+       * slot only had to flicker unmuted once — which it does when tracks are
+       * re-assigned — and the whole room was told somebody was sharing their
+       * screen, over a black stage, for the rest of the meeting. Turning the
+       * camera off did not clear it, because the track was still there.
+       *
+       * Sharing is a deliberate act and the person doing it already tells the
+       * server, which puts it in the roster on every poll. That is the
+       * authority; the track is only how the pixels get here.
+       */
+      if (!roster.find((r) => r.peerId === peerId)?.sharing) continue;
+
+      return {
+        peerId,
+        stream: m.screenStream,
+        name: roster.find((r) => r.peerId === peerId)?.name ?? "Someone",
+      };
     }
     if (local?.sharing && localScreen) {
       return { peerId: me?.peerId ?? "me", stream: localScreen, name: "You" };
