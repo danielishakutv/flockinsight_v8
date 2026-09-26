@@ -394,6 +394,13 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    mediaBlocked: "Your browser dey block the {device}. Tap the padlock or \u201caA\u201d for the address bar, allow am, then reload this page.",
+    mediaMissing: "We no see any {device} for this device.",
+    mediaInUse: "Another thing dey use your {device} \u2014 usually call or another tab. Close am make you try again.",
+    mediaUnreachable: "We no fit reach your {device}. Check the permission for your browser make you try again.",
+    mediaUnsupported: "This browser no fit use your {device}. Open the link for Chrome or Safari instead of inside another app.",
+    deviceMicrophone: "microphone",
+    deviceCamera: "camera",
     subtitle:
       "Video and voice meeting wey run inside browser. Share one link — nothing to install, and e dey hold even if network no strong.",
     newMeeting: "New meeting",

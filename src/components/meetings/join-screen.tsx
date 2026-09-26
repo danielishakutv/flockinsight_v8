@@ -17,6 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { initialsOf } from "@/lib/meetings-shared";
 import { useT } from "@/components/i18n-provider";
 import { cn } from "@/lib/utils";
+import { mediaFault, type MediaFault } from "@/lib/meeting-client";
+import type { TKey } from "@/lib/i18n/translate";
 
 export type JoinValues = {
   name: string;
@@ -35,6 +37,15 @@ export type JoinValues = {
  * hard-up connection choose audio-only BEFORE a camera has ever been opened —
  * which is the difference between joining and giving up.
  */
+/** One sentence per way a device can fail to open. */
+export const MEDIA_FAULT_KEY = {
+  blocked: "meetings.mediaBlocked",
+  missing: "meetings.mediaMissing",
+  inUse: "meetings.mediaInUse",
+  unknown: "meetings.mediaUnreachable",
+  unsupported: "meetings.mediaUnsupported",
+} as const satisfies Record<MediaFault, TKey>;
+
 export function JoinScreen({
   title,
   churchName,
@@ -66,7 +77,7 @@ export function JoinScreen({
   const [cameraOn, setCameraOn] = useState(!lowDataDefault);
   const [lowData, setLowData] = useState(lowDataDefault);
   const [passcode, setPasscode] = useState("");
-  const [devicesBlocked, setDevicesBlocked] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<MediaStream | null>(null);
@@ -105,9 +116,14 @@ export function JoinScreen({
           videoRef.current.srcObject = stream;
           void videoRef.current.play().catch(() => {});
         }
-      } catch {
+      } catch (e) {
         if (!cancelled) {
-          setDevicesBlocked(true);
+          // The same words the room uses, for the same failure. "Check your
+          // browser settings" is no help to somebody whose problem is that
+          // another app has the camera.
+          setDeviceError(
+            t(MEDIA_FAULT_KEY[mediaFault(e)], { device: t("meetings.deviceCamera") }),
+          );
           setCameraOn(false);
         }
       }
@@ -117,7 +133,7 @@ export function JoinScreen({
       cancelled = true;
       stop();
     };
-  }, [cameraOn, lowData]);
+  }, [cameraOn, lowData, t]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,11 +176,13 @@ export function JoinScreen({
                 className="size-full -scale-x-100 object-cover"
               />
             ) : (
-              <div className="flex size-full flex-col items-center justify-center gap-3">
+              // `pb-20` clears the control row below, which is absolutely
+              // positioned over the bottom of this box.
+              <div className="flex size-full flex-col items-center justify-center gap-3 px-4 pb-20">
                 <div className="flex size-20 items-center justify-center rounded-full bg-slate-700 text-2xl font-bold">
                   {initialsOf(name || "Guest")}
                 </div>
-                <p className="text-sm text-slate-400">
+                <p className="text-center text-sm text-balance text-slate-400">
                   {lowData
                     ? t("meetings.audioOnlyCameraStays")
                     : t("meetings.cameraOff")}
@@ -253,9 +271,9 @@ export function JoinScreen({
               </span>
             </label>
 
-            {devicesBlocked && (
+            {deviceError && (
               <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                {t("meetings.cameraBlocked")}
+                {deviceError}
               </p>
             )}
 

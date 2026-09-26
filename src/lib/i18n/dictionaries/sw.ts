@@ -386,6 +386,13 @@ export const sw: Dictionary = {
 
   meetings: {
     title: "Mikutano",
+    mediaBlocked: "Kivinjari chako kinazuia {device}. Gusa kufuli au \u201caA\u201d kwenye upau wa anwani, ruhusu, kisha upakie ukurasa huu upya.",
+    mediaMissing: "Hakuna {device} iliyopatikana kwenye kifaa hiki.",
+    mediaInUse: "Kitu kingine kinatumia {device} yako \u2014 mara nyingi simu au kichupo kingine. Kifunge kisha ujaribu tena.",
+    mediaUnreachable: "Hatukuweza kufikia {device} yako. Angalia ruhusa kwenye kivinjari chako kisha ujaribu tena.",
+    mediaUnsupported: "Kivinjari hiki hakiwezi kutumia {device} yako. Fungua kiungo katika Chrome au Safari badala ya ndani ya programu nyingine.",
+    deviceMicrophone: "maikrofoni",
+    deviceCamera: "kamera",
     subtitle:
       "Mikutano ya video na sauti inayofanya kazi kwenye kivinjari. Shiriki kiungo — hakuna kitu cha kupakua, na inavumilia mtandao dhaifu.",
     newMeeting: "Mkutano mpya",

@@ -68,6 +68,11 @@ export type MeetingClientEvents = {
   onRecording?: (payload: Record<string, unknown>) => void;
   onEnded?: (reason: string) => void;
   onError?: (message: string) => void;
+  /**
+   * A camera or microphone did not open. Separate from `onError` because the
+   * UI has the translator and this needs saying in the reader's language.
+   */
+  onMediaFault?: (fault: MediaFault, device: "microphone" | "camera") => void;
   /** Transport health, so the UI can say "reconnecting" honestly. */
   onTransport?: (state: "online" | "retrying" | "offline") => void;
 };
@@ -105,6 +110,41 @@ const STATS_INTERVAL_MS = 4000;
 /** How long to wait before another long-poll after a failed one. Backs off. */
 const RETRY_BASE_MS = 800;
 const RETRY_MAX_MS = 8000;
+
+/** Which of the four things went wrong when a camera or microphone did not open. */
+export type MediaFault = "blocked" | "missing" | "inUse" | "unknown" | "unsupported";
+
+/**
+ * Name the cause, do not write the sentence.
+ *
+ * Exported because the join screen asks for the same devices before the client
+ * exists, and two different explanations of one failure is worse than either.
+ * It returns a cause rather than a message because this module has no `t` and
+ * the meetings UI is translated into eight languages — a hardcoded English
+ * string here would land on exactly the person least able to act on it.
+ *
+ * The distinctions matter. `NotAllowedError` means they said no, or the page
+ * is not on HTTPS. `NotFoundError` means there is no such device.
+ * `NotReadableError` means another app holds it — on a phone, almost always a
+ * call or another tab. Each needs a different thing from the person, and one
+ * sentence covering all of them helps with none.
+ */
+export function mediaFault(error: unknown): MediaFault {
+  const name = (error as { name?: string })?.name ?? "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "blocked";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "missing";
+    case "NotReadableError":
+    case "AbortError":
+      return "inUse";
+    default:
+      return "unknown";
+  }
+}
 
 export class MeetingClient {
   private readonly code: string;
@@ -696,26 +736,69 @@ export class MeetingClient {
     for (const [, p] of this.peers) this.attachLocalTracks(p);
   }
 
+  /**
+   * Ask for a device, and say something true when it does not arrive.
+   *
+   * Two things this does that a bare `getUserMedia` call did not.
+   *
+   * It retries once with the plainest possible constraints. A browser that
+   * refuses `frameRate` or a `facingMode` it has no camera for fails the WHOLE
+   * request with OverconstrainedError, and on iOS it does so without ever
+   * prompting — so a first-time visitor saw "we couldn't reach your
+   * microphone" having never been asked for permission, and no amount of
+   * checking their settings would have helped.
+   *
+   * And it reads the error. `NotAllowedError` means they said no, or the site
+   * is not on HTTPS; `NotFoundError` means there is no such device;
+   * `NotReadableError` means another app holds it — on a phone, almost always
+   * a call or another tab. Each needs a different thing from the person, and
+   * one sentence covering all of them helps with none.
+   */
+  private async capture(
+    wanted: MediaStreamConstraints,
+    fallback: MediaStreamConstraints,
+    device: "microphone" | "camera",
+  ): Promise<MediaStream | null> {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      this.events.onMediaFault?.("unsupported", device);
+      return null;
+    }
+
+    try {
+      return await navigator.mediaDevices.getUserMedia(wanted);
+    } catch (first) {
+      const name = (first as { name?: string })?.name ?? "";
+
+      // Only a constraint problem is worth a second attempt. A refusal is a
+      // refusal, and asking again just produces the same dialog.
+      if (name === "OverconstrainedError" || name === "TypeError") {
+        try {
+          return await navigator.mediaDevices.getUserMedia(fallback);
+        } catch (second) {
+          this.events.onMediaFault?.(mediaFault(second), device);
+          return null;
+        }
+      }
+
+      this.events.onMediaFault?.(mediaFault(first), device);
+      return null;
+    }
+  }
+
   async setMic(on: boolean): Promise<void> {
     if (on && !this.micStream) {
-      try {
-        this.micStream = await navigator.mediaDevices.getUserMedia({
+      this.micStream = await this.capture(
+        {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            // Mono at 16kHz is speech. Stereo at 48 is a concert hall, and on
-            // a metered connection it is four times the bill for no benefit.
-            channelCount: 1,
-            sampleRate: 16000,
           },
-        });
-      } catch {
-        this.events.onError?.(
-          "We couldn't reach your microphone. Check the permission in your browser.",
-        );
-        return;
-      }
+        },
+        { audio: true },
+        "microphone",
+      );
+      if (!this.micStream) return;
     }
     this.micStream?.getAudioTracks().forEach((t) => (t.enabled = on));
     this.state.micOn = on;
@@ -735,22 +818,20 @@ export class MeetingClient {
       this.stopStream(this.camStream);
       this.camStream = null;
       const p = this.state.profile;
-      try {
-        this.camStream = await navigator.mediaDevices.getUserMedia({
+      this.camStream = await this.capture(
+        {
           video: {
             facingMode: wanted,
             width: { ideal: p.maxWidth, max: 1280 },
             height: { ideal: p.maxHeight, max: 720 },
             frameRate: { ideal: p.frameRate, max: 30 },
           },
-        });
-        this.state.facing = wanted;
-      } catch {
-        this.events.onError?.(
-          "We couldn't reach your camera. Check the permission in your browser.",
-        );
-        return;
-      }
+        },
+        { video: { facingMode: wanted } },
+        "camera",
+      );
+      if (!this.camStream) return;
+      this.state.facing = wanted;
     }
 
     if (!on) {

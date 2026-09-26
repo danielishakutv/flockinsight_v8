@@ -198,13 +198,24 @@ function Wrapper({
       )}
     >
       {children}
-      <div className="absolute top-2 right-2 flex gap-1.5">
+      <div
+        className={cn(
+          "absolute right-2 flex gap-1.5",
+          // Zoomed, this is a fixed overlay over the whole screen and the app
+          // is drawn behind the status bar, so `top-2` put the only way out
+          // under the clock and the battery.
+          zoom ? "top-[max(0.5rem,calc(env(safe-area-inset-top)+0.25rem))]" : "top-2",
+        )}
+      >
         {onClear && (
           <button
             type="button"
             onClick={onClear}
             aria-label={clearLabel}
-            className="rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
+            className={cn(
+              "grid place-items-center rounded-full bg-black/60 text-white hover:bg-black/80",
+              zoom ? "size-11" : "size-9",
+            )}
           >
             <X className="size-4" />
           </button>
@@ -213,7 +224,10 @@ function Wrapper({
           type="button"
           onClick={onZoom}
           aria-label={zoomLabel}
-          className="rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
+          className={cn(
+            "grid place-items-center rounded-full bg-black/60 text-white hover:bg-black/80",
+            zoom ? "size-11" : "size-9",
+          )}
         >
           {zoom ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         </button>

@@ -385,6 +385,13 @@ export const ha: Dictionary = {
 
   meetings: {
     title: "Tarurruka",
+    mediaBlocked: "Burauzar ka na toshe {device}. Danna makulli ko \u201caA\u201d a sandar adireshi, ba da izini, sannan ka sake loda shafin.",
+    mediaMissing: "Ba a sami {device} a wannan na'urar ba.",
+    mediaInUse: "Wani abu yana amfani da {device} naka \u2014 yawanci kira ko wani shafi. Rufe shi ka sake gwadawa.",
+    mediaUnreachable: "Ba mu iya kaiwa ga {device} naka ba. Duba izini a burauzar ka ka sake gwadawa.",
+    mediaUnsupported: "Wannan burauza ba za ta iya amfani da {device} naka ba. Bude hanyar a Chrome ko Safari maimakon cikin wata manhaja.",
+    deviceMicrophone: "makarufo",
+    deviceCamera: "kyamara",
     subtitle:
       "Tarurrukan bidiyo da murya cikin burauza. Raba hanyar haɗi — babu abin saukewa, kuma yana aiki a kan layi mai rauni.",
     newMeeting: "Sabon taro",

@@ -386,6 +386,13 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    mediaBlocked: "Aṣàwákiri rẹ ń dí {device} lọ́wọ́. Tẹ àmì kọ́kọ́rọ́ tàbí \u201caA\u201d ní pẹpẹ àdírẹ́sì, fàyègbà á, kí o sì tún ojú ìwé yìí ṣí.",
+    mediaMissing: "A kò rí {device} kankan lórí ẹ̀rọ yìí.",
+    mediaInUse: "Ohun mìíràn ń lo {device} rẹ \u2014 ọ̀pọ̀ ìgbà ìpè tàbí táàbù mìíràn. Ti í, kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
+    mediaUnreachable: "A kò lè dé {device} rẹ. Ṣàyẹ̀wò àṣẹ nínú aṣàwákiri rẹ kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
+    mediaUnsupported: "Aṣàwákiri yìí kò lè lo {device} rẹ. Ṣí ọ̀nà náà nínú Chrome tàbí Safari dípò inú ohun èlò mìíràn.",
+    deviceMicrophone: "gbohùngbohùn",
+    deviceCamera: "kámẹ́rà",
     subtitle:
       "Ìpàdé fídíò àti ohùn tí ó ń ṣiṣẹ́ nínú aṣàwákiri. Pín ọ̀nà àjápọ̀ — kò sí ohun tí a nílò láti fi sọ́wọ́, ó sì ń ṣiṣẹ́ lórí ìtàkùn tí kò lágbára.",
     newMeeting: "Ìpàdé tuntun",

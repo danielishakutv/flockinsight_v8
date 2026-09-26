@@ -381,6 +381,13 @@ export const pt: Dictionary = {
 
   meetings: {
     title: "Reuniões",
+    mediaBlocked: "O seu navegador est\u00e1 a bloquear o {device}. Toque no cadeado ou em \u201caA\u201d na barra de endere\u00e7o, permita e recarregue esta p\u00e1gina.",
+    mediaMissing: "N\u00e3o foi encontrado nenhum {device} neste dispositivo.",
+    mediaInUse: "Outra aplica\u00e7\u00e3o est\u00e1 a usar o seu {device} \u2014 normalmente uma chamada ou outro separador. Feche-a e tente de novo.",
+    mediaUnreachable: "N\u00e3o conseguimos aceder ao seu {device}. Verifique a permiss\u00e3o no navegador e tente de novo.",
+    mediaUnsupported: "Este navegador n\u00e3o consegue usar o seu {device}. Abra o link no Chrome ou no Safari em vez de dentro de outra aplica\u00e7\u00e3o.",
+    deviceMicrophone: "microfone",
+    deviceCamera: "c\u00e2mara",
     subtitle:
       "Reuniões de vídeo e áudio que funcionam no navegador. Partilhe uma ligação — nada para instalar, e aguenta uma ligação fraca.",
     newMeeting: "Nova reunião",

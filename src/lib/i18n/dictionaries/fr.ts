@@ -381,6 +381,13 @@ export const fr: Dictionary = {
 
   meetings: {
     title: "Réunions",
+    mediaBlocked: "Votre navigateur bloque le {device}. Touchez le cadenas ou \u00ab\u00a0aA\u00a0\u00bb dans la barre d'adresse, autorisez-le, puis rechargez la page.",
+    mediaMissing: "Aucun {device} n'a \u00e9t\u00e9 trouv\u00e9 sur cet appareil.",
+    mediaInUse: "Une autre application utilise votre {device} \u2014 g\u00e9n\u00e9ralement un appel ou un autre onglet. Fermez-la et r\u00e9essayez.",
+    mediaUnreachable: "Nous n'avons pas pu acc\u00e9der \u00e0 votre {device}. V\u00e9rifiez l'autorisation dans votre navigateur et r\u00e9essayez.",
+    mediaUnsupported: "Ce navigateur ne peut pas utiliser votre {device}. Ouvrez le lien dans Chrome ou Safari plut\u00f4t que dans une autre application.",
+    deviceMicrophone: "microphone",
+    deviceCamera: "cam\u00e9ra",
     subtitle:
       "Des réunions vidéo et audio qui fonctionnent dans le navigateur. Partagez un lien — rien à installer, et cela tient sur une connexion faible.",
     newMeeting: "Nouvelle réunion",

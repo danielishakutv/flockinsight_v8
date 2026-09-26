@@ -384,6 +384,13 @@ export const ig: Dictionary = {
 
   meetings: {
     title: "Nzukọ",
+    mediaBlocked: "Ihe nchọgharị gị na-egbochi {device}. Pịa mkpọchi ma ọ bụ \u201caA\u201d na mpempe adreesị, kwe ya, wee tọgharịa ibe a.",
+    mediaMissing: "Achọtaghị {device} ọ bụla na ngwaọrụ a.",
+    mediaInUse: "Ihe ọzọ na-eji {device} gị \u2014 ọtụtụ mgbe ọ bụ oku ma ọ bụ mpempe ọzọ. Mechie ya ma nwaa ọzọ.",
+    mediaUnreachable: "Anyị enweghị ike iru {device} gị. Lelee ikike dị na ihe nchọgharị gị ma nwaa ọzọ.",
+    mediaUnsupported: "Ihe nchọgharị a enweghị ike iji {device} gị. Mepee njikọ ahụ na Chrome ma ọ bụ Safari kama n'ime ngwa ọzọ.",
+    deviceMicrophone: "maikrofon",
+    deviceCamera: "igwefoto",
     subtitle:
       "Nzukọ vidiyo na olu na-arụ ọrụ n'ime ihe nchọgharị. Kesaa njikọ — ọ dịghị ihe a ga-ebudata, ọ na-arụkwa ọrụ na ịntanetị na-adịghị ike.",
     newMeeting: "Nzukọ ọhụrụ",

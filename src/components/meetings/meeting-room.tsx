@@ -51,7 +51,7 @@ import {
   type RecorderMode,
   type RecordingResult,
 } from "@/lib/meeting-recorder";
-import { JoinScreen, type JoinValues } from "@/components/meetings/join-screen";
+import { JoinScreen, type JoinValues, MEDIA_FAULT_KEY } from "@/components/meetings/join-screen";
 import { VideoTile } from "@/components/meetings/video-tile";
 import { StageView } from "@/components/meetings/stage-view";
 import { ChatPanel, type ChatMessage } from "@/components/meetings/chat-panel";
@@ -98,6 +98,17 @@ type JoinResponse = {
   cursor?: number;
 };
 
+/**
+ * A finished recording, plus the two things the upload needs that the recorder
+ * itself has no way to know: which row on the server it belongs to, and which
+ * mode it was captured in. They used to be read off live state at upload time,
+ * which had already been cleared by then.
+ */
+type PendingSave = RecordingResult & {
+  recordingId: string | null;
+  mode: RecorderMode;
+};
+
 export function MeetingRoom(props: {
   code: string;
   title: string;
@@ -136,7 +147,7 @@ export function MeetingRoom(props: {
   const [floaters, setFloaters] = useState<{ id: string; emoji: string; left: number }[]>([]);
   const [recording, setRecording] = useState<{ id: string | null; mode: RecorderMode } | null>(null);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
-  const [pendingSave, setPendingSave] = useState<RecordingResult | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [savingRecording, setSavingRecording] = useState(false);
   const [waiting, setWaiting] = useState<{ participantId: string; name: string }[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -266,6 +277,20 @@ export function MeetingRoom(props: {
               setPhase("ended");
             },
             onError: (message) => toast.error(message),
+            // A device that would not open, said in the reader's language.
+            // Long, because "check your settings" is no help to somebody
+            // whose actual problem is that a phone call has the microphone.
+            onMediaFault: (fault, device) =>
+              toast.error(
+                t(MEDIA_FAULT_KEY[fault], {
+                  device: t(
+                    device === "camera"
+                      ? "meetings.deviceCamera"
+                      : "meetings.deviceMicrophone",
+                  ),
+                }),
+                { duration: 8000 },
+              ),
             onTransport: setTransport,
           },
         });
@@ -474,6 +499,38 @@ export function MeetingRoom(props: {
     [],
   );
 
+  /**
+   * Say something, and see that you said it.
+   *
+   * The server broadcasts to the room but never back to the sender, so the
+   * message is appended here from what the action returns. `onChat` keys on
+   * the id, so this cannot double up.
+   */
+  const sendChat = useCallback(
+    async (body: string) => {
+      const res = await runAction("chat", { body });
+      if (!res?.ok) return;
+      const id = typeof res.id === "string" ? res.id : crypto.randomUUID();
+      const createdAt =
+        typeof res.createdAt === "string" ? res.createdAt : new Date().toISOString();
+      setMessages((prev) =>
+        prev.some((m) => m.id === id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id,
+                authorName: me?.name ?? "You",
+                body,
+                kind: "chat",
+                createdAt,
+              },
+            ],
+      );
+    },
+    [runAction, me],
+  );
+
   /* ============================================================
    * Recording
    * ========================================================== */
@@ -548,9 +605,12 @@ export function MeetingRoom(props: {
     const result = await recorder.stop();
     recorderRef.current = null;
     await runAction("recording.stop");
+    // Carry the id and the mode over to the file BEFORE clearing the state:
+    // the upload needs them, and `setRecording(null)` used to run first, so
+    // every upload posted an empty id and the row never left "uploading".
+    if (result) setPendingSave({ ...result, recordingId: recording?.id ?? null, mode: recording?.mode ?? "video" });
     setRecording(null);
-    if (result) setPendingSave(result);
-  }, [runAction]);
+  }, [runAction, recording]);
 
   const saveRecording = useCallback(
     async (alsoDownload: boolean) => {
@@ -562,9 +622,9 @@ export function MeetingRoom(props: {
         const form = new FormData();
         form.set("peer", me.peerId);
         form.set("secret", me.secret);
-        form.set("recordingId", recording?.id ?? "");
+        form.set("recordingId", pendingSave.recordingId ?? "");
         form.set("durationSec", String(pendingSave.durationSec));
-        form.set("mode", recording?.mode ?? "video");
+        form.set("mode", pendingSave.mode);
         form.set("file", pendingSave.blob, pendingSave.filename);
 
         const res = await fetch(`/api/meet/${props.code}/recording`, {
@@ -584,7 +644,7 @@ export function MeetingRoom(props: {
         setSavingRecording(false);
       }
     },
-    [pendingSave, me, recording, props.code, t],
+    [pendingSave, me, props.code, t],
   );
 
   /* ============================================================
@@ -783,7 +843,12 @@ export function MeetingRoom(props: {
           </div>
 
           {others.length === 0 && !showStage && (
-            <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-sm text-slate-500">
+            /*
+             * In the flow, not over the tile. Absolutely positioned at the
+             * bottom of the stage it landed exactly on the one tile's own name
+             * plate, which is absolutely positioned at the bottom of the tile.
+             */
+            <p className="shrink-0 px-2 pb-1 text-center text-sm text-balance text-slate-500">
               {t("meetings.onlyOneHere")}
             </p>
           )}
@@ -960,7 +1025,7 @@ export function MeetingRoom(props: {
         <ChatPanel
           messages={messages}
           disabled={!meeting?.allowChat}
-          onSend={(body) => void runAction("chat", { body })}
+          onSend={(body) => void sendChat(body)}
         />
       );
     if (panel === "people")

@@ -111,7 +111,7 @@ export default async function MeetingDetailPage({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {/* Register */}
           <Card>
             <CardHeader className="flex-row items-center justify-between">
@@ -262,7 +262,7 @@ export default async function MeetingDetailPage({
         </div>
 
         {/* Side */}
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Share this meeting</CardTitle>

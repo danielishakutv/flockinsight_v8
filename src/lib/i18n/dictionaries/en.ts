@@ -425,6 +425,13 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    mediaBlocked: "Your browser is blocking the {device}. Tap the padlock or \u201caA\u201d in the address bar, allow it, then reload this page.",
+    mediaMissing: "No {device} was found on this device.",
+    mediaInUse: "Something else is using your {device} \u2014 usually a phone call or another tab. Close it and try again.",
+    mediaUnreachable: "We couldn't reach your {device}. Check the permission in your browser and try again.",
+    mediaUnsupported: "This browser cannot use your {device}. Open the link in Chrome or Safari rather than inside another app.",
+    deviceMicrophone: "microphone",
+    deviceCamera: "camera",
     subtitle:
       "Video and audio meetings that run in the browser. Share a link — nothing to install, and it holds up on a weak connection.",
     newMeeting: "New meeting",

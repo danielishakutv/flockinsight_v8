@@ -98,7 +98,7 @@ export function ScrollableTable({
   }, [measure]);
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative w-full min-w-0", className)}>
       <div
         ref={ref}
         onScroll={measure}
@@ -106,7 +106,13 @@ export function ScrollableTable({
         aria-label={scrollable ? label : undefined}
         tabIndex={scrollable ? 0 : undefined}
         className={cn(
-          "overflow-x-auto overscroll-x-contain",
+          // `min-w-0` is not decoration. `overflow-x-auto` on a block element
+          // does not reduce its min-content contribution -- that behaviour is
+          // for flex items -- so a `min-w-[30rem]` table inside one still
+          // pushes every ancestor to 480px unless something says otherwise.
+          // This says it here; the container still needs to be able to shrink,
+          // which for a grid or flex item means `min-w-0` on that item too.
+          "w-full min-w-0 overflow-x-auto overscroll-x-contain",
           // A visible ring when a keyboard focuses the scroller, so it is clear
           // what the arrow keys are about to move.
           "focus-visible:ring-ring/50 rounded-lg focus-visible:ring-2 focus-visible:outline-none",
