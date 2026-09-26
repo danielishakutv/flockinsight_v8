@@ -90,6 +90,7 @@ type JoinResponse = {
     allowChat: boolean;
     allowReactions: boolean;
     allowScreenShare: boolean;
+    transport?: string;
     allowRecording: boolean;
     churchName: string;
     churchLogo: string | null;
@@ -361,6 +362,9 @@ export function MeetingRoom(props: {
           iceServers: data.ice.iceServers,
           iceTransportPolicy: data.ice.iceTransportPolicy,
           lowData: data.me.lowData,
+          // Decided by the server before anybody joined. Everyone in a room
+          // uses the same one; see the note on `meeting.transport`.
+          transport: data.meeting.transport === "sfu" ? "sfu" : "mesh",
           events: {
             onRoster: setRoster,
             onStage: (s) => setStage(parseStage(s)),

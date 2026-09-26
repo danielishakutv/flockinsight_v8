@@ -81,21 +81,9 @@ export function isSfuConfigured(): boolean {
   );
 }
 
-/**
- * The fixed names a participant's tracks go by.
- *
- * Constant rather than generated, because a track is already scoped by the
- * session it belongs to — `(sessionId, "cam")` is unique across the room. It
- * also means a subscriber knows what to ask for without being told: seeing
- * somebody in the roster is enough.
- */
-export const TRACK_NAMES = {
-  mic: "mic",
-  camera: "cam",
-  screen: "screen",
-} as const;
-
-export type TrackName = (typeof TRACK_NAMES)[keyof typeof TRACK_NAMES];
+// The track names live in `meetings-shared` so both halves share one
+// vocabulary; this module is server-only and the browser needs them too.
+export { TRACK_NAMES, type TrackName } from "@/lib/meetings-shared";
 
 class SfuError extends Error {
   constructor(

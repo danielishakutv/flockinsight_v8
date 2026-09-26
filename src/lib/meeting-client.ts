@@ -29,6 +29,7 @@ import {
   type SignalType,
   type Stage,
 } from "@/lib/meetings-shared";
+import { SfuTransport } from "@/lib/meeting-sfu";
 
 export type TrackSlot = "audio" | "camera" | "screen";
 
@@ -138,6 +139,11 @@ export type MeetingClientInit = {
   iceServers: RTCIceServer[];
   iceTransportPolicy?: RTCIceTransportPolicy;
   lowData: boolean;
+  /**
+   * How media travels in this room. Fixed for the meeting — see the note on
+   * `meeting.transport` in the schema for why it can never change mid-call.
+   */
+  transport?: "mesh" | "sfu";
   events: MeetingClientEvents;
 };
 
@@ -236,6 +242,13 @@ export class MeetingClient {
   private micStream: MediaStream | null = null;
   /** Which way up the camera was last asked for — see `handleRotation`. */
   private capturedPortrait = false;
+  /**
+   * The SFU, when this room uses one. Null on a mesh room, and every
+   * peer-to-peer code path below returns early when it is set — the two
+   * transports never interleave.
+   */
+  private sfu: SfuTransport | null = null;
+  private readonly transport: "mesh" | "sfu";
   private camStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
 
@@ -251,6 +264,7 @@ export class MeetingClient {
     this.secret = init.secret;
     this.cursor = init.cursor;
     this.events = init.events;
+    this.transport = init.transport ?? "mesh";
     this.rtcConfig = {
       iceServers: init.iceServers,
       iceTransportPolicy: init.iceTransportPolicy ?? "all",
@@ -275,6 +289,57 @@ export class MeetingClient {
    * Lifecycle
    * ========================================================== */
 
+  /**
+   * The SFU's view of the room, assembled into the same `RemoteMedia` shape the
+   * mesh produces — so the room component, the tiles, the recorder and the
+   * speaking detector all carry on unchanged. A transport is an implementation
+   * detail of this class and of nothing above it.
+   */
+  private buildSfu(): SfuTransport {
+    return new SfuTransport(
+      async (action, body) => {
+        const res = await fetch(`/api/meet/${this.code}/sfu`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            peer: this.peerId,
+            secret: this.secret,
+            action,
+            ...body,
+          }),
+        });
+        const data = (await res.json()) as Record<string, unknown>;
+        if (!res.ok || data.ok === false) {
+          throw new Error(String(data.error ?? `sfu ${action} failed`));
+        }
+        return data;
+      },
+      this.rtcConfig.iceServers ?? [],
+      {
+        onMedia: (peerId, bundle) => {
+          const screen = bundle.screen.getVideoTracks().length > 0;
+          this.media.set(peerId, {
+            peerId,
+            stream: bundle.stream,
+            hasAudio: bundle.stream.getAudioTracks().length > 0,
+            hasCamera: bundle.stream.getVideoTracks().length > 0,
+            hasScreen: screen,
+            screenStream: screen ? bundle.screen : null,
+          });
+          this.events.onMedia?.(new Map(this.media));
+        },
+        onGone: (peerId) => {
+          this.media.delete(peerId);
+          this.events.onMedia?.(new Map(this.media));
+        },
+        onState: (state) => {
+          if (state === "failed") this.events.onTransport?.("retrying");
+        },
+        onError: (message) => this.events.onError?.(message),
+      },
+    );
+  }
+
   start(): void {
     if (this.running) return;
     this.running = true;
@@ -290,6 +355,9 @@ export class MeetingClient {
    * Safe to call more than once — React will, in development.
    */
   async stop(): Promise<void> {
+    this.sfu?.close();
+    this.sfu = null;
+
     if (!this.running && this.peers.size === 0) return;
     this.running = false;
 
@@ -484,6 +552,16 @@ export class MeetingClient {
    * leaving a permanent black tile.
    */
   private reconcilePeers(roster: RosterEntry[]): void {
+    if (this.transport === "sfu") {
+      // No peers to dial. The roster says who is publishing and where, and the
+      // transport pulls whatever it has not already got.
+      this.sfu ??= this.buildSfu();
+      void this.sfu.sync(roster, this.peerId).catch((e) => {
+        console.error("[sfu] sync failed", e);
+      });
+      return;
+    }
+
     const present = new Set(
       roster.filter((r) => r.admitted && r.peerId !== this.peerId).map((r) => r.peerId),
     );
@@ -968,6 +1046,22 @@ export class MeetingClient {
   }
 
   private attachEverywhere(): void {
+    if (this.transport === "sfu") {
+      /*
+       * Published once, not once per person. This is the entire point of the
+       * SFU: in a mesh this loop is where a phone ends up encoding a separate
+       * stream for every other person in the room.
+       */
+      this.sfu ??= this.buildSfu();
+      void this.sfu
+        .setLocal({
+          mic: this.state.micOn ? (this.micStream?.getAudioTracks()[0] ?? null) : null,
+          camera: this.state.cameraOn ? (this.camStream?.getVideoTracks()[0] ?? null) : null,
+          screen: this.state.sharing ? (this.screenStream?.getVideoTracks()[0] ?? null) : null,
+        })
+        .catch((e) => console.error("[sfu] publish failed", e));
+      return;
+    }
     for (const [, p] of this.peers) this.attachLocalTracks(p);
   }
 
@@ -1208,7 +1302,9 @@ export class MeetingClient {
    * ========================================================== */
 
   private applyProfile(): void {
-    const peers = Math.max(1, this.peers.size);
+    // On the SFU the room size no longer decides the upload, because there is
+    // only ever one of it. The link's own quality still does.
+    const peers = this.transport === "sfu" ? 1 : Math.max(1, this.peers.size);
     this.state.profile = profileFor({
       peers,
       lowData: this.state.lowData,

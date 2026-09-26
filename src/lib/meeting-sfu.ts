@@ -1,0 +1,384 @@
+import {
+  TRACK_NAMES,
+  type RosterEntry,
+} from "@/lib/meetings-shared";
+
+/**
+ * The SFU transport — the browser half.
+ *
+ * Deliberately a separate object from `MeetingClient` rather than a rewrite of
+ * it. Everything that makes a meeting a meeting — signalling, the roster, chat,
+ * reactions, the stage, recording, presence — is the same whichever way media
+ * travels, and all of it already works. Only the media plumbing differs, so
+ * only the media plumbing is duplicated, and the mesh path is not touched at
+ * all by any of this.
+ *
+ * TWO CONNECTIONS, and the reason matters. A publisher (sendonly) carries this
+ * person's own tracks; a subscriber (recvonly) carries everybody else's. One
+ * connection would mean that somebody switching their camera on renegotiates
+ * the same connection that is delivering the sermon to them. Two means those
+ * two events cannot interfere.
+ *
+ * NO GUESSING WHICH TRACK IS WHOSE. The mesh path had to infer that from
+ * transceiver identity and lost a day to getting it wrong. Here the SFU tells
+ * us: every pull returns the `mid` it allocated, so `mid -> (peerId, kind)` is
+ * recorded from the answer and `ontrack` is a lookup. There is no fallback,
+ * because there is nothing to fall back to.
+ *
+ * ONE MUTATION AT A TIME. Cloudflare rejects concurrent changes to a session
+ * with a 406, and a room where four people join at once is exactly when that
+ * happens. Every call goes through `queue`, which is a promise chain, so the
+ * ordering is enforced here where the session is owned rather than hoped for.
+ */
+
+export type SfuEvents = {
+  /** A peer's media changed: new tracks, or a track that stopped. */
+  onMedia: (peerId: string, media: { stream: MediaStream; screen: MediaStream }) => void;
+  /** A peer left, or stopped publishing entirely. */
+  onGone: (peerId: string) => void;
+  /** Connection health, for the same pill the mesh drives. */
+  onState: (state: RTCPeerConnectionState) => void;
+  onError: (message: string) => void;
+};
+
+type Api = (action: string, body: Record<string, unknown>) => Promise<Record<string, unknown>>;
+
+type PulledTrack = { peerId: string; name: string };
+
+/** What we are currently sending, so a change can be compared against it. */
+type Published = { mic?: string; cam?: string; screen?: string };
+
+export class SfuTransport {
+  private publisher: RTCPeerConnection | null = null;
+  private subscriber: RTCPeerConnection | null = null;
+
+  private publisherSession: string | null = null;
+  private subscriberSession: string | null = null;
+
+  /** Our own sendonly transceivers, by track name. */
+  private senders = new Map<string, RTCRtpTransceiver>();
+  private published: Published = {};
+
+  /** `mid` -> whose track it is. Filled in from the SFU's own answer. */
+  private incoming = new Map<string, PulledTrack>();
+  /** What we have already asked for, so a poll does not re-pull every tick. */
+  private pulled = new Set<string>();
+
+  /** Per-peer media, assembled as tracks arrive. */
+  private media = new Map<string, { stream: MediaStream; screen: MediaStream }>();
+
+  private chain: Promise<unknown> = Promise.resolve();
+  private stopped = false;
+
+  constructor(
+    private readonly api: Api,
+    private readonly iceServers: RTCIceServer[],
+    private readonly events: SfuEvents,
+  ) {}
+
+  /**
+   * Serialise every mutation of a session.
+   *
+   * Cloudflare answers a second concurrent change to one session with a 406,
+   * and the moment that happens is a room where several people join together —
+   * precisely when a meeting must not break. A promise chain is enough because
+   * each session is mutated only from this object.
+   */
+  private queue<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(work, work);
+    // Keep the chain alive after a failure: one bad pull must not stop every
+    // later one from being attempted.
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+
+  private pc(): RTCPeerConnection {
+    return new RTCPeerConnection({ iceServers: this.iceServers, bundlePolicy: "max-bundle" });
+  }
+
+  /**
+   * Wait for ICE gathering to finish before handing an SDP to the SFU.
+   *
+   * Cloudflare's API takes one description rather than a stream of candidates,
+   * so a description sent early is a description with no way to connect.
+   * Bounded, because a network that never finishes gathering would otherwise
+   * hang the join for ever — and a partial candidate list usually still works.
+   */
+  private async gathered(pc: RTCPeerConnection): Promise<void> {
+    if (pc.iceGatheringState === "complete") return;
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      };
+      const check = () => {
+        if (pc.iceGatheringState === "complete") done();
+      };
+      pc.addEventListener("icegatheringstatechange", check);
+      setTimeout(done, 3000);
+    });
+  }
+
+  /* ============================================================
+   * Publishing
+   * ========================================================== */
+
+  /**
+   * Send these tracks, replacing whatever was being sent before.
+   *
+   * A track that is already published is swapped with `replaceTrack`, which
+   * needs no renegotiation at all — so turning a camera on and off in a room
+   * of two hundred costs one local operation and nothing on the wire.
+   */
+  async setLocal(tracks: {
+    mic: MediaStreamTrack | null;
+    camera: MediaStreamTrack | null;
+    screen: MediaStreamTrack | null;
+  }): Promise<void> {
+    await this.queue(async () => {
+      if (this.stopped) return;
+
+      if (!this.publisher) {
+        this.publisher = this.pc();
+        this.publisher.onconnectionstatechange = () => {
+          if (this.publisher) this.events.onState(this.publisher.connectionState);
+        };
+        this.publisherSession = await this.session();
+      }
+
+      const wanted: [keyof Published, string, MediaStreamTrack | null][] = [
+        ["mic", TRACK_NAMES.mic, tracks.mic],
+        ["cam", TRACK_NAMES.camera, tracks.camera],
+        ["screen", TRACK_NAMES.screen, tracks.screen],
+      ];
+
+      const fresh: { mid: string; trackName: string }[] = [];
+
+      for (const [key, name, track] of wanted) {
+        const existing = this.senders.get(name);
+        if (existing) {
+          // Already negotiated: a swap, or silence. No SDP either way.
+          await existing.sender.replaceTrack(track);
+          continue;
+        }
+        if (!track) continue;
+
+        const tr = this.publisher.addTransceiver(track, { direction: "sendonly" });
+        this.senders.set(name, tr);
+        this.published[key] = name;
+        fresh.push({ mid: "", trackName: name });
+      }
+
+      if (fresh.length === 0) return;
+
+      const offer = await this.publisher.createOffer();
+      await this.publisher.setLocalDescription(offer);
+      await this.gathered(this.publisher);
+
+      // Mids only exist after setLocalDescription, which is why they are read
+      // here rather than when the transceiver was created.
+      const payload = fresh
+        .map((f) => ({
+          mid: this.senders.get(f.trackName)?.mid ?? "",
+          trackName: f.trackName,
+        }))
+        .filter((f) => f.mid);
+
+      const res = await this.api("publish", {
+        session: this.publisherSession,
+        sdp: {
+          type: "offer",
+          sdp: this.publisher.localDescription?.sdp ?? "",
+        },
+        tracks: payload,
+      });
+
+      const answer = res.sessionDescription as RTCSessionDescriptionInit | undefined;
+      if (answer?.sdp) await this.publisher.setRemoteDescription(answer);
+    });
+  }
+
+  /* ============================================================
+   * Subscribing
+   * ========================================================== */
+
+  /**
+   * Pull whatever is new in the roster, and drop whoever has gone.
+   *
+   * Driven by the same poll that already keeps the roster current, so there is
+   * no second source of truth about who is in the room. Only tracks not
+   * already pulled are asked for, which is what keeps a four-second poll from
+   * renegotiating four times a second.
+   */
+  async sync(roster: RosterEntry[], myPeerId: string): Promise<void> {
+    await this.queue(async () => {
+      if (this.stopped) return;
+
+      const others = roster.filter(
+        (r) => r.admitted && r.peerId !== myPeerId && r.sfuSessionId,
+      );
+      const live = new Set(others.map((r) => r.peerId));
+
+      for (const [peerId] of this.media) {
+        if (!live.has(peerId)) {
+          this.media.delete(peerId);
+          this.events.onGone(peerId);
+        }
+      }
+
+      const wanted: { sessionId: string; trackName: string }[] = [];
+      const record: PulledTrack[] = [];
+
+      for (const r of others) {
+        for (const name of [TRACK_NAMES.mic, TRACK_NAMES.camera, TRACK_NAMES.screen]) {
+          const key = `${r.peerId}:${name}`;
+          if (this.pulled.has(key)) continue;
+          this.pulled.add(key);
+          wanted.push({ sessionId: r.sfuSessionId as string, trackName: name });
+          record.push({ peerId: r.peerId, name });
+        }
+      }
+
+      if (wanted.length === 0) return;
+
+      if (!this.subscriber) {
+        this.subscriber = this.pc();
+        this.subscriber.ontrack = (e) => this.onTrack(e);
+        this.subscriberSession = await this.session();
+      }
+
+      let res: Record<string, unknown>;
+      try {
+        res = await this.api("pull", {
+          session: this.subscriberSession,
+          tracks: wanted,
+        });
+      } catch (e) {
+        // Let them be asked for again on the next poll: somebody who has not
+        // published yet is the common case, not a failure.
+        for (const r of record) this.pulled.delete(`${r.peerId}:${r.name}`);
+        throw e;
+      }
+
+      /*
+       * The SFU says which mid each track landed on. This is the whole reason
+       * the SFU path cannot suffer the slot confusion the mesh path did: the
+       * mapping is stated rather than inferred.
+       */
+      /*
+       * By POSITION, not by name. Every person's camera is called "cam", so
+       * matching on the name alone would give three people's video to whoever
+       * happened to be first in the list. The response is in the order the
+       * tracks were asked for, and `record` was built in that same order.
+       */
+      const results = (res.tracks as { mid?: string; trackName?: string }[]) ?? [];
+      results.forEach((t, i) => {
+        const who = record[i];
+        if (!t.mid || !who) return;
+        if (t.trackName && t.trackName !== who.name) {
+          // Order and names disagreeing means an assumption here is wrong, and
+          // silently mis-routing somebody's camera is the expensive outcome.
+          console.warn("[sfu] pull result out of order", t.trackName, who.name);
+          return;
+        }
+        this.incoming.set(t.mid, who);
+      });
+
+      const offer = res.sessionDescription as RTCSessionDescriptionInit | undefined;
+      if (!offer?.sdp) return;
+
+      await this.subscriber.setRemoteDescription(offer);
+      const answer = await this.subscriber.createAnswer();
+      await this.subscriber.setLocalDescription(answer);
+      await this.gathered(this.subscriber);
+
+      await this.api("renegotiate", {
+        session: this.subscriberSession,
+        sdp: {
+          type: "answer",
+          sdp: this.subscriber.localDescription?.sdp ?? "",
+        },
+      });
+    });
+  }
+
+  private onTrack(e: RTCTrackEvent): void {
+    const mid = e.transceiver.mid;
+    const who = mid ? this.incoming.get(mid) : undefined;
+    if (!who) {
+      // Nothing to guess at. An unmapped track means the answer and the event
+      // disagreed, which is a bug worth seeing rather than papering over.
+      console.warn("[sfu] a track arrived on an unmapped mid", mid);
+      return;
+    }
+
+    let bundle = this.media.get(who.peerId);
+    if (!bundle) {
+      bundle = { stream: new MediaStream(), screen: new MediaStream() };
+      this.media.set(who.peerId, bundle);
+    }
+
+    const target = who.name === TRACK_NAMES.screen ? bundle.screen : bundle.stream;
+    for (const t of target.getTracks()) {
+      if (t.kind === e.track.kind && t.id !== e.track.id) target.removeTrack(t);
+    }
+    if (!target.getTracks().includes(e.track)) target.addTrack(e.track);
+
+    // A fresh MediaStream per change, for the same reason the mesh path needs
+    // one: a `<video>` holds srcObject by reference and never notices a stream
+    // mutated underneath it.
+    this.events.onMedia(who.peerId, {
+      stream: new MediaStream(bundle.stream.getTracks()),
+      screen: new MediaStream(bundle.screen.getTracks()),
+    });
+
+    e.track.onended = () => this.events.onMedia(who.peerId, {
+      stream: new MediaStream(bundle.stream.getTracks()),
+      screen: new MediaStream(bundle.screen.getTracks()),
+    });
+  }
+
+  private async session(): Promise<string> {
+    const res = await this.api("session", {});
+    const id = res.sessionId;
+    if (typeof id !== "string") throw new Error("The media server gave no session.");
+    return id;
+  }
+
+  /** Per-connection stats, in the shape the diagnostics panel already reads. */
+  async stats(): Promise<{ videoInKbps: number; videoOutKbps: number }> {
+    let inBytes = 0;
+    let outBytes = 0;
+    for (const pc of [this.publisher, this.subscriber]) {
+      if (!pc) continue;
+      const report = await pc.getStats();
+      report.forEach((r) => {
+        const x = r as unknown as Record<string, number | string>;
+        if (x.type === "inbound-rtp" && x.kind === "video") {
+          inBytes += Number(x.bytesReceived ?? 0);
+        }
+        if (x.type === "outbound-rtp" && x.kind === "video") {
+          outBytes += Number(x.bytesSent ?? 0);
+        }
+      });
+    }
+    return { videoInKbps: inBytes, videoOutKbps: outBytes };
+  }
+
+  close(): void {
+    this.stopped = true;
+    for (const pc of [this.publisher, this.subscriber]) {
+      try {
+        pc?.close();
+      } catch {
+        /* already closed */
+      }
+    }
+    this.publisher = null;
+    this.subscriber = null;
+    this.media.clear();
+    this.incoming.clear();
+    this.pulled.clear();
+    this.senders.clear();
+  }
+}

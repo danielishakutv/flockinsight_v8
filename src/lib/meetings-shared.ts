@@ -682,3 +682,22 @@ export function chooseTransport(opts: {
 export function meetingLimitFor(plan: string): number | null {
   return plan in MEETING_LIMIT_BY_PLAN ? MEETING_LIMIT_BY_PLAN[plan] : 12;
 }
+
+/**
+ * What a participant's tracks are called on the SFU.
+ *
+ * Fixed rather than generated, because a track is already scoped by the session
+ * it belongs to — `(sessionId, "cam")` is unique across the room. It also means
+ * a subscriber knows what to ask for without being told anything: seeing
+ * somebody in the roster is enough.
+ *
+ * Here rather than in `sfu.ts` because both halves need the same vocabulary and
+ * that module is server-only.
+ */
+export const TRACK_NAMES = {
+  mic: "mic",
+  camera: "cam",
+  screen: "screen",
+} as const;
+
+export type TrackName = (typeof TRACK_NAMES)[keyof typeof TRACK_NAMES];
