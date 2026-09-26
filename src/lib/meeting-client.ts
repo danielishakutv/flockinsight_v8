@@ -79,6 +79,13 @@ export type PeerDiagnostics = {
    */
   framesDecoded: number;
   framesDropped: number;
+  /**
+   * What the `<video>` element showing this peer is doing, reported back by
+   * the tile. The last link in the chain, and the only one `getStats` cannot
+   * see: frames can decode perfectly into an element that is paused, has no
+   * stream, or has never been given dimensions.
+   */
+  element?: { width: number; paused: boolean; readyState: number } | null;
 };
 
 export type MeetingClientEvents = {
@@ -1191,6 +1198,20 @@ export class MeetingClient {
     return d;
   }
 
+  /**
+   * What the tile reports about its own video element.
+   *
+   * Pushed in from the UI because only the element knows. Kept here so the
+   * diagnostics panel reads one shape from one place.
+   */
+  reportElement(
+    peerId: string,
+    element: { width: number; paused: boolean; readyState: number },
+  ): void {
+    const p = this.peers.get(peerId);
+    if (p?.diagnostics) p.diagnostics = { ...p.diagnostics, element };
+  }
+
   /** Everything the diagnostics panel shows, as of the last sample. */
   diagnostics(): PeerDiagnostics[] {
     return [...this.peers.values()].map(
@@ -1283,6 +1304,16 @@ export class MeetingClient {
         /* a connection that is closing has no stats to give */
       }
     }
+
+    /*
+     * Republish while we are here. Everything derived from a remote track's
+     * `muted` flag depends on an event that can be missed — fired before a
+     * handler was attached, or coalesced — and a roster icon stuck on "camera
+     * off" for the rest of a meeting is the visible half of the bug that hid
+     * the missing video. Recomputing every four seconds costs nothing and
+     * means any missed edge heals itself.
+     */
+    for (const [peerId, p] of this.peers) this.publishMedia(peerId, p);
 
     const quality = rateLink({
       packetLossPct: worstLoss,

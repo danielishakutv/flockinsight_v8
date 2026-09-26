@@ -1034,7 +1034,19 @@ export function MeetingRoom(props: {
                 <VideoTile
                   key={r.peerId}
                   name={r.name}
-                  stream={m?.hasCamera ? (m?.stream ?? null) : null}
+                  /*
+                   * Always, not `hasCamera ? … : null`.
+                   *
+                   * `hasCamera` asks whether a remote track is unmuted, which
+                   * only changes by event, so the picture appearing depended
+                   * on a `mute`/`unmute` event firing AND being heard. When it
+                   * was not, the stream was never handed to an element at all:
+                   * 288 kbit/s arriving, 1404 frames decoded, and an avatar on
+                   * screen. The tile shows the avatar until the element paints,
+                   * which is the only thing that actually knows whether pixels
+                   * exist, so the gate is redundant as well as wrong.
+                   */
+                  stream={m?.stream ?? null}
                   micOn={r.micOn}
                   handRaised={r.handRaised}
                   speaking={speaking.has(r.peerId)}
@@ -1048,6 +1060,9 @@ export function MeetingRoom(props: {
                   }
                   dataSaverNote={t("meetings.videoOffInDataSaver")}
                   tapToPlay={t("meetings.tapToPlay")}
+                  onElement={(state) =>
+                    clientRef.current?.reportElement(r.peerId, state)
+                  }
                   roleLabel={isHostRole(r.role) ? t("meetings.host") : null}
                   pinned={focus === r.peerId}
                   spotlit={spotlight === r.peerId}

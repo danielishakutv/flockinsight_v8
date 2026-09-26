@@ -213,6 +213,23 @@ function LinkLine({ link, cameraOn }: { link: PeerDiagnostics; cameraOn: boolean
           {link.framesDropped > 0 ? ` · ${link.framesDropped} dropped` : ""}
         </span>
       )}
+      {/*
+        The last link in the chain, and the one `getStats` cannot see. Frames
+        can decode perfectly into an element that is paused, or that was never
+        given the stream at all — which is precisely what happened here.
+      */}
+      {link.element && (
+        <span
+          className={cn(
+            "block",
+            (link.element.width === 0 || link.element.paused) && "text-rose-400",
+          )}
+        >
+          {`element ${link.element.width}px`}
+          {link.element.paused ? " · paused" : " · playing"}
+          {` · ready ${link.element.readyState}`}
+        </span>
+      )}
     </span>
   );
 }

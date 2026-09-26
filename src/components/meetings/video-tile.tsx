@@ -35,6 +35,12 @@ export type TileProps = {
   dataSaverNote?: string;
   /** Shown when the browser refuses to start the video. */
   tapToPlay?: string;
+  /**
+   * Report what this element is actually doing. Only the element knows
+   * whether there are pixels — `getStats` can show a perfectly decoded stream
+   * going into one that is paused or has never been given a stream at all.
+   */
+  onElement?: (state: { width: number; paused: boolean; readyState: number }) => void;
   /** Only a host gets this: it changes what everybody else is looking at. */
   onSpotlight?: () => void;
   className?: string;
@@ -66,6 +72,7 @@ export function VideoTile({
   hiddenByDataSaver,
   dataSaverNote,
   tapToPlay = "Tap to play",
+  onElement,
   className,
   contain,
 }: TileProps) {
@@ -74,6 +81,16 @@ export function VideoTile({
   const [painting, setPainting] = useState(false);
   /** The browser refused to start it. Recoverable, with a tap. */
   const [blocked, setBlocked] = useState(false);
+  /*
+   * The reporter, held in a ref. It is an inline arrow at the call site, so a
+   * new function every render — in the dependency array it would tear down and
+   * re-create the play-and-poll effect on every render, which means asking the
+   * browser to play several times a second.
+   */
+  const reportRef = useRef(onElement);
+  useEffect(() => {
+    reportRef.current = onElement;
+  }, [onElement]);
 
   // The identity of the track, not of the stream. `publishable` in the client
   // now gives a new stream whenever the tracks change, so these move together
@@ -119,17 +136,22 @@ export function VideoTile({
      * has been decoded — so it is polled briefly after the stream arrives
      * rather than trusted from the event alone.
      */
-    let tries = 0;
     const check = setInterval(() => {
       if (cancelled) return;
+      reportRef.current?.({
+        width: el.videoWidth,
+        paused: el.paused,
+        readyState: el.readyState,
+      });
       if (el.videoWidth > 0) {
         setPainting(true);
         setBlocked(false);
-        clearInterval(check);
-      } else if (++tries > 40) {
-        clearInterval(check);
+      } else {
+        // Never give up. An earlier version stopped after ten seconds, which
+        // is exactly long enough to miss a camera switched on mid-meeting.
+        setPainting(false);
       }
-    }, 250);
+    }, 1000);
 
     return () => {
       cancelled = true;
