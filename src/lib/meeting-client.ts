@@ -142,6 +142,13 @@ type PeerState = {
   } | null;
   /** The last reading, kept so the panel never has to await `getStats`. */
   diagnostics: PeerDiagnostics | null;
+  /**
+   * The copies actually handed to React, and the track ids they were made
+   * from. See `publishable` — this is what stops a `<video>` element holding a
+   * reference to a stream whose tracks have since been swapped underneath it.
+   */
+  published: { key: string; stream: MediaStream } | null;
+  publishedScreen: { key: string; stream: MediaStream } | null;
 };
 
 const SEND_DEBOUNCE_MS = 40;
@@ -525,6 +532,8 @@ export class MeetingClient {
       peerId,
       lastBytes: null,
       diagnostics: null,
+      published: null,
+      publishedScreen: null,
     };
     this.peers.set(peerId, p);
 
@@ -780,6 +789,41 @@ export class MeetingClient {
     this.publishMedia(peerId, p);
   }
 
+  /**
+   * Hand out a stream whose identity changes when, and only when, its tracks do.
+   *
+   * This is the fix for the black remote tile, and it is worth spelling out.
+   * `p.stream` is one long-lived MediaStream that gets mutated in place — a
+   * track removed here, a new one added there, every time a peer restarts ICE
+   * or turns a camera off and on. A `<video>` element holds `srcObject` by
+   * reference, so the usual guard
+   *
+   *     if (el.srcObject !== stream) el.srcObject = stream;
+   *
+   * is false for ever after the first assignment, the element is never
+   * re-pointed, and Chrome goes on rendering the track that was removed. The
+   * result is a tile that is black while `getStats` cheerfully reports 300
+   * kilobits a second arriving, which is exactly how this presented.
+   *
+   * Copying on every publish would be the other extreme: a new object several
+   * times a second, so React re-renders every tile and each one re-assigns
+   * `srcObject`, which makes the picture blink. So the copy is keyed on the
+   * track ids — new object when the tracks change, the same object when they
+   * have not.
+   */
+  private publishable(
+    current: MediaStream,
+    cache: { key: string; stream: MediaStream } | null,
+  ): { key: string; stream: MediaStream } {
+    const tracks = current.getTracks();
+    const key = tracks
+      .map((t) => t.id)
+      .sort()
+      .join("|");
+    if (cache && cache.key === key) return cache;
+    return { key, stream: new MediaStream(tracks) };
+  }
+
   private publishMedia(peerId: string, p: PeerState): void {
     const audio = p.stream.getAudioTracks().some((t) => !t.muted);
     const camera = p.stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted);
@@ -787,13 +831,16 @@ export class MeetingClient {
       .getVideoTracks()
       .some((t) => t.readyState === "live" && !t.muted);
 
+    p.published = this.publishable(p.stream, p.published);
+    p.publishedScreen = this.publishable(p.screenStream, p.publishedScreen);
+
     this.media.set(peerId, {
       peerId,
-      stream: p.stream,
+      stream: p.published.stream,
       hasAudio: audio,
       hasCamera: camera,
       hasScreen: screen,
-      screenStream: screen ? p.screenStream : null,
+      screenStream: screen ? p.publishedScreen.stream : null,
     });
     this.events.onMedia?.(new Map(this.media));
   }

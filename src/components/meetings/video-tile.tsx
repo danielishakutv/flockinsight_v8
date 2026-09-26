@@ -68,6 +68,12 @@ export function VideoTile({
 }: TileProps) {
   const ref = useRef<HTMLVideoElement>(null);
 
+  // The identity of the track, not of the stream. `publishable` in the client
+  // now gives a new stream whenever the tracks change, so these move together
+  // — but a tile that renders black is expensive enough to debug that it is
+  // worth being certain from both ends.
+  const videoTrackId = stream?.getVideoTracks()[0]?.id ?? null;
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -78,7 +84,7 @@ export function VideoTile({
       // fires — and a failed play must not throw into React.
       void el.play().catch(() => {});
     }
-  }, [stream]);
+  }, [stream, videoTrackId]);
 
   const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.readyState === "live");
 
