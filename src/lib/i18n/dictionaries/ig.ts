@@ -384,6 +384,12 @@ export const ig: Dictionary = {
 
   meetings: {
     title: "Nzukọ",
+    savingToLibrary: "Na-echekwa n'ụlọ akwụkwọ gị…",
+    downloadOrLoseIt: "Budata ya ugbu a — ọ dị naanị na mpempe a, imechi ya ga-efunahụ ya.",
+    recordingUploadFailed: "Nbudata ahụ emechabeghị.",
+    allowToContinue: "Kwe ka igwefoto na maikrofon gị rụọ ọrụ ka ị gaa n'ihu",
+    joinAnywayHint: "Ị ka nwere ike ịbanye ige ntị ma jiri nkata.",
+    videoOffInDataSaver: "Vidiyo gbanyụrụ mgbe Nchekwa Data na-arụ ọrụ",
     leaveThisMeeting: "Ị ga-apụ na nzukọ a?",
     leaveThisMeetingHint: "Ị nwere ike iji otu njikọ ahụ laghachi.",
     stayInMeeting: "Nọrọ",

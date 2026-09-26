@@ -386,6 +386,12 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    savingToLibrary: "À ń fọ̀ sí ilé-ìwé rẹ…",
+    downloadOrLoseIt: "Gbà á wá nísisìyì — ó wà nínú táàbù yìí nìkan, tí o bá tí i, ó yóò sùnùnú.",
+    recordingUploadFailed: "Ìfẹ́rànsẹ́ kò parí.",
+    allowToContinue: "Fàyègbà kámẹ́rà àti gbohùngbohùn rẹ láti tẹ̀síwájú",
+    joinAnywayHint: "O ṣì lè wọlé láti gbọ́ àti láti lo ìfọ̀rọ̀wérọ̀.",
+    videoOffInDataSaver: "Fídíò ti pa nígbà tí Olùdáàbòbò Dátà wà",
     leaveThisMeeting: "Ṣé o fẹ́ kúrò nínú ìpàdé yìí?",
     leaveThisMeetingHint: "O lè padà wá pẹ̀lú ọ̀nà kan náà.",
     stayInMeeting: "Dúró",

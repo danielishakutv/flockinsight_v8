@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle,
+  Download,
   Hand,
+  Loader2,
   LogOut,
   MessageSquare,
   Mic,
@@ -171,6 +173,15 @@ export function MeetingRoom(props: {
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [savingRecording, setSavingRecording] = useState(false);
+  /**
+   * Why the recording is not in the library.
+   *
+   * Set only when an automatic save has actually failed, so its presence is
+   * what turns the panel from "saving" into "this is on your device and
+   * nowhere else". That distinction is the difference between a host who
+   * downloads the file and a host who closes the tab.
+   */
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<{ participantId: string; name: string }[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
@@ -420,6 +431,20 @@ export function MeetingRoom(props: {
     setEndedReason(t("meetings.youLeft"));
     setPhase("ended");
   }, [t]);
+
+  /*
+   * A recording that could not be stored lives in this tab and nowhere else,
+   * so closing it destroys the only copy. This is the one case in the whole
+   * app that earns a `beforeunload` prompt: the browser's wording is not ours
+   * to choose and people rightly resent these, but losing a recording of a
+   * service to a stray Cmd-W is worse than an ugly dialog.
+   */
+  useEffect(() => {
+    if (!pendingSave || !saveProblem) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pendingSave, saveProblem]);
 
   useEffect(() => {
     const onUnload = () => clientRef.current?.leave(true);
@@ -711,33 +736,20 @@ export function MeetingRoom(props: {
     [meeting, me, props.churchName, props.title, runAction, t],
   );
 
-  const stopRecording = useCallback(async () => {
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    const result = await recorder.stop();
-    recorderRef.current = null;
-    await runAction("recording.stop");
-    // Carry the id and the mode over to the file BEFORE clearing the state:
-    // the upload needs them, and `setRecording(null)` used to run first, so
-    // every upload posted an empty id and the row never left "uploading".
-    if (result) setPendingSave({ ...result, recordingId: recording?.id ?? null, mode: recording?.mode ?? "video" });
-    setRecording(null);
-  }, [runAction, recording]);
-
   const saveRecording = useCallback(
-    async (alsoDownload: boolean) => {
-      if (!pendingSave || !me) return;
-      if (alsoDownload) downloadRecording(pendingSave);
+    async (file: PendingSave) => {
+      if (!me) return;
 
       setSavingRecording(true);
+      setSaveProblem(null);
       try {
         const form = new FormData();
         form.set("peer", me.peerId);
         form.set("secret", me.secret);
-        form.set("recordingId", pendingSave.recordingId ?? "");
-        form.set("durationSec", String(pendingSave.durationSec));
-        form.set("mode", pendingSave.mode);
-        form.set("file", pendingSave.blob, pendingSave.filename);
+        form.set("recordingId", file.recordingId ?? "");
+        form.set("durationSec", String(file.durationSec));
+        form.set("mode", file.mode);
+        form.set("file", file.blob, file.filename);
 
         const res = await fetch(`/api/meet/${props.code}/recording`, {
           method: "POST",
@@ -747,17 +759,45 @@ export function MeetingRoom(props: {
         if (data.ok) {
           toast.success(t("meetings.savedToLibrary"));
           setPendingSave(null);
-        } else {
-          toast.error(data.error ?? t("common.somethingWentWrong"));
+          return;
         }
+        // The server knows why — too big, no media storage configured, quota
+        // full — and every one of those is something the host can act on.
+        // Its sentence beats anything generic this end could write.
+        setSaveProblem(data.error ?? t("common.somethingWentWrong"));
       } catch {
-        toast.error(t("common.somethingWentWrong"));
+        setSaveProblem(t("meetings.recordingUploadFailed"));
       } finally {
         setSavingRecording(false);
       }
     },
-    [pendingSave, me, props.code, t],
+    [me, props.code, t],
   );
+
+  const stopRecording = useCallback(async () => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    const result = await recorder.stop();
+    recorderRef.current = null;
+    await runAction("recording.stop");
+    // Carry the id and the mode over to the file BEFORE clearing the state:
+    // the upload needs them, and `setRecording(null)` used to run first, so
+    // every upload posted an empty id and the row never left "uploading".
+    if (result) {
+      const pending = {
+        ...result,
+        recordingId: recording?.id ?? null,
+        mode: recording?.mode ?? "video",
+      };
+      setPendingSave(pending);
+      // Straight to the library. Stopping a recording is already the decision
+      // to keep it, and a button between the two is how a recording of a
+      // service is lost to a closed tab.
+      void saveRecording(pending);
+    }
+    setRecording(null);
+  }, [runAction, recording, saveRecording]);
+
 
   /* ============================================================
    * Screens
@@ -808,31 +848,56 @@ export function MeetingRoom(props: {
           {endedReason || t("meetings.meetingEnded")}
         </h1>
         {pendingSave && (
-          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+          /*
+            Three states, and only the third asks anything of the host.
+            Saving: it is on its way, nothing to do. Failed: it is in this tab
+            and nowhere else, which is said plainly and loudly because the
+            alternative is a host who closes the tab believing it was kept.
+          */
+          <div
+            className={cn(
+              "w-full max-w-sm rounded-xl border p-4 text-left",
+              saveProblem
+                ? "border-amber-500/40 bg-amber-500/10"
+                : "border-white/10 bg-white/5",
+            )}
+          >
             <p className="text-sm font-semibold">
               {t("meetings.recordingReady", {
                 duration: formatDuration(pendingSave.durationSec),
               })}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
-              {t("meetings.recordingReadyHint")}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Button
-                size="sm"
-                disabled={savingRecording}
-                onClick={() => saveRecording(false)}
-              >
-                {savingRecording ? t("common.saving") : t("meetings.saveToLibrary")}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => downloadRecording(pendingSave)}
-              >
-                {t("common.download")}
-              </Button>
-            </div>
+
+            {savingRecording && (
+              <p className="text-muted-foreground mt-1 flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 className="size-3.5 animate-spin" />
+                {t("meetings.savingToLibrary")}
+              </p>
+            )}
+
+            {saveProblem && (
+              <>
+                <p className="mt-1 text-xs leading-relaxed text-amber-200">
+                  {saveProblem}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-amber-200">
+                  {t("meetings.downloadOrLoseIt")}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => downloadRecording(pendingSave)}>
+                    <Download className="size-4" /> {t("common.download")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={savingRecording}
+                    onClick={() => void saveRecording(pendingSave)}
+                  >
+                    {t("common.tryAgain")}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
         <div className="flex gap-2">
@@ -955,6 +1020,13 @@ export function MeetingRoom(props: {
                   speaking={speaking.has(r.peerId)}
                   quality={r.quality}
                   lowData={r.lowData}
+                  // They have a camera on and I am not getting it because I am
+                  // the one saving data. Without saying so, this is
+                  // indistinguishable from a camera that is simply off.
+                  hiddenByDataSaver={
+                    !!local?.lowData && r.cameraOn && !m?.hasCamera
+                  }
+                  dataSaverNote={t("meetings.videoOffInDataSaver")}
                   roleLabel={isHostRole(r.role) ? t("meetings.host") : null}
                   pinned={focus === r.peerId}
                   spotlit={spotlight === r.peerId}

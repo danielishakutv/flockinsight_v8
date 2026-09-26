@@ -386,6 +386,12 @@ export const sw: Dictionary = {
 
   meetings: {
     title: "Mikutano",
+    savingToLibrary: "Inahifadhiwa kwenye maktaba yako…",
+    downloadOrLoseIt: "Ipakue sasa — ipo kwenye kichupo hiki tu, na kukifunga kutaipoteza.",
+    recordingUploadFailed: "Upakiaji haukukamilika.",
+    allowToContinue: "Ruhusu kamera na maikrofoni yako ili kuendelea",
+    joinAnywayHint: "Bado unaweza kujiunga ili kusikiliza na kutumia gumzo.",
+    videoOffInDataSaver: "Video imezimwa wakati Kiokoa Data kimewashwa",
     leaveThisMeeting: "Uondoke kwenye mkutano huu?",
     leaveThisMeetingHint: "Unaweza kurudi na kiungo kilekile.",
     stayInMeeting: "Baki",

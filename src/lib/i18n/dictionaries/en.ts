@@ -425,6 +425,12 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    savingToLibrary: "Saving to your media library…",
+    downloadOrLoseIt: "Download it now — it is only in this tab, and closing the tab will lose it.",
+    recordingUploadFailed: "The upload did not finish.",
+    allowToContinue: "Allow your camera and microphone to continue",
+    joinAnywayHint: "You can still join to listen and use the chat.",
+    videoOffInDataSaver: "Video off while Data Saver is on",
     leaveThisMeeting: "Leave this meeting?",
     leaveThisMeetingHint: "You can come back with the same link.",
     stayInMeeting: "Stay",

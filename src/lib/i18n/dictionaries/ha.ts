@@ -385,6 +385,12 @@ export const ha: Dictionary = {
 
   meetings: {
     title: "Tarurruka",
+    savingToLibrary: "Ana ajiyewa a ƙundin ka…",
+    downloadOrLoseIt: "Sauke shi yanzu — yana wannan shafin ne kawai, rufe shi zai bata shi.",
+    recordingUploadFailed: "Ba a gama ɗorawa ba.",
+    allowToContinue: "Ba da izinin kyamara da makarufo don ci gaba",
+    joinAnywayHint: "Za ka iya shiga don saurare da amfani da hira.",
+    videoOffInDataSaver: "An kashe bidiyo yayin Tattalin Data",
     leaveThisMeeting: "Ka bar wannan taron?",
     leaveThisMeetingHint: "Za ka iya dawowa da wannan hanyar.",
     stayInMeeting: "Ka zauna",

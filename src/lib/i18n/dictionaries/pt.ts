@@ -381,6 +381,12 @@ export const pt: Dictionary = {
 
   meetings: {
     title: "Reuniões",
+    savingToLibrary: "A guardar na sua biblioteca…",
+    downloadOrLoseIt: "Descarregue agora — só existe neste separador, e fechá-lo perde-o.",
+    recordingUploadFailed: "O envio não terminou.",
+    allowToContinue: "Permita a câmara e o microfone para continuar",
+    joinAnywayHint: "Pode entrar mesmo assim para ouvir e usar o chat.",
+    videoOffInDataSaver: "Vídeo desligado com a Poupança de dados",
     leaveThisMeeting: "Sair desta reuni\u00e3o?",
     leaveThisMeetingHint: "Pode voltar com o mesmo link.",
     stayInMeeting: "Ficar",

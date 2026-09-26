@@ -394,6 +394,12 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    savingToLibrary: "Dey save am for your media library…",
+    downloadOrLoseIt: "Download am now — e dey only for this tab, and if you close am e go loss.",
+    recordingUploadFailed: "The upload no finish.",
+    allowToContinue: "Allow your camera and microphone make you continue",
+    joinAnywayHint: "You fit still join to listen and use the chat.",
+    videoOffInDataSaver: "Video off while Data Saver dey on",
     leaveThisMeeting: "You wan comot for this meeting?",
     leaveThisMeetingHint: "You fit come back with the same link.",
     stayInMeeting: "Stay",

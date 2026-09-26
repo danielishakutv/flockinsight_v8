@@ -29,6 +29,11 @@ Then deploy:
 APP_ROOT=/home/flockinsight/app DEPLOY_BRANCH=main FLOCKINSIGHT_PORT=3005 \
   bash /home/flockinsight/app/current/deploy/deploy.sh
 
+
+testttt cronn***********
+curl -s "https://flockinsight.com/api/cron/meetings?key=$CRON_SECRET"
+# {"ok":true,"ended":0,"expired":0,"swept":0,"warmed":0}
+
 Copy the whole block. Takes a few minutes.
 It finishes with:  ==> Deployed <code> — <the commit message>
 

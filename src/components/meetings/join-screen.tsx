@@ -7,6 +7,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  RotateCcw,
   Signal,
   Video,
 } from "lucide-react";
@@ -91,69 +92,128 @@ export function JoinScreen({
   const [cameraOn, setCameraOn] = useState(!lowDataDefault);
   const [lowData, setLowData] = useState(lowDataDefault);
   const [passcode, setPasscode] = useState("");
-  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [fault, setFault] = useState<MediaFault | null>(null);
+  /** null while the browser's dialog is up — nothing else should render yet. */
+  const [asked, setAsked] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<MediaStream | null>(null);
 
   /*
-   * The preview holds a real camera open, so it is released the moment it is
-   * not wanted — when low-data is switched on, when the camera is switched
-   * off, and when this screen goes away. A preview left running is a camera
-   * light that stays on after someone thought they had turned it off.
+   * Ask for both devices, once, as soon as this screen appears.
+   *
+   * This is the whole point of a screen before the call. The browser shows ONE
+   * dialog per getUserMedia call, so camera and microphone are asked for
+   * together — two calls would be two dialogs, and the second arrives after
+   * the person has stopped reading. And it happens here rather than in the
+   * room because the remedy for a refusal is "change the setting and reload",
+   * which costs nothing on this screen and throws you out of a live meeting on
+   * the next one.
+   *
+   * Data Saver does not suppress the request. It decides what gets SENT, not
+   * whether the browser has been asked — a meeting that starts in Data Saver
+   * and switches to video mid-way should not stop to ask for permission in
+   * front of a waiting congregation.
+   *
+   * The granted stream is kept for the preview and stopped on the way out.
+   * Permission survives at the origin, so the room re-acquires silently with
+   * no second dialog.
    */
   useEffect(() => {
     let cancelled = false;
 
-    const stop = () => {
-      previewRef.current?.getTracks().forEach((t) => t.stop());
-      previewRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-    };
-
-    if (!cameraOn || lowData) {
-      stop();
-      return;
-    }
-
     void (async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (!cancelled) {
+          setFault("unsupported");
+          setAsked(true);
+        }
+        return;
+      }
+
+      let stream: MediaStream | null = null;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
           video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
         });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+      } catch (first) {
+        // A machine with no camera fails the whole request, microphone and
+        // all. Falling back to audio keeps the meeting usable for someone on
+        // a desktop with no webcam, which is a great many church offices.
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (!cancelled) setCameraOn(false);
+        } catch {
+          if (!cancelled) {
+            setFault(mediaFault(first));
+            setMicOn(false);
+            setCameraOn(false);
+            setAsked(true);
+          }
           return;
         }
-        previewRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play().catch(() => {});
-        }
-      } catch (e) {
-        if (!cancelled) {
-          // The same words the room uses, for the same failure. "Check your
-          // browser settings" is no help to somebody whose problem is that
-          // another app has the camera.
-          setDeviceError(
-            t(mediaFaultKey(mediaFault(e)), { device: t("meetings.deviceCamera") }),
-          );
-          setCameraOn(false);
-        }
       }
+
+      if (cancelled) {
+        stream?.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      previewRef.current = stream;
+      setFault(null);
+      setAsked(true);
     })();
 
     return () => {
       cancelled = true;
-      stop();
+      previewRef.current?.getTracks().forEach((t) => t.stop());
+      previewRef.current = null;
     };
-  }, [cameraOn, lowData, t]);
+  }, []);
+
+  /*
+   * Show the preview only while the camera is actually wanted, and let the
+   * track go when it is not. A preview left running is a camera light that
+   * stays on after somebody thought they had turned it off.
+   */
+  useEffect(() => {
+    const el = videoRef.current;
+    const stream = previewRef.current;
+    if (!el) return;
+
+    const video = stream?.getVideoTracks() ?? [];
+    const wanted = cameraOn && !lowData;
+    for (const track of video) track.enabled = wanted;
+
+    if (wanted && stream) {
+      el.srcObject = stream;
+      void el.play().catch(() => {});
+    } else {
+      el.srcObject = null;
+    }
+  }, [cameraOn, lowData, asked]);
+
+  /** Try the dialog again, for somebody who has just changed the setting. */
+  const retry = () => {
+    setFault(null);
+    setAsked(false);
+    window.location.reload();
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Release the devices here. Permission lives on at the origin, so the room
+    // re-acquires what it needs without a second dialog.
     previewRef.current?.getTracks().forEach((t) => t.stop());
     previewRef.current = null;
-    onJoin({ name: name.trim() || "Guest", micOn, cameraOn: cameraOn && !lowData, lowData, passcode });
+    onJoin({
+      name: name.trim() || "Guest",
+      micOn: micOn && fault === null,
+      cameraOn: cameraOn && !lowData && fault === null,
+      lowData,
+      passcode,
+    });
   };
 
   return (
@@ -197,9 +257,16 @@ export function JoinScreen({
                   {initialsOf(name || "Guest")}
                 </div>
                 <p className="text-center text-sm text-balance text-slate-400">
-                  {lowData
-                    ? t("meetings.audioOnlyCameraStays")
-                    : t("meetings.cameraOff")}
+                  {!asked
+                    ? // While the browser's own dialog is up. Without this the
+                      // screen says "your camera is off", which reads as a
+                      // setting rather than as a question waiting to be
+                      // answered — and people dismiss the dialog to go and
+                      // look for the setting.
+                      t("meetings.allowToContinue")
+                    : lowData
+                      ? t("meetings.audioOnlyCameraStays")
+                      : t("meetings.cameraOff")}
                 </p>
               </div>
             )}
@@ -285,10 +352,29 @@ export function JoinScreen({
               </span>
             </label>
 
-            {deviceError && (
-              <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                {deviceError}
-              </p>
+            {fault && (
+              /*
+                A panel, not a line of small print. Everything here needs the
+                person to go and change something, and the Reload is the point:
+                a permission changed in the browser's own panel does not reach
+                a page that is already open, and on this screen reloading costs
+                nothing.
+              */
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                <p className="text-xs leading-relaxed text-amber-200">
+                  {t(mediaFaultKey(fault), {
+                    device: t("meetings.deviceCameraAndMic"),
+                  })}
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="secondary" onClick={retry}>
+                    <RotateCcw className="size-4" /> {t("common.tryAgain")}
+                  </Button>
+                </div>
+                <p className="mt-2 text-[11px] text-amber-200/70">
+                  {t("meetings.joinAnywayHint")}
+                </p>
+              </div>
             )}
 
             {error && (

@@ -21,6 +21,18 @@ export type TileProps = {
   onPin?: () => void;
   /** This person is on the main screen for the whole room, not just for me. */
   spotlit?: boolean;
+  /**
+   * They have their camera on and I am not receiving it, because I am the one
+   * in Data Saver. Worth saying: an avatar where a face should be is otherwise
+   * indistinguishable from a camera that is simply off, and the person cannot
+   * act on what they cannot see the reason for.
+   */
+  hiddenByDataSaver?: boolean;
+  /**
+   * The sentence for that. Passed in rather than translated here, because this
+   * tile is also rendered on the join screen's preview, outside the provider.
+   */
+  dataSaverNote?: string;
   /** Only a host gets this: it changes what everybody else is looking at. */
   onSpotlight?: () => void;
   className?: string;
@@ -49,6 +61,8 @@ export function VideoTile({
   onPin,
   spotlit,
   onSpotlight,
+  hiddenByDataSaver,
+  dataSaverNote,
   className,
   contain,
 }: TileProps) {
@@ -89,10 +103,15 @@ export function VideoTile({
           )}
         />
       ) : (
-        <div className="flex size-full items-center justify-center">
+        <div className="flex size-full flex-col items-center justify-center gap-3 px-3">
           <div className="flex size-16 items-center justify-center rounded-full bg-slate-700 text-lg font-bold text-white sm:size-20 sm:text-xl">
             {initialsOf(name)}
           </div>
+          {hiddenByDataSaver && (
+            <p className="text-center text-[11px] leading-tight text-emerald-400/90">
+              {dataSaverNote}
+            </p>
+          )}
         </div>
       )}
 

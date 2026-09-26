@@ -425,6 +425,35 @@ export class MeetingClient {
     for (const peerId of present) {
       if (!this.peers.has(peerId)) this.createPeer(peerId);
     }
+
+    /*
+     * Who wants pictures, taken from the roster rather than inferred.
+     *
+     * `wantsVideo` decides whether this peer gets my camera track at all, and
+     * it used to be seeded from MY OWN Data Saver setting and then corrected
+     * only by a `pause` signal — which is sent when somebody TOGGLES Data
+     * Saver, and never when they simply join with it on.
+     *
+     * That produced the worst failure this module has had. Join with Data
+     * Saver on, turn it off, turn the camera on: every peer connection made
+     * during that window is still flagged as not wanting video, so the camera
+     * track is never attached to any of them. The local preview works, because
+     * that is the local stream. Nobody else ever receives a single frame, and
+     * nothing anywhere says why.
+     *
+     * The server already knows each participant's own `lowData` and sends it
+     * in the roster on every poll. That is authoritative, it is about the
+     * right person, and it repairs itself within a poll if anything is ever
+     * missed. The `pause` signal stays as the instant path; this is the truth.
+     */
+    for (const r of roster) {
+      const p = this.peers.get(r.peerId);
+      if (!p) continue;
+      const wants = !r.lowData;
+      if (p.wantsVideo === wants) continue;
+      p.wantsVideo = wants;
+      this.attachLocalTracks(p);
+    }
     for (const [peerId, p] of this.peers) {
       if (!present.has(peerId)) {
         try {
@@ -455,7 +484,11 @@ export class MeetingClient {
       slots: {},
       stream: new MediaStream(),
       screenStream: new MediaStream(),
-      wantsVideo: !this.state.lowData,
+      // Optimistic, and corrected from the roster on the next poll. This
+      // used to read `!this.state.lowData` — MY setting, used to decide what
+      // somebody else receives, which is how video came to be silently
+      // withheld from everybody. See `reconcilePeers`.
+      wantsVideo: true,
       restarts: 0,
       lastStats: { at: 0, packetsSent: 0, packetsLost: 0 },
     };
