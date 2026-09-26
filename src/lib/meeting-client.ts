@@ -768,33 +768,73 @@ export class MeetingClient {
     }
   }
 
-  private onRemoteTrack(peerId: string, p: PeerState, e: RTCTrackEvent): void {
-    const slot: TrackSlot | null =
-      e.transceiver === p.slots.audio
-        ? "audio"
-        : e.transceiver === p.slots.camera
-          ? "camera"
-          : e.transceiver === p.slots.screen
-            ? "screen"
-            : null;
+  /**
+   * Which of the three slots an arriving track belongs to.
+   *
+   * There are TWO video transceivers per peer — camera and screen — and
+   * telling them apart is the whole job. Getting it wrong does not look like a
+   * mix-up; it looks like video being broken, because the idle screen track
+   * displaces the camera and the element is handed something that will never
+   * carry a frame.
+   *
+   * Identity first, which holds whenever the browser reused the transceivers
+   * we created. Then `mid`, which is the negotiated name of the m-line and is
+   * the same string on both sides of the call — so even a transceiver the
+   * browser made for itself lands in the right slot.
+   *
+   * The old last resort was `kind === "audio" ? "audio" : "camera"`, which sent
+   * BOTH video tracks to the camera slot. That is what caused this: the screen
+   * track arrived second, resolved to camera, and evicted a camera track that
+   * was mid-picture. Now an unidentifiable video track goes to whichever video
+   * slot is still free, and to screen if both are taken, so it can never evict
+   * the camera.
+   */
+  private slotFor(p: PeerState, e: RTCTrackEvent): TrackSlot {
+    if (e.transceiver === p.slots.audio) return "audio";
+    if (e.transceiver === p.slots.camera) return "camera";
+    if (e.transceiver === p.slots.screen) return "screen";
 
-    // A browser that associated the m-lines to its own transceivers gives us
-    // objects we did not create. They arrive in the offer's order, so fall
-    // back to position.
-    const resolved =
-      slot ??
-      (["audio", "camera", "screen"][
-        p.pc.getTransceivers().indexOf(e.transceiver)
-      ] as TrackSlot | undefined) ??
-      (e.track.kind === "audio" ? "audio" : "camera");
-
-    const target = resolved === "screen" ? p.screenStream : p.stream;
-    // Replace rather than accumulate: a peer switching camera sends a new
-    // track into the same slot, and leaving the dead one attached is how a
-    // tile ends up frozen on the last frame of the old one.
-    for (const t of target.getTracks()) {
-      if (t.kind === e.track.kind && t.id !== e.track.id) target.removeTrack(t);
+    const mid = e.transceiver.mid;
+    if (mid !== null && mid !== undefined) {
+      if (mid === p.slots.audio?.mid) return "audio";
+      if (mid === p.slots.camera?.mid) return "camera";
+      if (mid === p.slots.screen?.mid) return "screen";
     }
+
+    if (e.track.kind === "audio") return "audio";
+    return p.stream.getVideoTracks().length === 0 ? "camera" : "screen";
+  }
+
+  private onRemoteTrack(peerId: string, p: PeerState, e: RTCTrackEvent): void {
+    const resolved = this.slotFor(p, e);
+    const target = resolved === "screen" ? p.screenStream : p.stream;
+
+    /*
+     * Replace rather than accumulate — but never let a track that is not
+     * carrying anything displace one that is.
+     *
+     * A track arrives muted, meaning no media yet, and it may stay that way
+     * for ever if the far end is not sending on that transceiver. The old code
+     * evicted the incumbent unconditionally, so an idle second video track
+     * replaced a camera that was mid-picture: the receiver went on decoding
+     * hundreds of frames into a track nothing held, and the video element was
+     * left with one that never produced a pixel. From the outside that is an
+     * avatar and a healthy `getStats`, which is a miserable thing to debug.
+     */
+    const others = target
+      .getTracks()
+      .filter((t) => t.kind === e.track.kind && t.id !== e.track.id);
+    const incomingIsIdle = e.track.muted;
+    const working = others.filter((t) => !t.muted && t.readyState === "live");
+
+    if (incomingIsIdle && working.length > 0) {
+      // Keep what is working. If this one ever starts carrying media its own
+      // `unmute` brings it back through here, and by then it can win.
+      e.track.onunmute = () => this.onRemoteTrack(peerId, p, e);
+      return;
+    }
+
+    for (const t of others) target.removeTrack(t);
     if (!target.getTracks().includes(e.track)) target.addTrack(e.track);
 
     e.track.onended = () => {
