@@ -394,6 +394,8 @@ export const pcm: Dictionary = {
 
   meetings: {
     title: "Meetings",
+    diagCameraOff: "your camera off",
+    diagTheySaveData: "dem dey for Data Saver",
     savingToLibrary: "Dey save am for your media library…",
     downloadOrLoseIt: "Download am now — e dey only for this tab, and if you close am e go loss.",
     recordingUploadFailed: "The upload no finish.",

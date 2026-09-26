@@ -51,6 +51,25 @@ export type LocalState = {
   facing: "user" | "environment";
 };
 
+/** What one peer connection is actually doing, for the diagnostics panel. */
+export type PeerDiagnostics = {
+  peerId: string;
+  /** "connected", "checking", "failed" — the ICE layer's own verdict. */
+  ice: RTCIceConnectionState;
+  /** Whether a camera track is attached to this peer's sender at all. */
+  videoAttached: boolean;
+  /** Why it is not, when it is not. The most useful line in the whole panel. */
+  videoWithheld: "camera-off" | "they-save-data" | null;
+  /** Kilobits per second leaving for this peer, measured across two samples. */
+  videoOutKbps: number;
+  audioOutKbps: number;
+  /** And arriving from them. */
+  videoInKbps: number;
+  audioInKbps: number;
+  /** What the relay decided: "host" is direct, "relay" went through TURN. */
+  transport: string | null;
+};
+
 export type MeetingClientEvents = {
   onRoster?: (roster: RosterEntry[]) => void;
   onStage?: (stage: Stage) => void;
@@ -111,6 +130,18 @@ type PeerState = {
   wantsVideo: boolean;
   restarts: number;
   lastStats: { at: number; packetsSent: number; packetsLost: number };
+  /** Its own id, so a diagnostics row can be read off the peer alone. */
+  peerId: string;
+  /** Byte totals from the previous sample, for turning totals into rates. */
+  lastBytes: {
+    at: number;
+    videoOut: number;
+    audioOut: number;
+    videoIn: number;
+    audioIn: number;
+  } | null;
+  /** The last reading, kept so the panel never has to await `getStats`. */
+  diagnostics: PeerDiagnostics | null;
 };
 
 const SEND_DEBOUNCE_MS = 40;
@@ -491,6 +522,9 @@ export class MeetingClient {
       wantsVideo: true,
       restarts: 0,
       lastStats: { at: 0, packetsSent: 0, packetsLost: 0 },
+      peerId,
+      lastBytes: null,
+      diagnostics: null,
     };
     this.peers.set(peerId, p);
 
@@ -1057,6 +1091,62 @@ export class MeetingClient {
    * is enough to make the whole call feel broken, and it is nearly always the
    * local uplink that is at fault.
    */
+  /**
+   * Turn two byte counts into kilobits per second, and say what is withheld.
+   *
+   * Rates rather than totals: a total that stopped growing ten minutes ago
+   * looks identical to one that is growing now, and "is video moving RIGHT
+   * NOW" is the only question this panel exists to answer.
+   */
+  private rateFlow(
+    p: PeerState,
+    bytes: { videoOut: number; audioOut: number; videoIn: number; audioIn: number },
+    transport: string | null,
+  ): PeerDiagnostics {
+    const now = Date.now();
+    const prev = p.lastBytes;
+    const seconds = prev ? (now - prev.at) / 1000 : 0;
+    const kbps = (curr: number, before: number) =>
+      seconds > 0 ? Math.max(0, Math.round(((curr - before) * 8) / seconds / 1000)) : 0;
+
+    const d: PeerDiagnostics = {
+      peerId: p.peerId,
+      ice: p.pc.iceConnectionState,
+      videoAttached: !!p.slots.camera?.sender.track,
+      videoWithheld: !this.state.cameraOn
+        ? "camera-off"
+        : !p.wantsVideo
+          ? "they-save-data"
+          : null,
+      videoOutKbps: prev ? kbps(bytes.videoOut, prev.videoOut) : 0,
+      audioOutKbps: prev ? kbps(bytes.audioOut, prev.audioOut) : 0,
+      videoInKbps: prev ? kbps(bytes.videoIn, prev.videoIn) : 0,
+      audioInKbps: prev ? kbps(bytes.audioIn, prev.audioIn) : 0,
+      transport,
+    };
+
+    p.lastBytes = { at: now, ...bytes };
+    return d;
+  }
+
+  /** Everything the diagnostics panel shows, as of the last sample. */
+  diagnostics(): PeerDiagnostics[] {
+    return [...this.peers.values()].map(
+      (p) =>
+        p.diagnostics ?? {
+          peerId: p.peerId,
+          ice: p.pc.iceConnectionState,
+          videoAttached: !!p.slots.camera?.sender.track,
+          videoWithheld: null,
+          videoOutKbps: 0,
+          audioOutKbps: 0,
+          videoInKbps: 0,
+          audioInKbps: 0,
+          transport: null,
+        },
+    );
+  }
+
   private async sampleStats(): Promise<void> {
     if (this.peers.size === 0) return;
 
@@ -1070,6 +1160,10 @@ export class MeetingClient {
         let sent = 0;
         let lost = 0;
 
+        // Bytes per kind, so the panel can say which media is moving.
+        const bytes = { videoOut: 0, audioOut: 0, videoIn: 0, audioIn: 0 };
+        let transport: string | null = null;
+
         stats.forEach((r) => {
           const report = r as unknown as Record<string, number | string>;
           if (report.type === "remote-inbound-rtp") {
@@ -1077,14 +1171,29 @@ export class MeetingClient {
             const rtt = Number(report.roundTripTime ?? 0) * 1000;
             if (rtt > worstRtt) worstRtt = rtt;
           }
-          if (report.type === "outbound-rtp") sent += Number(report.packetsSent ?? 0);
+          if (report.type === "outbound-rtp") {
+            sent += Number(report.packetsSent ?? 0);
+            const n = Number(report.bytesSent ?? 0);
+            if (report.kind === "video") bytes.videoOut += n;
+            if (report.kind === "audio") bytes.audioOut += n;
+          }
+          if (report.type === "inbound-rtp") {
+            const n = Number(report.bytesReceived ?? 0);
+            if (report.kind === "video") bytes.videoIn += n;
+            if (report.kind === "audio") bytes.audioIn += n;
+          }
           if (report.type === "candidate-pair" && report.state === "succeeded") {
             const rtt = Number(report.currentRoundTripTime ?? 0) * 1000;
             if (rtt > worstRtt) worstRtt = rtt;
             const bw = Number(report.availableOutgoingBitrate ?? 0);
             if (bw > 0 && (available === 0 || bw < available)) available = bw;
           }
+          if (report.type === "local-candidate" && report.candidateType) {
+            transport = String(report.candidateType);
+          }
         });
+
+        p.diagnostics = this.rateFlow(p, bytes, transport);
 
         // Loss since the previous sample, not since the call began — a rough
         // first ten seconds must not condemn the next hour.

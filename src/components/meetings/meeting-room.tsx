@@ -50,6 +50,7 @@ import {
   MeetingClient,
   type LocalState,
   type MediaFault,
+  type PeerDiagnostics,
   type RemoteMedia,
 } from "@/lib/meeting-client";
 import {
@@ -185,6 +186,14 @@ export function MeetingRoom(props: {
   const [waiting, setWaiting] = useState<{ participantId: string; name: string }[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
+  /**
+   * What each peer connection is doing, refreshed while the people panel is
+   * open and not otherwise — the readings come free from the quality sampler
+   * that already runs, and nobody needs them when nobody is looking.
+   */
+  const [diagnostics, setDiagnostics] = useState<Map<string, PeerDiagnostics>>(
+    new Map(),
+  );
 
   const clientRef = useRef<MeetingClient | null>(null);
   const recorderRef = useRef<MeetingRecorder | null>(null);
@@ -497,6 +506,17 @@ export function MeetingRoom(props: {
 
   useEffect(() => {
     panelRef.current = panel;
+  }, [panel]);
+
+  useEffect(() => {
+    if (panel !== "people") return;
+    const read = () => {
+      const rows = clientRef.current?.diagnostics() ?? [];
+      setDiagnostics(new Map(rows.map((d) => [d.peerId, d])));
+    };
+    read();
+    const t = setInterval(read, 2000);
+    return () => clearInterval(t);
   }, [panel]);
 
   /* ============================================================
@@ -1294,6 +1314,7 @@ export function MeetingRoom(props: {
           onDeny={(participantId) => void runAction("deny", { participantId })}
           onMuteAll={() => void runAction("mute")}
           onLowerHands={() => void runAction("lower-hands")}
+          diagnostics={diagnostics}
         />
       );
     if (panel === "share" && me)

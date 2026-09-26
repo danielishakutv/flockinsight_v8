@@ -381,6 +381,8 @@ export const pt: Dictionary = {
 
   meetings: {
     title: "Reuniões",
+    diagCameraOff: "a sua câmara está desligada",
+    diagTheySaveData: "estão em Poupança de dados",
     savingToLibrary: "A guardar na sua biblioteca…",
     downloadOrLoseIt: "Descarregue agora — só existe neste separador, e fechá-lo perde-o.",
     recordingUploadFailed: "O envio não terminou.",

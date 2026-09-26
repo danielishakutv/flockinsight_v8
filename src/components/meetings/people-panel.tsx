@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { initialsOf, type RosterEntry } from "@/lib/meetings-shared";
+import type { PeerDiagnostics } from "@/lib/meeting-client";
 import { useT } from "@/components/i18n-provider";
 
 /**
@@ -40,8 +41,19 @@ export function PeoplePanel({
   onDeny,
   onMuteAll,
   onLowerHands,
+  diagnostics,
 }: {
   roster: RosterEntry[];
+  /**
+   * What each peer connection is actually doing, keyed by peer id.
+   *
+   * Shown under every name. Video that does not arrive has half a dozen
+   * possible causes across three layers and from the outside they all look
+   * the same — a tile with a face on it and no picture. This says which layer
+   * it stopped at, which is the difference between an afternoon of theories
+   * and one screenshot.
+   */
+  diagnostics?: Map<string, PeerDiagnostics>;
   waiting: { participantId: string; name: string }[];
   myPeerId: string;
   canHost: boolean;
@@ -97,6 +109,7 @@ export function PeoplePanel({
                 onMute={onMute}
                 onRemove={onRemove}
                 onPromote={onPromote}
+                link={diagnostics?.get(p.peerId)}
               />
             ))}
           </Section>
@@ -111,6 +124,7 @@ export function PeoplePanel({
               onMute={onMute}
               onRemove={onRemove}
               onPromote={onPromote}
+              link={diagnostics?.get(p.peerId)}
             />
           ))}
         </Section>
@@ -147,6 +161,49 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * One line of truth about a peer connection.
+ *
+ * Deliberately plain numbers rather than a verdict. "Poor connection" is what
+ * every other product says and it is useless — it does not distinguish a
+ * camera that is off, a peer who is saving data, a track that was never
+ * attached, an encoder producing nothing, and a network dropping it. Each of
+ * those needs a different person to do a different thing.
+ *
+ * kbps rather than totals, because a total that stopped growing ten minutes
+ * ago looks exactly like one that is growing now, and "is it moving RIGHT
+ * NOW" is the only question worth asking of a call in progress.
+ */
+function LinkLine({ link, cameraOn }: { link: PeerDiagnostics; cameraOn: boolean }) {
+  const t = useT();
+
+  // The most useful case first: their camera is on and nothing is arriving.
+  const stalled = cameraOn && link.videoInKbps === 0;
+
+  const why =
+    link.videoWithheld === "camera-off"
+      ? t("meetings.diagCameraOff")
+      : link.videoWithheld === "they-save-data"
+        ? t("meetings.diagTheySaveData")
+        : null;
+
+  return (
+    <span className="mt-0.5 block font-mono text-[10px] leading-tight text-slate-500">
+      <span className={stalled ? "text-amber-400" : undefined}>
+        {`↓ ${link.videoInKbps}k video · ${link.audioInKbps}k audio`}
+      </span>
+      {"  "}
+      <span>{`↑ ${link.videoOutKbps}k video · ${link.audioOutKbps}k audio`}</span>
+      <span className="block">
+        {link.ice}
+        {link.transport ? ` · ${link.transport}` : ""}
+        {link.videoAttached ? "" : " · no video track sent"}
+        {why ? ` · ${why}` : ""}
+      </span>
+    </span>
+  );
+}
+
 function Row({
   person,
   isSelf,
@@ -154,6 +211,7 @@ function Row({
   onMute,
   onRemove,
   onPromote,
+  link,
 }: {
   person: RosterEntry;
   isSelf: boolean;
@@ -161,6 +219,7 @@ function Row({
   onMute: (id: string) => void;
   onRemove: (id: string) => void;
   onPromote: (id: string, role: "cohost" | "attendee") => void;
+  link?: PeerDiagnostics;
 }) {
   const t = useT();
   const isHost = person.role === "host" || person.role === "cohost";
@@ -184,10 +243,11 @@ function Row({
           )}
         </span>
         {person.lowData && (
-          <span className="text-[11px] text-slate-500">
+          <span className="block text-[11px] text-slate-500">
             {t("meetings.audioOnlyCameraStays")}
           </span>
         )}
+        {link && <LinkLine link={link} cameraOn={person.cameraOn} />}
       </span>
 
       <span className="flex shrink-0 items-center gap-1.5 text-slate-400">

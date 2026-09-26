@@ -386,6 +386,8 @@ export const yo: Dictionary = {
 
   meetings: {
     title: "Ìpàdé",
+    diagCameraOff: "kámẹ́rà rẹ ti pa",
+    diagTheySaveData: "wọ́n wà nínú Olùdáàbòbò Dátà",
     savingToLibrary: "À ń fọ̀ sí ilé-ìwé rẹ…",
     downloadOrLoseIt: "Gbà á wá nísisìyì — ó wà nínú táàbù yìí nìkan, tí o bá tí i, ó yóò sùnùnú.",
     recordingUploadFailed: "Ìfẹ́rànsẹ́ kò parí.",

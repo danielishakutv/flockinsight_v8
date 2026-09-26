@@ -425,6 +425,8 @@ export const en = {
    * ========================================================== */
   meetings: {
     title: "Meetings",
+    diagCameraOff: "your camera is off",
+    diagTheySaveData: "they are in Data Saver",
     savingToLibrary: "Saving to your media library…",
     downloadOrLoseIt: "Download it now — it is only in this tab, and closing the tab will lose it.",
     recordingUploadFailed: "The upload did not finish.",

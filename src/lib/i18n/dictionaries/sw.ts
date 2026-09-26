@@ -386,6 +386,8 @@ export const sw: Dictionary = {
 
   meetings: {
     title: "Mikutano",
+    diagCameraOff: "kamera yako imezimwa",
+    diagTheySaveData: "wako kwenye Kiokoa Data",
     savingToLibrary: "Inahifadhiwa kwenye maktaba yako…",
     downloadOrLoseIt: "Ipakue sasa — ipo kwenye kichupo hiki tu, na kukifunga kutaipoteza.",
     recordingUploadFailed: "Upakiaji haukukamilika.",
