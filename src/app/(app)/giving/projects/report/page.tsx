@@ -70,7 +70,7 @@ export default async function PledgeReportPage({
         }
       />
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <StatCard label="Pledged" value={formatMoney(report.totalPledged, church.currency)} icon={HandCoins} />
         <StatCard label="Received" value={formatMoney(report.totalPaid, church.currency)} icon={PiggyBank} accent />
         <StatCard label="Outstanding" value={formatMoney(report.totalOutstanding, church.currency)} icon={Wallet} />

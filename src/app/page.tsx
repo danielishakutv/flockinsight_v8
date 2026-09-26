@@ -329,7 +329,7 @@ export default async function LandingPage() {
                         <Icon className="size-6" />
                       </div>
                       <h3 className="mt-4 text-lg font-bold">{f.title}</h3>
-                      <p className="text-muted-foreground mt-2 text-sm">
+                      <p className="text-muted-foreground mt-2 text-sm break-words">
                         {f.body}
                       </p>
                     </CardContent>

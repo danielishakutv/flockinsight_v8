@@ -26,8 +26,10 @@ import { PageContainer } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShareLink } from "@/components/meetings/share-link";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 import { MeetingActions } from "@/components/meetings/meeting-actions";
 import { HostLink } from "@/components/meetings/host-link";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Meeting" };
 
@@ -39,6 +41,7 @@ export default async function MeetingDetailPage({
   const { id } = await params;
   const { church } = await requireChurch();
   await requireCan("meetings.view");
+  const t = await getT();
   const canManage = await can("meetings.manage");
   const canAttendance = await can("attendance.manage");
 
@@ -126,7 +129,14 @@ export default async function MeetingDetailPage({
                   Nobody has joined this meeting yet.
                 </p>
               ) : (
-                <div className="-mx-2 overflow-x-auto">
+                // The first column is the person's name: sticky, so a row of
+                // times halfway across still belongs to somebody.
+                <ScrollableTable
+                  stickyFirstColumn
+                  className="-mx-2"
+                  hint={t("common.scrollForMore")}
+                  label={t("meetings.whoWasThere")}
+                >
                   <table className="w-full min-w-[30rem] text-sm">
                     <thead>
                       <tr className="text-muted-foreground text-left text-xs uppercase">
@@ -176,7 +186,7 @@ export default async function MeetingDetailPage({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </ScrollableTable>
               )}
             </CardContent>
           </Card>

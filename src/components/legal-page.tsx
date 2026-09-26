@@ -36,9 +36,15 @@ export function LegalPage({
         </div>
         <p className="text-muted-foreground mt-10 border-t pt-6 text-sm">
           Questions? Contact{" "}
+          {/*
+            An email address is one unbreakable token. `break-all` rather than
+            `break-words`, because there is no space in it to break at — and an
+            address that leaves the screen on the page where somebody is trying
+            to find how to contact us is the worst place for it to happen.
+          */}
           <a
             href="mailto:support@flockinsight.com"
-            className="text-primary font-medium hover:underline"
+            className="text-primary font-medium break-all hover:underline"
           >
             support@flockinsight.com
           </a>

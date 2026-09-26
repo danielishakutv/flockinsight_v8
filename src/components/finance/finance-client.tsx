@@ -42,6 +42,8 @@ import {
 } from "@/lib/finance-shared";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { useT } from "@/components/i18n-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -137,6 +139,7 @@ export function FinanceClient({
   hasAnyAccounts: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -404,7 +407,11 @@ export function FinanceClient({
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border">
-          <div className="overflow-x-auto">
+          <ScrollableTable
+            stickyFirstColumn
+            hint={t("common.scrollForMore")}
+            label={t("finance.title")}
+          >
             <table className="w-full min-w-[46rem] text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                 <tr>
@@ -483,7 +490,7 @@ export function FinanceClient({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
         </div>
       )}
 

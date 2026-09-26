@@ -88,8 +88,11 @@ export function NotificationReceipts({ notificationId }: { notificationId: strin
               or predates delivery receipts.
             </p>
           ) : (
-            <div className="max-h-80 overflow-y-auto">
-              <table className="w-full text-sm">
+            // Both axes. It already scrolled vertically; the third column (a
+            // timestamp with `whitespace-nowrap`) was pushing the row past the
+            // right edge with no way to reach it.
+            <div className="max-h-80 overflow-x-auto overflow-y-auto overscroll-contain">
+              <table className="w-full min-w-[26rem] text-sm">
                 <tbody className="divide-y">
                   {summary.rows.map((r) => (
                     <tr key={r.id} className="hover:bg-accent/40">

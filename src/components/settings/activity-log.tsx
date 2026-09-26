@@ -28,6 +28,8 @@ import {
   type AuditSeverity,
 } from "@/lib/audit-catalog";
 import { cn } from "@/lib/utils";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { useT } from "@/components/i18n-provider";
 
 export type ActivityEntry = {
   id: string;
@@ -250,6 +252,7 @@ function Entry({
   entry: ActivityEntry;
   showChurch?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const changed = entry.meta?.changed as Record<string, { from: unknown; to: unknown }> | undefined;
   const hasDetail =
@@ -285,7 +288,14 @@ function Entry({
         </div>
 
         <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
-          <span className="font-medium">{entry.actorName ?? "Someone"}</span>
+          {/*
+            An actor is often an email address, which is one unbreakable token
+            of 20-30 characters. `min-w-0` is what lets it shrink inside the
+            flex row at all, and `break-words` is what lets it wrap once it has.
+          */}
+          <span className="min-w-0 font-medium break-words">
+            {entry.actorName ?? "Someone"}
+          </span>
           {entry.actorRole && <span>· {entry.actorRole}</span>}
           <span>· {AUDIT_MODULE_LABEL[entry.module] ?? entry.module}</span>
           {showChurch && entry.churchName && (
@@ -326,12 +336,20 @@ function Entry({
           )}
 
           {changed && Object.keys(changed).length > 0 && (
-            <table className="w-full">
+            /*
+             * Before and after values are arbitrary text — an address, a note,
+             * a whole phone number — so three columns of them do not fit a
+             * phone. Scrolled rather than truncated: the point of this table is
+             * comparing the two values, and an ellipsis on both hides exactly
+             * what somebody opened the row to see.
+             */
+            <ScrollableTable hint={t("common.scrollForMore")} label={t("activity.title")}>
+            <table className="w-full min-w-[22rem]">
               <thead>
                 <tr className="text-muted-foreground text-left">
-                  <th className="pb-1 font-semibold">Field</th>
-                  <th className="pb-1 font-semibold">Was</th>
-                  <th className="pb-1 font-semibold">Now</th>
+                  <th className="pb-1 font-semibold">{t("activity.field")}</th>
+                  <th className="pb-1 font-semibold">{t("activity.was")}</th>
+                  <th className="pb-1 font-semibold">{t("activity.now")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,6 +364,7 @@ function Entry({
                 ))}
               </tbody>
             </table>
+            </ScrollableTable>
           )}
 
           {entry.ip && (

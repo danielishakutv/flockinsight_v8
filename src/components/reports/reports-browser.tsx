@@ -335,7 +335,7 @@ function DatasetCard({
                 {dataset.joins.map((j, i) => (
                   <span key={j.column}>
                     {i > 0 && ", "}
-                    <code className="bg-muted rounded px-1 py-0.5 text-[11px]">
+                    <code className="bg-muted rounded px-1 py-0.5 text-[11px] break-all">
                       {j.target}
                     </code>
                   </span>

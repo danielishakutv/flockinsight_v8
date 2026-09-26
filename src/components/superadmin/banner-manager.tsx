@@ -178,7 +178,7 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
                 placeholder="https://… where it should go"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid gap-2 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label>Placement</Label>
                 <Select value={f.placement} onValueChange={(v) => set({ placement: v as FormState["placement"] })}>

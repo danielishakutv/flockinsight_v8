@@ -375,7 +375,7 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
                 </div>
 
                 {/* Per-church numbers */}
-                <div className="mt-3 grid grid-cols-3 gap-3 border-t pt-3 sm:grid-cols-6">
+                <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3 sm:grid-cols-3 lg:grid-cols-6">
                   <Metric label="Members" value={c.memberCount} />
                   <Metric label="Staff" value={c.staffCount} />
                   <Metric label="Groups" value={c.groupCount} />

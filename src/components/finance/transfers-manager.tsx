@@ -30,6 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { useT } from "@/components/i18n-provider";
 
 export type TransferAccount = {
   id: string;
@@ -67,6 +69,7 @@ export function TransfersManager({
   today: string;
 }) {
   const router = useRouter();
+  const tr = useT();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -165,7 +168,11 @@ export function TransfersManager({
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border">
-          <div className="overflow-x-auto">
+          <ScrollableTable
+            stickyFirstColumn
+            hint={tr("common.scrollForMore")}
+            label={tr("finance.transfers")}
+          >
             <table className="w-full min-w-[40rem] text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                 <tr>
@@ -218,7 +225,7 @@ export function TransfersManager({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableTable>
         </div>
       )}
 

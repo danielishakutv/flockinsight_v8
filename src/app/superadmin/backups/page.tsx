@@ -28,7 +28,7 @@ export default async function BackupsPage() {
           <p className="font-semibold">These files are AES-256 encrypted.</p>
           <p className="text-muted-foreground">
             To restore one, decrypt with your key file:&nbsp;
-            <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            <code className="bg-muted rounded px-1 py-0.5 text-xs break-all">
               openssl enc -d -aes-256-cbc -pbkdf2 -in FILE -pass file:KEY | pg_restore -d DB
             </code>
             &nbsp;(see <code className="text-xs">deploy/BACKUPS.md</code>).
@@ -43,7 +43,8 @@ export default async function BackupsPage() {
               <Database className="size-7" />
             </div>
             <p className="text-muted-foreground">
-              No backups found in <code className="text-xs">{BACKUP_DIR}</code>.
+              No backups found in{" "}
+              <code className="text-xs break-all">{BACKUP_DIR}</code>.
             </p>
           </CardContent>
         </Card>
