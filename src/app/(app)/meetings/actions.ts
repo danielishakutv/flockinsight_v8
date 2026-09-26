@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { isSfuConfigured } from "@/lib/sfu";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import {
   allocateMeetingCode,
@@ -20,8 +21,10 @@ import {
   getMeeting,
 } from "@/lib/meetings";
 import {
+  chooseTransport,
   generatePasscode,
   MEETING_KINDS,
+  meetingLimitFor,
   type MeetingKind,
 } from "@/lib/meetings-shared";
 
@@ -38,7 +41,14 @@ const DENIED: ActionResult = {
 async function guard() {
   const { church, user } = await requireChurch();
   if (!(await can("meetings.manage"))) return null;
-  return { churchId: church.id, userId: user.id, timezone: church.timezone };
+  return {
+    churchId: church.id,
+    userId: user.id,
+    timezone: church.timezone,
+    // The plan decides how big a room may be, so every write that touches the
+    // room limit needs it to hand.
+    plan: church.plan,
+  };
 }
 
 const emptyToNull = (v: unknown) =>
@@ -60,7 +70,7 @@ const meetingSchema = z.object({
   durationMin: z.coerce.number().int().min(5).max(600).default(60),
   access: z.enum(["open", "passcode", "members"]),
   lobby: z.boolean().default(false),
-  maxParticipants: z.coerce.number().int().min(2).max(30).default(12),
+  maxParticipants: z.coerce.number().int().min(2).max(1000).default(12),
   muteOnEntry: z.boolean().default(true),
   cameraOffOnEntry: z.boolean().default(false),
   allowChat: z.boolean().default(true),
@@ -98,6 +108,19 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
   if (scheduledFor && Number.isNaN(scheduledFor.getTime()))
     return { ok: false, error: "Pick a real date and time." };
 
+  /*
+   * The plan's ceiling for one room. Checked here rather than trusted from the
+   * form, because relayed media costs real money per gigabyte and the number
+   * in the form came from a browser.
+   */
+  const ceiling = meetingLimitFor(g.plan);
+  if (ceiling !== null && v.maxParticipants > ceiling) {
+    return {
+      ok: false,
+      error: `Your plan allows up to ${ceiling} people in a meeting. Upgrade to hold a larger one.`,
+    };
+  }
+
   const values = {
     title: v.title,
     description: v.description,
@@ -114,6 +137,19 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     allowScreenShare: v.allowScreenShare,
     allowRecording: v.allowRecording,
     lowDataDefault: v.lowDataDefault,
+    /*
+     * Decided here, once, and never while people are in the room — everyone in
+     * a meeting must use the same transport, because a mesh peer and an SFU
+     * peer cannot see each other at all.
+     *
+     * Editing a meeting re-runs this, which is right: raising the room limit
+     * before it starts should move it onto the SFU. `isJoinable` keeps that
+     * from happening to a meeting already under way.
+     */
+    transport: chooseTransport({
+      maxParticipants: v.maxParticipants,
+      sfuAvailable: isSfuConfigured(),
+    }),
   };
 
   if (v.id) {

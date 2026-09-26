@@ -3232,6 +3232,26 @@ export const meeting = pgTable(
      */
     spotlightPeerId: text(),
 
+    /**
+     * How media travels in this room: peer-to-peer, or via the SFU.
+     *
+     * Fixed for the life of the meeting and decided before anybody joins,
+     * because everyone in a room must use the same one — a mesh peer and an
+     * SFU peer cannot see each other, so switching mid-call would split the
+     * congregation in half at the moment it mattered.
+     *
+     * "mesh" is right for a handful of people: no server in the path, lowest
+     * latency, and it costs nothing. "sfu" is what makes a room bigger than
+     * about six with video possible at all, because each person then uploads
+     * once instead of once per other person.
+     *
+     * Chosen from the room limit at creation (see `chooseTransport`), and
+     * falls back to mesh at join time if the SFU turns out not to be
+     * configured — a smaller meeting that works beats a larger one that
+     * cannot start.
+     */
+    transport: text().notNull().default("mesh"),
+
     /** Filled in as the meeting runs, so the summary survives the room. */
     peakParticipants: integer().notNull().default(0),
     totalJoins: integer().notNull().default(0),
@@ -3287,6 +3307,19 @@ export const meetingParticipant = pgTable(
      * which is the correct reading of what actually happened.
      */
     deviceId: text(),
+
+    /**
+     * This participant's PUBLISHER session on the SFU.
+     *
+     * How everybody else finds their media: a track is addressed as
+     * `(sessionId, trackName)`, and the track names are fixed, so knowing this
+     * is enough to pull somebody's camera. It rides in the roster, which is
+     * already the thing that tells the room who is here.
+     *
+     * Their subscriber session is deliberately NOT stored: nobody else ever
+     * needs to address it, and it dies with the tab.
+     */
+    sfuSessionId: text(),
     /**
      * Proves a caller owns this peer id. Held only by that browser tab and
      * required on every write — without it anyone who could read a roster

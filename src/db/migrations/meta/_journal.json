@@ -505,6 +505,13 @@
       "when": 1790410852451,
       "tag": "0071_meeting_device_id",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790459662460,
+      "tag": "0072_meeting_sfu",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { resolveIceConfig } from "@/lib/ice";
+import { isSfuConfigured } from "@/lib/sfu";
 import {
   addMessage,
   evaluateAdmission,
@@ -209,6 +210,16 @@ export async function POST(
       allowRecording: m.allowRecording,
       maxParticipants: m.maxParticipants,
       lowDataDefault: m.lowDataDefault,
+      /*
+       * Fixed for the life of the meeting. A mesh peer and an SFU peer cannot
+       * see each other, so this is decided before anybody joins and never
+       * changes while people are in the room.
+       *
+       * Degrades on the spot if the SFU is not configured on this server: a
+       * smaller meeting that works beats a larger one that cannot start, and
+       * the room limit is what the host set, not what the transport can bear.
+       */
+      transport: m.transport === "sfu" && isSfuConfigured() ? "sfu" : "mesh",
       churchName: c?.name ?? "",
       churchLogo: c?.logo ?? null,
     },

@@ -206,6 +206,15 @@ export type RosterEntry = {
   lowData: boolean;
   quality: MeetingQuality;
   admitted: boolean;
+  /**
+   * Where this person publishes on the SFU, when the room uses one.
+   *
+   * A track is addressed as `(sessionId, trackName)` and the names are fixed,
+   * so this single value is everything anybody needs to pull their camera.
+   * Null on a mesh room, and null briefly on an SFU room before they have
+   * published — a subscriber simply waits for the next poll.
+   */
+  sfuSessionId: string | null;
   joinedAt: string;
   /** Set for someone signed in — a guest has none. */
   userId: string | null;
@@ -608,4 +617,68 @@ export function deviceId(): string | null {
   } catch {
     return null;
   }
+}
+
+/* ============================================================
+ * How big a room can be, and how its media travels
+ * ========================================================== */
+
+/**
+ * The most people a meeting may hold, by plan.
+ *
+ * A limit on the ROOM, not on the platform. Above `MESH_CEILING` a room needs
+ * the SFU, so these numbers are also what the church is paying for: relayed
+ * media costs real money per gigabyte, and a plan that promised two hundred
+ * people on a Sunday without charging for it would be a plan that loses money
+ * every Sunday.
+ *
+ * `null` is unlimited in the plan's own terms; the host still sets a room
+ * limit, and the SFU is still the thing doing the work.
+ */
+export const MEETING_LIMIT_BY_PLAN: Record<string, number | null> = {
+  starter: 12,
+  growth: 50,
+  pro: 200,
+  enterprise: null,
+};
+
+/**
+ * The most people a peer-to-peer room can hold before it stops working.
+ *
+ * Not a preference — arithmetic. In a mesh each person uploads one copy per
+ * other person, so at eight people a phone is encoding seven streams and
+ * pushing about 1.1 Mbit/s up, which is more than most Nigerian mobile uplinks
+ * have. `profileFor` is already down to 320x180 by twelve. Six is where the
+ * picture is still worth looking at.
+ *
+ * Audio-only rooms go far past this — twelve people is about 264 kbit/s up —
+ * which is why the threshold is applied to the room's LIMIT and not to whoever
+ * happens to be in it.
+ */
+export const MESH_CEILING = 6;
+
+export type MeetingTransport = "mesh" | "sfu";
+
+/**
+ * Which transport a room of this size should use.
+ *
+ * Decided once, before anybody joins, and never changed while a meeting is
+ * running: everyone in a room must use the same one, because a mesh peer and
+ * an SFU peer cannot see each other at all. Switching mid-call would split a
+ * congregation in half at the moment it mattered most.
+ *
+ * Mesh where mesh works — no server in the media path, the lowest latency
+ * available, and it costs nothing to run.
+ */
+export function chooseTransport(opts: {
+  maxParticipants: number;
+  sfuAvailable: boolean;
+}): MeetingTransport {
+  if (!opts.sfuAvailable) return "mesh";
+  return opts.maxParticipants > MESH_CEILING ? "sfu" : "mesh";
+}
+
+/** The plan's ceiling for a room, or null for unlimited. */
+export function meetingLimitFor(plan: string): number | null {
+  return plan in MEETING_LIMIT_BY_PLAN ? MEETING_LIMIT_BY_PLAN[plan] : 12;
 }

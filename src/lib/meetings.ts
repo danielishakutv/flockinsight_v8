@@ -576,6 +576,7 @@ export async function roster(meetingId: string): Promise<RosterEntry[]> {
       sharing: meetingParticipant.sharing,
       handRaised: meetingParticipant.handRaised,
       lowData: meetingParticipant.lowData,
+      sfuSessionId: meetingParticipant.sfuSessionId,
       quality: meetingParticipant.quality,
       admitted: meetingParticipant.admitted,
       joinedAt: meetingParticipant.joinedAt,
