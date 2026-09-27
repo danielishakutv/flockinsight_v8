@@ -124,6 +124,15 @@ type PendingSave = RecordingResult & {
   mode: RecorderMode;
 };
 
+/**
+ * How many people's cameras to actually receive at once.
+ *
+ * Not how many tiles are drawn — how many streams are paid for. Nine covers a
+ * full grid on a laptop and every phone layout, and anybody past it is a tile
+ * with initials in it until they speak or are spotlit.
+ */
+const VISIBLE_VIDEO = 9;
+
 /** A store that never emits. For reading a fact the browser will not change. */
 const NEVER_CHANGES = () => () => {};
 
@@ -623,6 +632,37 @@ export function MeetingRoom(props: {
   );
   const speaking = useSpeaking(speakingSources);
 
+  /*
+   * Whose pictures we actually want off the SFU.
+   *
+   * Voices come from everybody; pictures only from the people on screen. Every
+   * camera in a two-hundred-person room is about sixty megabits a second down,
+   * which no connection this product exists for has — and it is the media bill
+   * as well. Nine of them is about four.
+   *
+   * The order is the room's own attention: whoever is spotlit or pinned, then
+   * whoever is speaking, then everybody else. So the people who matter keep
+   * their picture when the grid is larger than the budget.
+   *
+   * A string rather than a Set, because this drives an effect and a new Set
+   * every render would re-send it several times a second.
+   */
+  const watchedKey = useMemo(() => {
+    const focused = spotlight ?? pinned;
+    return [
+      ...others.filter((r) => r.peerId === focused),
+      ...others.filter((r) => r.peerId !== focused && speaking.has(r.peerId)),
+      ...others.filter((r) => r.peerId !== focused && !speaking.has(r.peerId)),
+    ]
+      .slice(0, VISIBLE_VIDEO)
+      .map((r) => r.peerId)
+      .join(",");
+  }, [others, speaking, spotlight, pinned]);
+
+  useEffect(() => {
+    clientRef.current?.setVideoInterest(watchedKey ? watchedKey.split(",") : []);
+  }, [watchedKey]);
+
   const showStage = !!sharer || stage.kind !== "none";
 
   // Keep the recorder's view of the world current without re-creating it. In
@@ -1021,6 +1061,7 @@ export function MeetingRoom(props: {
     tiles.length + 1,
     typeof window === "undefined" ? 1024 : window.innerWidth,
   );
+
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-slate-950 text-white">

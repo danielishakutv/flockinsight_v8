@@ -70,6 +70,21 @@ export class SfuTransport {
   /** Previous byte totals per peer, for turning them into a rate. */
   private lastVideoBytes = new Map<string, { at: number; bytes: number }>();
 
+  /**
+   * Whose PICTURES are wanted right now — the people on screen.
+   *
+   * Voices are pulled from everybody regardless; a meeting where you cannot
+   * hear somebody is not a meeting, and audio is 24 kbps. Video is the
+   * expensive half, and pulling all of it is what made download grow with the
+   * room: 8.7 Mbps at thirty people, 59.7 at two hundred, on connections that
+   * have neither.
+   *
+   * Empty means "not told yet", which is treated as wanting everything — the
+   * safe direction, because a room that shows nothing is worse than a room
+   * that costs too much for a few seconds.
+   */
+  private videoInterest: Set<string> | null = null;
+
   private chain: Promise<unknown> = Promise.resolve();
   private stopped = false;
 
@@ -213,6 +228,21 @@ export class SfuTransport {
    * already pulled are asked for, which is what keeps a four-second poll from
    * renegotiating four times a second.
    */
+  /**
+   * Say who is on screen. Anyone dropping out of this set has their video
+   * closed; anyone entering it has theirs pulled on the next sync.
+   *
+   * Audio is deliberately not part of this.
+   */
+  setVideoInterest(peerIds: Iterable<string>): void {
+    this.videoInterest = new Set(peerIds);
+  }
+
+  /** Is this person's picture wanted? Unset means "we have not been told yet". */
+  private wantsVideoFrom(peerId: string): boolean {
+    return this.videoInterest === null || this.videoInterest.has(peerId);
+  }
+
   async sync(roster: RosterEntry[], myPeerId: string): Promise<void> {
     await this.queue(async () => {
       if (this.stopped) return;
@@ -238,6 +268,8 @@ export class SfuTransport {
         if (!live.has(peerId)) this.pulled.delete(key);
       }
 
+      await this.dropUnwatched(live);
+
       const wanted: { sessionId: string; trackName: string }[] = [];
       const record: PulledTrack[] = [];
 
@@ -261,7 +293,13 @@ export class SfuTransport {
         if (r.micOn || this.pulled.has(`${r.peerId}:${TRACK_NAMES.mic}`)) {
           available.push(TRACK_NAMES.mic);
         }
-        if (r.cameraOn) available.push(TRACK_NAMES.camera);
+        // Their picture, only if it is being looked at. This one condition is
+        // what turns download from linear in room size into flat.
+        if (r.cameraOn && this.wantsVideoFrom(r.peerId)) {
+          available.push(TRACK_NAMES.camera);
+        }
+        // A shared screen is always wanted: somebody sharing is, by
+        // definition, the thing the room is looking at.
         if (r.sharing) available.push(TRACK_NAMES.screen);
 
         for (const name of available) {
@@ -351,6 +389,57 @@ export class SfuTransport {
         },
       });
     });
+  }
+
+  /**
+   * Stop paying for pictures nobody is looking at.
+   *
+   * Without this half, limiting what we PULL only helps somebody who joins a
+   * large room — anyone already in one keeps every stream they ever acquired,
+   * and the cost never comes back down when the grid changes page or a
+   * spotlight starts.
+   *
+   * Audio is never dropped here. Only cameras, and only cameras belonging to
+   * people who are still in the room but no longer on screen — somebody who
+   * has left is handled by the caller, which forgets them entirely.
+   */
+  private async dropUnwatched(live: Set<string>): Promise<void> {
+    if (this.videoInterest === null || !this.subscriber || !this.subscriberSession) {
+      return;
+    }
+
+    const mids: string[] = [];
+    for (const [mid, who] of this.incoming) {
+      if (who.name !== TRACK_NAMES.camera) continue;
+      if (!live.has(who.peerId)) continue;
+      if (this.videoInterest.has(who.peerId)) continue;
+      mids.push(mid);
+    }
+    if (mids.length === 0) return;
+
+    try {
+      await this.api("close", { session: this.subscriberSession, mids });
+    } catch {
+      // Leave everything as it is and try again on the next poll. Failing to
+      // close costs bandwidth; getting the bookkeeping wrong loses a picture.
+      return;
+    }
+
+    for (const mid of mids) {
+      const who = this.incoming.get(mid);
+      if (!who) continue;
+      this.incoming.delete(mid);
+      // Forget it, so coming back on screen pulls it again.
+      this.pulled.delete(`${who.peerId}:${who.name}`);
+
+      const bundle = this.media.get(who.peerId);
+      if (!bundle) continue;
+      for (const t of bundle.stream.getVideoTracks()) bundle.stream.removeTrack(t);
+      this.events.onMedia(who.peerId, {
+        stream: new MediaStream(bundle.stream.getTracks()),
+        screen: new MediaStream(bundle.screen.getTracks()),
+      });
+    }
   }
 
   private onTrack(e: RTCTrackEvent): void {

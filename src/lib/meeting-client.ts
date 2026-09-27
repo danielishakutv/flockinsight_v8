@@ -1270,6 +1270,19 @@ export class MeetingClient {
     this.pushState();
   }
 
+  /**
+   * Say whose pictures are on screen.
+   *
+   * Only meaningful on the SFU, where it is the difference between a download
+   * that grows with the room and one that does not — every camera in a
+   * two-hundred-person room is sixty megabits, and nine of them is four. On a
+   * mesh it is ignored: a mesh peer is already sending or not sending, and
+   * there is nothing in between to ask for.
+   */
+  setVideoInterest(peerIds: Iterable<string>): void {
+    this.sfu?.setVideoInterest(peerIds);
+  }
+
   /** The tracks a recorder or a local preview needs. */
   localStreams(): { mic: MediaStream | null; camera: MediaStream | null; screen: MediaStream | null } {
     return { mic: this.micStream, camera: this.camStream, screen: this.screenStream };

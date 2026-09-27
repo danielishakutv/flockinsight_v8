@@ -137,3 +137,74 @@ describe("what to record", () => {
     expect(pulled.has(`alice:${CAM}`)).toBe(false);
   });
 });
+
+/* ============================================================
+ * Whose pictures do we pay for?
+ * ========================================================== */
+
+/**
+ * The SFU made upload flat — one copy, whatever the room size. It did nothing
+ * for download, because pulling every camera is linear in the room: 8.7 Mbps
+ * at thirty people and 59.7 at two hundred, on connections that have neither.
+ *
+ * Voices come from everybody, always. Pictures come only from the people on
+ * screen. That is what turns download from linear into flat, and it is what
+ * every large conferencing product does.
+ */
+
+const VISIBLE = 9;
+
+function watchedPeers(
+  others: { peerId: string }[],
+  focused: string | null,
+  speaking: Set<string>,
+): string[] {
+  return [
+    ...others.filter((r) => r.peerId === focused),
+    ...others.filter((r) => r.peerId !== focused && speaking.has(r.peerId)),
+    ...others.filter((r) => r.peerId !== focused && !speaking.has(r.peerId)),
+  ]
+    .slice(0, VISIBLE)
+    .map((r) => r.peerId);
+}
+
+const room = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ peerId: `p${i}` }));
+
+describe("whose video we subscribe to", () => {
+  it("takes everyone in a small room", () => {
+    expect(watchedPeers(room(5), null, new Set())).toHaveLength(5);
+  });
+
+  it("stops at the budget in a large one", () => {
+    // The whole point: two hundred people must not mean two hundred streams.
+    expect(watchedPeers(room(200), null, new Set())).toHaveLength(VISIBLE);
+  });
+
+  it("always keeps the spotlit person, however large the room", () => {
+    // Somebody at the end of a two-hundred-person roster who is put on the
+    // main screen must not be the one person nobody can see.
+    const watched = watchedPeers(room(200), "p150", new Set());
+    expect(watched[0]).toBe("p150");
+    expect(watched).toHaveLength(VISIBLE);
+  });
+
+  it("prefers whoever is speaking over whoever happens to be first", () => {
+    const watched = watchedPeers(room(50), null, new Set(["p40", "p45"]));
+    expect(watched.slice(0, 2)).toEqual(["p40", "p45"]);
+  });
+
+  it("puts the spotlight ahead of a speaker", () => {
+    // A host has said "look at this person". That beats the room's own noise.
+    const watched = watchedPeers(room(50), "p30", new Set(["p40"]));
+    expect(watched[0]).toBe("p30");
+    expect(watched[1]).toBe("p40");
+  });
+
+  it("never lists anybody twice", () => {
+    // Both spotlit and speaking. A duplicate would spend two of nine slots on
+    // one person and silently drop somebody else.
+    const watched = watchedPeers(room(50), "p10", new Set(["p10", "p11"]));
+    expect(new Set(watched).size).toBe(watched.length);
+  });
+});
