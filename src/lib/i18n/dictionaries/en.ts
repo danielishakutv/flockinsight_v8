@@ -121,6 +121,8 @@ export const en = {
     training: "Training",
     trainingDesc: "Classes, worker training & who has completed what",
     meetings: "Meetings",
+    livestreams: "Livestreams",
+    livestreamsDesc: "Broadcast a service to anyone",
     meetingsDesc: "Video & audio meetings in the browser",
     giving: "Giving",
     givingDesc: "Offerings, tithes & donations",

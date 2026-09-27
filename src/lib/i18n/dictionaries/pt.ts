@@ -106,6 +106,8 @@ export const pt: Dictionary = {
     training: "Formação",
     trainingDesc: "Aulas, formação de obreiros e quem concluiu o quê",
     meetings: "Reuniões",
+    livestreams: "Transmissões",
+    livestreamsDesc: "Transmitir um culto para todos",
     meetingsDesc: "Reuniões de vídeo e áudio no navegador",
     giving: "Ofertas",
     givingDesc: "Ofertas, dízimos e donativos",

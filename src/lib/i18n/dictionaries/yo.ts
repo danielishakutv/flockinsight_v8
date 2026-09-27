@@ -112,6 +112,8 @@ export const yo: Dictionary = {
     training: "Ìdánilẹ́kọ̀ọ́",
     trainingDesc: "Kíláàsì, ìdánilẹ́kọ̀ọ́ òṣìṣẹ́ àti ẹni tí ó parí kí",
     meetings: "Ìpàdé",
+    livestreams: "Ìgbóhùnsáfẹ́fẹ́",
+    livestreamsDesc: "Gbé ìsìn jáde fún gbogbo ènìyàn",
     meetingsDesc: "Ìpàdé fídíò àti ohùn nínú aṣàwákiri",
     giving: "Ọrẹ",
     givingDesc: "Ọrẹ, ìdámẹ́wàá àti ìtọrẹ",

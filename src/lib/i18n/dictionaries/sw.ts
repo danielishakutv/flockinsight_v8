@@ -112,6 +112,8 @@ export const sw: Dictionary = {
     training: "Mafunzo",
     trainingDesc: "Madarasa, mafunzo ya watumishi na nani alihitimu nini",
     meetings: "Mikutano",
+    livestreams: "Matangazo",
+    livestreamsDesc: "Tangaza ibada kwa kila mtu",
     meetingsDesc: "Mikutano ya video na sauti kwenye kivinjari",
     giving: "Sadaka",
     givingDesc: "Sadaka, zaka na michango",

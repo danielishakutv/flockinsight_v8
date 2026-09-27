@@ -40,6 +40,7 @@ const APP_PAGES = [
   "/celebrations",
   "/training",
   "/meetings",
+  "/livestreams",
   "/giving",
   "/giving/projects",
   "/giving/projects/report",

@@ -111,6 +111,8 @@ export const ha: Dictionary = {
     training: "Horo",
     trainingDesc: "Ajujuwa, horon ma'aikata da wanda ya kammala me",
     meetings: "Tarurruka",
+    livestreams: "Watsa shirye-shirye",
+    livestreamsDesc: "Watsa hidima ga kowa",
     meetingsDesc: "Tarurrukan bidiyo da murya cikin burauza",
     giving: "Bayarwa",
     givingDesc: "Sadaka, zakka da gudunmawa",

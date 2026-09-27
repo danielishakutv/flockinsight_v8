@@ -119,6 +119,8 @@ export const pcm: Dictionary = {
     training: "Training",
     trainingDesc: "Classes, worker training and who don finish wetin",
     meetings: "Meetings",
+    livestreams: "Livestreams",
+    livestreamsDesc: "Broadcast service give anybody",
     meetingsDesc: "Video and voice meetings inside browser",
     giving: "Offering",
     givingDesc: "Offering, tithe and donations",

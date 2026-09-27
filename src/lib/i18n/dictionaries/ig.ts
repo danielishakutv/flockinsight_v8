@@ -110,6 +110,8 @@ export const ig: Dictionary = {
     training: "Ọzụzụ",
     trainingDesc: "Klaasị, ọzụzụ ndị ọrụ na onye gụchara gịnị",
     meetings: "Nzukọ",
+    livestreams: "Mgbasa ozi",
+    livestreamsDesc: "Gbasaa ofufe nye onye ọ bụla",
     meetingsDesc: "Nzukọ vidiyo na olu n'ime ihe nchọgharị",
     giving: "Onyinye",
     givingDesc: "Onyinye, otu ụzọ n'iri na inyeaka",
