@@ -57,21 +57,43 @@ export async function requestSenderId(opts: {
       }),
     });
     const data = (await res.json().catch(() => null)) as
-      | { code?: string; message?: string }
+      | { code?: string; message?: string; error?: string; fieldErrors?: unknown[] }
       | null;
 
-    const msg = String(data?.message ?? "");
-    if (res.ok && (data?.code === "ok" || /request|success/i.test(msg))) {
-      return { ok: true };
-    }
+    const msg = String(data?.message ?? data?.error ?? "");
+
+    /*
+     * A 2xx is success, whatever it says.
+     *
+     * This used to require `code: "ok"` or the word "request" or "success" in
+     * the message. The rewritten service answers with a Spring envelope and
+     * neither is guaranteed, so a submission Termii had accepted could be
+     * reported back as a failure — and then retried, which is how a duplicate
+     * registration happens.
+     */
+    if (res.ok) return { ok: true };
     // Treat "already requested / exists" as success — status check handles it.
     if (/exist|already|registered/i.test(msg)) {
       return { ok: true, alreadyExists: true };
     }
+    /*
+     * Field-level validation, said in the words of whoever has to fix it. The
+     * service now returns which field it refused and why — "Sender ID must be
+     * between 3 and 11 characters" is something an admin can act on, where
+     * "Termii error 400" is not.
+     */
+    const fields = Array.isArray(data?.fieldErrors)
+      ? (data.fieldErrors as { field?: string; message?: string }[])
+          .map((f) => [f.field, f.message].filter(Boolean).join(": "))
+          .filter(Boolean)
+          .join("; ")
+      : "";
+
+    const detail = fields || msg || `Termii error ${res.status}`;
     console.error(
-      `[termii] requestSenderId("${opts.senderId}") rejected: ${res.status} ${msg}`,
+      `[termii] requestSenderId("${opts.senderId}") rejected: ${res.status} ${detail}`,
     );
-    return { ok: false, error: msg || `Termii error ${res.status}` };
+    return { ok: false, error: detail };
   } catch (e) {
     console.error("[termii] requestSenderId failed:", e);
     return { ok: false, error: "Could not reach the SMS gateway." };
@@ -107,6 +129,69 @@ export function mapStatus(raw: string | undefined): SenderIdStatus {
   return "pending";
 }
 
+/**
+ * The first page number this API uses.
+ *
+ * ZERO. Termii rewrote the sender-ID service and its pages are now
+ * zero-indexed: asking for page 1 returns the SECOND page, skipping the first
+ * fifteen sender IDs entirely. Verified against the live API — page 0 returned
+ * twelve ids, page 1 returned nothing with `pageable.offset: 15`.
+ *
+ * Worth a named constant, because "start at 1" is the assumption that made
+ * every lookup on a small account come back empty while the dashboard plainly
+ * showed the ID.
+ */
+const FIRST_PAGE = 0;
+
+type TermiiPage = {
+  // The rewritten service: a Spring page.
+  content?: SenderIdRow[];
+  totalPages?: number;
+  number?: number;
+  last?: boolean;
+  // The older Laravel-style response, still handled — see `readPage`.
+  data?: SenderIdRow[];
+  current_page?: number;
+  last_page?: number;
+  total_pages?: number;
+  next_page_url?: string | null;
+  message?: string;
+};
+
+/**
+ * Read either envelope Termii might send.
+ *
+ * Both are understood rather than swapping one for the other. The old shape
+ * may still be what some accounts are served, and a reader that handles both
+ * cannot be broken by whichever arrives — which is the whole failure being
+ * fixed here.
+ */
+export function readPage(
+  data: TermiiPage,
+  page: number,
+): { rows: SenderIdRow[]; hasNext: boolean } | null {
+  if (Array.isArray(data.content)) {
+    const rows = data.content;
+    const total = data.totalPages ?? 0;
+    const current = data.number ?? page;
+    // `last` is authoritative when present; otherwise compare against the
+    // total, remembering that these page numbers start at zero.
+    const hasNext = data.last === undefined ? current + 1 < total : !data.last;
+    return { rows, hasNext };
+  }
+
+  if (Array.isArray(data.data)) {
+    const rows = data.data;
+    const last = data.last_page ?? data.total_pages ?? page;
+    const hasNext = data.next_page_url
+      ? true
+      : (data.current_page ?? page) < last && rows.length > 0;
+    return { rows, hasNext };
+  }
+
+  return null;
+}
+
 /** One page of Termii's sender-ID list. */
 async function fetchPage(
   apiKey: string,
@@ -124,14 +209,7 @@ async function fetchPage(
     },
   );
   const body = await res.text();
-  let data: {
-    data?: SenderIdRow[];
-    current_page?: number;
-    last_page?: number;
-    total_pages?: number;
-    next_page_url?: string | null;
-    message?: string;
-  } | null = null;
+  let data: TermiiPage | null = null;
   try {
     data = JSON.parse(body);
   } catch {
@@ -143,17 +221,14 @@ async function fetchPage(
     console.error(`[termii] sender-id list page ${page} failed: ${res.status} ${detail}`);
     return { ok: false, error: `The SMS network returned an error: ${detail}` };
   }
-  if (!Array.isArray(data.data)) {
+
+  const read = readPage(data, page);
+  if (!read) {
     console.error(`[termii] sender-id list page ${page}: unexpected shape`, body.slice(0, 300));
     return { ok: false, error: "The SMS network returned an unexpected response." };
   }
 
-  const rows = data.data;
-  const last = data.last_page ?? data.total_pages ?? page;
-  const hasNext = data.next_page_url
-    ? true
-    : (data.current_page ?? page) < last && rows.length > 0;
-  return { ok: true, rows, hasNext };
+  return { ok: true, rows: read.rows, hasNext: read.hasNext };
 }
 
 /**
@@ -169,7 +244,7 @@ export async function listNetworkSenderIds(): Promise<
 
   const ids: NetworkSenderId[] = [];
   try {
-    for (let page = 1; page <= 50; page++) {
+    for (let page = FIRST_PAGE; page < FIRST_PAGE + 50; page++) {
       const res = await fetchPage(apiKey, page);
       if (!res.ok) return res;
       for (const r of res.rows) {
@@ -200,7 +275,7 @@ export async function lookupSenderId(senderId: string): Promise<SenderIdLookup> 
   const target = normalizeSenderId(senderId);
 
   try {
-    for (let page = 1; page <= 50; page++) {
+    for (let page = FIRST_PAGE; page < FIRST_PAGE + 50; page++) {
       const res = await fetchPage(apiKey, page);
       if (!res.ok) return res;
 
