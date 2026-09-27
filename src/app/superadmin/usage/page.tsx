@@ -1,5 +1,12 @@
 import { getUsageOverview } from "@/lib/analytics";
 import { UsageDashboard } from "@/components/superadmin/usage-dashboard";
+import { MeetingCost } from "@/components/superadmin/meeting-cost";
+import {
+  monthStart,
+  projectMonth,
+  usageByChurch,
+  usageSince,
+} from "@/lib/meeting-usage";
 
 import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Usage · Admin" };
@@ -8,6 +15,15 @@ export const dynamic = "force-dynamic";
 export default async function SuperadminUsagePage() {
   await requirePlatform("platform.overview.view");
   const overview = await getUsageOverview();
+
+  // The month so far, and where it is heading. Both cheap: one indexed scan
+  // over participants who actually moved bytes.
+  const since = monthStart();
+  const [month, churches] = await Promise.all([
+    usageSince(since),
+    usageByChurch(since),
+  ]);
+  const projection = projectMonth(month.gb);
 
   return (
     <div className="space-y-6">
@@ -18,6 +34,7 @@ export default async function SuperadminUsagePage() {
           trends. For funnels, paths, retention &amp; session replay, see PostHog.
         </p>
       </div>
+      <MeetingCost month={month} projection={projection} churches={churches} />
       <UsageDashboard overview={overview} />
     </div>
   );

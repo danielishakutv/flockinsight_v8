@@ -85,7 +85,17 @@ function parseState(raw: Record<string, unknown> | undefined) {
       ? (raw.quality as "good" | "fair" | "poor" | "lost")
       : undefined;
 
+  const num = (k: string) => {
+    const v = raw[k];
+    // Bounded: a browser could claim anything, and this figure becomes money.
+    // A terabyte from one participant is a bug or a lie either way.
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return undefined;
+    return Math.min(Math.floor(v), 1_000_000_000_000);
+  };
+
   const state = {
+    bytesReceived: num("bytesReceived"),
+    bytesSent: num("bytesSent"),
     micOn: bool("micOn"),
     cameraOn: bool("cameraOn"),
     sharing: bool("sharing"),

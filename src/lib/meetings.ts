@@ -473,11 +473,40 @@ export async function heartbeat(
     handRaised: boolean;
     lowData: boolean;
     quality: "good" | "fair" | "poor" | "lost";
+    bytesReceived: number;
+    bytesSent: number;
   }>,
 ): Promise<void> {
+  const { bytesReceived, bytesSent, ...flags } = state ?? {};
+
+  /*
+   * Bytes only ever go up.
+   *
+   * The client reports cumulative totals from `getStats`, and those counters
+   * start again whenever a connection is rebuilt — an ICE restart, a tab that
+   * reconnected. Taking the larger of the two means a reconnection cannot make
+   * a church's usage go backwards, which is the difference between a billing
+   * figure and a number that drifts.
+   */
+  const money =
+    bytesReceived === undefined && bytesSent === undefined
+      ? {}
+      : {
+          ...(bytesReceived === undefined
+            ? {}
+            : {
+                bytesReceived: sql`greatest(${meetingParticipant.bytesReceived}, ${bytesReceived})`,
+              }),
+          ...(bytesSent === undefined
+            ? {}
+            : {
+                bytesSent: sql`greatest(${meetingParticipant.bytesSent}, ${bytesSent})`,
+              }),
+        };
+
   await db
     .update(meetingParticipant)
-    .set({ lastSeenAt: new Date(), ...(state ?? {}) })
+    .set({ lastSeenAt: new Date(), ...flags, ...money })
     .where(eq(meetingParticipant.id, participantId));
 }
 

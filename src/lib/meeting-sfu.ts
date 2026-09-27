@@ -486,6 +486,32 @@ export class SfuTransport {
   }
 
   /**
+   * Everything both connections have moved, for the bill.
+   *
+   * Cumulative since the connection opened, not a rate: the server keeps the
+   * larger of what it has and what arrives, so a reconnection that resets
+   * these counters cannot make a church's total go backwards.
+   */
+  async totals(): Promise<{ received: number; sent: number }> {
+    let received = 0;
+    let sent = 0;
+    for (const pc of [this.publisher, this.subscriber]) {
+      if (!pc) continue;
+      try {
+        const report = await pc.getStats();
+        report.forEach((r) => {
+          const x = r as unknown as Record<string, number | string>;
+          if (x.type === "inbound-rtp") received += Number(x.bytesReceived ?? 0);
+          if (x.type === "outbound-rtp") sent += Number(x.bytesSent ?? 0);
+        });
+      } catch {
+        /* a closing connection has nothing to report */
+      }
+    }
+    return { received, sent };
+  }
+
+  /**
    * What is arriving from each person, for the People panel.
    *
    * This exists because a panel that goes blank on one transport is worse than

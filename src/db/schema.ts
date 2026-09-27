@@ -3320,6 +3320,25 @@ export const meetingParticipant = pgTable(
      * needs to address it, and it dies with the tab.
      */
     sfuSessionId: text(),
+
+    /**
+     * What this person's connection actually moved, in bytes.
+     *
+     * Measured, not estimated. The client already samples `getStats` every few
+     * seconds for the quality pill, so the true figures are to hand and there
+     * is no reason to guess from bitrate ladders and durations — which would
+     * be wrong exactly when it mattered, because a bad connection sends less
+     * and a spotlight sends more.
+     *
+     * `received` is the one that costs money: Cloudflare bills egress from its
+     * edge to a client, so this column summed over a month IS the bill.
+     *
+     * Monotonic. The server keeps the larger of what it has and what arrives,
+     * so a client that reconnects and starts its counters again cannot make
+     * the total go backwards.
+     */
+    bytesReceived: bigint({ mode: "number" }).notNull().default(0),
+    bytesSent: bigint({ mode: "number" }).notNull().default(0),
     /**
      * Proves a caller owns this peer id. Held only by that browser tab and
      * required on every write — without it anyone who could read a roster

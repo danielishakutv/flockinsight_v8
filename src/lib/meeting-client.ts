@@ -243,6 +243,14 @@ export class MeetingClient {
   /** Which way up the camera was last asked for — see `handleRotation`. */
   private capturedPortrait = false;
   /**
+   * Everything this connection has moved, across every peer or the SFU.
+   *
+   * Reported to the server with the ordinary state push, so usage is measured
+   * rather than estimated. `received` is the half that costs money: the media
+   * server bills what leaves its edge for a client.
+   */
+  private totals = { received: 0, sent: 0 };
+  /**
    * The SFU, when this room uses one. Null on a mesh room, and every
    * peer-to-peer code path below returns early when it is set — the two
    * transports never interleave.
@@ -501,6 +509,8 @@ export class MeetingClient {
       sharing: this.state.sharing,
       lowData: this.state.lowData,
       quality: this.state.quality,
+      bytesReceived: this.totals.received,
+      bytesSent: this.totals.sent,
     });
   }
 
@@ -1451,6 +1461,7 @@ export class MeetingClient {
 
   private async sampleSfu(): Promise<void> {
     if (!this.sfu) return;
+    this.totals = await this.sfu.totals();
     const rows = await this.sfu.diagnose();
     this.sfuDiagnostics = [...rows.entries()].map(([peerId, d]) => ({
       peerId,
@@ -1577,6 +1588,17 @@ export class MeetingClient {
      * means any missed edge heals itself.
      */
     for (const [peerId, p] of this.peers) this.publishMedia(peerId, p);
+
+    // Totals for the bill, gathered while we are already here.
+    this.totals = { received: 0, sent: 0 };
+    for (const [, p] of this.peers) {
+      const d = p.diagnostics;
+      if (!d) continue;
+      const b = p.lastBytes;
+      if (!b) continue;
+      this.totals.received += b.videoIn + b.audioIn;
+      this.totals.sent += b.videoOut + b.audioOut;
+    }
 
     const quality = rateLink({
       packetLossPct: worstLoss,
