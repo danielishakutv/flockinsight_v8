@@ -287,6 +287,20 @@ export const church = pgTable("church", {
   // Purchased extra storage beyond the free base (BASE_STORAGE_BYTES). The
   // effective limit = base + storageExtraBytes.
   storageExtraBytes: bigint({ mode: "number" }).notNull().default(0),
+
+  /**
+   * Which age bands this church counts, and its own words for them.
+   *
+   * Shape: `{ youths: { label: "Young Adults", enabled: true }, ... }`. Null
+   * means "never configured", which reads as the defaults — so attendance goes
+   * on working untouched for every church that never opens the page.
+   *
+   * The bands themselves are fixed in code (lib/attendance-bands.ts); only
+   * which are shown and what they are called live here. That keeps every count
+   * a real column, so exports, analytics and year-on-year comparisons survive
+   * a church renaming something.
+   */
+  attendanceBands: jsonb().$type<Record<string, { label?: string; enabled?: boolean }>>(),
   // Active monthly storage add-on: cost (deducted from the wallet each renewal)
   // and when it next renews. Zero cost / null date = on the free base only.
   storageMonthlyCost: numeric({ precision: 14, scale: 2, mode: "number" })
@@ -776,6 +790,18 @@ export const attendanceSession = pgTable(
     // Teens by gender.
     teenMaleCount: integer().notNull().default(0),
     teenFemaleCount: integer().notNull().default(0),
+    /*
+     * Youths, and senior members. Both optional and both off by default.
+     *
+     * Turning Youths on changes what Adults MEANS from that day forward —
+     * before it existed, youths were counted among the adults, and nothing
+     * re-splits the history. The settings page says so, because a church
+     * comparing this year with last needs to know why the adult figure fell.
+     */
+    youthMaleCount: integer().notNull().default(0),
+    youthFemaleCount: integer().notNull().default(0),
+    seniorMaleCount: integer().notNull().default(0),
+    seniorFemaleCount: integer().notNull().default(0),
     // Children: childrenCount is the stored total. Rows recorded before the
     // gender split have only the total (male/female stay 0).
     childrenCount: integer().notNull().default(0),

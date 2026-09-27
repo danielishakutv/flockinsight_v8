@@ -86,3 +86,37 @@ describe("zeptoReason", () => {
     expect(zeptoReason("email_delivered", null)).toBeNull();
   });
 });
+
+/* ============================================================
+ * Reply-to
+ * ========================================================== */
+
+describe("default reply-to", () => {
+  /**
+   * The send address is on a domain nobody reads, so an email without a
+   * reply-to is a dead end: somebody answers their pastor's announcement and
+   * it goes nowhere. This restates the rule the mailer applies.
+   */
+  const resolve = (chosen?: string, env = "flockinsight@gmail.com") =>
+    chosen?.trim() || env;
+
+  it("fills one in when the caller set none", () => {
+    expect(resolve(undefined)).toBe("flockinsight@gmail.com");
+  });
+
+  it("treats blank and whitespace as none", () => {
+    expect(resolve("")).toBe("flockinsight@gmail.com");
+    expect(resolve("   ")).toBe("flockinsight@gmail.com");
+  });
+
+  it("leaves a caller's own choice alone", () => {
+    // The important half. A church's devotional replies to the CHURCH, and a
+    // support thread to the thread — overriding those would take replies away
+    // from the person who wanted them.
+    expect(resolve("pastor@church.org")).toBe("pastor@church.org");
+  });
+
+  it("follows the environment when it is set", () => {
+    expect(resolve(undefined, "hello@flockinsight.com")).toBe("hello@flockinsight.com");
+  });
+});

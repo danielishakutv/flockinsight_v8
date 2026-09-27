@@ -83,6 +83,24 @@ export function buildFrom(fromName?: string | null): string {
   return `${name} <${fromAddress()}>`;
 }
 
+/**
+ * Where a reply goes when nothing else has been chosen.
+ *
+ * The send address is on a domain nobody reads, so an email without this is a
+ * dead end: somebody answers their pastor's announcement and it disappears.
+ * Every message now has somewhere to land.
+ *
+ * A DEFAULT, not an override. Where a caller sets `replyTo` it wins, and that
+ * is the point — a church's devotional should reply to the church, and a
+ * support thread should reply to the thread. Replacing those would take
+ * replies AWAY from the person who wanted them.
+ *
+ * Env-configurable so it can change without a deploy.
+ */
+function defaultReplyTo(): string {
+  return (process.env.EMAIL_REPLY_TO || "flockinsight@gmail.com").trim();
+}
+
 export type SendEmailOptions = {
   to: string;
   subject: string;
@@ -106,8 +124,15 @@ export type SendEmailOptions = {
  * object return would make `if (ok)` always true without TypeScript objecting.
  */
 export async function sendEmailWithId(
-  opts: SendEmailOptions,
+  input: SendEmailOptions,
 ): Promise<{ ok: boolean; id: string | null }> {
+  // Applied once, here, rather than at the dozens of call sites — every one of
+  // which would otherwise be a place to forget it.
+  const opts: SendEmailOptions = {
+    ...input,
+    replyTo: input.replyTo?.trim() || defaultReplyTo(),
+  };
+
   const from = buildFrom(opts.fromName);
 
   /*

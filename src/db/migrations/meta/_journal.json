@@ -526,6 +526,13 @@
       "when": 1790501065581,
       "tag": "0074_livestreaming",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1790543346444,
+      "tag": "0075_attendance_bands",
+      "breakpoints": true
     }
   ]
 }
