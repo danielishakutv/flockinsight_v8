@@ -726,6 +726,7 @@ export const fr: Dictionary = {
     verification: "Vérification",
     publicPage: "Page publique",
     services: "Cultes",
+    attendance: "Qui vous comptez",
     givingCategories: "Dons",
     financeSetup: "Finances",
     reminders: "Rappels",

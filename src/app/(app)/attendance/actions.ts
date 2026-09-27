@@ -22,6 +22,12 @@ const recordSchema = z.object({
   // Teens by gender.
   teenMaleCount: count,
   teenFemaleCount: count,
+  // Youths and senior members. Optional on the wire so an older client, or a
+  // church that counts neither, keeps posting exactly what it always did.
+  youthMaleCount: count.optional(),
+  youthFemaleCount: count.optional(),
+  seniorMaleCount: count.optional(),
+  seniorFemaleCount: count.optional(),
   // Children / first-timers / converts by gender. The totals are sent by the
   // form too: for rows recorded before the split they carry the legacy value
   // (splits untouched at 0), otherwise they equal the split sum.
@@ -74,8 +80,25 @@ export async function recordAttendance(
     d.newConvertMaleCount + d.newConvertFemaleCount > 0
       ? d.newConvertMaleCount + d.newConvertFemaleCount
       : d.newConvertCount;
+  /*
+   * The stored total.
+   *
+   * Every band this church counts, which now includes youths and seniors
+   * where they are used. Computed from what was POSTED rather than from the
+   * church's configuration, so a figure recorded today still adds up if the
+   * church turns a band off tomorrow — an old session should read the same
+   * whenever it is opened.
+   */
   const total =
-    d.maleCount + d.femaleCount + d.teenMaleCount + d.teenFemaleCount + children;
+    d.maleCount +
+    d.femaleCount +
+    d.teenMaleCount +
+    d.teenFemaleCount +
+    (d.youthMaleCount ?? 0) +
+    (d.youthFemaleCount ?? 0) +
+    (d.seniorMaleCount ?? 0) +
+    (d.seniorFemaleCount ?? 0) +
+    children;
 
   const values = {
     churchId: church.id,
@@ -86,6 +109,10 @@ export async function recordAttendance(
     femaleCount: d.femaleCount,
     teenMaleCount: d.teenMaleCount,
     teenFemaleCount: d.teenFemaleCount,
+    youthMaleCount: d.youthMaleCount ?? 0,
+    youthFemaleCount: d.youthFemaleCount ?? 0,
+    seniorMaleCount: d.seniorMaleCount ?? 0,
+    seniorFemaleCount: d.seniorFemaleCount ?? 0,
     childMaleCount: d.childMaleCount,
     childFemaleCount: d.childFemaleCount,
     childrenCount: children,

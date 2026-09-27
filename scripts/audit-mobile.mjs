@@ -59,6 +59,7 @@ const APP_PAGES = [
   "/help/meetings",
   "/help/support",
   "/settings",
+  "/settings/attendance",
   "/settings/language",
   "/settings/activity",
   "/settings/services",

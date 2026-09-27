@@ -729,6 +729,7 @@ export const sw: Dictionary = {
     verification: "Uthibitisho",
     publicPage: "Ukurasa wa umma",
     services: "Ibada",
+    attendance: "Unaowahesabu",
     givingCategories: "Sadaka",
     financeSetup: "Fedha",
     reminders: "Vikumbusho",

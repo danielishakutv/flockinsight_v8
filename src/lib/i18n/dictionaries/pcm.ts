@@ -734,6 +734,7 @@ export const pcm: Dictionary = {
     verification: "Verification",
     publicPage: "Public page",
     services: "Services",
+    attendance: "Who una count",
     givingCategories: "Offering",
     financeSetup: "Money matters",
     reminders: "Reminders",

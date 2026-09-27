@@ -771,6 +771,7 @@ export const en = {
     verification: "Verification",
     publicPage: "Public page",
     services: "Services",
+    attendance: "Who you count",
     givingCategories: "Giving",
     financeSetup: "Finance",
     reminders: "Reminders",

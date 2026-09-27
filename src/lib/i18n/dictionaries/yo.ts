@@ -729,6 +729,7 @@ export const yo: Dictionary = {
     verification: "Ìfẹ̀rí",
     publicPage: "Ojú ìwé gbogbo ènìyàn",
     services: "Ìsìn",
+    attendance: "Àwọn tí ẹ ń kà",
     givingCategories: "Ọrẹ",
     financeSetup: "Ìṣúná",
     reminders: "Ìrán-ni-létí",

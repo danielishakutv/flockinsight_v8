@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import type { BandDefinition, BandKey } from "@/lib/attendance-bands";
 import { useRouter } from "next/navigation";
 import { Loader2, StickyNote, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -86,9 +87,15 @@ function GenderGroup({
 export function RecordForm({
   services,
   initial,
+  bands,
 }: {
   services: ServiceOption[];
   initial?: Initial;
+  /**
+   * The bands this church counts, in reading order, already filtered to the
+   * enabled ones and carrying the church's own words for each.
+   */
+  bands: BandDefinition[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -105,6 +112,11 @@ export function RecordForm({
   // Teens.
   const [teenM, setTeenM] = useState(initial?.teenMaleCount ?? 0);
   const [teenF, setTeenF] = useState(initial?.teenFemaleCount ?? 0);
+  // Youths and senior members: optional, and off until a church turns them on.
+  const [youthM, setYouthM] = useState(initial?.youthMaleCount ?? 0);
+  const [youthF, setYouthF] = useState(initial?.youthFemaleCount ?? 0);
+  const [seniorM, setSeniorM] = useState(initial?.seniorMaleCount ?? 0);
+  const [seniorF, setSeniorF] = useState(initial?.seniorFemaleCount ?? 0);
   // Children / first-timers / converts by gender.
   const [childM, setChildM] = useState(initial?.childMaleCount ?? 0);
   const [childF, setChildF] = useState(initial?.childFemaleCount ?? 0);
@@ -135,7 +147,21 @@ export function RecordForm({
   const firstTimerTotal = ftM + ftF > 0 ? ftM + ftF : legacyFirstTimers;
   const newConvertTotal = ncM + ncF > 0 ? ncM + ncF : legacyNewConverts;
 
-  const total = adultM + adultF + teenM + teenF + childrenTotal;
+  /*
+   * Only the bands this church counts.
+   *
+   * Children keep their legacy fallback: rows recorded before the gender split
+   * have a total and no breakdown, and dropping those people out of the sum
+   * would make an old session's figure change the moment somebody opened it.
+   */
+  const perBand: Record<BandKey, number> = {
+    adults: adultM + adultF,
+    teens: teenM + teenF,
+    youths: youthM + youthF,
+    children: childrenTotal,
+    seniors: seniorM + seniorF,
+  };
+  const total = bands.reduce((sum, b) => sum + (perBand[b.key] ?? 0), 0);
   const isAdhoc = serviceKey === ADHOC;
 
   const canSave = useMemo(() => {
@@ -155,6 +181,10 @@ export function RecordForm({
         femaleCount: adultF,
         teenMaleCount: teenM,
         teenFemaleCount: teenF,
+        youthMaleCount: youthM,
+        youthFemaleCount: youthF,
+        seniorMaleCount: seniorM,
+        seniorFemaleCount: seniorF,
         childMaleCount: childM,
         childFemaleCount: childF,
         childrenCount: childrenTotal,
@@ -234,7 +264,7 @@ export function RecordForm({
                 Total attendance
               </div>
               <div className="text-muted-foreground text-xs leading-tight">
-                Adults + Teens + Children
+                {bands.map((b) => b.label).join(" + ")}
               </div>
             </div>
           </div>
@@ -244,36 +274,38 @@ export function RecordForm({
         </CardContent>
       </Card>
 
-      {/* Headcount */}
-      <GenderGroup
-        title="Adults"
-        male={adultM}
-        female={adultF}
-        onMale={setAdultM}
-        onFemale={setAdultF}
-        accent
-      />
-      <GenderGroup
-        title="Teens"
-        male={teenM}
-        female={teenF}
-        onMale={setTeenM}
-        onFemale={setTeenF}
-        accent
-      />
-      <GenderGroup
-        title="Children"
-        male={childM}
-        female={childF}
-        onMale={setChildM}
-        onFemale={setChildF}
-        accent
-        legacyNote={
-          legacyChildren > 0 && childM + childF === 0
-            ? `${legacyChildren} children were recorded without a gender split — that number stays in the total until you enter one.`
-            : undefined
-        }
-      />
+      {/*
+        Headcount, in the church's own words and only the bands it counts.
+        A church with no youth fellowship never sees a Youths box to leave at
+        zero, which is the difference between a form that fits and one that
+        has to be worked around every Sunday.
+      */}
+      {bands.map((b) => {
+        const state = {
+          adults: { male: adultM, female: adultF, onMale: setAdultM, onFemale: setAdultF },
+          teens: { male: teenM, female: teenF, onMale: setTeenM, onFemale: setTeenF },
+          youths: { male: youthM, female: youthF, onMale: setYouthM, onFemale: setYouthF },
+          children: { male: childM, female: childF, onMale: setChildM, onFemale: setChildF },
+          seniors: { male: seniorM, female: seniorF, onMale: setSeniorM, onFemale: setSeniorF },
+        }[b.key];
+
+        return (
+          <GenderGroup
+            key={b.key}
+            title={b.label}
+            male={state.male}
+            female={state.female}
+            onMale={state.onMale}
+            onFemale={state.onFemale}
+            accent
+            legacyNote={
+              b.key === "children" && legacyChildren > 0 && childM + childF === 0
+                ? `${legacyChildren} children were recorded without a gender split — that number stays in the total until you enter one.`
+                : undefined
+            }
+          />
+        );
+      })}
 
       {/* Highlights */}
       <GenderGroup

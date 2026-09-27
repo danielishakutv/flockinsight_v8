@@ -725,6 +725,7 @@ export const ig: Dictionary = {
     verification: "Nkwado",
     publicPage: "Ibe ọha",
     services: "Ofufe",
+    attendance: "Ndị ị na-agụ",
     givingCategories: "Onyinye",
     financeSetup: "Nhazi ego",
     reminders: "Ncheta",

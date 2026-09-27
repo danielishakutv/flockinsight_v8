@@ -726,6 +726,7 @@ export const ha: Dictionary = {
     verification: "Tabbatarwa",
     publicPage: "Shafin jama'a",
     services: "Ibada",
+    attendance: "Wa kuke ƙidaya",
     givingCategories: "Bayarwa",
     financeSetup: "Harkokin kuɗi",
     reminders: "Tunatarwa",

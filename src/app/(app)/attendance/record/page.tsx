@@ -5,6 +5,7 @@ import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
+import { activeBands } from "@/lib/attendance-bands";
 
 export const metadata = { title: "Record Attendance" };
 
@@ -24,7 +25,7 @@ export default async function RecordPage() {
         title="Record Attendance"
         description="Pick a service, then tap to count. The total updates live."
       />
-      <RecordForm services={services} />
+      <RecordForm services={services} bands={activeBands(church.attendanceBands)} />
     </PageContainer>
   );
 }
