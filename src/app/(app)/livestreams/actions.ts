@@ -168,7 +168,7 @@ export async function setLivestreamStatus(
       ...(status === "live" ? { startedAt: new Date(), endedAt: null } : {}),
       ...(status === "ended" ? { endedAt: new Date() } : {}),
     })
-    .where(eq(livestream.id, id));
+    .where(and(eq(livestream.id, id), eq(livestream.churchId, g.churchId)));
 
   await audit({
     churchId: g.churchId,
@@ -219,7 +219,9 @@ export async function deleteLivestream(id: string): Promise<ActionResult> {
     }
   }
 
-  await db.delete(livestream).where(eq(livestream.id, id));
+  await db
+    .delete(livestream)
+    .where(and(eq(livestream.id, id), eq(livestream.churchId, g.churchId)));
 
   await audit({
     churchId: g.churchId,
@@ -331,7 +333,9 @@ export async function removeLivestreamOutput(id: string): Promise<ActionResult> 
     }
   }
 
-  await db.delete(livestreamOutput).where(eq(livestreamOutput.id, id));
+  await db
+    .delete(livestreamOutput)
+    .where(and(eq(livestreamOutput.id, id), eq(livestreamOutput.churchId, g.churchId)));
 
   await audit({
     churchId: g.churchId,

@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church, livestream } from "@/db/schema";
+import { church, livestream, staff } from "@/db/schema";
 import { getSession } from "@/lib/session";
+import { canWatch } from "@/lib/livestream-access";
 import { LivePlayer } from "@/components/livestreams/live-player";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export default async function WatchPage({
   const [s] = await db
     .select({
       id: livestream.id,
+      churchId: livestream.churchId,
       title: livestream.title,
       description: livestream.description,
       status: livestream.status,
@@ -68,24 +70,48 @@ export default async function WatchPage({
   /*
    * A members-only stream is checked here rather than hidden in the player.
    * The playback urls are the whole secret — anybody holding one can watch —
-   * so they must not reach a page that somebody unauthorised can open.
+   * so the decision has to happen before they reach a response.
+   *
+   * And "signed in" is not the question. Every other church's staff are signed
+   * in too, so a session alone would have let any church in the country watch
+   * any other church's private service. It has to be membership OF THIS
+   * CHURCH, which is what `staff` records.
    */
   if (s.visibility === "members") {
     const session = await getSession();
-    if (!session?.user) {
+    const viewerUserId = session?.user?.id ?? null;
+
+    const memberships = viewerUserId
+      ? await db
+          .select({ churchId: staff.organizationId })
+          .from(staff)
+          .where(eq(staff.userId, viewerUserId))
+      : [];
+
+    const decision = canWatch({
+      visibility: s.visibility,
+      streamChurchId: s.churchId,
+      viewerUserId,
+      viewerChurchIds: memberships.map((m) => m.churchId),
+    });
+
+    if (decision !== "allow") {
       return (
         <main className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-slate-950 px-6 text-center text-white">
           <h1 className="text-xl font-bold">{s.title}</h1>
-          <p className="max-w-sm text-sm text-slate-400">
-            This stream is for {s.churchName} members. Sign in with the account
-            your church set up for you, then open this link again.
+          <p className="max-w-sm text-sm text-balance text-slate-400">
+            {decision === "sign-in"
+              ? `This stream is for ${s.churchName} members. Sign in with the account your church set up for you, then open this link again.`
+              : `This stream is for ${s.churchName} members, and the account you are signed in with is not one of theirs.`}
           </p>
-          <a
-            href={`/login?next=${encodeURIComponent(`/live/${slug}`)}`}
-            className="mt-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold"
-          >
-            Sign in
-          </a>
+          {decision === "sign-in" && (
+            <a
+              href={`/login?next=${encodeURIComponent(`/live/${slug}`)}`}
+              className="mt-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold"
+            >
+              Sign in
+            </a>
+          )}
         </main>
       );
     }
