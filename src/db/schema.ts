@@ -3390,6 +3390,115 @@ export const meetingParticipant = pgTable(
  * always with an age WHERE clause). What actually happened in a meeting lives
  * in `meeting_participant`, `meeting_message` and the audit log.
  */
+/* ============================================================
+ * Livestreaming
+ *
+ * Deliberately NOT a meeting. A meeting is a roster of people who can all be
+ * heard; a stream is one broadcaster and an audience that may be in the
+ * thousands and never speaks. Sharing the table would mean a participant row
+ * per viewer, which is the shape a livestream exists to avoid.
+ * ========================================================== */
+
+export const livestream = pgTable(
+  "livestream",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+
+    title: text().notNull(),
+    description: text(),
+
+    /**
+     * The public address, `/live/<slug>`. Generated from the title and kept
+     * stable afterwards: a church puts this link on a poster and in a
+     * WhatsApp broadcast, and a link that changes is a link that is wrong.
+     */
+    slug: text().notNull(),
+
+    /** "idle" | "live" | "ended". What the church last did, not what is arriving. */
+    status: text().notNull().default("idle"),
+
+    /** When it is meant to begin, for a stream announced in advance. */
+    scheduledFor: timestamp({ withTimezone: true }),
+
+    /**
+     * The Cloudflare live input behind this. Created with the livestream and
+     * deleted with it, never on merely ending a broadcast — the recording
+     * outlives the broadcast and is the thing a church wants on Monday.
+     */
+    inputUid: text(),
+    /** Publish from a browser. Secret: anyone holding it can broadcast as this church. */
+    whipUrl: text(),
+    /** Watch over WebRTC, about a second behind. Public. */
+    whepUrl: text(),
+    /** For OBS and hardware encoders. Secret, and the only path that can simulcast. */
+    rtmpUrl: text(),
+    rtmpKey: text(),
+    /** HLS, for embedding. Only produced by an RTMP or SRT ingest. */
+    hlsUrl: text(),
+
+    /** Anyone with the link, or only people signed in to this church. */
+    visibility: text().notNull().default("public"),
+    /** Let viewers chat. Off by default: an unwatched chat is a liability. */
+    allowChat: boolean().notNull().default(false),
+
+    startedAt: timestamp({ withTimezone: true }),
+    endedAt: timestamp({ withTimezone: true }),
+    /** Filled in as it runs, so the summary survives the broadcast. */
+    peakViewers: integer().notNull().default(0),
+    totalViews: integer().notNull().default(0),
+
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("livestream_slug_unique").on(t.slug),
+    index("livestream_church_idx").on(t.churchId),
+    index("livestream_church_status_idx").on(t.churchId, t.status),
+  ],
+);
+
+/**
+ * Where a stream is forwarded to — YouTube, Facebook, anywhere RTMP.
+ *
+ * The stream key is somebody else's credential and is write-only in the UI:
+ * shown once when entered and never read back, because a leaked YouTube key
+ * lets anybody broadcast to that church's channel.
+ */
+export const livestreamOutput = pgTable(
+  "livestream_output",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    livestreamId: uuid()
+      .notNull()
+      .references(() => livestream.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+
+    /** What the church called it: "Main channel", "Youth page". */
+    label: text().notNull(),
+    /** youtube | facebook | twitch | custom */
+    platform: text().notNull().default("custom"),
+    url: text().notNull(),
+    /** Cloudflare's id for this output, so it can be removed there too. */
+    outputUid: text(),
+    enabled: boolean().notNull().default(true),
+
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("livestream_output_stream_idx").on(t.livestreamId),
+    index("livestream_output_church_idx").on(t.churchId),
+  ],
+);
+
 export const meetingSignal = pgTable(
   "meeting_signal",
   {
