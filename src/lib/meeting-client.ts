@@ -1429,8 +1429,35 @@ export class MeetingClient {
     if (p?.diagnostics) p.diagnostics = { ...p.diagnostics, element };
   }
 
+  /**
+   * Refreshed on the same tick the mesh path samples on, so the panel behaves
+   * identically whichever transport a room is using. A diagnostic that works
+   * on one and not the other is how a blind spot gets built.
+   */
+  private sfuDiagnostics: PeerDiagnostics[] = [];
+
+  private async sampleSfu(): Promise<void> {
+    if (!this.sfu) return;
+    const rows = await this.sfu.diagnose();
+    this.sfuDiagnostics = [...rows.entries()].map(([peerId, d]) => ({
+      peerId,
+      ice: d.ice,
+      videoAttached: this.state.cameraOn,
+      videoWithheld: this.state.cameraOn ? null : ("camera-off" as const),
+      videoOutKbps: 0,
+      audioOutKbps: 0,
+      videoInKbps: d.videoInKbps,
+      audioInKbps: 0,
+      transport: "sfu",
+      framesDecoded: d.framesDecoded,
+      framesDropped: 0,
+    }));
+  }
+
   /** Everything the diagnostics panel shows, as of the last sample. */
   diagnostics(): PeerDiagnostics[] {
+    if (this.transport === "sfu") return this.sfuDiagnostics;
+
     return [...this.peers.values()].map(
       (p) =>
         p.diagnostics ?? {
@@ -1450,6 +1477,12 @@ export class MeetingClient {
   }
 
   private async sampleStats(): Promise<void> {
+    if (this.transport === "sfu") {
+      await this.sampleSfu().catch(() => {
+        /* a closing connection has no stats to give */
+      });
+      return;
+    }
     if (this.peers.size === 0) return;
 
     let worstLoss = 0;

@@ -67,6 +67,9 @@ export class SfuTransport {
   /** Per-peer media, assembled as tracks arrive. */
   private media = new Map<string, { stream: MediaStream; screen: MediaStream }>();
 
+  /** Previous byte totals per peer, for turning them into a rate. */
+  private lastVideoBytes = new Map<string, { at: number; bytes: number }>();
+
   private chain: Promise<unknown> = Promise.resolve();
   private stopped = false;
 
@@ -226,14 +229,44 @@ export class SfuTransport {
         }
       }
 
+      // Forget what we pulled from anybody who has gone. Otherwise the same
+      // person rejoining — a reload, a dropped connection — finds their tracks
+      // already recorded as pulled, against a session that no longer exists,
+      // and never appears again.
+      for (const key of [...this.pulled]) {
+        const peerId = key.slice(0, key.lastIndexOf(":"));
+        if (!live.has(peerId)) this.pulled.delete(key);
+      }
+
       const wanted: { sessionId: string; trackName: string }[] = [];
       const record: PulledTrack[] = [];
 
       for (const r of others) {
-        for (const name of [TRACK_NAMES.mic, TRACK_NAMES.camera, TRACK_NAMES.screen]) {
+        /*
+         * Only what they have actually published, which the roster states.
+         *
+         * A track exists on the SFU from the moment it is first turned on, and
+         * survives being turned off afterwards — the publisher keeps the
+         * transceiver and swaps the track for null. So these flags are the
+         * right question to ask: they go true the moment there is something to
+         * pull, and a `cam` that is off but was on is still there to be had.
+         *
+         * Asking for all three unconditionally is what broke this. People join
+         * with their camera off, so at that instant only the microphone
+         * exists; the other two came back as per-track errors that nothing
+         * looked at, were marked done anyway, and were never asked for again.
+         * Audio worked and video never appeared.
+         */
+        const available: string[] = [];
+        if (r.micOn || this.pulled.has(`${r.peerId}:${TRACK_NAMES.mic}`)) {
+          available.push(TRACK_NAMES.mic);
+        }
+        if (r.cameraOn) available.push(TRACK_NAMES.camera);
+        if (r.sharing) available.push(TRACK_NAMES.screen);
+
+        for (const name of available) {
           const key = `${r.peerId}:${name}`;
           if (this.pulled.has(key)) continue;
-          this.pulled.add(key);
           wanted.push({ sessionId: r.sfuSessionId as string, trackName: name });
           record.push({ peerId: r.peerId, name });
         }
@@ -253,11 +286,12 @@ export class SfuTransport {
           session: this.subscriberSession,
           tracks: wanted,
         });
-      } catch (e) {
-        // Let them be asked for again on the next poll: somebody who has not
-        // published yet is the common case, not a failure.
-        for (const r of record) this.pulled.delete(`${r.peerId}:${r.name}`);
-        throw e;
+      } catch {
+        // Nothing is marked until it has arrived, so a failed call simply
+        // means the next poll tries again. Somebody who has not finished
+        // publishing is the common case here, not an error worth shouting
+        // about — four seconds later they will have.
+        return;
       }
 
       /*
@@ -271,16 +305,33 @@ export class SfuTransport {
        * happened to be first in the list. The response is in the order the
        * tracks were asked for, and `record` was built in that same order.
        */
-      const results = (res.tracks as { mid?: string; trackName?: string }[]) ?? [];
+      const results =
+        (res.tracks as {
+          mid?: string;
+          trackName?: string;
+          error?: { errorDescription?: string };
+        }[]) ?? [];
+
       results.forEach((t, i) => {
         const who = record[i];
-        if (!t.mid || !who) return;
+        if (!who) return;
+
+        /*
+         * A per-track failure comes back inside a 200, which is how this
+         * managed to look like success. Left unmarked, so the next poll asks
+         * again — a track that is not there yet usually is a moment later.
+         */
+        if (t.error || !t.mid) return;
+
         if (t.trackName && t.trackName !== who.name) {
           // Order and names disagreeing means an assumption here is wrong, and
           // silently mis-routing somebody's camera is the expensive outcome.
           console.warn("[sfu] pull result out of order", t.trackName, who.name);
           return;
         }
+
+        // Marked only now, having actually been allocated a mid.
+        this.pulled.add(`${who.peerId}:${who.name}`);
         this.incoming.set(t.mid, who);
       });
 
@@ -345,24 +396,63 @@ export class SfuTransport {
     return id;
   }
 
-  /** Per-connection stats, in the shape the diagnostics panel already reads. */
-  async stats(): Promise<{ videoInKbps: number; videoOutKbps: number }> {
-    let inBytes = 0;
-    let outBytes = 0;
-    for (const pc of [this.publisher, this.subscriber]) {
-      if (!pc) continue;
-      const report = await pc.getStats();
-      report.forEach((r) => {
-        const x = r as unknown as Record<string, number | string>;
-        if (x.type === "inbound-rtp" && x.kind === "video") {
-          inBytes += Number(x.bytesReceived ?? 0);
-        }
-        if (x.type === "outbound-rtp" && x.kind === "video") {
-          outBytes += Number(x.bytesSent ?? 0);
-        }
-      });
+  /**
+   * What is arriving from each person, for the People panel.
+   *
+   * This exists because a panel that goes blank on one transport is worse than
+   * no panel at all: the whole reason last week's hunt ended was being able to
+   * read bytes, frames and the element side by side, and an SFU room must not
+   * lose that.
+   *
+   * Per receiver rather than per connection. Everybody arrives down ONE
+   * subscriber connection here, so connection-level totals would say "video is
+   * arriving" while being unable to say from whom — which is precisely the
+   * question. `mid` is the join: the SFU told us which mid each person's track
+   * landed on when we pulled it.
+   */
+  async diagnose(): Promise<
+    Map<string, { videoInKbps: number; framesDecoded: number; ice: RTCIceConnectionState }>
+  > {
+    const out = new Map<
+      string,
+      { videoInKbps: number; framesDecoded: number; ice: RTCIceConnectionState }
+    >();
+    const sub = this.subscriber;
+    if (!sub) return out;
+
+    const now = Date.now();
+    const ice = sub.iceConnectionState;
+
+    for (const tr of sub.getTransceivers()) {
+      const who = tr.mid ? this.incoming.get(tr.mid) : undefined;
+      if (!who || who.name !== TRACK_NAMES.camera) continue;
+
+      let bytes = 0;
+      let frames = 0;
+      try {
+        const report = await tr.receiver.getStats();
+        report.forEach((r) => {
+          const x = r as unknown as Record<string, number | string>;
+          if (x.type !== "inbound-rtp" || x.kind !== "video") return;
+          bytes += Number(x.bytesReceived ?? 0);
+          frames += Number(x.framesDecoded ?? 0);
+        });
+      } catch {
+        continue;
+      }
+
+      const previous = this.lastVideoBytes.get(who.peerId);
+      const seconds = previous ? (now - previous.at) / 1000 : 0;
+      const kbps =
+        seconds > 0
+          ? Math.max(0, Math.round(((bytes - previous!.bytes) * 8) / seconds / 1000))
+          : 0;
+      this.lastVideoBytes.set(who.peerId, { at: now, bytes });
+
+      out.set(who.peerId, { videoInKbps: kbps, framesDecoded: frames, ice });
     }
-    return { videoInKbps: inBytes, videoOutKbps: outBytes };
+
+    return out;
   }
 
   close(): void {
