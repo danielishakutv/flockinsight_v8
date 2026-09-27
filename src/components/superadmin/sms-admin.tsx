@@ -197,9 +197,17 @@ export function SmsAdmin({
       else if (res.status === "rejected")
         toast.error(`Rejected by the network (it says: "${res.raw}").`);
       else
-        toast.message(
-          `Still under review at the network (it says: "${res.raw || "pending"}").`,
-        );
+        /*
+         * Long, and left up until dismissed, because it is the one verdict
+         * that may be wrong. Termii's API has reported "pending" for IDs their
+         * own dashboard shows as approved, and a church in that state is
+         * approved and cannot send — with nothing on this screen to suggest
+         * why. The note says where to look and what to do.
+         */
+        toast.message(res.note ?? `Still under review at the network.`, {
+          duration: res.note ? Infinity : 8000,
+          closeButton: true,
+        });
       router.refresh();
     });
   }

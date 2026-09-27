@@ -353,7 +353,13 @@ async function recordNetworkStatus(
 }
 
 export type CheckResult =
-  | { ok: true; status: SenderIdStatus; raw?: string }
+  | {
+      ok: true;
+      status: SenderIdStatus;
+      raw?: string;
+      /** Shown alongside the verdict when it needs qualifying. */
+      note?: string;
+    }
   | { ok: false; error: string };
 
 /**
@@ -379,7 +385,14 @@ export async function checkSenderIdOnNetwork(churchId: string): Promise<CheckRes
   if (!lookup.found)
     return {
       ok: false,
-      error: `The network has no record of "${c.senderId}" — it hasn't been submitted yet.`,
+      /*
+       * "Not in the list" is not the same as "never submitted", and saying so
+       * plainly matters: Termii's list endpoint returns REGISTERED sender IDs,
+       * and a request that is still in their review queue does not appear in
+       * it at all. Checked on 2026-09-27 — a request submitted through their
+       * dashboard was visible there under "Requests" and absent from the API.
+       */
+      error: `The network's list has no record of "${c.senderId}". That means either it hasn't been submitted, or it has been submitted and is still in Termii's review queue — their API only lists sender IDs that are already registered. Check the Requests tab on the Termii dashboard before submitting it again.`,
     };
 
   await db
@@ -421,7 +434,25 @@ export async function checkSenderIdOnNetwork(churchId: string): Promise<CheckRes
     });
   }
   revalidatePath("/superadmin/sms");
-  return { ok: true, status: lookup.status, raw: lookup.raw };
+
+  /*
+   * Say when the API and the dashboard are likely to disagree.
+   *
+   * Confirmed on 2026-09-27: two sender IDs the Termii dashboard listed as
+   * Approved were reported by their API as "pending". A church in that state
+   * is approved and cannot send, because nothing here ever flips it — the
+   * check keeps reading "pending" for ever and there is no clue why.
+   *
+   * The dashboard is authoritative for approval, so the honest thing is to say
+   * the two sources differ and point at the manual approval that already
+   * exists, rather than quietly trusting a field that has been wrong.
+   */
+  const note =
+    lookup.status === "pending"
+      ? `Termii's API reports "${lookup.raw || "pending"}". Their API has been known to report pending for IDs their dashboard shows as approved — check the dashboard, and if it says approved, use Approve here to release it.`
+      : undefined;
+
+  return { ok: true, status: lookup.status, raw: lookup.raw, note };
 }
 
 /**
