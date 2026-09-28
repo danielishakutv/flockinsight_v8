@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activeBands,
   bandsFor,
+  oldestFirst,
   recordingBands,
   labelFor,
   parseBandConfig,
@@ -77,6 +78,15 @@ describe("recordingBands", () => {
     // ever added to BAND_SEEDS this stays true without anyone remembering.
     const config = { youths: { enabled: true }, seniors: { enabled: true } };
     expect(recordingBands(config)).toEqual([...activeBands(config)].reverse());
+  });
+});
+
+describe("oldestFirst", () => {
+  it("keeps the bands a church has switched off, so settings still lists them", () => {
+    // The settings page reverses the full list, not just the active one:
+    // a band you have turned off is exactly the one you came here to find.
+    const keys = oldestFirst(bandsFor(null)).map((b) => b.key);
+    expect(keys).toEqual(["seniors", "adults", "youths", "teens", "children"]);
   });
 });
 

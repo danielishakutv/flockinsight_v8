@@ -170,17 +170,23 @@ export function parseBandConfig(value: unknown): BandConfig {
 }
 
 /**
- * The bands this church counts, oldest first.
+ * Bands in recording order: oldest first.
  *
- * The recording form asks for Senior members, then Adults, then Youths, Teens
- * and Children, because that is the order an usher's sheet runs in and it puts
- * the bands every church fills in — Adults above all — at the top of the
- * screen, where they are reached without scrolling.
+ * Senior members, then Adults, Youths, Teens and Children — the order an
+ * usher's sheet runs in, and it puts the bands every church fills in, Adults
+ * above all, at the top of the screen where they are reached without
+ * scrolling. Both the recording form and the settings page that decides who
+ * gets counted read in this direction, so the two never disagree.
  *
- * Derived by reversing BAND_SEEDS rather than listing the keys again: the
- * seeds are already ordered by age, so a band added there lands in the right
- * place here without anybody remembering to update a second list.
+ * Derived by reversing rather than listing the keys again: BAND_SEEDS is
+ * already ordered by age, so a band added there lands in the right place here
+ * without anybody remembering to update a second list.
  */
+export function oldestFirst(bands: BandDefinition[]): BandDefinition[] {
+  return [...bands].reverse();
+}
+
+/** What this church counts, oldest first — the recording form's order. */
 export function recordingBands(config: BandConfig | null | undefined): BandDefinition[] {
-  return activeBands(config).reverse();
+  return oldestFirst(activeBands(config));
 }

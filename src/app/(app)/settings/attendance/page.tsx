@@ -1,7 +1,7 @@
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
-import { BAND_SEEDS, bandsFor } from "@/lib/attendance-bands";
+import { BAND_SEEDS, bandsFor, oldestFirst } from "@/lib/attendance-bands";
 import { AttendanceBandsForm } from "@/components/settings/attendance-bands-form";
 
 export const metadata = { title: "Attendance · Settings" };
@@ -11,7 +11,10 @@ export default async function AttendanceSettingsPage() {
   const { church } = await requireChurch();
   await requireCan("settings.manage");
 
-  const bands = bandsFor(church.attendanceBands);
+  // Oldest first, matching the recording form — somebody who turns a band on
+  // here and goes straight to a sheet should not have to re-read the list in
+  // the opposite direction.
+  const bands = oldestFirst(bandsFor(church.attendanceBands));
 
   return (
     <PageContainer className="max-w-2xl">
