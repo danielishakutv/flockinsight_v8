@@ -9,7 +9,7 @@ import {
   recordAttendance,
   type RecordAttendanceInput,
 } from "@/app/(app)/attendance/actions";
-import { Stepper } from "@/components/attendance/stepper";
+import { CountGroup } from "@/components/attendance/count-group";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,54 +35,6 @@ function todayStr() {
 }
 
 type Initial = Partial<RecordAttendanceInput> & { id?: string };
-
-/** A "Male / Female" stepper pair with a group heading. */
-function GenderGroup({
-  title,
-  male,
-  female,
-  onMale,
-  onFemale,
-  accent,
-  hint,
-  legacyNote,
-}: {
-  title: string;
-  male: number;
-  female: number;
-  onMale: (n: number) => void;
-  onFemale: (n: number) => void;
-  accent?: boolean;
-  hint?: string;
-  legacyNote?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <h3 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
-        {title}
-      </h3>
-      <div className="grid grid-cols-2 gap-3">
-        <Stepper
-          label="Male"
-          hint={hint}
-          value={male}
-          onChange={onMale}
-          accent={accent}
-        />
-        <Stepper
-          label="Female"
-          hint={hint}
-          value={female}
-          onChange={onFemale}
-          accent={accent}
-        />
-      </div>
-      {legacyNote && (
-        <p className="text-muted-foreground px-1 text-xs">{legacyNote}</p>
-      )}
-    </div>
-  );
-}
 
 export function RecordForm({
   services,
@@ -124,6 +76,21 @@ export function RecordForm({
   const [ftF, setFtF] = useState(initial?.firstTimerFemaleCount ?? 0);
   const [ncM, setNcM] = useState(initial?.newConvertMaleCount ?? 0);
   const [ncF, setNcF] = useState(initial?.newConvertFemaleCount ?? 0);
+
+  /*
+   * One group open at a time, identified by key.
+   *
+   * A new sheet opens on Adults: it is the one band that can never be
+   * switched off and the one every church fills in, so the first number an
+   * usher has is already asked for with nothing tapped. Editing an existing
+   * sheet opens nothing — somebody who came back to fix one figure wants to
+   * see all of them first, and every row carries its own subtotal.
+   */
+  const [openGroup, setOpenGroup] = useState<string | null>(() =>
+    initial?.id ? null : (bands.find((b) => b.key === "adults")?.key ?? bands[0]?.key ?? null),
+  );
+  const toggleGroup = (key: string) =>
+    setOpenGroup((current) => (current === key ? null : key));
 
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [showNotes, setShowNotes] = useState(!!initial?.notes);
@@ -275,65 +242,94 @@ export function RecordForm({
       </Card>
 
       {/*
-        Headcount, in the church's own words and only the bands it counts.
-        A church with no youth fellowship never sees a Youths box to leave at
-        zero, which is the difference between a form that fits and one that
-        has to be worked around every Sunday.
+        Headcount, in the church's own words, only the bands it counts, and
+        oldest first — Senior members down to Children, the order an usher's
+        sheet runs in. A church with no youth fellowship never sees a Youths
+        box to leave at zero, which is the difference between a form that fits
+        and one that has to be worked around every Sunday.
+
+        One group is open at a time. Closing the previous one keeps every band
+        on a single screen, so the next number is always a tap away rather
+        than a scroll, and each closed row still shows its own subtotal.
       */}
-      {bands.map((b) => {
-        const state = {
-          adults: { male: adultM, female: adultF, onMale: setAdultM, onFemale: setAdultF },
-          teens: { male: teenM, female: teenF, onMale: setTeenM, onFemale: setTeenF },
-          youths: { male: youthM, female: youthF, onMale: setYouthM, onFemale: setYouthF },
-          children: { male: childM, female: childF, onMale: setChildM, onFemale: setChildF },
-          seniors: { male: seniorM, female: seniorF, onMale: setSeniorM, onFemale: setSeniorF },
-        }[b.key];
+      <div className="space-y-2">
+        {bands.map((b) => {
+          const state = {
+            adults: { male: adultM, female: adultF, onMale: setAdultM, onFemale: setAdultF },
+            teens: { male: teenM, female: teenF, onMale: setTeenM, onFemale: setTeenF },
+            youths: { male: youthM, female: youthF, onMale: setYouthM, onFemale: setYouthF },
+            children: { male: childM, female: childF, onMale: setChildM, onFemale: setChildF },
+            seniors: { male: seniorM, female: seniorF, onMale: setSeniorM, onFemale: setSeniorF },
+          }[b.key];
 
-        return (
-          <GenderGroup
-            key={b.key}
-            title={b.label}
-            male={state.male}
-            female={state.female}
-            onMale={state.onMale}
-            onFemale={state.onFemale}
-            accent
-            legacyNote={
-              b.key === "children" && legacyChildren > 0 && childM + childF === 0
-                ? `${legacyChildren} children were recorded without a gender split — that number stays in the total until you enter one.`
-                : undefined
-            }
-          />
-        );
-      })}
+          return (
+            <CountGroup
+              key={b.key}
+              id={`band-${b.key}`}
+              title={b.label}
+              male={state.male}
+              female={state.female}
+              onMale={state.onMale}
+              onFemale={state.onFemale}
+              open={openGroup === b.key}
+              onToggle={() => toggleGroup(b.key)}
+              carried={b.key === "children" ? legacyChildren : 0}
+              note={
+                b.key === "children" && legacyChildren > 0 && childM + childF === 0
+                  ? `${legacyChildren} children were recorded without a gender split — that number stays in the total until you enter one.`
+                  : undefined
+              }
+            />
+          );
+        })}
+      </div>
 
-      {/* Highlights */}
-      <GenderGroup
-        title="First-timers"
-        male={ftM}
-        female={ftF}
-        onMale={setFtM}
-        onFemale={setFtF}
-        hint="incl. above"
-        legacyNote={
-          legacyFirstTimers > 0 && ftM + ftF === 0
-            ? `${legacyFirstTimers} first-timer${legacyFirstTimers === 1 ? " was" : "s were"} recorded without a gender split.`
-            : undefined
-        }
-      />
-      <GenderGroup
-        title="New converts"
-        male={ncM}
-        female={ncF}
-        onMale={setNcM}
-        onFemale={setNcF}
-        hint="incl. above"
-        legacyNote={
-          legacyNewConverts > 0 && ncM + ncF === 0
-            ? `${legacyNewConverts} new convert${legacyNewConverts === 1 ? " was" : "s were"} recorded without a gender split.`
-            : undefined
-        }
-      />
+      {/*
+        Highlights. Same rows, but visually quieter and under a heading that
+        says why their numbers are not added on: these people are already
+        among the counts above, and adding them counts somebody twice.
+      */}
+      <div className="space-y-2">
+        <h3 className="text-muted-foreground px-1 text-xs font-bold uppercase tracking-wider">
+          Also among the above
+        </h3>
+        <CountGroup
+          id="first-timers"
+          title="First-timers"
+          subtitle="Already counted above"
+          muted
+          male={ftM}
+          female={ftF}
+          onMale={setFtM}
+          onFemale={setFtF}
+          open={openGroup === "first-timers"}
+          onToggle={() => toggleGroup("first-timers")}
+          carried={legacyFirstTimers}
+          note={
+            legacyFirstTimers > 0 && ftM + ftF === 0
+              ? `${legacyFirstTimers} first-timer${legacyFirstTimers === 1 ? " was" : "s were"} recorded without a gender split.`
+              : undefined
+          }
+        />
+        <CountGroup
+          id="new-converts"
+          title="New converts"
+          subtitle="Already counted above"
+          muted
+          male={ncM}
+          female={ncF}
+          onMale={setNcM}
+          onFemale={setNcF}
+          open={openGroup === "new-converts"}
+          onToggle={() => toggleGroup("new-converts")}
+          carried={legacyNewConverts}
+          note={
+            legacyNewConverts > 0 && ncM + ncF === 0
+              ? `${legacyNewConverts} new convert${legacyNewConverts === 1 ? " was" : "s were"} recorded without a gender split.`
+              : undefined
+          }
+        />
+      </div>
 
       {/* Notes (collapsed by default) */}
       {showNotes ? (

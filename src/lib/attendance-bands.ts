@@ -168,3 +168,19 @@ export function parseBandConfig(value: unknown): BandConfig {
   }
   return out;
 }
+
+/**
+ * The bands this church counts, oldest first.
+ *
+ * The recording form asks for Senior members, then Adults, then Youths, Teens
+ * and Children, because that is the order an usher's sheet runs in and it puts
+ * the bands every church fills in — Adults above all — at the top of the
+ * screen, where they are reached without scrolling.
+ *
+ * Derived by reversing BAND_SEEDS rather than listing the keys again: the
+ * seeds are already ordered by age, so a band added there lands in the right
+ * place here without anybody remembering to update a second list.
+ */
+export function recordingBands(config: BandConfig | null | undefined): BandDefinition[] {
+  return activeBands(config).reverse();
+}

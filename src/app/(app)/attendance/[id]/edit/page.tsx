@@ -7,7 +7,7 @@ import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
-import { activeBands } from "@/lib/attendance-bands";
+import { recordingBands } from "@/lib/attendance-bands";
 import { DeleteSessionButton } from "@/components/attendance/delete-session-button";
 
 export const metadata = { title: "Edit Attendance" };
@@ -53,7 +53,7 @@ export default async function EditAttendancePage({
       />
       <RecordForm
         services={services}
-        bands={activeBands(church.attendanceBands)}
+        bands={recordingBands(church.attendanceBands)}
         initial={{
           id: row.id,
           serviceId: row.serviceId,

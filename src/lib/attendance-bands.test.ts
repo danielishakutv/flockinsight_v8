@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activeBands,
   bandsFor,
+  recordingBands,
   labelFor,
   parseBandConfig,
   totalFrom,
@@ -51,6 +52,31 @@ describe("bandsFor", () => {
 
   it("falls back to the standard name for a blank label", () => {
     expect(labelFor({ teens: { label: "   " } }, "teens")).toBe("Teens");
+  });
+});
+
+describe("recordingBands", () => {
+  it("asks oldest first, so the form reads like an usher's sheet", () => {
+    const keys = recordingBands({
+      youths: { enabled: true },
+      seniors: { enabled: true },
+    }).map((b) => b.key);
+    expect(keys).toEqual(["seniors", "adults", "youths", "teens", "children"]);
+  });
+
+  it("leaves out the bands this church does not count", () => {
+    expect(recordingBands(null).map((b) => b.key)).toEqual([
+      "adults",
+      "teens",
+      "children",
+    ]);
+  });
+
+  it("is exactly the active bands, reversed — nothing gained or lost", () => {
+    // The order is derived, not a second hand-maintained list. If a band is
+    // ever added to BAND_SEEDS this stays true without anyone remembering.
+    const config = { youths: { enabled: true }, seniors: { enabled: true } };
+    expect(recordingBands(config)).toEqual([...activeBands(config)].reverse());
   });
 });
 
