@@ -17,12 +17,19 @@ set -Eeuo pipefail
 # Run as a file it is <root>/releases/<stamp>/deploy/deploy.sh, so the root is
 # three levels up — meaning a manual deploy needs no environment at all. Piped
 # over SSH there is no script path to read, and the caller passes APP_ROOT.
+#
+# Resolved physically (`cd -P`/`pwd -P`), because the normal way to run this is
+# `current/deploy/deploy.sh` and `current` is a symlink. Logical resolution
+# keeps the word "current" in the path, so ".." climbs out of it instead of out
+# of the release it points at, and three levels up lands one directory too high
+# — which is how a manual deploy ended up looking for releases/ in $HOME and
+# refusing to start.
 default_app_root() {
   local src="${BASH_SOURCE[0]:-}"
   if [ -n "$src" ] && [ -f "$src" ]; then
     local dir root
-    dir="$(cd "$(dirname "$src")" && pwd)"
-    root="$(cd "$dir/../../.." 2>/dev/null && pwd)" || root=""
+    dir="$(cd -P "$(dirname "$src")" && pwd -P)"
+    root="$(cd -P "$dir/../../.." 2>/dev/null && pwd -P)" || root=""
     if [ -n "$root" ] && [ -d "$root/releases" ] && [ -d "$root/shared" ]; then
       printf '%s' "$root"
       return
