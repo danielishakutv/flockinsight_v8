@@ -105,7 +105,8 @@ export function FormSubmit({
   );
 }
 
-function FieldInput({
+/** Exported so the platform survey form renders identical inputs. */
+export function FieldInput({
   field,
   value,
   onChange,
@@ -203,6 +204,33 @@ function FieldInput({
         </div>
       );
     }
+    /*
+     * Eleven buttons, wrapped, never a slider. A slider hides the number it is
+     * reporting and is miserable to hit accurately on a phone — and the whole
+     * value of a 0-10 answer is that the person chose a specific one.
+     */
+    case "scale":
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from({ length: 11 }, (_, n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onChange(n)}
+              aria-label={`${n} out of 10`}
+              aria-pressed={Number(value) === n}
+              className={cn(
+                "min-h-11 min-w-11 rounded-lg border text-sm font-bold tabular-nums transition-colors",
+                Number(value) === n
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "hover:bg-muted",
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      );
     case "yesno":
       return (
         <div className="flex gap-2">

@@ -9,6 +9,7 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { slugify, randomSuffix } from "@/lib/slug";
+import { FIELD_TYPES, type FormFieldType } from "@/lib/forms-shared";
 
 /** Resolve an event id to itself + title if it belongs to this church. */
 async function eventInChurch(
@@ -39,18 +40,14 @@ const RESERVED = new Set([
 
 const fieldSchema = z.object({
   id: z.string().min(1).max(40),
-  type: z.enum([
-    "short_text",
-    "long_text",
-    "email",
-    "phone",
-    "number",
-    "date",
-    "select",
-    "radio",
-    "checkboxes",
-    "yesno",
-  ]),
+  /*
+   * Derived from FIELD_TYPES rather than listed again. The two had already
+   * drifted apart once: a type added to the shared list is invisible here, so
+   * the builder offers a field the save action rejects.
+   */
+  type: z.enum(
+    FIELD_TYPES.map((t) => t.type) as [FormFieldType, ...FormFieldType[]],
+  ),
   label: z.string().trim().max(200).default(""),
   description: z.string().trim().max(500).optional(),
   required: z.boolean().default(false),

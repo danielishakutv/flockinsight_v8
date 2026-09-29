@@ -58,6 +58,7 @@ export async function submitForm(input: {
       clean[field.id] = Array.isArray(v) ? v.map(String).slice(0, 50) : [String(v)];
     else if (field.type === "yesno")
       clean[field.id] = v === true || v === "true" || v === "Yes";
+    else if (field.type === "scale") clean[field.id] = Number(v);
     else clean[field.id] = String(v).slice(0, 5000);
   }
 

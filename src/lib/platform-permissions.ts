@@ -138,6 +138,7 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     pages: [
       { label: "Notifications", href: "/superadmin/notifications", perm: "platform.messaging.send", icon: "Bell" },
       { label: "Outreach", href: "/superadmin/growth/outreach", perm: "platform.messaging.send", icon: "Megaphone" },
+      { label: "Surveys", href: "/superadmin/surveys", perm: "platform.messaging.send", icon: "ClipboardList" },
       { label: "SMS", href: "/superadmin/sms", perm: "platform.sms.manage", icon: "MessageSquare" },
     ],
   },

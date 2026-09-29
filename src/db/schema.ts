@@ -3670,6 +3670,77 @@ export const platformMrrSnapshot = pgTable("platform_mrr_snapshot", {
 
 export type PlatformMrrSnapshot = typeof platformMrrSnapshot.$inferSelect;
 
+/* ============================================================
+ * Platform surveys � asking the churches what they think
+ * Same shape as a church's own forms, one level up: the audience
+ * is churches rather than members, so `form.churchId` (NOT NULL)
+ * could not be reused. The field definitions and validation ARE
+ * reused, from lib/forms-shared.ts.
+ * ========================================================== */
+
+export const platformSurvey = pgTable(
+  "platform_survey",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    title: text().notNull().default("Untitled survey"),
+    description: text(),
+    /** The link half-name: /s/<slug>. Globally unique so links stay stable. */
+    slug: text().notNull().unique(),
+    status: formStatusEnum().notNull().default("draft"),
+    fields: jsonb()
+      .$type<import("@/lib/forms-shared").FormField[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Who it is for, expressed the way a broadcast expresses it. */
+    audience: notificationAudienceEnum().notNull().default("all"),
+    targetPlan: planEnum(),
+    targetCountry: text(),
+    churchIds: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
+     * When true the response records no church and no user.
+     *
+     * It is the difference between "how are we doing?" and "how are YOU
+     * doing?", and a church that knows it is identified answers the second
+     * question. Enforced at write time, not by hiding a column at read time.
+     */
+    anonymous: boolean().notNull().default(false),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("platform_survey_status_idx").on(t.status)],
+);
+
+export const platformSurveyResponse = pgTable(
+  "platform_survey_response",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    surveyId: uuid()
+      .notNull()
+      .references(() => platformSurvey.id, { onDelete: "cascade" }),
+    /** Null for an anonymous survey, or an answer from a public link. */
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** Answers keyed by field id. */
+    data: jsonb()
+      .$type<Record<string, import("@/lib/forms-shared").FieldValue>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("platform_survey_response_survey_idx").on(t.surveyId),
+    /* One answer per church per survey, when it is not anonymous. */
+    uniqueIndex("platform_survey_response_once")
+      .on(t.surveyId, t.churchId)
+      .where(sql`church_id is not null`),
+  ],
+);
+
+export type PlatformSurvey = typeof platformSurvey.$inferSelect;
+export type PlatformSurveyResponse = typeof platformSurveyResponse.$inferSelect;
+
 export type Meeting = typeof meeting.$inferSelect;
 export type NewMeeting = typeof meeting.$inferInsert;
 export type MeetingParticipant = typeof meetingParticipant.$inferSelect;

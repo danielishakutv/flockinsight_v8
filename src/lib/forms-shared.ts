@@ -11,7 +11,8 @@ export type FormFieldType =
   | "select" // single choice, dropdown
   | "radio" // single choice, buttons
   | "checkboxes" // multiple choice
-  | "yesno";
+  | "yesno"
+  | "scale"; // 0-10 buttons, for "how likely are you to recommend..."
 
 /** Optional mapping of a field to a member attribute (for match-or-create). */
 export type FieldMap =
@@ -53,6 +54,7 @@ export const FIELD_TYPES: {
   { type: "radio", label: "Multiple choice", hasOptions: true, mappable: false },
   { type: "checkboxes", label: "Checkboxes", hasOptions: true, mappable: false },
   { type: "yesno", label: "Yes / No", hasOptions: false, mappable: false },
+  { type: "scale", label: "Scale 0-10", hasOptions: false, mappable: false },
 ];
 
 export const FIELD_TYPE_META: Record<
@@ -126,6 +128,11 @@ export function validateSubmission(
       errors[f.id] = "Enter a valid email address.";
     if (f.type === "number" && typeof v === "string" && v !== "" && isNaN(Number(v)))
       errors[f.id] = "Enter a number.";
+    if (f.type === "scale") {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 10)
+        errors[f.id] = "Choose a number from 0 to 10.";
+    }
     if (
       (f.type === "select" || f.type === "radio") &&
       typeof v === "string" &&
