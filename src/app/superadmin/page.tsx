@@ -187,14 +187,14 @@ async function KeyNumbers() {
 }
 
 async function Growth() {
-  const data = await getGrowthSeries(90);
+  const [data, stats] = await Promise.all([getGrowthSeries(90), getOverviewStats()]);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Last 90 days</CardTitle>
       </CardHeader>
       <CardContent>
-        <GrowthChart data={data} />
+        <GrowthChart data={data} churches={stats.totalChurches} />
       </CardContent>
     </Card>
   );

@@ -12,6 +12,8 @@ import {
   YAxis,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { CHART_MARGIN, Y_AXIS_PROPS } from "@/components/charts/axis";
+import { readability, readabilityNote, seriesSample } from "@/lib/thin-data";
 
 export type GrowthPoint = {
   day: string;
@@ -62,10 +64,31 @@ function GrowthTooltip({
   );
 }
 
-/** 90-day platform growth. One series at a time keeps the scales honest. */
-export function GrowthChart({ data }: { data: GrowthPoint[] }) {
+/**
+ * 90-day platform growth. One series at a time keeps the scales honest.
+ *
+ * The verdict is recomputed per series, because they thin out at different
+ * rates: ninety days of active churches is a real line while ninety days of
+ * revenue is nine payments and eighty-one zeroes, and drawing the second the
+ * same way as the first is how a flat axis with one spike at the end reads as
+ * growth.
+ */
+export function GrowthChart({
+  data,
+  churches,
+}: {
+  data: GrowthPoint[];
+  /** Churches contributing, so the sample is honest about its real width. */
+  churches: number;
+}) {
   const [key, setKey] = useState<SeriesKey>("activeChurches");
   const series = SERIES[key];
+
+  const sample = seriesSample(
+    data.map((d) => d[key]),
+    churches,
+  );
+  const verdict = readability(sample, "series");
 
   return (
     <div>
@@ -87,8 +110,15 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
         ))}
       </div>
 
+      {verdict !== "solid" && (
+        <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
+          {readabilityNote(verdict, "series")}{" "}
+          {sample.n} of {data.length} days carry a value.
+        </p>
+      )}
+
       <ResponsiveContainer width="100%" height={260}>
-        <AreaChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+        <AreaChart data={data} margin={CHART_MARGIN}>
           <defs>
             <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={series.color} stopOpacity={0.35} />
@@ -106,10 +136,7 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
           />
           <YAxis
-            tickLine={false}
-            axisLine={false}
-            width={44}
-            allowDecimals={false}
+            {...Y_AXIS_PROPS}
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
           />
           <Tooltip
@@ -144,7 +171,7 @@ export function BurnChart({ data }: { data: BurnPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+      <AreaChart data={data} margin={CHART_MARGIN}>
         <defs>
           <linearGradient id="burnFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
@@ -162,9 +189,7 @@ export function BurnChart({ data }: { data: BurnPoint[] }) {
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <YAxis
-          tickLine={false}
-          axisLine={false}
-          width={52}
+          {...Y_AXIS_PROPS}
           tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
         />
         <Tooltip

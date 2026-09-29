@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { getPlanPrices } from "@/lib/pricing";
 import { getTermiiUnitCost, getSmsPrice } from "@/lib/platform-settings";
 import { getChurchHealth, type ChurchHealthRow } from "@/lib/platform-health";
+import { platformMrrSnapshot } from "@/db/schema";
 
 /**
  * Platform metrics for the command centre.
@@ -121,6 +122,50 @@ export const getOverviewStats = unstable_cache(
   ["overview-stats"],
   { revalidate: 60, tags: ["platform-stats"] },
 );
+
+/**
+ * Write today's size and worth down, once a day.
+ *
+ * Uncached on purpose — it runs from the health cron, where reading a minute-old
+ * figure and storing it as the day's record would quietly enshrine a stale
+ * number. The day is the primary key, so the last write of the day wins and
+ * running the cron every half hour costs one upsert.
+ */
+export async function recordMrrSnapshot(): Promise<{
+  day: string;
+  mrr: number;
+  activeChurches: number;
+  totalChurches: number;
+}> {
+  const stats = await loadOverviewStats();
+  const now = new Date();
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  await db
+    .insert(platformMrrSnapshot)
+    .values({
+      day,
+      mrr: Math.round(stats.mrr.value),
+      activeChurches: stats.activeChurches,
+      totalChurches: stats.totalChurches,
+    })
+    .onConflictDoUpdate({
+      target: platformMrrSnapshot.day,
+      set: {
+        mrr: Math.round(stats.mrr.value),
+        activeChurches: stats.activeChurches,
+        totalChurches: stats.totalChurches,
+        capturedAt: now,
+      },
+    });
+
+  return {
+    day,
+    mrr: stats.mrr.value,
+    activeChurches: stats.activeChurches,
+    totalChurches: stats.totalChurches,
+  };
+}
 
 export type GrowthPoint = {
   day: string;

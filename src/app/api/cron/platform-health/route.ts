@@ -3,14 +3,16 @@ import { withCronRun } from "@/lib/cron-run";
 import { snapshotTermiiBalance } from "@/lib/termii-balance";
 import { getFloatOverviewFresh } from "@/lib/float";
 import { syncAlerts } from "@/lib/platform-alerts";
+import { recordMrrSnapshot } from "@/lib/platform-stats";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
  * GET /api/cron/platform-health — run every 30 minutes. Records the Termii
- * master-wallet balance, re-evaluates every platform alert rule, and notifies
- * on newly-opened critical alerts. Auth via ?key=CRON_SECRET or Bearer header.
+ * master-wallet balance and the day's MRR, re-evaluates every platform alert
+ * rule, and notifies on newly-opened critical alerts. Auth via ?key=CRON_SECRET
+ * or Bearer header.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -30,6 +32,19 @@ export async function GET(request: Request) {
       const float = await getFloatOverviewFresh();
       const result = await syncAlerts(float);
 
+      /*
+       * Today's size and worth, kept so that in a year there is something to
+       * compare against. Its own try/catch: a failure here is a gap in a
+       * history nobody is reading yet, and must never cost the alert sync that
+       * somebody is relying on right now.
+       */
+      let snapshot: Awaited<ReturnType<typeof recordMrrSnapshot>> | null = null;
+      try {
+        snapshot = await recordMrrSnapshot();
+      } catch (e) {
+        console.error("[cron/platform-health] mrr snapshot failed", e);
+      }
+
       // The dashboard's cached float is now out of date. "max" gives
       // stale-while-revalidate; the bare one-argument form is deprecated in
       // Next 16.
@@ -40,6 +55,7 @@ export async function GET(request: Request) {
           ok: true,
           balance: balance.ok ? balance.balance : null,
           balanceError: balance.ok ? null : balance.error,
+          snapshot,
           ...result,
         }),
         { headers: { "Content-Type": "application/json" } },

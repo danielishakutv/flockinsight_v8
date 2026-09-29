@@ -13,6 +13,9 @@ import { format, parseISO } from "date-fns";
 import { Activity, Building2, TrendingUp, Users } from "lucide-react";
 import type { UsageOverview } from "@/lib/analytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CHART_MARGIN, Y_AXIS_PROPS } from "@/components/charts/axis";
+import { SampleChip } from "@/components/superadmin/panel";
+import { readability, readabilityNote, shareLabel } from "@/lib/thin-data";
 
 function Stat({
   label,
@@ -64,6 +67,20 @@ function TrendTooltip({
 export function UsageDashboard({ overview }: { overview: UsageOverview }) {
   const maxViews = Math.max(1, ...overview.topFeatures.map((f) => f.views));
 
+  /*
+   * Adoption is judged by how many churches touched a feature, not by how many
+   * pageviews it collected. Four thousand events sound like a verdict on the
+   * product until you notice they came from five churches — at which point the
+   * ranking describes those five churches' habits, which is still useful and is
+   * not the same claim.
+   */
+  const featureSample = {
+    n: overview.totalPageviews30,
+    churches: overview.activeChurches30,
+    unit: "pageviews",
+  };
+  const featureVerdict = readability(featureSample, "events");
+
   if (!overview.hasData) {
     return (
       <Card className="border-dashed">
@@ -99,7 +116,7 @@ export function UsageDashboard({ overview }: { overview: UsageOverview }) {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={overview.trend} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
+            <AreaChart data={overview.trend} margin={CHART_MARGIN}>
               <defs>
                 <linearGradient id="fillUsers" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
@@ -117,10 +134,7 @@ export function UsageDashboard({ overview }: { overview: UsageOverview }) {
                 tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
               />
               <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={40}
-                allowDecimals={false}
+                {...Y_AXIS_PROPS}
                 tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
               />
               <Tooltip content={<TrendTooltip />} cursor={{ stroke: "var(--border)" }} />
@@ -142,15 +156,23 @@ export function UsageDashboard({ overview }: { overview: UsageOverview }) {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Most-used features (30 days)</CardTitle>
+            <div className="mt-1.5">
+              <SampleChip sample={featureSample} />
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            {featureVerdict !== "solid" && (
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {readabilityNote(featureVerdict, "events")}
+              </p>
+            )}
             {overview.topFeatures.map((f) => (
               <div key={f.name}>
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="font-medium">{f.name}</span>
                   <span className="text-muted-foreground tabular-nums">
-                    {f.views.toLocaleString()} views · {f.churches} church
-                    {f.churches === 1 ? "" : "es"}
+                    {f.views.toLocaleString()} views ·{" "}
+                    {shareLabel(f.churches, overview.activeChurches30)} of churches
                   </span>
                 </div>
                 <div className="bg-muted h-2 overflow-hidden rounded-full">

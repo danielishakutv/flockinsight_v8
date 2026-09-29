@@ -3631,6 +3631,31 @@ export const scriptureVerse = pgTable(
   (t) => [uniqueIndex("scripture_verse_unique").on(t.reference, t.translation)],
 );
 
+/**
+ * One row a day: what the platform was worth, and how big it was.
+ *
+ * `getOverviewStats` reports MRR with `delta: null` and says why — there is no
+ * natural "previous" to compare against, because nothing has ever been written
+ * down. Reconstructing it later from the payments table is fiction: a payment
+ * says what somebody paid, not what everybody was subscribed to that morning,
+ * and it cannot see the churches that lapsed.
+ *
+ * So the only way to have a year of history in a year's time is to start
+ * keeping it now. The existing platform-health cron writes this every half
+ * hour and the day is the primary key, so the last write of each day wins and
+ * running the job more often costs nothing.
+ */
+export const platformMrrSnapshot = pgTable("platform_mrr_snapshot", {
+  day: date().primaryKey(),
+  /** Minor units, like every other money column here. */
+  mrr: integer().notNull().default(0),
+  activeChurches: integer().notNull().default(0),
+  totalChurches: integer().notNull().default(0),
+  capturedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PlatformMrrSnapshot = typeof platformMrrSnapshot.$inferSelect;
+
 export type Meeting = typeof meeting.$inferSelect;
 export type NewMeeting = typeof meeting.$inferInsert;
 export type MeetingParticipant = typeof meetingParticipant.$inferSelect;
