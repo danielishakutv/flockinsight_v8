@@ -86,6 +86,7 @@ import { ChatPanel, type ChatMessage } from "@/components/meetings/chat-panel";
 import { PeoplePanel } from "@/components/meetings/people-panel";
 import { SharePanel } from "@/components/meetings/share-panel";
 import { useSpeaking } from "@/components/meetings/use-speaking";
+import { ShortcutsSheet } from "@/components/meetings/shortcuts-sheet";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import type { TFunction } from "@/lib/i18n/translate";
@@ -181,6 +182,7 @@ export function MeetingRoom(props: {
   const [local, setLocal] = useState<LocalState | null>(null);
   const [transport, setTransport] = useState<"online" | "retrying" | "offline">("online");
   const [panel, setPanel] = useState<Panel>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /*
    * A mirror of `panel` for the back-gesture listener below. That listener
    * pushes a history entry when it registers, so re-registering it on every
@@ -216,7 +218,9 @@ export function MeetingRoom(props: {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [busyStage, setBusyStage] = useState(false);
-  const [floaters, setFloaters] = useState<{ id: string; emoji: string; left: number }[]>([]);
+  const [floaters, setFloaters] = useState<
+    { id: string; emoji: string; left: number; name: string }[]
+  >([]);
   const [recording, setRecording] = useState<{ id: string | null; mode: RecorderMode } | null>(null);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
@@ -311,16 +315,47 @@ export function MeetingRoom(props: {
     [t],
   );
 
-  /** A reaction someone tapped, drifting up the screen and gone. */
-  function addFloater(emoji: string) {
+  /**
+   * A reaction someone tapped, drifting up the screen and gone.
+   *
+   * Carries the name because an emoji on its own is a reaction from nobody. In
+   * a meeting of twenty, a lone thumbs-up tells the speaker that somebody
+   * agreed and gives them no way to know who — which is most of the value of
+   * having reacted at all.
+   */
+  function addFloater(emoji: string, name: string) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setFloaters((f) => [...f, { id, emoji, left: 10 + Math.random() * 70 }]);
+    setFloaters((f) => [...f, { id, emoji, left: 10 + Math.random() * 70, name }]);
     setTimeout(() => setFloaters((f) => f.filter((x) => x.id !== id)), 2600);
   }
 
+  /**
+   * Names the chat can offer after an "@".
+   *
+   * Everyone admitted, including the person typing: people do refer to
+   * themselves in a thread, and leaving yourself out is a gap somebody has to
+   * notice and work around.
+   */
+  const mentionables = useMemo(
+    () =>
+      roster
+        .filter((r) => r.admitted)
+        .map((r) => r.name)
+        .filter((n, i, all) => n && all.indexOf(n) === i),
+    [roster],
+  );
+
+  /** Who a peer id belongs to, falling back rather than showing a raw id. */
+  const nameForPeer = useCallback(
+    (peerId: string): string =>
+      frameRef.current.roster.find((r) => r.peerId === peerId)?.name ??
+      t("meetings.someone"),
+    [t],
+  );
+
   function react(emoji: string) {
     clientRef.current?.react(emoji);
-    addFloater(emoji);
+    addFloater(emoji, t("meetings.you"));
   }
 
   /** Lobby traffic: who is knocking, and who has been dealt with. */
@@ -409,7 +444,7 @@ export function MeetingRoom(props: {
               );
               if (msg.kind === "chat") setUnread((u) => u + 1);
             },
-            onReaction: (_peer, emoji) => addFloater(emoji),
+            onReaction: (peer, emoji) => addFloater(emoji, nameForPeer(peer)),
             onSpotlight: setSpotlight,
             onControl: (payload) => handleControl(payload),
             onRecording: (payload) => {
@@ -457,7 +492,7 @@ export function MeetingRoom(props: {
         setJoining(false);
       }
     },
-    [props.code, props.hostKey, t, reportMediaFault],
+    [props.code, props.hostKey, t, reportMediaFault, nameForPeer],
   );
 
   /* ============================================================
@@ -743,6 +778,18 @@ export function MeetingRoom(props: {
    * Keyboard
    * ========================================================== */
 
+  /**
+   * Every control reachable from the keyboard.
+   *
+   * Single unmodified letters, because in a meeting your hands are usually not
+   * on the mouse and the one thing people need instantly is the microphone.
+   * Modifier combinations are deliberately avoided: they collide with the
+   * browser's own, and the half-second spent forming one is the half-second
+   * somebody is being heard when they did not mean to be.
+   *
+   * A panel toggles rather than only opening, so the same key that shows the
+   * chat puts it away — nobody wants to learn two keys for one panel.
+   */
   useEffect(() => {
     if (phase !== "live") return;
     const onKey = (e: KeyboardEvent) => {
@@ -752,19 +799,61 @@ export function MeetingRoom(props: {
       if (el?.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "m" || e.key === "M") {
-        e.preventDefault();
-        toggleMic();
+      const togglePanel = (which: Panel) =>
+        setPanel((current) => (current === which ? null : which));
+
+      switch (e.key.toLowerCase()) {
+        case "m":
+          e.preventDefault();
+          toggleMic();
+          break;
+        case "v":
+          e.preventDefault();
+          toggleCamera();
+          break;
+        case "s":
+          e.preventDefault();
+          toggleScreenShare();
+          break;
+        case "h":
+          e.preventDefault();
+          toggleHand();
+          break;
+        case "c":
+          e.preventDefault();
+          togglePanel("chat");
+          break;
+        case "p":
+          e.preventDefault();
+          togglePanel("people");
+          break;
+        case "d":
+          e.preventDefault();
+          toggleLowData();
+          break;
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen((v) => !v);
+          break;
+        case "escape":
+          // One Escape closes the shortcuts sheet, the next closes a panel, so
+          // the key always undoes the most recent thing.
+          if (shortcutsOpen) setShortcutsOpen(false);
+          else setPanel(null);
+          break;
       }
-      if (e.key === "v" || e.key === "V") {
-        e.preventDefault();
-        toggleCamera();
-      }
-      if (e.key === "Escape") setPanel(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, toggleMic, toggleCamera]);
+  }, [
+    phase,
+    toggleMic,
+    toggleCamera,
+    toggleScreenShare,
+    toggleHand,
+    toggleLowData,
+    shortcutsOpen,
+  ]);
 
   /* ============================================================
    * Stage actions (host)
@@ -1436,15 +1525,25 @@ export function MeetingRoom(props: {
             </p>
           )}
 
+          <ShortcutsSheet
+            open={shortcutsOpen}
+            onClose={() => setShortcutsOpen(false)}
+            t={t}
+            canRecord={canHost && !!meeting?.allowRecording}
+          />
+
           {/* Floating reactions */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             {floaters.map((f) => (
               <span
                 key={f.id}
-                className="animate-float-up absolute bottom-4 text-4xl"
+                className="animate-float-up absolute bottom-4 flex flex-col items-center gap-1"
                 style={{ left: `${f.left}%` }}
               >
-                {f.emoji}
+                <span className="text-4xl">{f.emoji}</span>
+                <span className="max-w-28 truncate rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {f.name}
+                </span>
               </span>
             ))}
           </div>
@@ -1485,6 +1584,7 @@ export function MeetingRoom(props: {
             active={!!local?.micOn}
             danger={!local?.micOn}
             label={local?.micOn ? t("meetings.mute") : t("meetings.unmute")}
+            shortcut="M"
             onClick={toggleMic}
           >
             {local?.micOn ? <Mic /> : <MicOff />}
@@ -1499,6 +1599,7 @@ export function MeetingRoom(props: {
                 ? t("meetings.cameraOff2")
                 : t("meetings.cameraOn2")
             }
+            shortcut="V"
             onClick={toggleCamera}
           >
             {local?.cameraOn ? <Video /> : <VideoOff />}
@@ -1512,6 +1613,7 @@ export function MeetingRoom(props: {
                   ? t("meetings.stopSharing")
                   : t("meetings.shareScreen")
               }
+              shortcut="S"
               onClick={toggleScreenShare}
               className="hidden sm:flex"
             >
@@ -1522,6 +1624,7 @@ export function MeetingRoom(props: {
           <ControlButton
             active={handRaised}
             label={handRaised ? t("meetings.lowerHand") : t("meetings.raiseHand")}
+            shortcut="H"
             onClick={toggleHand}
           >
             <Hand />
@@ -1652,6 +1755,8 @@ export function MeetingRoom(props: {
           messages={messages}
           disabled={!meeting?.allowChat}
           onSend={(body) => void sendChat(body)}
+          people={mentionables}
+          myName={me?.name}
         />
       );
     if (panel === "people")
@@ -1798,6 +1903,7 @@ function ControlButton({
   disabled,
   badge,
   className,
+  shortcut,
 }: {
   children: React.ReactNode;
   label: string;
@@ -1807,6 +1913,8 @@ function ControlButton({
   disabled?: boolean;
   badge?: number;
   className?: string;
+  /** The key that does the same thing, shown on hover. */
+  shortcut?: string;
 }) {
   return (
     <button
@@ -1814,7 +1922,12 @@ function ControlButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      title={label}
+      /*
+       * The key goes in the tooltip, not the accessible name: a screen reader
+       * announcing "Mute (M)" on every control is noise, and the shortcuts
+       * sheet is the discoverable route for anyone not using a mouse.
+       */
+      title={shortcut ? `${label} (${shortcut})` : label}
       aria-pressed={active}
       className={cn(
         "relative flex size-11 items-center justify-center rounded-full transition disabled:opacity-40 sm:size-12 [&_svg]:size-5",
