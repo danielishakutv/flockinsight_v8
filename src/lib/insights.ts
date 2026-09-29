@@ -116,8 +116,15 @@ type CountRow = { label: string | null; n: string };
  */
 async function loadDemography(): Promise<DemographyInsight> {
   const [genderRows, ageRows, stateRows, totals] = await Promise.all([
+    /*
+     * `gender` is a Postgres enum, not text, so it must be cast before any
+     * string function touches it — `trim(gender)` raises
+     * "function pg_catalog.btrim(gender) does not exist" and takes the page
+     * with it. An enum value cannot be blank or padded either, so the
+     * trim/nullif dance that `state` needs is pointless here.
+     */
     db.execute<CountRow>(sql`
-      select coalesce(nullif(trim(gender), ''), 'Not recorded') as label,
+      select coalesce(gender::text, 'Not recorded') as label,
              count(*)::text as n
       from member
       group by 1

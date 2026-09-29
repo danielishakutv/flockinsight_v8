@@ -13,6 +13,7 @@ import {
   EconomicsPanel,
 } from "@/components/superadmin/insight-panels";
 import { ListCardSkeleton } from "@/components/superadmin/skeletons";
+import { PanelBoundary } from "@/components/superadmin/panel-boundary";
 
 export const metadata = { title: "Insights · Admin" };
 export const dynamic = "force-dynamic";
@@ -42,21 +43,35 @@ export default async function InsightsPage() {
         </p>
       </div>
 
-      <Suspense fallback={<ListCardSkeleton rows={4} />}>
-        <Adoption />
-      </Suspense>
+      {/*
+        Each panel gets its own boundary as well as its own Suspense. Suspense
+        alone only isolates SLOWNESS; a thrown query still escapes to the route
+        error boundary and blanks every panel that worked — which is how one
+        bad cast made the whole page read "this section failed to load".
+      */}
+      <PanelBoundary title="Adoption">
+        <Suspense fallback={<ListCardSkeleton rows={4} />}>
+          <Adoption />
+        </Suspense>
+      </PanelBoundary>
 
-      <Suspense fallback={<ListCardSkeleton rows={4} />}>
-        <Cohorts />
-      </Suspense>
+      <PanelBoundary title="Retention">
+        <Suspense fallback={<ListCardSkeleton rows={4} />}>
+          <Cohorts />
+        </Suspense>
+      </PanelBoundary>
 
-      <Suspense fallback={<ListCardSkeleton rows={3} />}>
-        <Economics />
-      </Suspense>
+      <PanelBoundary title="Plan economics">
+        <Suspense fallback={<ListCardSkeleton rows={3} />}>
+          <Economics />
+        </Suspense>
+      </PanelBoundary>
 
-      <Suspense fallback={<ListCardSkeleton rows={5} />}>
-        <Demography />
-      </Suspense>
+      <PanelBoundary title="Demography">
+        <Suspense fallback={<ListCardSkeleton rows={5} />}>
+          <Demography />
+        </Suspense>
+      </PanelBoundary>
     </div>
   );
 }
