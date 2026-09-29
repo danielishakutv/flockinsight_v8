@@ -17,20 +17,21 @@ import {
 } from "@/lib/reminder-emails";
 import { runFirstTimers } from "@/lib/first-timers";
 import { withCronRun } from "@/lib/cron-run";
+import { getChurchHealth } from "@/lib/platform-health";
+import { shouldRemind, type ReminderKind } from "@/lib/reminder-rules";
 
 export const dynamic = "force-dynamic";
-
-function iso(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function daysSince(ms: number) {
-  return (Date.now() - ms) / 86_400_000;
-}
 
 /**
  * GET /api/cron/reminders  — run daily. Sends at most one reminder email per
  * church based on inactivity. Auth via ?key=CRON_SECRET or Bearer header.
  * Windowed conditions (e.g. 3–4 days) mean each reminder fires once.
+ *
+ * `?dry=1` decides everything and sends nothing, answering "who would hear from
+ * us today, and why" without putting it in anybody's inbox. It skips the
+ * housekeeping that follows the ladder AND stays outside `withCronRun`, because
+ * a dry run that wrote a heartbeat would tell the health page the daily job had
+ * run — a rehearsal silencing the alarm for the real thing.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -42,7 +43,9 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  return withCronRun("reminders", async () => {
+  const dry = url.searchParams.get("dry") === "1";
+
+  const run = async () => {
   // Owners of active churches.
   const owners = await db
     .select({
@@ -79,56 +82,57 @@ export async function GET(request: Request) {
       .groupBy(session.userId),
   ]);
 
+  /*
+   * Which churches are actually under way.
+   *
+   * The ladder below presumes a routine, so a church that never began one must
+   * be excluded before any rule can claim it. Computing the set here — once,
+   * from the same source the activation board reads — is what stops suppression
+   * and activation nudges ever disagreeing about who has started.
+   */
+  const healthBy = new Map((await getChurchHealth()).map((h) => [h.churchId, h.health]));
+
   const attBy = new Map(attMax.map((r) => [r.churchId, r.last]));
   const givBy = new Map(givMax.map((r) => [r.churchId, r.last]));
   const memBy = new Map(memMax.map((r) => [r.churchId, r.last]));
   const loginBy = new Map(sessMax.map((r) => [r.userId, r.last]));
 
   const now = new Date();
-  const isMonday = now.getDay() === 1;
-  let lastSat = "";
-  if (isMonday) {
-    const sat = new Date(now);
-    sat.setDate(now.getDate() - 2);
-    lastSat = iso(sat);
-  }
 
   let sent = 0;
-  const byKind: Record<string, number> = { login: 0, weekend: 0, inactive: 0 };
+  let skippedNotStarted = 0;
+  const wouldSend: { church: string; to: string; kind: ReminderKind; health: string }[] = [];
+  const byKind: Record<ReminderKind, number> = { login: 0, weekend: 0, inactive: 0 };
 
   for (const o of owners) {
     if (!o.ownerEmail) continue;
-    const lastAtt = attBy.get(o.churchId) ?? null; // "YYYY-MM-DD"
-    const lastGiv = givBy.get(o.churchId) ?? null;
-    const lastMem = memBy.get(o.churchId) ?? null; // Date
-    const lastLogin = loginBy.get(o.ownerId) ?? null; // Date
+    const health = healthBy.get(o.churchId) ?? "healthy";
+    if (health === "never_activated") skippedNotStarted++;
 
-    const activityMs = Math.max(
-      lastAtt ? Date.parse(lastAtt) : 0,
-      lastGiv ? Date.parse(lastGiv) : 0,
-      lastMem ? new Date(lastMem).getTime() : 0,
-    );
+    const kind = shouldRemind({
+      health,
+      lastAtt: attBy.get(o.churchId) ?? null, // "YYYY-MM-DD"
+      lastGiv: givBy.get(o.churchId) ?? null,
+      lastMem: memBy.get(o.churchId) ?? null,
+      lastLogin: loginBy.get(o.ownerId) ?? null,
+      now,
+    });
 
-    let email: { subject: string; html: string; text: string } | null = null;
-    let kind = "";
+    const email =
+      kind === "inactive"
+        ? inactiveWeekEmail(o.ownerName, o.churchName)
+        : kind === "weekend"
+          ? weekendRecordEmail(o.ownerName, o.churchName)
+          : kind === "login"
+            ? reLoginEmail(o.ownerName, o.churchName)
+            : null;
 
-    // Priority: inactive week > weekend miss (Mon) > no login.
-    if (activityMs > 0 && daysSince(activityMs) >= 7 && daysSince(activityMs) < 8) {
-      email = inactiveWeekEmail(o.ownerName, o.churchName);
-      kind = "inactive";
-    } else if (isMonday && (!lastAtt || lastAtt < lastSat)) {
-      email = weekendRecordEmail(o.ownerName, o.churchName);
-      kind = "weekend";
-    } else if (
-      lastLogin &&
-      daysSince(new Date(lastLogin).getTime()) >= 3 &&
-      daysSince(new Date(lastLogin).getTime()) < 4
-    ) {
-      email = reLoginEmail(o.ownerName, o.churchName);
-      kind = "login";
-    }
-
-    if (email) {
+    if (email && kind) {
+      if (dry) {
+        wouldSend.push({ church: o.churchName, to: o.ownerEmail, kind, health });
+        byKind[kind] = (byKind[kind] ?? 0) + 1;
+        continue;
+      }
       try {
         const ok = await sendEmail({
           to: o.ownerEmail,
@@ -144,6 +148,20 @@ export async function GET(request: Request) {
         /* keep going */
       }
     }
+  }
+
+  if (dry) {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        dry: true,
+        checked: owners.length,
+        skippedNotStarted,
+        byKind,
+        wouldSend,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
   }
 
   // Piggyback the daily first-timer nurture sequence so it runs without needing
@@ -189,8 +207,19 @@ export async function GET(request: Request) {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, checked: owners.length, sent, byKind, firstTimers, senderIds, pledges }),
+    JSON.stringify({
+      ok: true,
+      checked: owners.length,
+      sent,
+      byKind,
+      skippedNotStarted,
+      firstTimers,
+      senderIds,
+      pledges,
+    }),
     { headers: { "Content-Type": "application/json" } },
   );
-  });
+  };
+
+  return dry ? run() : withCronRun("reminders", run);
 }
