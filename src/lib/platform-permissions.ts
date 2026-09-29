@@ -50,6 +50,7 @@ export const PLATFORM_MODULES: PlatformModule[] = [
       { label: "Dashboard", href: "/superadmin", perm: "platform.overview.view", icon: "LayoutDashboard" },
       { label: "Health", href: "/superadmin/health", perm: "platform.overview.view", icon: "HeartPulse" },
       { label: "Usage", href: "/superadmin/usage", perm: "platform.overview.view", icon: "BarChart3" },
+      { label: "Insights", href: "/superadmin/insights", perm: "platform.overview.view", icon: "Telescope" },
     ],
   },
   {
