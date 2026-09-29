@@ -70,6 +70,29 @@ export function audienceLabel(a: Audience): string {
 }
 
 /**
+ * Who a church's email reaches.
+ *
+ * `temp` rows are the important exclusion. They are memberships created while
+ * a platform operator "acts as" a church, so they point at the operator's own
+ * account — mail them and every campaign quietly CCs whoever last impersonated
+ * that church, once per church. Roles matter for the same reason volunteers do
+ * not get billing notices: an activation nudge asks somebody to set the church
+ * up, which only an owner or admin can act on.
+ */
+export type StaffReach = {
+  /** Org roles to include. Undefined means every role, the old behaviour. */
+  roles?: string[];
+  /** Leave out impersonation memberships. */
+  excludeTemp?: boolean;
+};
+
+/** What a message addressed to church leadership should use. */
+export const LEADERSHIP_REACH: StaffReach = {
+  roles: ["owner", "admin"],
+  excludeTemp: true,
+};
+
+/**
  * Resolve an audience to people.
  *
  * For churches the email goes to every staff login (that's who reads it) but
@@ -79,6 +102,7 @@ export function audienceLabel(a: Audience): string {
 export async function resolveTargets(
   a: Audience,
   channel: "email" | "sms",
+  reach: StaffReach = {},
 ): Promise<Target[]> {
   if (a.kind === "leads") {
     const where =
@@ -157,6 +181,12 @@ export async function resolveTargets(
     }));
   }
 
+  const staffWhere = [
+    churchWhere,
+    reach.roles?.length ? inArray(staff.role, reach.roles) : undefined,
+    reach.excludeTemp ? eq(staff.temp, false) : undefined,
+  ].filter(Boolean);
+
   const rows = await db
     .selectDistinct({
       churchId: church.id,
@@ -169,7 +199,7 @@ export async function resolveTargets(
     .from(staff)
     .innerJoin(user, eq(user.id, staff.userId))
     .innerJoin(church, eq(church.id, staff.organizationId))
-    .where(churchWhere)
+    .where(staffWhere.length ? and(...staffWhere) : undefined)
     .orderBy(asc(church.name));
 
   return rows.map((r) => ({
@@ -187,8 +217,9 @@ export async function resolveTargets(
 export async function audienceReach(
   a: Audience,
   channel: "email" | "sms",
+  reach: StaffReach = {},
 ): Promise<{ total: number; reachable: number }> {
-  const targets = await resolveTargets(a, channel);
+  const targets = await resolveTargets(a, channel, reach);
   const reachable = targets.filter((t) =>
     channel === "email" ? !!t.email : !!(t.phone && normalizePhone(t.phone)),
   ).length;
@@ -242,6 +273,14 @@ export type SendOutreachInput = {
   actorName?: string | null;
   /** Only send to these specific targets (used by "message this lead"). */
   limitToLeadIds?: string[];
+  /** Narrow a church audience to particular org roles, excluding impersonation. */
+  reach?: StaffReach;
+  /**
+   * Why this went out — "activation", "survey", null for a hand-written
+   * campaign. Automated sends must be tellable from marketing in the history,
+   * and the recency guard needs to find its own previous attempts.
+   */
+  purpose?: string | null;
 };
 
 export type SendOutreachResult = {
@@ -266,7 +305,7 @@ const CHUNK = 500;
 export async function sendOutreach(
   input: SendOutreachInput,
 ): Promise<SendOutreachResult> {
-  const targets = await resolveTargets(input.audience, input.channel);
+  const targets = await resolveTargets(input.audience, input.channel, input.reach ?? {});
   const scoped = input.limitToLeadIds?.length
     ? targets.filter((t) => t.leadId && input.limitToLeadIds!.includes(t.leadId))
     : targets;
@@ -286,6 +325,7 @@ export async function sendOutreach(
       audienceLabel: audienceLabel(input.audience),
       subject: input.channel === "email" ? (input.subject ?? null) : null,
       body: input.body,
+      purpose: input.purpose ?? null,
       createdBy: input.createdBy ?? null,
     })
     .returning({ id: outreachCampaign.id });

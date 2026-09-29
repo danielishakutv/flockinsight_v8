@@ -267,6 +267,13 @@ export const church = pgTable("church", {
   paymentWaived: boolean().notNull().default(false),
   // Which trial-ending reminders have been sent (0=none,1=14d,2=7d,3=3d) — idempotent cron.
   trialReminderStage: integer().notNull().default(0),
+  /**
+   * How far through the activation sequence this church has been taken.
+   * Mirrors trialReminderStage: the ladder only ever moves forward, so a
+   * church cannot be sent the same step twice. -1 is a tombstone meaning
+   * "never auto-nudge this one", so opting a church out needs no extra column.
+   */
+  activationNudgeStage: integer().notNull().default(0),
   // ----- SMS -----
   smsSenderId: text(), // requested/approved sender ID (<=11 chars)
   smsSenderStatus: smsSenderStatusEnum().notNull().default("none"),
@@ -2472,6 +2479,13 @@ export const outreachCampaign = pgTable(
     // "churches" | "leads" — which side of the house was addressed.
     audienceKind: text().notNull(),
     audienceLabel: text().notNull(), // human summary, e.g. "Leads · interested"
+    /**
+     * Why this went out: "activation", "survey", or null for a campaign a
+     * person wrote. Automated sends have to be tellable from marketing in the
+     * history, and the recency guard that stops a church being messaged twice
+     * in a week needs to find its own previous attempts.
+     */
+    purpose: text(),
     subject: text(), // email only
     body: text().notNull(),
     recipients: integer().notNull().default(0),

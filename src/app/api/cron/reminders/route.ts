@@ -164,6 +164,23 @@ export async function GET(request: Request) {
     );
   }
 
+  /*
+   * Walk stalled churches along the activation sequence.
+   *
+   * Here rather than behind its own cron key on purpose: a new key lands in
+   * CRON_JOBS as never-run, which getCronLiveness reports as overdue and the
+   * alert rules raise on the very dashboard this work is redesigning. Off by
+   * default, so until somebody turns it on this computes the plan and sends
+   * nothing.
+   */
+  let activation: Awaited<ReturnType<typeof import("@/lib/activation-nudges").runActivationNudges>> | null = null;
+  try {
+    const { runActivationNudges } = await import("@/lib/activation-nudges");
+    activation = await runActivationNudges();
+  } catch (e) {
+    console.error("[cron/reminders] activation nudges failed", e);
+  }
+
   // Piggyback the daily first-timer nurture sequence so it runs without needing
   // a separate crontab entry. Idempotent — safe if the dedicated cron also runs.
   let firstTimers: Awaited<ReturnType<typeof runFirstTimers>> | null = null;
@@ -213,6 +230,7 @@ export async function GET(request: Request) {
       sent,
       byKind,
       skippedNotStarted,
+      activation,
       firstTimers,
       senderIds,
       pledges,

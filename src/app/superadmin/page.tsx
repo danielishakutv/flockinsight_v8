@@ -17,6 +17,7 @@ import { church, payment, walletTopup } from "@/db/schema";
 import { getOpenAlerts } from "@/lib/platform-alerts";
 import { getChurchesNeedingAttention } from "@/lib/platform-health";
 import { getActivationBoard } from "@/lib/activation";
+import { planActivationNudges } from "@/lib/activation-nudges";
 import { getOverviewStats, getGrowthSeries } from "@/lib/platform-stats";
 import { getFloatOverview } from "@/lib/float";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
@@ -193,7 +194,22 @@ async function KeyNumbers() {
 }
 
 async function Activation() {
-  return <ActivationBoardPanel board={await getActivationBoard()} />;
+  /*
+   * Planning only. `planActivationNudges` is the same code the sender calls to
+   * decide who is due, so the preview cannot drift from what actually goes out
+   * — and because it cannot send, rendering this page never posts mail.
+   */
+  const [board, run] = await Promise.all([getActivationBoard(), planActivationNudges()]);
+  return (
+    <ActivationBoardPanel
+      board={board}
+      nudges={{
+        planned: run.planned,
+        enabled: run.enabled,
+        suppressedRecent: run.suppressedRecent,
+      }}
+    />
+  );
 }
 
 async function Growth() {

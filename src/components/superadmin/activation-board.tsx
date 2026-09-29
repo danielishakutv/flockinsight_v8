@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import type { ActivationBoard, ActivationRow } from "@/lib/activation";
+import type { NudgePlan } from "@/lib/activation-nudges";
+import { NudgeControls } from "@/components/superadmin/nudge-controls";
 import { shareLabel } from "@/lib/thin-data";
 import {
   FunnelDots,
@@ -17,7 +19,13 @@ import { Panel } from "@/components/superadmin/panel";
  * thing they did not get past. Nine of these were invisible until now — the
  * only sign of them was a weekly reminder email nobody read.
  */
-export function ActivationBoardPanel({ board }: { board: ActivationBoard }) {
+export function ActivationBoardPanel({
+  board,
+  nudges,
+}: {
+  board: ActivationBoard;
+  nudges: { planned: NudgePlan[]; enabled: boolean; suppressedRecent: number };
+}) {
   const { stalled, slipping, healthyCount, totalChurches } = board;
 
   return (
@@ -74,6 +82,14 @@ export function ActivationBoardPanel({ board }: { board: ActivationBoard }) {
             />
           )}
         </div>
+      )}
+
+      {stalled.length > 0 && (
+        <NudgeControls
+          planned={nudges.planned}
+          enabled={nudges.enabled}
+          suppressedRecent={nudges.suppressedRecent}
+        />
       )}
     </Panel>
   );
