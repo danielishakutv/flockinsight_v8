@@ -16,6 +16,7 @@ import { db } from "@/db";
 import { church, payment, walletTopup } from "@/db/schema";
 import { getOpenAlerts } from "@/lib/platform-alerts";
 import { getChurchesNeedingAttention } from "@/lib/platform-health";
+import { getActivationBoard } from "@/lib/activation";
 import { getOverviewStats, getGrowthSeries } from "@/lib/platform-stats";
 import { getFloatOverview } from "@/lib/float";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
@@ -25,6 +26,7 @@ import {
   StatusLine,
   type QueueItem,
 } from "@/components/superadmin/action-queue";
+import { ActivationBoardPanel } from "@/components/superadmin/activation-board";
 import { GrowthChart } from "@/components/superadmin/growth-chart";
 import { HealthBadge, LastSeen } from "@/components/superadmin/health-badge";
 import {
@@ -68,6 +70,10 @@ export default async function SuperadminOverviewPage() {
 
       <Suspense fallback={<StatGridSkeleton />}>
         <KeyNumbers />
+      </Suspense>
+
+      <Suspense fallback={<ListCardSkeleton rows={4} />}>
+        <Activation />
       </Suspense>
 
       <Suspense fallback={<ChartSkeleton />}>
@@ -184,6 +190,10 @@ async function KeyNumbers() {
       />
     </div>
   );
+}
+
+async function Activation() {
+  return <ActivationBoardPanel board={await getActivationBoard()} />;
 }
 
 async function Growth() {
