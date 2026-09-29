@@ -25,6 +25,20 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatBytes } from "@/lib/storage-bytes";
+import {
+  UploadCancelled,
+  uploadDirect,
+  type UploadProgress,
+} from "@/lib/direct-upload";
+import {
+  downloadEntry,
+  keepRecording,
+  listPending,
+  noteFailure,
+  releaseRecording,
+  type VaultEntry,
+} from "@/lib/recording-vault";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -122,6 +136,8 @@ type JoinResponse = {
 type PendingSave = RecordingResult & {
   recordingId: string | null;
   mode: RecorderMode;
+  /** Its key in the on-device vault, so a confirmed save can release it. */
+  vaultId: string;
 };
 
 /**
@@ -214,6 +230,9 @@ export function MeetingRoom(props: {
    * downloads the file and a host who closes the tab.
    */
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [unsaved, setUnsaved] = useState<VaultEntry[]>([]);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const [waiting, setWaiting] = useState<{ participantId: string; name: string }[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
@@ -480,18 +499,20 @@ export function MeetingRoom(props: {
   }, [t]);
 
   /*
-   * A recording that could not be stored lives in this tab and nowhere else,
-   * so closing it destroys the only copy. This is the one case in the whole
-   * app that earns a `beforeunload` prompt: the browser's wording is not ours
-   * to choose and people rightly resent these, but losing a recording of a
-   * service to a stray Cmd-W is worse than an ugly dialog.
+   * Only while an upload is actually in flight.
+   *
+   * This prompt used to guard a failed save, because the only copy lived in
+   * this tab and closing it destroyed an hour of somebody's service. The file
+   * is now in IndexedDB before the first byte is sent, so a closed tab costs
+   * nothing and the prompt would be pure nuisance. What it still earns is
+   * interrupting a transfer half-way.
    */
   useEffect(() => {
-    if (!pendingSave || !saveProblem) return;
+    if (!savingRecording) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [pendingSave, saveProblem]);
+  }, [savingRecording]);
 
   useEffect(() => {
     const onUnload = () => clientRef.current?.leave(true);
@@ -862,42 +883,120 @@ export function MeetingRoom(props: {
     [meeting, me, props.churchName, props.title, runAction, t],
   );
 
+  /** What is still only on this device. */
+  const refreshUnsaved = useCallback(async () => {
+    setUnsaved(await listPending());
+  }, []);
+
+  /*
+   * Read the vault once on mount. Guarded rather than fire-and-forget so a
+   * room that unmounts mid-read does not set state on a gone component — and
+   * so the lint rule can see that nothing is set synchronously here.
+   */
+  useEffect(() => {
+    let live = true;
+    listPending()
+      .then((rows) => {
+        if (live) setUnsaved(rows);
+      })
+      .catch(() => {
+        // A private window, or storage the browser refuses. Nothing to show,
+        // and the save path reports its own failures.
+        if (live) setUnsaved([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  /**
+   * Save a recording to the library, straight from this browser.
+   *
+   * The file goes to Cloudinary directly rather than through our API. Posting
+   * it to us meant every video ever recorded died at Cloudflare, which rejects
+   * any request body over 100 MB — an hour of video is about three times that,
+   * and audio kept working only because an hour of it is around 30 MB. It
+   * failed late and quietly, so it read as "still uploading" and then stopped.
+   *
+   * The blob is in IndexedDB before the first byte is sent, and only removed
+   * once the server confirms the media row. If anything goes wrong — here, the
+   * network, the laptop lid — the recording is still on this device and the
+   * Unsaved recordings panel will offer it back.
+   */
   const saveRecording = useCallback(
     async (file: PendingSave) => {
       if (!me) return;
 
       setSavingRecording(true);
       setSaveProblem(null);
-      try {
-        const form = new FormData();
-        form.set("peer", me.peerId);
-        form.set("secret", me.secret);
-        form.set("recordingId", file.recordingId ?? "");
-        form.set("durationSec", String(file.durationSec));
-        form.set("mode", file.mode);
-        form.set("file", file.blob, file.filename);
+      setUploadProgress(null);
 
-        const res = await fetch(`/api/meet/${props.code}/recording`, {
+      const controller = new AbortController();
+      uploadAbortRef.current = controller;
+
+      try {
+        const signRes = await fetch(`/api/meet/${props.code}/recording/sign`, {
           method: "POST",
-          body: form,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            peer: me.peerId,
+            secret: me.secret,
+            bytes: file.bytes,
+            mode: file.mode,
+          }),
         });
-        const data = await res.json();
-        if (data.ok) {
-          toast.success(t("meetings.savedToLibrary"));
-          setPendingSave(null);
-          return;
+        const signData = await signRes.json();
+        if (!signData.ok) {
+          // The server knows why — quota full, storage not configured — and
+          // each of those is something the host can act on. Its sentence beats
+          // anything generic this end could write.
+          throw new Error(signData.error ?? t("common.somethingWentWrong"));
         }
-        // The server knows why — too big, no media storage configured, quota
-        // full — and every one of those is something the host can act on.
-        // Its sentence beats anything generic this end could write.
-        setSaveProblem(data.error ?? t("common.somethingWentWrong"));
-      } catch {
-        setSaveProblem(t("meetings.recordingUploadFailed"));
+
+        const uploaded = await uploadDirect(
+          file.blob,
+          file.filename,
+          signData.ticket,
+          setUploadProgress,
+          controller.signal,
+        );
+
+        const doneRes = await fetch(`/api/meet/${props.code}/recording/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            peer: me.peerId,
+            secret: me.secret,
+            publicId: uploaded.publicId,
+            recordingId: file.recordingId,
+            durationSec: file.durationSec,
+            mode: file.mode,
+          }),
+        });
+        const doneData = await doneRes.json();
+        if (!doneData.ok) throw new Error(doneData.error ?? t("common.somethingWentWrong"));
+
+        // Confirmed saved, and only now is the local copy let go.
+        await releaseRecording(file.vaultId);
+        toast.success(t("meetings.savedToLibrary"));
+        setPendingSave(null);
+        setUploadProgress(null);
+        void refreshUnsaved();
+      } catch (e) {
+        if (e instanceof UploadCancelled) {
+          setSaveProblem(t("meetings.uploadCancelled"));
+        } else {
+          const message = e instanceof Error ? e.message : t("meetings.recordingUploadFailed");
+          setSaveProblem(message);
+          await noteFailure(file.vaultId, message);
+        }
+        void refreshUnsaved();
       } finally {
+        uploadAbortRef.current = null;
         setSavingRecording(false);
       }
     },
-    [me, props.code, t],
+    [me, props.code, t, refreshUnsaved],
   );
 
   const stopRecording = useCallback(async () => {
@@ -910,11 +1009,37 @@ export function MeetingRoom(props: {
     // the upload needs them, and `setRecording(null)` used to run first, so
     // every upload posted an empty id and the row never left "uploading".
     if (result) {
-      const pending = {
+      const pending: PendingSave = {
         ...result,
         recordingId: recording?.id ?? null,
         mode: recording?.mode ?? "video",
+        vaultId:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : String(Date.now()),
       };
+
+      /*
+       * On disk before a single byte is uploaded. The moment most likely to
+       * lose a recording is the one right here — the host stops recording and
+       * closes the laptop — and until now the only copy was a React state
+       * variable that a refresh destroyed.
+       */
+      await keepRecording({
+        id: pending.vaultId,
+        meetingCode: props.code,
+        meetingTitle: props.title,
+        recordingId: pending.recordingId,
+        mode: pending.mode,
+        filename: pending.filename,
+        mime: pending.mime,
+        durationSec: pending.durationSec,
+        bytes: pending.bytes,
+        createdAt: Date.now(),
+        blob: pending.blob,
+      });
+      void refreshUnsaved();
+
       setPendingSave(pending);
       // Straight to the library. Stopping a recording is already the decision
       // to keep it, and a button between the two is how a recording of a
@@ -922,7 +1047,7 @@ export function MeetingRoom(props: {
       void saveRecording(pending);
     }
     setRecording(null);
-  }, [runAction, recording, saveRecording]);
+  }, [runAction, recording, saveRecording, props.code, props.title, refreshUnsaved]);
 
 
   /* ============================================================
@@ -995,9 +1120,59 @@ export function MeetingRoom(props: {
             </p>
 
             {savingRecording && (
-              <p className="text-muted-foreground mt-1 flex items-center gap-2 text-xs text-slate-400">
-                <Loader2 className="size-3.5 animate-spin" />
-                {t("meetings.savingToLibrary")}
+              <div className="mt-2">
+                <p className="flex items-center gap-2 text-xs text-slate-300">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {uploadProgress
+                    ? t("meetings.uploadingPercent", {
+                        percent: String(uploadProgress.percent),
+                      })
+                    : t("meetings.savingToLibrary")}
+                </p>
+
+                {/*
+                  A real bar driven by real bytes. A ten-minute upload with no
+                  progress is indistinguishable from a broken one, which is
+                  exactly how the old silent failure was experienced.
+                */}
+                <div
+                  className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={uploadProgress?.percent ?? 0}
+                  aria-label={t("meetings.savingToLibrary")}
+                >
+                  <div
+                    className="bg-primary h-full rounded-full transition-[width] duration-300"
+                    style={{ width: `${uploadProgress?.percent ?? 0}%` }}
+                  />
+                </div>
+
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span className="tabular-nums">
+                    {formatBytes(uploadProgress?.uploadedBytes ?? 0)} /{" "}
+                    {formatBytes(pendingSave.bytes)}
+                    {uploadProgress?.secondsLeft != null &&
+                      uploadProgress.secondsLeft > 0 &&
+                      ` · ${t("meetings.uploadTimeLeft", {
+                        time: formatDuration(uploadProgress.secondsLeft),
+                      })}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => uploadAbortRef.current?.abort()}
+                    className="font-semibold text-slate-300 underline underline-offset-2"
+                  >
+                    {t("meetings.cancelUpload")}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!savingRecording && !saveProblem && (
+              <p className="mt-1 text-xs text-slate-400">
+                {t("meetings.recordingKeptSafe")}
               </p>
             )}
 
@@ -1006,6 +1181,11 @@ export function MeetingRoom(props: {
                 <p className="mt-1 text-xs leading-relaxed text-amber-200">
                   {saveProblem}
                 </p>
+                {/*
+                  No longer a warning that closing the tab destroys it, because
+                  it no longer does: the file is in IndexedDB and the Unsaved
+                  recordings panel will still have it tomorrow.
+                */}
                 <p className="mt-2 text-xs font-semibold text-amber-200">
                   {t("meetings.downloadOrLoseIt")}
                 </p>
@@ -1026,6 +1206,57 @@ export function MeetingRoom(props: {
             )}
           </div>
         )}
+        {/*
+          Anything still only on this device, including recordings from earlier
+          meetings whose upload never finished. Until now a failed upload was
+          simply gone once the tab closed; this is where it comes back.
+        */}
+        {unsaved.filter((u) => u.id !== pendingSave?.vaultId).length > 0 && (
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+            <p className="text-sm font-semibold">{t("meetings.unsavedRecordings")}</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              {t("meetings.unsavedExplain")}
+            </p>
+            <ul className="mt-3 space-y-2">
+              {unsaved
+                .filter((u) => u.id !== pendingSave?.vaultId)
+                .map((u) => (
+                  <li key={u.id} className="rounded-lg border border-white/10 p-2.5">
+                    <p className="truncate text-xs font-semibold">{u.meetingTitle}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                      {formatDuration(u.durationSec)} · {formatBytes(u.bytes)}
+                      {u.lastError ? ` · ${u.lastError}` : ""}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={savingRecording}
+                        onClick={() =>
+                          void saveRecording({
+                            blob: u.blob,
+                            mime: u.mime,
+                            durationSec: u.durationSec,
+                            bytes: u.bytes,
+                            filename: u.filename,
+                            recordingId: u.recordingId,
+                            mode: u.mode,
+                            vaultId: u.id,
+                          })
+                        }
+                      >
+                        {t("meetings.saveToLibrary")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => downloadEntry(u)}>
+                        <Download className="size-4" /> {t("common.download")}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => window.location.reload()}>
             <RefreshCcw className="size-4" /> {t("meetings.rejoin")}

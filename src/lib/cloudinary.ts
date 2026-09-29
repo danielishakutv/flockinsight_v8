@@ -186,3 +186,120 @@ export function withAttachment(url: string, filename?: string): string {
 function sanitizeName(name: string): string {
   return name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80);
 }
+
+/* ============================================================
+ * Direct browser uploads
+ * ========================================================== */
+
+export type DirectUploadTicket = {
+  /** Where the browser POSTs each chunk. */
+  endpoint: string;
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  transformation?: string;
+  resourceType: ResourceType;
+  /** Correlates the chunks of one file. Cloudinary requires it byte-for-byte. */
+  uniqueUploadId: string;
+};
+
+/**
+ * Everything a browser needs to upload straight to Cloudinary, and nothing it
+ * shouldn't have.
+ *
+ * The API secret never leaves the server — only a signature over the exact
+ * parameters this upload is allowed to use, valid for about an hour. Anyone
+ * who intercepted the ticket could upload one file into one church's folder,
+ * which is the same thing they could do by using the app normally.
+ *
+ * Why direct at all: a recording goes through Cloudflare on its way to us, and
+ * Cloudflare rejects any request body over 100 MB with a 413 before it reaches
+ * the origin. An hour of video is roughly three times that. Uploading from the
+ * browser to api.cloudinary.com skips our edge completely — and, chunked, it
+ * also skips Cloudinary's own 100 MB ceiling on single-shot uploads. Both
+ * limits had to go; removing either one alone changed nothing.
+ */
+export function signDirectUpload(opts: {
+  folder: string;
+  resourceType: ResourceType;
+  audio?: boolean;
+  uniqueUploadId: string;
+}): DirectUploadTicket | null {
+  if (!isCloudinaryConfigured()) return null;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const transformation = opts.audio
+    ? AUDIO_TRANSFORM
+    : incomingTransformation(opts.resourceType);
+
+  const signature = sign({ timestamp, folder: opts.folder, transformation });
+
+  return {
+    endpoint: `https://api.cloudinary.com/v1_1/${CLOUD}/${opts.resourceType}/upload`,
+    cloudName: CLOUD!,
+    apiKey: API_KEY!,
+    timestamp,
+    signature,
+    folder: opts.folder,
+    transformation,
+    resourceType: opts.resourceType,
+    uniqueUploadId: opts.uniqueUploadId,
+  };
+}
+
+/**
+ * Confirm an asset the browser claims to have uploaded.
+ *
+ * Never trust the browser's word for the public id, size or duration: those
+ * numbers become a church's storage accounting and a media row people play
+ * back. Asking Cloudinary directly costs one request and means a forged
+ * response cannot inflate a quota or point a media row at somebody else's
+ * asset.
+ */
+export async function fetchCloudinaryAsset(
+  publicId: string,
+  resourceType: ResourceType,
+): Promise<CloudinaryAsset | null> {
+  if (!isCloudinaryConfigured()) return null;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = sign({ public_id: publicId, timestamp });
+  const params = new URLSearchParams({
+    public_id: publicId,
+    timestamp: String(timestamp),
+    api_key: API_KEY!,
+    signature,
+  });
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD}/resources/${resourceType}/upload/${encodeURIComponent(publicId)}?${params}`,
+    { headers: { Authorization: `Basic ${btoa(`${API_KEY}:${API_SECRET}`)}` } },
+  );
+  if (!res.ok) return null;
+
+  const json = (await res.json().catch(() => null)) as {
+    public_id?: string;
+    secure_url?: string;
+    bytes?: number;
+    format?: string;
+    resource_type?: ResourceType;
+    width?: number;
+    height?: number;
+    duration?: number;
+  } | null;
+
+  if (!json?.public_id || !json.secure_url) return null;
+
+  return {
+    publicId: json.public_id,
+    url: json.secure_url,
+    bytes: json.bytes ?? 0,
+    format: json.format ?? null,
+    resourceType: json.resource_type ?? resourceType,
+    width: json.width ?? null,
+    height: json.height ?? null,
+    durationSec: json.duration != null ? Math.round(json.duration) : null,
+  };
+}
