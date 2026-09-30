@@ -38,6 +38,19 @@ export const CURRENCIES: { code: string; label: string; symbol: string }[] = [
   { code: "GBP", label: "British Pound (£)", symbol: "£" },
   { code: "EUR", label: "Euro (€)", symbol: "€" },
   { code: "CAD", label: "Canadian Dollar (C$)", symbol: "C$" },
+  { code: "AUD", label: "Australian Dollar (A$)", symbol: "A$" },
+  { code: "BRL", label: "Brazilian Real (R$)", symbol: "R$" },
+  // Added with the country profiles: every currency a supported country
+  // defaults to has to exist here, or a church lands on a code its own
+  // giving screen cannot name.
+  { code: "BIF", label: "Burundian Franc (FBu)", symbol: "FBu" },
+  { code: "CVE", label: "Cape Verdean Escudo (Esc)", symbol: "Esc" },
+  { code: "LSL", label: "Lesotho Loti (L)", symbol: "L" },
+  { code: "LYD", label: "Libyan Dinar (LD)", symbol: "LD" },
+  { code: "SDG", label: "Sudanese Pound (SDG)", symbol: "SDG" },
+  { code: "SOS", label: "Somali Shilling (Sh)", symbol: "Sh" },
+  { code: "STN", label: "São Tomé Dobra (Db)", symbol: "Db" },
+  { code: "SZL", label: "Eswatini Lilangeni (E)", symbol: "E" },
 ];
 
 export const DEFAULT_CURRENCY = "NGN";

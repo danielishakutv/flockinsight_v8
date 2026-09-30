@@ -1,9 +1,9 @@
-// Where the SMS engine is live today. Churches in other countries see a
-// "coming soon" message instead of SMS controls. Client- and server-safe.
-
-const SMS_COUNTRIES = new Set<string>(["Nigeria"]);
-
-/** True if SMS sending is available for a church in this country. */
-export function smsAvailableForCountry(country: string | null | undefined): boolean {
-  return !!country && SMS_COUNTRIES.has(country.trim());
-}
+/**
+ * Where SMS can actually be delivered.
+ *
+ * Kept as a re-export so the nine existing call sites do not all have to
+ * change, but the answer now lives in `country-profile.ts` beside the currency
+ * and language for the same country. Three facts about a country were in three
+ * places, and a church in Maputo got the Nigerian answer to all three.
+ */
+export { SMS_COUNTRIES, smsAvailableForCountry } from "@/lib/country-profile";

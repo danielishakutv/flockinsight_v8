@@ -4,6 +4,13 @@ import { cookies, headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/geo";
+import {
+  countryFromIso2,
+  currencyForCountry,
+  localeForCountry,
+} from "@/lib/country-profile";
+import { LOCALE_COOKIE } from "@/lib/i18n/locales";
 import { church, staff, session as sessionTable, user } from "@/db/schema";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { ensureMemberForUser } from "@/lib/member-link";
@@ -48,10 +55,21 @@ export async function createChurchAccount(input: {
   name: string;
   email: string;
   password: string;
+  /** Chosen on the form, pre-filled from Cloudflare's guess. */
+  country?: string;
 }): Promise<SignUpResult> {
   const churchName = input.churchName.trim();
   const name = input.name.trim();
   const email = input.email.trim();
+
+  /*
+   * Trust the form over the header. Cloudflare only pre-fills the field; a
+   * Nigerian pastor planting in Mozambique, or anyone behind a VPN, must be
+   * able to say otherwise and be believed.
+   */
+  const country = COUNTRIES.includes((input.country ?? "").trim())
+    ? input.country!.trim()
+    : DEFAULT_COUNTRY;
 
   if (!churchName || !name || !email || !input.password) {
     return { ok: false, error: "Please fill in every field." };
@@ -122,6 +140,18 @@ export async function createChurchAccount(input: {
           // Left unverified: Better Auth verifies the PERSON's login email,
           // which is a different claim from the CHURCH owning this address.
           contactEmail: email.toLowerCase(),
+          /*
+           * Country decides money and language, so it is set at creation
+           * rather than left to default.
+           *
+           * Every church used to be created as Nigerian: naira in its giving
+           * screens, English on every page, and an SMS button that would take
+           * its money and deliver nothing. A church in Maputo now starts in
+           * meticais and Portuguese, which is the difference between software
+           * that was built for you and software you have to correct.
+           */
+          country,
+          currency: currencyForCountry(country),
           // Start the "first 7 Sundays free" trial from today.
           trialEndsAt: trialEndDate(new Date()),
           referredByChurchId,
@@ -133,6 +163,20 @@ export async function createChurchAccount(input: {
           userId,
           role: "owner",
         });
+
+        /*
+         * Start them in their own language too.
+         *
+         * Set on the ACCOUNT rather than only in a cookie, so it survives the
+         * verification email round trip and the next device. The cookie is
+         * written below for this browser, because a Mozambican pastor should
+         * not have to read an English confirmation page to find the language
+         * picker.
+         */
+        const locale = localeForCountry(country);
+        if (locale !== "en") {
+          await tx.update(user).set({ locale }).where(eq(user.id, userId));
+        }
       });
       break;
     } catch (e) {
@@ -147,6 +191,23 @@ export async function createChurchAccount(input: {
         needsOnboarding: true,
       };
     }
+  }
+
+  /*
+   * Switch this browser to their language now, not on next sign-in.
+   *
+   * The account already carries the locale, but the very next thing they see
+   * is a verification page — and asking somebody to read English instructions
+   * in order to find the language picker is the wrong first impression for a
+   * product that claims to speak their language.
+   */
+  const locale = localeForCountry(country);
+  if (locale !== "en") {
+    (await cookies()).set(LOCALE_COOKIE, locale, {
+      maxAge: 60 * 60 * 24 * 365,
+      path: "/",
+      sameSite: "lax",
+    });
   }
 
   // The owner is also a person in the congregation — create their member
@@ -179,4 +240,18 @@ export async function createChurchAccount(input: {
   }
 
   return { ok: true, signedIn };
+}
+
+/**
+ * Where Cloudflare thinks this visitor is.
+ *
+ * Only ever a suggestion for the form's initial value. It costs nothing —
+ * `CF-IPCountry` is already on every request — and it is right far more often
+ * than a dropdown defaulting to Nigeria for the whole world. When it is wrong,
+ * which a VPN or a travelling pastor makes certain, the person simply picks
+ * another and is believed.
+ */
+export async function detectCountry(): Promise<string | null> {
+  const h = await headers();
+  return countryFromIso2(h.get("cf-ipcountry"));
 }

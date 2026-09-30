@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
-import { createChurchAccount } from "./actions";
+import { createChurchAccount, detectCountry } from "./actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,6 +18,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/geo";
+import {
+  countryProfile,
+  smsAvailableForCountry,
+} from "@/lib/country-profile";
+import { CURRENCIES } from "@/lib/money";
 
 function SignupForm() {
   const router = useRouter();
@@ -28,6 +34,28 @@ function SignupForm() {
   const inviteMode = redirectTo.startsWith("/accept-invitation");
 
   const [loading, setLoading] = useState(false);
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+
+  /*
+   * Cloudflare's guess, applied once as the field's starting value.
+   *
+   * Deliberately not forced: this only moves the dropdown before anybody has
+   * touched it. A pastor who has already chosen keeps their choice.
+   */
+  useEffect(() => {
+    let live = true;
+    detectCountry()
+      .then((c) => {
+        if (live && c) setCountry(c);
+      })
+      .catch(() => {
+        // No geolocation is not an error; the dropdown already has a value.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -72,6 +100,7 @@ function SignupForm() {
         name,
         email,
         password,
+        country,
       });
 
       if (!result.ok) {
@@ -156,6 +185,42 @@ function SignupForm() {
               />
             </div>
           )}
+          {!inviteMode && (
+            <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <select
+                id="country"
+                name="country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="border-input bg-background focus-visible:ring-ring/50 h-11 w-full rounded-lg border px-3 text-sm focus-visible:ring-[3px] focus-visible:outline-none sm:h-10"
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              {/*
+                Said before they commit, not discovered afterwards. Country
+                decides the money their giving is recorded in and the language
+                the app opens in — and whether SMS is even offered, which is
+                the one people are most likely to assume.
+              */}
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Sets your currency to{" "}
+                <strong>
+                  {CURRENCIES.find((x) => x.code === countryProfile(country).currency)
+                    ?.label ?? countryProfile(country).currency}
+                </strong>
+                .{" "}
+                {smsAvailableForCountry(country)
+                  ? "Email and SMS are both available."
+                  : "Email is free and unlimited. SMS isn't available here yet, so we won't offer it."}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="name">Your name</Label>
             <Input

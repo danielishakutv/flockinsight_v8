@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { church, walletTxn } from "@/db/schema";
 import { sendSms, smsPages, normalizePhone, isSmsConfigured } from "@/lib/sms";
 import { getSmsPrice } from "@/lib/platform-settings";
@@ -31,11 +32,33 @@ export async function sendChurchSms(opts: {
       senderId: church.smsSenderId,
       status: church.smsSenderStatus,
       balance: church.walletBalance,
+      country: church.country,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
     .limit(1);
   if (!c) return { ok: false, error: "Church not found." };
+
+  /*
+   * The country gate, enforced HERE rather than only in the UI.
+   *
+   * Hiding a button is not a gate: the crons send SMS too — service reminders,
+   * celebrations, pledge chasers, first-timer welcomes — and none of them pass
+   * through a screen anybody hid. A church outside Nigeria would have had
+   * those charged to its wallet and delivered nowhere.
+   *
+   * The message says the real reason. Without this the caller fell through to
+   * "your sender ID isn't approved yet", which sends somebody to a settings
+   * page to fix something that is not the problem and cannot be fixed there.
+   */
+  if (!smsAvailableForCountry(c.country)) {
+    return {
+      ok: false,
+      error:
+        "SMS isn't available in your country yet, so nothing was sent or charged. Email is free and unlimited — use that to reach everybody.",
+    };
+  }
+
   if (c.status !== "approved" || !c.senderId) {
     return {
       ok: false,
@@ -136,11 +159,23 @@ export async function sendChurchSmsBatch(opts: {
       senderId: church.smsSenderId,
       status: church.smsSenderStatus,
       balance: church.walletBalance,
+      country: church.country,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
     .limit(1);
   if (!c) return { ok: false, error: "Church not found." };
+
+  // The same gate as the single send, and this is the path that matters most:
+  // the crons send in batches, so an unguarded bulk reminder is where a church
+  // outside Nigeria would be charged for a hundred messages at once.
+  if (!smsAvailableForCountry(c.country))
+    return {
+      ok: false,
+      error:
+        "SMS isn't available in your country yet, so nothing was sent or charged. Email is free and unlimited — use that to reach everybody.",
+    };
+
   if (c.status !== "approved" || !c.senderId)
     return {
       ok: false,
