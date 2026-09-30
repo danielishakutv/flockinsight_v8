@@ -158,7 +158,7 @@ ln -s "$SHARED/.env" "$RELEASE/.env"
 printf 'DEPLOYMENT_ID=%s\n' "$SHA" > "$RELEASE/.env.production.local"
 
 log "Installing dependencies"
-( cd "$RELEASE" && pnpm install --prod=false --frozen-lockfile )
+( cd "$RELEASE" && nice -n 15 pnpm install --prod=false --frozen-lockfile )
 
 # Migrations run before the swap, so they must be additive — adding columns,
 # tables or indexes. A rename or a drop breaks the old workers that are still
@@ -178,7 +178,22 @@ log "Building"
 # machine down with it — which is how a bad afternoon becomes a day of 522s.
 # A build that fails is recoverable. Raise it only against `free -h`, and
 # override from the environment rather than editing this line.
-( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}" pnpm build )
+#
+# Built at low priority, because this box is shared.
+#
+# `nice` only changes who wins when the CPU is contended — an idle machine
+# builds at exactly the same speed. What it buys is that during the ~90 seconds
+# of a build, Apache serving somebody's Sunday service always outranks our
+# compiler. `ionice` does the same for disk, which is what a pnpm install over
+# 774MB of node_modules actually saturates.
+#
+# Both are best-effort: a box without them still builds, just without the
+# courtesy.
+NICE=""
+command -v nice >/dev/null 2>&1 && NICE="nice -n 15"
+command -v ionice >/dev/null 2>&1 && NICE="$NICE ionice -c2 -n7"
+
+( cd "$RELEASE" && NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}" $NICE pnpm build )
 
 # --------------------------------------------------------------- smoke test
 # Prove the new build boots and answers before anything points at it. This is

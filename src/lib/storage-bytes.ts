@@ -3,8 +3,33 @@
 export const MB = 1024 * 1024;
 export const GB = 1024 * MB;
 
-/** Free storage every church gets, before any paid add-on. */
-export const BASE_STORAGE_BYTES = 200 * MB; // 200 MB
+/**
+ * Included storage, per plan.
+ *
+ * This used to be one number for everybody, which meant a Pro church paying
+ * ₦15,000 a month got exactly the same 200 MB as a free Starter — the single
+ * biggest hole in the unit economics, because storage is the cost that never
+ * goes away. Cloudinary bills roughly a credit per gigabyte stored per month
+ * and the jump from the free 25 credits to the next tier is $99, so what each
+ * plan may keep is the main thing standing between this platform and a bill
+ * larger than its revenue.
+ *
+ * Deliberately modest. A church's photos, logos and documents are small; it is
+ * VIDEO that fills a quota, and video is what a paid plan is really buying.
+ */
+export const PLAN_STORAGE_BYTES: Record<string, number> = {
+  starter: 200 * MB,
+  growth: 2 * GB,
+  pro: 10 * GB,
+  enterprise: 50 * GB,
+};
+
+/** What a plan we do not recognise gets. The smallest, on purpose. */
+export const BASE_STORAGE_BYTES = 200 * MB;
+
+export function planStorageBytes(plan: string | null | undefined): number {
+  return PLAN_STORAGE_BYTES[plan ?? ""] ?? BASE_STORAGE_BYTES;
+}
 
 /** Human-readable size, e.g. 1536 -> "1.5 KB". */
 export function formatBytes(n: number, decimals = 1): string {

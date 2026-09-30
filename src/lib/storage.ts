@@ -1,12 +1,12 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { media } from "@/db/schema";
-import { BASE_STORAGE_BYTES } from "@/lib/storage-bytes";
+import { church, media } from "@/db/schema";
+import { planStorageBytes } from "@/lib/storage-bytes";
 
 /** Effective storage limit for a church = free base + purchased extra. */
-export function storageLimitBytes(extraBytes: number): number {
-  return BASE_STORAGE_BYTES + Math.max(0, extraBytes || 0);
+export function storageLimitBytes(extraBytes: number, plan?: string | null): number {
+  return planStorageBytes(plan) + Math.max(0, extraBytes || 0);
 }
 
 /** Total bytes a church is currently using (sum of all its media). */
@@ -32,7 +32,20 @@ export async function getStorageInfo(
   extraBytes: number,
 ): Promise<StorageInfo> {
   const used = await getStorageUsed(churchId);
-  const limit = storageLimitBytes(extraBytes);
+
+  /*
+   * The plan is read here rather than asked of every caller. Six places want a
+   * storage figure — the media page, settings, two upload routes and the admin
+   * — and a quota that depends on which of them asked is a quota that will
+   * disagree with itself.
+   */
+  const [row] = await db
+    .select({ plan: church.plan })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+
+  const limit = storageLimitBytes(extraBytes, row?.plan);
   return {
     used,
     limit,
