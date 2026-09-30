@@ -17,6 +17,7 @@ import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
 import { PageTracker } from "@/components/analytics/page-tracker";
+import { TranslationPrompt } from "@/components/app/translation-prompt";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/components/i18n-provider";
@@ -124,6 +125,7 @@ export default async function AppLayout({
       <InstallPrompt />
       <OfflineIndicator />
       <PageTracker />
+      <TranslationPrompt />
       <PostHogIdentify
         userId={user.id}
         churchId={church.id}

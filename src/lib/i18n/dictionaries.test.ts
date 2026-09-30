@@ -218,3 +218,37 @@ describe("Accept-Language matching", () => {
     expect(matchAcceptLanguage(null)).toBeNull();
   });
 });
+
+describe("partial dictionaries", () => {
+  it("fills a missing key from English rather than showing the key", async () => {
+    // A language is translated a screen at a time, so most locales are
+    // incomplete by design. An untranslated string must read as real English,
+    // never as "dashboard.welcome".
+    const { mergedDictionary } = await import("@/lib/i18n/dictionaries");
+    const { en } = await import("@/lib/i18n/dictionaries/en");
+    const merged = mergedDictionary("ha");
+    for (const section of Object.keys(en) as (keyof typeof en)[]) {
+      expect(Object.keys(merged[section]).sort()).toEqual(
+        Object.keys(en[section]).sort(),
+      );
+    }
+  });
+
+  it("prefers the translation wherever there is one", async () => {
+    const { mergedDictionary } = await import("@/lib/i18n/dictionaries");
+    const { fr } = await import("@/lib/i18n/dictionaries/fr");
+    const merged = mergedDictionary("fr");
+    const key = Object.keys(fr.common ?? {})[0] as keyof typeof merged.common;
+    if (key) {
+      expect(merged.common[key]).toEqual(
+        (fr.common as Record<string, unknown>)[key],
+      );
+    }
+  });
+
+  it("returns English itself for English", async () => {
+    const { mergedDictionary } = await import("@/lib/i18n/dictionaries");
+    const { en } = await import("@/lib/i18n/dictionaries/en");
+    expect(mergedDictionary("en")).toBe(en);
+  });
+});

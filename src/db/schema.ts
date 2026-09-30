@@ -3756,6 +3756,46 @@ export const platformSurveyResponse = pgTable(
   ],
 );
 
+/**
+ * A speaker of the language telling us where the translation is wrong.
+ *
+ * Machine-assisted translation gets grammar roughly right and church
+ * vocabulary reliably wrong: "offering", "tithe", "first-timer", "cell group"
+ * and "service" all carry conventions a congregation would recognise and a
+ * translator would not invent. The only people who can fix that are the ones
+ * reading it, so we ask them — after they have actually used the app in that
+ * language, not the moment they switch.
+ *
+ * `original` is the English, `suggestion` is theirs. Both are kept because a
+ * correction without the thing it corrects is unusable a month later.
+ */
+export const translationFeedback = pgTable(
+  "translation_feedback",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    locale: text().notNull(),
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** Where they were when it read wrong, so it can be found again. */
+    path: text(),
+    /** The English string, when they picked one from the page. */
+    original: text(),
+    /** What it should say instead. */
+    suggestion: text().notNull(),
+    /** Anything else they wanted to say. */
+    note: text(),
+    /** "open" | "applied" | "declined" — what the operator did with it. */
+    status: text().notNull().default("open"),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("translation_feedback_locale_idx").on(t.locale, t.status),
+    index("translation_feedback_created_idx").on(t.createdAt),
+  ],
+);
+
+export type TranslationFeedback = typeof translationFeedback.$inferSelect;
+
 export type PlatformSurvey = typeof platformSurvey.$inferSelect;
 export type PlatformSurveyResponse = typeof platformSurveyResponse.$inferSelect;
 

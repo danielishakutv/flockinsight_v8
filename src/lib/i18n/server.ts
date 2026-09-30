@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, user } from "@/db/schema";
-import { dictionaryFor, en, type Dictionary } from "./dictionaries";
+import { en, mergedDictionary, type Dictionary } from "./dictionaries";
 import {
   DEFAULT_LOCALE,
   isLocale,
@@ -96,9 +96,16 @@ async function accountLocale(): Promise<LocaleCode | null> {
   }
 }
 
-/** The resolved dictionary. Handed to a client provider as a prop. */
+/**
+ * The resolved dictionary, complete. Handed to a client provider as a prop.
+ *
+ * Merged with English here rather than in the browser. The client gets one
+ * dictionary — that is why these are passed as a prop instead of imported —
+ * so a half-translated language must be completed before it is sent, or the
+ * browser would need English beside it and every reader would pay twice.
+ */
 export const getDictionary = cache(async (): Promise<Dictionary> => {
-  return dictionaryFor(await getLocale());
+  return mergedDictionary(await getLocale());
 });
 
 /**
@@ -110,14 +117,14 @@ export const getDictionary = cache(async (): Promise<Dictionary> => {
  */
 export const getT = cache(async (): Promise<TFunction> => {
   const locale = await getLocale();
-  return makeT(locale, dictionaryFor(locale), en);
+  return makeT(locale, mergedDictionary(locale), en);
 });
 
 /** Everything a client provider needs, in one call. */
 export const getI18n = cache(
   async (): Promise<{ locale: LocaleCode; dict: Dictionary; t: TFunction }> => {
     const locale = await getLocale();
-    const dict = dictionaryFor(locale);
+    const dict = mergedDictionary(locale);
     return { locale, dict, t: makeT(locale, dict, en) };
   },
 );
