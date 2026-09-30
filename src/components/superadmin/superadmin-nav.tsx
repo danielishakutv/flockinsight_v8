@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,6 +9,7 @@ import {
   BarChart3,
   Bell,
   Building2,
+  ChevronDown,
   Church,
   ClipboardList,
   Database,
@@ -21,6 +22,8 @@ import {
   Menu,
   MessageSquare,
   Newspaper,
+  PanelLeftClose,
+  PanelLeftOpen,
   Rocket,
   ScrollText,
   ShieldCheck,
@@ -32,6 +35,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visibleNav } from "@/lib/platform-permissions";
+import {
+  NAV_CLOSED_GROUPS_KEY,
+  NAV_RAIL_KEY,
+  activeHref,
+  parseStored,
+  resolveOpenGroups,
+  toggleClosed,
+  type NavGroup,
+} from "@/lib/admin-nav";
+import { useMounted, useStoredValue, writeStoredValue } from "@/lib/client-state";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -58,6 +71,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 type Item = { label: string; href: string; icon: LucideIcon };
+type Group = { title: string; items: Item[] };
 
 /**
  * The sidebar is built from the permission catalogue, not from a list kept
@@ -68,33 +82,202 @@ type Item = { label: string; href: string; icon: LucideIcon };
  * Here the groups ARE the permission modules, and `visibleNav` has already
  * dropped anything this admin cannot open.
  */
-function useGroups(perms: string[]): { title: string; items: Item[] }[] {
-  return visibleNav(perms).map((m) => ({
-    title: m.label,
-    items: m.pages.map((pg) => ({
-      label: pg.label,
-      href: pg.href,
-      icon: ICONS[pg.icon] ?? LayoutDashboard,
-    })),
-  }));
+function useGroups(perms: string[]): Group[] {
+  return useMemo(
+    () =>
+      visibleNav(perms).map((m) => ({
+        title: m.label,
+        items: m.pages.map((pg) => ({
+          label: pg.label,
+          href: pg.href,
+          icon: ICONS[pg.icon] ?? LayoutDashboard,
+        })),
+      })),
+    [perms],
+  );
 }
 
-/** Longest matching href wins, so /growth/outreach doesn't also light /growth. */
-function activeHref(pathname: string, hrefs: string[]): string | undefined {
-  return hrefs
-    .filter((href) =>
-      href === "/superadmin" ? pathname === href : pathname.startsWith(href),
-    )
-    .sort((a, b) => b.length - a.length)[0];
-}
+/* ============================================================
+ * One link
+ * ========================================================== */
 
-function NavList({
-  perms,
+/**
+ * A nav link, in either of the sidebar's two widths.
+ *
+ * In the rail the label is still in the DOM and still the link's accessible
+ * name — it is only visually replaced by a flyout that appears on hover and on
+ * keyboard focus. A rail whose labels exist only on hover is unusable to
+ * anyone navigating by keyboard, and unreadable to a screen reader.
+ */
+function NavLink({
+  item,
+  active,
+  rail,
   onNavigate,
 }: {
-  perms: string[];
+  item: Item;
+  active: boolean;
+  rail: boolean;
   onNavigate?: () => void;
 }) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      title={rail ? item.label : undefined}
+      className={cn(
+        "group/link relative flex items-center rounded-lg text-[13px] font-medium transition-colors",
+        rail ? "justify-center p-2" : "gap-2.5 px-2.5 py-2",
+        active
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      <item.icon className="size-4 shrink-0" />
+      <span className={cn("truncate", rail && "sr-only")}>{item.label}</span>
+
+      {rail && (
+        /*
+          The flyout. Rendered inside the link so hover and focus both reveal
+          it without a scrap of javascript, and marked aria-hidden because the
+          sr-only label above is already the accessible name — announcing both
+          would read the item twice.
+        */
+        <span
+          aria-hidden
+          className="bg-popover text-popover-foreground pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs font-semibold shadow-md group-hover/link:block group-focus-visible/link:block"
+        >
+          {item.label}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/* ============================================================
+ * The list
+ * ========================================================== */
+
+function NavList({
+  groups,
+  active,
+  rail,
+  onNavigate,
+}: {
+  groups: Group[];
+  active: string | undefined;
+  rail: boolean;
+  onNavigate?: () => void;
+}) {
+  const navGroups: NavGroup[] = useMemo(
+    () => groups.map((g) => ({ title: g.title, hrefs: g.items.map((i) => i.href) })),
+    [groups],
+  );
+
+  /*
+   * Read through the store rather than into state. It returns null on the
+   * server and during hydration, so the markup matches, and it updates in
+   * every tab at once — collapse a group on one screen and the other agrees.
+   */
+  const raw = useStoredValue(NAV_CLOSED_GROUPS_KEY);
+  const closed = useMemo(() => parseStored<string[]>(raw, []), [raw]);
+
+  const open = resolveOpenGroups(navGroups, closed, active);
+
+  const toggle = (title: string) =>
+    writeStoredValue(NAV_CLOSED_GROUPS_KEY, JSON.stringify(toggleClosed(closed, title)));
+
+  /*
+   * In the rail there is nowhere to put a group heading and nothing to click
+   * to expand — so groups become a hairline rule and every item is shown. A
+   * collapsed group inside a collapsed sidebar would be a menu item hidden
+   * behind two separate things, neither of them visible.
+   */
+  if (rail) {
+    return (
+      <nav className="space-y-1">
+        {groups.map((group, i) => (
+          <div key={group.title}>
+            {i > 0 && <div className="bg-border/70 mx-auto my-2 h-px w-6" />}
+            <ul className="space-y-1">
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <NavLink
+                    item={item}
+                    active={active === item.href}
+                    rail
+                    onNavigate={onNavigate}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    );
+  }
+
+  return (
+    <nav className="space-y-1">
+      {groups.map((group) => {
+        const isOpen = open.has(group.title);
+        const panelId = `nav-${group.title.toLowerCase().replace(/\W+/g, "-")}`;
+        return (
+          <div key={group.title}>
+            <button
+              type="button"
+              onClick={() => toggle(group.title)}
+              aria-expanded={isOpen}
+              aria-controls={panelId}
+              className="text-muted-foreground/70 hover:text-foreground flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] font-semibold tracking-[0.08em] uppercase transition-colors"
+            >
+              {group.title}
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3.5 transition-transform duration-200 motion-reduce:transition-none",
+                  !isOpen && "-rotate-90",
+                )}
+              />
+            </button>
+
+            <div
+              id={panelId}
+              inert={!isOpen}
+              className={cn(
+                "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+                isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="overflow-hidden">
+                <ul className="space-y-0.5 pb-1">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <NavLink
+                        item={item}
+                        active={active === item.href}
+                        rail={false}
+                        onNavigate={onNavigate}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+/* ============================================================
+ * Desktop sidebar
+ * ========================================================== */
+
+/** The fixed sidebar on desktop, full width or a rail of icons. */
+export function SuperadminSidebar({ perms }: { perms: string[] }) {
   const pathname = usePathname();
   const groups = useGroups(perms);
   const active = activeHref(
@@ -102,142 +285,132 @@ function NavList({
     groups.flatMap((g) => g.items.map((i) => i.href)),
   );
 
-  return (
-    <nav className="space-y-5">
-      {groups.map((group) => (
-        <div key={group.title}>
-          <p className="text-muted-foreground/70 px-2.5 pb-1.5 text-[10px] font-semibold tracking-[0.08em] uppercase">
-            {group.title}
-          </p>
-          <ul className="space-y-0.5">
-            {group.items.map((item) => {
-              const on = active === item.href;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={on ? "page" : undefined}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors",
-                      on
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                    )}
-                  >
-                    <item.icon
-                      className={cn("size-4 shrink-0", on && "text-primary")}
-                    />
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  );
-}
+  const railRaw = useStoredValue(NAV_RAIL_KEY);
+  const rail = parseStored<boolean>(railRaw, false);
+  const toggleRail = () => writeStoredValue(NAV_RAIL_KEY, JSON.stringify(!rail));
 
-/** The fixed sidebar on desktop. */
-export function SuperadminSidebar({ perms }: { perms: string[] }) {
   return (
-    <aside className="hidden w-56 shrink-0 border-r lg:block">
-      <div className="sticky top-14 px-3 py-5">
-        <NavList perms={perms} />
+    <aside
+      data-rail={rail ? "" : undefined}
+      className={cn(
+        "hidden shrink-0 border-r transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block",
+        rail ? "w-[4.25rem]" : "w-56",
+      )}
+    >
+      {/*
+        overflow-visible, deliberately: the rail's hover labels sit outside the
+        sidebar's own width, and a scroll container here would clip every one
+        of them.
+      */}
+      <div className="sticky top-14 overflow-visible px-3 py-4">
+        <NavList groups={groups} active={active} rail={rail} />
+
+        <button
+          type="button"
+          onClick={toggleRail}
+          aria-label={rail ? "Expand the menu" : "Collapse the menu to icons"}
+          aria-pressed={rail}
+          className={cn(
+            "text-muted-foreground hover:bg-accent hover:text-foreground mt-3 flex items-center rounded-lg py-2 text-[13px] font-medium transition-colors",
+            rail ? "w-full justify-center" : "w-full gap-2.5 px-2.5",
+          )}
+        >
+          {rail ? (
+            <PanelLeftOpen className="size-4" />
+          ) : (
+            <>
+              <PanelLeftClose className="size-4" />
+              Collapse
+            </>
+          )}
+        </button>
       </div>
     </aside>
   );
 }
 
+/* ============================================================
+ * Mobile drawer
+ * ========================================================== */
+
 /**
- * The same list behind a button on small screens.
+ * The drawer, portalled to <body>.
  *
- * The drawer is rendered through a portal into `document.body` rather than in
- * place. It has to be: this component sits inside the admin header, and that
- * header carries `backdrop-blur`. A `backdrop-filter` makes an element the
- * containing block for every `position: fixed` descendant, so an in-place
- * `fixed inset-0` resolved against the 56px-tall header instead of the
- * viewport — the panel was clipped to a sliver showing only its title and
- * close button, and every nav link was cut off. On a phone that reads as "the
- * menu doesn't open at all". The portal moves the drawer out from under the
- * blur, so `inset-0` means the viewport again.
+ * The admin header carries `backdrop-blur`, and a blurred element becomes the
+ * containing block for `position: fixed` descendants — so a drawer rendered
+ * inside it resolved against the 56px header and opened as an empty sliver.
+ * The portal is the fix and must stay.
  */
 export function SuperadminMobileNav({ perms }: { perms: string[] }) {
   const [open, setOpen] = useState(false);
+  const mounted = useMounted();
   const pathname = usePathname();
   const groups = useGroups(perms);
-  const items = groups.flatMap((g) => g.items);
   const active = activeHref(
     pathname,
-    items.map((i) => i.href),
+    groups.flatMap((g) => g.items.map((i) => i.href)),
   );
-  const current = items.find((i) => i.href === active);
 
-  // Close on Escape, and don't let the page behind scroll while it's open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
+    window.addEventListener("keydown", onKey);
+    const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
     };
   }, [open]);
-
-  const drawer = (
-    <div className="fixed inset-0 z-[60] lg:hidden">
-      <button
-        type="button"
-        aria-label="Close menu"
-        onClick={() => setOpen(false)}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r shadow-xl">
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <span className="text-sm font-bold">Platform admin</span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-            className="hover:bg-accent -mr-1 rounded-md p-1.5"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div
-          className="min-h-0 flex-1 overflow-y-auto p-4"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
-        >
-          <NavList perms={perms} onNavigate={() => setOpen(false)} />
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hover:bg-accent flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold lg:hidden"
-        aria-label="Open admin menu"
-        aria-expanded={open}
+        aria-label="Open the menu"
+        className="text-muted-foreground hover:text-foreground grid size-11 place-items-center rounded-lg lg:hidden"
       >
-        <Menu className="size-4 shrink-0" />
-        <span className="max-w-[9rem] truncate">
-          {current?.label ?? "Menu"}
-        </span>
+        <Menu className="size-5" />
       </button>
 
-      {/* `open` only ever becomes true from a click, so this never runs
-          during SSR and `document` is always there when it does. */}
-      {open && createPortal(drawer, document.body)}
+      {mounted &&
+        open &&
+        createPortal(
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setOpen(false)}
+            />
+            <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r shadow-xl">
+              <div className="flex h-14 shrink-0 items-center justify-between border-b px-3">
+                <span className="text-sm font-bold">Menu</span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close the menu"
+                  className="text-muted-foreground hover:text-foreground grid size-11 place-items-center rounded-lg"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+              <div
+                className="min-h-0 flex-1 overflow-y-auto px-3 py-4"
+                style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+              >
+                <NavList
+                  groups={groups}
+                  active={active}
+                  rail={false}
+                  onNavigate={() => setOpen(false)}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

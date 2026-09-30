@@ -5,6 +5,7 @@ import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
 import { platformAccess } from "@/lib/platform-access";
 import { Logo } from "@/components/brand";
 import { SignOutButton } from "@/components/app/sign-out-button";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import {
   SuperadminMobileNav,
   SuperadminSidebar,
@@ -54,6 +55,7 @@ export default async function SuperadminLayout({
 
           <div className="flex shrink-0 items-center gap-1.5">
             <CommandPaletteHint />
+            <ThemeToggle />
             <Link
               href="/dashboard"
               className="text-muted-foreground hover:text-foreground hidden items-center gap-1 text-[13px] font-medium sm:inline-flex"
