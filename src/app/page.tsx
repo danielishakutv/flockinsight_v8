@@ -38,15 +38,8 @@ import { APP_VERSION } from "@/lib/version";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  AUDIENCES,
-  BUILT_FOR,
-  FAQ,
-  FEATURES,
-  HIGHLIGHTS,
-  PAINS,
-  STEPS,
-} from "@/lib/landing-content";
+import { FAQ, FEATURES, landingContent } from "@/lib/landing-content";
+import { getLocale } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: "FlockInsight — Church Management Software for Africa",
@@ -100,6 +93,8 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
 };
 
 export default async function LandingPage() {
+  const locale = await getLocale();
+  const c = landingContent(locale);
   const site = siteUrl();
   /**
    * Structured data, for search engines and for AI assistants.
@@ -216,23 +211,19 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-4xl px-4 py-20 text-center lg:py-28">
             <span className="bg-primary/10 text-primary inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold">
               <Star className="size-4 fill-current" />
-              For churches, fellowships & ministries
+              {c.hero.eyebrow}
             </span>
             <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-              Everything your ministry needs,{" "}
-              <span className="text-primary">in one simple app</span>
+              {c.hero.title}{" "}
+              <span className="text-primary">{c.hero.titleAccent}</span>
             </h1>
             <p className="text-muted-foreground mx-auto mt-6 max-w-2xl text-lg text-balance">
-              Stop juggling notebooks, spreadsheets and WhatsApp groups.
-              Attendance, members, groups, classes, giving, church finances and
-              follow-up. Bulk SMS and free email, reminders that send
-              themselves, events, forms, sermons and your own public page —
-              one login, built for Africa.
+              {c.hero.body}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="xl">
                 <Link href="/signup">
-                  Create Free Account <ArrowRight className="size-5" />
+                  {c.hero.ctaPrimary} <ArrowRight className="size-5" />
                 </Link>
               </Button>
               <Button asChild size="xl" variant="outline">
@@ -243,12 +234,12 @@ export default async function LandingPage() {
               </Button>
             </div>
             <p className="text-muted-foreground mt-4 text-sm">
-              First 7 Sundays free • No card required • Cancel anytime
+              {c.hero.reassurance}
             </p>
 
             {/* Stats */}
             <div className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-6 lg:grid-cols-4">
-              {HIGHLIGHTS.map((s) => (
+              {c.highlights.map((s) => (
                 <div key={s.label}>
                   <div className="text-primary text-3xl font-extrabold lg:text-4xl">
                     {s.value}
@@ -270,7 +261,7 @@ export default async function LandingPage() {
                 Sound familiar?
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                The daily headaches of running a ministry
+                {c.painsTitle}
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
                 If any of these feel like you, you&apos;re not alone — and you
@@ -278,7 +269,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {PAINS.map((p) => (
+              {c.pains.map((p) => (
                 <div
                   key={p}
                   className="bg-card rounded-2xl border border-dashed p-5 text-pretty"
@@ -288,7 +279,7 @@ export default async function LandingPage() {
               ))}
             </div>
             <p className="mt-8 text-center text-lg font-semibold">
-              FlockInsight fixes all of this — in one place. 👇
+              {c.painsOutro}
             </p>
           </div>
         </section>
@@ -301,7 +292,7 @@ export default async function LandingPage() {
                 Features
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Everything you need to grow your ministry
+                {c.featuresTitle}
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
                 One affordable platform that replaces a dozen tools — simple
@@ -309,7 +300,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mx-auto mb-10 mt-6 flex max-w-3xl flex-wrap justify-center gap-2">
-              {AUDIENCES.map((a) => (
+              {c.audiences.map((a) => (
                 <span
                   key={a}
                   className="bg-background rounded-full border px-3 py-1 text-sm font-semibold"
@@ -319,7 +310,7 @@ export default async function LandingPage() {
               ))}
             </div>
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map((f) => {
+              {c.features.map((f) => {
                 const Icon = FEATURE_ICONS[f.icon] ?? BookOpen;
                 return (
                   <Card
@@ -350,7 +341,7 @@ export default async function LandingPage() {
                 Simple Process
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Get Started in Minutes
+                {c.stepsTitle}
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
                 No technical expertise required. Set up your church management
@@ -358,7 +349,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mt-12 grid gap-8 md:grid-cols-3">
-              {STEPS.map((s) => (
+              {c.steps.map((s) => (
                 <div key={s.n} className="text-center">
                   <div className="from-primary mx-auto grid size-16 place-items-center rounded-2xl bg-gradient-to-br to-violet-500 text-2xl font-extrabold text-white shadow-lg">
                     {s.n}
@@ -382,7 +373,7 @@ export default async function LandingPage() {
                 Why this one
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Built for how African churches actually work
+                {c.builtForTitle}
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
                 Most church software is built for an American congregation with
@@ -391,7 +382,7 @@ export default async function LandingPage() {
               </p>
             </div>
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {BUILT_FOR.map((b) => (
+              {c.builtFor.map((b) => (
                 <Card key={b.title}>
                   <CardContent>
                     <div className="flex items-start gap-2.5">
@@ -501,11 +492,11 @@ export default async function LandingPage() {
                 Questions
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Straight answers
+                {c.faqTitle}
               </h2>
             </div>
             <div className="mt-10 divide-y rounded-2xl border">
-              {FAQ.map((f) => (
+              {c.faq.map((f) => (
                 <details key={f.q} className="group p-5">
                   <summary className="cursor-pointer list-none text-lg font-bold">
                     {f.q}
@@ -525,7 +516,7 @@ export default async function LandingPage() {
             <Card className="from-primary overflow-hidden bg-gradient-to-br to-violet-600 text-center text-white">
               <CardContent className="px-6 py-14">
                 <h2 className="text-3xl font-extrabold tracking-tight text-balance lg:text-4xl">
-                  Start with this Sunday
+                  {c.ctaTitle}
                 </h2>
                 <p className="mx-auto mt-4 max-w-2xl text-lg text-white/85">
                   Set your church up in about half an hour, and record your

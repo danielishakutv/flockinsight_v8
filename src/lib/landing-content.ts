@@ -1,3 +1,6 @@
+import { fr as frContent } from "@/lib/landing-content-fr";
+import { pt as ptContent } from "@/lib/landing-content-pt";
+
 /**
  * Landing page copy, kept as data.
  *
@@ -249,3 +252,96 @@ export const FAQ: { q: string; a: string }[] = [
     a: "No. If you can use WhatsApp you can use FlockInsight. Setting up a church takes about half an hour, and there are step-by-step guides for every part of it inside the app.",
   },
 ];
+
+/* ============================================================
+ * Languages
+ * ========================================================== */
+
+/**
+ * The whole public site's copy, as one shape per language.
+ *
+ * Headings live here beside the data they head, rather than in the app's
+ * dictionary. The landing page is one continuous argument — a section title,
+ * its lead-in and its items are written together and have to be TRANSLATED
+ * together, and splitting them across two systems is how a heading ends up in
+ * French above a list still in English.
+ *
+ * The English below is assembled from the constants above so there is exactly
+ * one copy of each sentence; `llms.txt` and the FAQ structured data keep
+ * reading those constants directly.
+ */
+export type LandingContent = {
+  hero: {
+    eyebrow: string;
+    title: string;
+    /** The coloured tail of the headline, so it can move in translation. */
+    titleAccent: string;
+    body: string;
+    ctaPrimary: string;
+    ctaSecondary: string;
+    reassurance: string;
+  };
+  highlights: { value: string; label: string }[];
+  painsTitle: string;
+  painsIntro: string;
+  painsOutro: string;
+  pains: string[];
+  featuresTitle: string;
+  features: LandingFeature[];
+  stepsTitle: string;
+  steps: { n: number; title: string; body: string }[];
+  builtForTitle: string;
+  builtFor: { title: string; body: string }[];
+  audiencesTitle: string;
+  audiences: string[];
+  faqTitle: string;
+  faq: { q: string; a: string }[];
+  ctaTitle: string;
+  ctaBody: string;
+  footerTagline: string;
+};
+
+export const en: LandingContent = {
+  hero: {
+    eyebrow: "For churches, fellowships & ministries",
+    title: "Everything your ministry needs,",
+    titleAccent: "in one simple app",
+    body: "Stop juggling notebooks, spreadsheets and WhatsApp groups. Attendance, members, groups, classes, giving, church finances and follow-up. Bulk SMS and free email, reminders that send themselves, events, forms, sermons and your own public page — one login, built for Africa.",
+    ctaPrimary: "Start free",
+    ctaSecondary: "See pricing",
+    reassurance: "First 7 Sundays free • No card required • Cancel anytime",
+  },
+  highlights: HIGHLIGHTS,
+  painsTitle: "The daily headaches of running a ministry",
+  painsIntro:
+    "If any of these feel like you, you're not alone — and it isn't your fault.",
+  painsOutro: "FlockInsight fixes all of this — in one place. 👇",
+  pains: PAINS,
+  featuresTitle: "Everything you need to grow your ministry",
+  features: FEATURES,
+  stepsTitle: "Get started in minutes",
+  steps: STEPS,
+  builtForTitle: "Built for how African churches actually work",
+  builtFor: BUILT_FOR,
+  audiencesTitle: "Built for",
+  audiences: AUDIENCES,
+  faqTitle: "Straight answers",
+  faq: FAQ,
+  ctaTitle: "Start with this Sunday",
+  ctaBody: "Seven Sundays free. No card required. Your data stays yours.",
+  footerTagline:
+    "Empowering churches with modern management tools to grow and thrive.",
+};
+
+/**
+ * The copy for one language, falling back to English.
+ *
+ * Synchronous and statically imported: this is a few kilobytes of text and the
+ * landing page needs it while rendering, so there is nothing to gain from
+ * deferring it and a flash of English to lose.
+ */
+export function landingContent(locale: string): LandingContent {
+  if (locale === "fr") return frContent;
+  if (locale === "pt") return ptContent;
+  return en;
+}
