@@ -233,6 +233,9 @@ export const pt: PartialDictionary = {
   },
 
   attendance: {
+    pickAServiceThenTap: "Escolha um culto e toque para contar. O total atualiza-se em direto.",
+    updateTheHeadcountOrRemove: "Corrija a contagem ou remova este registo.",
+    alreadyCountedAbove: "Já contados acima",
     noAttendanceYet: "Ainda não há presenças",
     recordAttendance: "Registar presenças",
     editAttendance: "Editar presenças",
@@ -273,6 +276,14 @@ export const pt: PartialDictionary = {
   },
 
   members: {
+    confirmItAposSYou: "Confirme que é mesmo você",
+    yearIsOptional: "O ano é opcional.",
+    enterAtLeastAnEmail: "Indique pelo menos um e-mail ou número de telefone.",
+    optionalAddYourChildrenSo: "Opcional — adicione os seus filhos para que façam parte da família e sejam também celebrados.",
+    optionalSoWeCanCelebrate: "Opcional — para podermos celebrar consigo.",
+    tickAnyYouBelongTo: "Assinale aqueles a que pertence (ou a que gostaria de aderir).",
+    keepAtLeastAnEmail: "Mantenha pelo menos um e-mail ou número de telefone para continuarmos em contacto.",
+    addYourChildrenSoThey: "Adicione os seus filhos para que façam parte da família e sejam também celebrados.",
     fulfilled: "Cumprido",
     cancelled: "Cancelado",
     title: "Membros",
@@ -454,6 +465,9 @@ export const pt: PartialDictionary = {
   },
 
   giving: {
+    runBuildingFundsAndOther: "Faça campanhas de construção e outras — acompanhe compromissos e pagamentos até ao fim.",
+    howTheyAposLlGive: "Como vão contribuir",
+    sendReceiptAmpBlessing: "Enviar recibo e bênção",
     projectsPledges: "Projetos e compromissos",
     exportCsv: "Exportar CSV",
     outstandingPledges: "Compromissos por cumprir",
@@ -553,6 +567,11 @@ export const pt: PartialDictionary = {
   },
 
   finance: {
+    whereTheChurchSMoney: "Onde está o dinheiro da igreja. Os saldos são apurados a partir do que regista, por isso nunca ficam desatualizados.",
+    whatIncomeAndSpendingIs: "Como as receitas e as despesas são classificadas. É por aqui que as repartições e os relatórios agrupam.",
+    inTheSelectedRange: "no período selecionado",
+    acrossAllOpenAccountsToday: "em todas as contas abertas, hoje",
+    incomeAmpExpense: "Receitas e despesas",
     noAccountsYet: "Ainda não há contas",
     type: "Tipo",
     bankProvider: "Banco / prestador",
@@ -750,6 +769,10 @@ export const pt: PartialDictionary = {
   },
 
   meetings: {
+    everyoneStartsAudioOnlyThe: "Todos começam apenas com áudio. A definição certa para uma reunião de oração a que se entra com dados móveis.",
+    youLetEachPersonIn: "É você que deixa entrar cada pessoa. Vale a pena para aconselhamento ou uma reunião de direção.",
+    hostsAlwaysCan: "Os anfitriões podem sempre.",
+    onlyAHostCanStart: "Só um anfitrião pode iniciar, e todos são avisados quando o faz.",
     name: "Nome",
     joined: "Entrou",
     left: "Saiu",
@@ -1083,6 +1106,7 @@ export const pt: PartialDictionary = {
   },
 
   forms: {
+    responsesUpdateLiveAsThey: "As respostas aparecem em direto à medida que chegam.",
     memberSelfRegistration: "Autoinscrição de membros",
     title: "Formulários",
     subtitle: "Crie um formulário, partilhe a ligação, recolha as respostas.",
@@ -1305,6 +1329,10 @@ export const pt: PartialDictionary = {
   },
 
   settings: {
+    chooseTheGroupsYourChurch: "Escolha os grupos que a sua igreja conta ao domingo, e como lhes chama.",
+    manageYourChurchProfileServices: "Faça a gestão do perfil da igreja, dos cultos, das ofertas, das finanças e da equipa.",
+    weLlSendReceiptsAlerts: "É para aqui que enviamos recibos, alertas e avisos da conta.",
+    usedForUrgentAccountMessages: "Usado para mensagens urgentes da conta. Números nigerianos: 0803… ou +234803…",
     whoYouCount: "Quem conta",
     accounts: "Contas",
     for: "para",
@@ -1647,6 +1675,8 @@ export const pt: PartialDictionary = {
   },
 
   public: {
+    weRsquoVeGotIt: "Recebemos",
+    youAposReSubscribed: "Subscrição feita!",
     orStartFreeRightNow: "Ou comece gratuitamente agora mesmo",
     churchName: "Nome da igreja",
     yourName: "O seu nome",
@@ -1700,6 +1730,7 @@ export const pt: PartialDictionary = {
   },
 
   livestreams: {
+    broadcastAServiceToAnyone: "Transmita um culto a quem tiver o link — e também para o YouTube ou o Facebook.",
     noLivestreamsYet: "Ainda não há transmissões",
     open: "Abrir",
     livestreams: "Transmissões em direto",

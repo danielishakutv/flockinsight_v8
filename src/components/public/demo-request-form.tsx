@@ -41,7 +41,7 @@ export function DemoRequestForm() {
     return (
       <div className="bg-card rounded-2xl border p-8 text-center shadow-sm">
         <CheckCircle2 className="text-success mx-auto size-10" />
-        <h2 className="mt-3 text-xl font-extrabold">We&rsquo;ve got it</h2>
+        <h2 className="mt-3 text-xl font-extrabold">{t("public.weRsquoVeGotIt")}</h2>
         <p className="text-muted-foreground mt-2 text-sm">
           Someone from FlockInsight will call you within one working day. If it
           is urgent, WhatsApp us on{" "}

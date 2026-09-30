@@ -298,7 +298,7 @@ export function RecordForm({
         <CountGroup
           id="first-timers"
           title={t("attendance.firstTimers")}
-          subtitle="Already counted above"
+          subtitle={t("attendance.alreadyCountedAbove")}
           muted
           male={ftM}
           female={ftF}
@@ -316,7 +316,7 @@ export function RecordForm({
         <CountGroup
           id="new-converts"
           title={t("attendance.newConverts")}
-          subtitle="Already counted above"
+          subtitle={t("attendance.alreadyCountedAbove")}
           muted
           male={ncM}
           female={ncF}

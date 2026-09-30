@@ -216,7 +216,7 @@ export function MeetingDialog({
 
           <Toggle
             label={t("meetings.lowDataModeByDefault")}
-            hint="Everyone starts audio-only. The right setting for a prayer meeting people join on mobile data."
+            hint={t("meetings.everyoneStartsAudioOnlyThe")}
             checked={values.lowDataDefault}
             onChange={(v) => set("lowDataDefault", v)}
           />
@@ -266,7 +266,7 @@ export function MeetingDialog({
 
               <Toggle
                 label={t("meetings.waitInALobby")}
-                hint="You let each person in. Worth it for counselling or a board meeting."
+                hint={t("meetings.youLetEachPersonIn")}
                 checked={values.lobby}
                 onChange={(v) => set("lobby", v)}
               />
@@ -292,13 +292,13 @@ export function MeetingDialog({
               />
               <Toggle
                 label={t("meetings.letAnyoneShareTheirScreen")}
-                hint="Hosts always can."
+                hint={t("meetings.hostsAlwaysCan")}
                 checked={values.allowScreenShare}
                 onChange={(v) => set("allowScreenShare", v)}
               />
               <Toggle
                 label={t("meetings.allowRecording")}
-                hint="Only a host can start one, and everyone is told when they do."
+                hint={t("meetings.onlyAHostCanStart")}
                 checked={values.allowRecording}
                 onChange={(v) => set("allowRecording", v)}
               />

@@ -155,7 +155,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
             <ShieldCheck className="size-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Confirm it&apos;s you</h2>
+            <h2 className="text-lg font-bold">{t("members.confirmItAposSYou")}</h2>
             <p className="text-muted-foreground text-sm">
               We sent a 6-digit code to <b>{otp.masked}</b> ({otp.channel}). Enter
               it to save your changes.
@@ -218,7 +218,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
             </Select>
           </Field>
           {config.collectBirthday && (
-            <Field label={t("members.dateOfBirth")} hint="Year optional">
+            <Field label={t("members.dateOfBirth")} hint={t("members.yearOptional")}>
               <BirthdayInput
                 value={values.dateOfBirth}
                 onChange={(v) => set("dateOfBirth", v)}
@@ -228,7 +228,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
         </div>
       </Section>
 
-      <Section title={t("members.howWeReachYou")} hint="Keep at least an email or phone number so we can stay in touch.">
+      <Section title={t("members.howWeReachYou")} hint={t("members.keepAtLeastAnEmail")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("members.phone")}>
             <Input type="tel" value={values.phone} onChange={(e) => set("phone", e.target.value)} />
@@ -242,7 +242,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       {config.collectChildren && (
         <Section
           title={t("members.yourChildren")}
-          hint="Add your children so they're part of the family and celebrated too."
+          hint={t("members.addYourChildrenSoThey")}
         >
           {data.children.length > 0 && (
             <div className="mb-3 space-y-1.5">
@@ -297,7 +297,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
                       </Select>
                     </Field>
                   </div>
-                  <Field label={t("members.dateOfBirth")} hint="Year optional">
+                  <Field label={t("members.dateOfBirth")} hint={t("members.yearOptional")}>
                     <BirthdayInput
                       value={c.dateOfBirth}
                       onChange={(v) => setChild(i, { dateOfBirth: v })}
@@ -316,7 +316,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.collectAnniversary && (
-        <Section title={t("members.milestones")} hint="Optional — so we can celebrate with you.">
+        <Section title={t("members.milestones")} hint={t("members.optionalSoWeCanCelebrate")}>
           <Field label={t("members.weddingAnniversary")}>
             <Input
               type="date"
@@ -329,7 +329,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.collectAddress && (
-        <Section title={t("members.whereYouLive")} hint="Optional.">
+        <Section title={t("members.whereYouLive")} hint={t("members.optional")}>
           <div className="grid gap-4">
             <Field label={t("members.address")}>
               <Input value={values.address} onChange={(e) => set("address", e.target.value)} />
@@ -347,7 +347,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.allowGroupSelect && data.groups.length > 0 && (
-        <Section title={t("members.ministriesGroups")} hint="Tick any you belong to (or would like to join).">
+        <Section title={t("members.ministriesGroups")} hint={t("members.tickAnyYouBelongTo")}>
           <div className="grid gap-2 sm:grid-cols-2">
             {data.groups.map((g) => (
               <label

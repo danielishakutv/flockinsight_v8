@@ -490,7 +490,7 @@ function PledgeDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>How they&apos;ll give</Label>
+              <Label>{t("giving.howTheyAposLlGive")}</Label>
               <Select value={cadence} onValueChange={(v) => setCadence(v as PledgeInput["cadence"])}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -661,7 +661,7 @@ function PaymentDialog({
           </div>
           {receiptsEnabled && pl.memberId && (
             <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
-              <span className="text-sm font-semibold">Send receipt &amp; blessing</span>
+              <span className="text-sm font-semibold">{t("giving.sendReceiptAmpBlessing")}</span>
               <Switch checked={sendReceipt} onCheckedChange={setSendReceipt} />
             </label>
           )}

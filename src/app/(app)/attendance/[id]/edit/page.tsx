@@ -50,7 +50,7 @@ export default async function EditAttendancePage({
     <PageContainer className="max-w-2xl">
       <PageHeader
         title={t("attendance.editAttendance")}
-        description="Update the headcount or remove this record."
+        description={t("attendance.updateTheHeadcountOrRemove")}
         action={<DeleteSessionButton id={row.id} />}
       />
       <RecordForm

@@ -28,7 +28,7 @@ export default async function FinanceCategoriesPage() {
       </Button>
       <PageHeader
         title={t("finance.categories")}
-        description="What income and spending is counted as. These are what the breakdowns and reports group by."
+        description={t("finance.whatIncomeAndSpendingIs")}
       />
       <CategoriesManager
         canManage={canManage}

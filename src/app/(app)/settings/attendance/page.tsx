@@ -22,7 +22,7 @@ export default async function AttendanceSettingsPage() {
     <PageContainer className="max-w-2xl">
       <PageHeader
         title={t("settings.whoYouCount")}
-        description="Choose the groups your church counts on a Sunday, and what you call them."
+        description={t("settings.chooseTheGroupsYourChurch")}
       />
       <AttendanceBandsForm
         bands={bands.map((b) => ({

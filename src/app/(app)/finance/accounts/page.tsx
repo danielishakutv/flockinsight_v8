@@ -40,7 +40,7 @@ export default async function FinanceAccountsPage() {
       </Button>
       <PageHeader
         title={t("finance.accounts")}
-        description="Where the church's money sits. Balances are worked out from what you record, so they cannot go stale."
+        description={t("finance.whereTheChurchSMoney")}
       />
       <div className="space-y-10">
         <AccountsManager

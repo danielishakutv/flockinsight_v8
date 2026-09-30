@@ -25,7 +25,7 @@ export default async function RecordPage() {
     <PageContainer className="max-w-2xl">
       <PageHeader
         title={t("attendance.recordAttendance")}
-        description="Pick a service, then tap to count. The total updates live."
+        description={t("attendance.pickAServiceThenTap")}
       />
       <RecordForm services={services} bands={recordingBands(church.attendanceBands)} />
     </PageContainer>

@@ -26,7 +26,25 @@ import { join, relative } from "node:path";
 
 const ROOT = process.cwd();
 const EN = "src/lib/i18n/dictionaries/en.ts";
-const TEXT_PROPS = ["placeholder", "title", "aria-label", "label", "alt"];
+/*
+ * Props whose value a person reads.
+ *
+ * `hint`, `description` and `subtitle` belong to this app's own Field, Section
+ * and PageHeader components, and between them they held a third of the last
+ * ninety untranslated strings — nearly all of them the sentence under an input
+ * explaining what to put there, which is the text a first-time user reads most
+ * carefully and the last text anyone thinks to translate.
+ */
+const TEXT_PROPS = [
+  "placeholder",
+  "title",
+  "aria-label",
+  "label",
+  "alt",
+  "hint",
+  "description",
+  "subtitle",
+];
 
 /**
  * Which hook this file may call.
@@ -65,6 +83,33 @@ function sectionFor(rel) {
     rel.match(/src\/app\/\(app\)\/([a-z-]+)\//);
   const raw = m ? m[1] : "common";
   return raw.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+/**
+ * `&apos;` is markup, not a character.
+ *
+ * It is correct in raw JSX and wrong the moment the string moves into the
+ * dictionary, because `{t("key")}` is escaped by React — so the entity would
+ * reach the screen as its five literal characters. Decoded before storing, and
+ * to the typographic forms the rest of the dictionary already uses.
+ */
+const ENTITIES = {
+  "&apos;": "\u2019",
+  "&#39;": "\u2019",
+  "&rsquo;": "\u2019",
+  "&lsquo;": "\u2018",
+  "&quot;": '"',
+  "&ldquo;": "\u201c",
+  "&rdquo;": "\u201d",
+  "&amp;": "&",
+  "&nbsp;": "\u00a0",
+  "&mdash;": "\u2014",
+  "&ndash;": "\u2013",
+  "&hellip;": "\u2026",
+};
+
+function decodeEntities(text) {
+  return text.replace(/&[a-z]+;|&#\d+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m);
 }
 
 /** A stable camelCase key from the English text. */
@@ -114,7 +159,13 @@ function isNotProse(s) {
  * does not begin with `=` or a digit.
  */
 function looksLikeCode(t) {
-  if (/&&|\|\||==|=>|;|\breturn\b|\bconst\b/.test(t)) return true;
+  /*
+   * An HTML entity is prose. `Confirm it&apos;s you` was thrown out as code by
+   * the `;` rule below — the rule that catches a statement — so every
+   * apostrophe written as an entity hid its string from this script.
+   */
+  const bare = t.replace(/&[a-z]+;|&#\d+;/gi, "'");
+  if (/&&|\|\||==|=>|;|\breturn\b|\bconst\b/.test(bare)) return true;
   if (/\b\w+\.\w+\(/.test(t)) return true;
   if (!/^[A-Za-z"'£$€₦]/.test(t)) return true;
   /*
@@ -308,7 +359,9 @@ for (const file of files) {
   const take = (text) => {
     const key = keyFor(text);
     if (!key) return null;
-    used.set(key, text);
+    // The KEY is built from the raw text so it stays stable; the VALUE is
+    // decoded, because that is the one that gets rendered.
+    used.set(key, decodeEntities(text));
     return `${section}.${key}`;
   };
 

@@ -173,7 +173,7 @@ export function FinanceFilters({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ANY}>Income &amp; expense</SelectItem>
+                  <SelectItem value={ANY}>{t("finance.incomeAmpExpense")}</SelectItem>
                   <SelectItem value="income">{KIND_LABEL.income}</SelectItem>
                   <SelectItem value="expense">{KIND_LABEL.expense}</SelectItem>
                 </SelectContent>

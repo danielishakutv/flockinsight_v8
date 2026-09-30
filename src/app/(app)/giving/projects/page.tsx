@@ -28,7 +28,7 @@ export default async function ProjectsPage() {
       </Button>
       <PageHeader
         title={t("giving.projectsPledges")}
-        description="Run building funds and other campaigns — track pledges and payments to completion."
+        description={t("giving.runBuildingFundsAndOther")}
         action={
           <Button asChild variant="outline">
             <Link href="/giving/projects/report">

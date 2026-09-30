@@ -35,7 +35,7 @@ export function NewsletterSignup({
       <div className="flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 p-5 text-white backdrop-blur">
         <CheckCircle2 className="size-7 shrink-0" />
         <div>
-          <p className="font-semibold">You&apos;re subscribed!</p>
+          <p className="font-semibold">{t("public.youAposReSubscribed")}</p>
           <p className="text-sm text-white/80">
             You&apos;ll get devotionals & updates from {churchName}.
           </p>

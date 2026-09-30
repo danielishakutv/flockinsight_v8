@@ -53,7 +53,7 @@ export default async function LivestreamsPage() {
     <PageContainer>
       <PageHeader
         title={t("livestreams.livestreams")}
-        description="Broadcast a service to anyone with the link — and on to YouTube or Facebook."
+        description={t("livestreams.broadcastAServiceToAnyone")}
         action={
           canManage ? <NewLivestream streamConfigured={configured} /> : undefined
         }

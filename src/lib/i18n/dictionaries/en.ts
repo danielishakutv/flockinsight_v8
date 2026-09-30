@@ -258,6 +258,9 @@ export const en = {
    * Attendance
    * ========================================================== */
   attendance: {
+    pickAServiceThenTap: "Pick a service, then tap to count. The total updates live.",
+    updateTheHeadcountOrRemove: "Update the headcount or remove this record.",
+    alreadyCountedAbove: "Already counted above",
     noAttendanceYet: "No attendance yet",
     recordAttendance: "Record Attendance",
     editAttendance: "Edit attendance",
@@ -301,6 +304,14 @@ export const en = {
    * Members
    * ========================================================== */
   members: {
+    confirmItAposSYou: "Confirm it’s you",
+    yearIsOptional: "Year is optional.",
+    enterAtLeastAnEmail: "Enter at least an email or phone number.",
+    optionalAddYourChildrenSo: "Optional — add your children so they're part of the family and celebrated too.",
+    optionalSoWeCanCelebrate: "Optional — so we can celebrate with you.",
+    tickAnyYouBelongTo: "Tick any you belong to (or would like to join).",
+    keepAtLeastAnEmail: "Keep at least an email or phone number so we can stay in touch.",
+    addYourChildrenSoThey: "Add your children so they're part of the family and celebrated too.",
     fulfilled: "Fulfilled",
     cancelled: "Cancelled",
     day: "Day",
@@ -488,6 +499,9 @@ export const en = {
    * Giving
    * ========================================================== */
   giving: {
+    runBuildingFundsAndOther: "Run building funds and other campaigns — track pledges and payments to completion.",
+    howTheyAposLlGive: "How they’ll give",
+    sendReceiptAmpBlessing: "Send receipt & blessing",
     projectsPledges: "Projects & pledges",
     exportCsv: "Export CSV",
     outstandingPledges: "Outstanding pledges",
@@ -590,6 +604,11 @@ export const en = {
    * Finance
    * ========================================================== */
   finance: {
+    whereTheChurchSMoney: "Where the church's money sits. Balances are worked out from what you record, so they cannot go stale.",
+    whatIncomeAndSpendingIs: "What income and spending is counted as. These are what the breakdowns and reports group by.",
+    inTheSelectedRange: "in the selected range",
+    acrossAllOpenAccountsToday: "across all open accounts, today",
+    incomeAmpExpense: "Income & expense",
     noAccountsYet: "No accounts yet",
     type: "Type",
     bankProvider: "Bank / provider",
@@ -796,6 +815,10 @@ export const en = {
    * Meetings — the list, and the room itself
    * ========================================================== */
   meetings: {
+    everyoneStartsAudioOnlyThe: "Everyone starts audio-only. The right setting for a prayer meeting people join on mobile data.",
+    youLetEachPersonIn: "You let each person in. Worth it for counselling or a board meeting.",
+    hostsAlwaysCan: "Hosts always can.",
+    onlyAHostCanStart: "Only a host can start one, and everyone is told when they do.",
     name: "Name",
     joined: "Joined",
     left: "Left",
@@ -1133,6 +1156,7 @@ export const en = {
     none: "Nothing written yet.",
   },
   forms: {
+    responsesUpdateLiveAsThey: "Responses update live as they come in.",
     memberSelfRegistration: "Member self-registration",
     share: "Share",
     publicLink: "Public link",
@@ -1353,6 +1377,10 @@ export const en = {
    * Settings
    * ========================================================== */
   settings: {
+    chooseTheGroupsYourChurch: "Choose the groups your church counts on a Sunday, and what you call them.",
+    manageYourChurchProfileServices: "Manage your church profile, services, giving, finances and team.",
+    weLlSendReceiptsAlerts: "We'll send receipts, alerts and account notices here.",
+    usedForUrgentAccountMessages: "Used for urgent account messages. Nigerian numbers: 0803… or +234803…",
     whoYouCount: "Who you count",
     accounts: "Accounts",
     for: "for",
@@ -1698,6 +1726,7 @@ export const en = {
   },
 
   livestreams: {
+    broadcastAServiceToAnyone: "Broadcast a service to anyone with the link — and on to YouTube or Facebook.",
     noLivestreamsYet: "No livestreams yet",
     open: "Open",
     livestreams: "Livestreams",
@@ -1749,6 +1778,8 @@ export const en = {
   },
 
   public: {
+    weRsquoVeGotIt: "We’ve got it",
+    youAposReSubscribed: "You’re subscribed!",
     orStartFreeRightNow: "Or start free right now",
     churchName: "Church name",
     yourName: "Your name",

@@ -188,7 +188,7 @@ export function VerificationManager({
             channel="email"
             icon={Mail}
             label={t("settings.accountEmailAddress")}
-            hint="We'll send receipts, alerts and account notices here."
+            hint={t("settings.weLlSendReceiptsAlerts")}
             placeholder="office@yourchurch.org"
             inputType="email"
             value={contactEmail}
@@ -210,7 +210,7 @@ export function VerificationManager({
             channel="phone"
             icon={Phone}
             label={t("settings.accountPhoneNumber")}
-            hint="Used for urgent account messages. Nigerian numbers: 0803… or +234803…"
+            hint={t("settings.usedForUrgentAccountMessages")}
             placeholder="08012345678"
             inputType="tel"
             value={contactPhone}

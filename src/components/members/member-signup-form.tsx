@@ -185,7 +185,7 @@ export function MemberSignupForm({
             <ShieldCheck className="size-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Confirm it&apos;s you</h2>
+            <h2 className="text-lg font-bold">{t("members.confirmItAposSYou")}</h2>
             <p className="text-muted-foreground text-sm">
               You already have a record with us. We sent a 6-digit code to{" "}
               <b>{otp.masked}</b> ({otp.channel}). Enter it to update your details.
@@ -262,7 +262,7 @@ export function MemberSignupForm({
             </Select>
           </Field>
           {config.collectBirthday && (
-            <Field label={t("members.dateOfBirth")} hint="Year is optional.">
+            <Field label={t("members.dateOfBirth")} hint={t("members.yearIsOptional")}>
               <BirthdayInput
                 value={values.dateOfBirth}
                 onChange={(v) => set("dateOfBirth", v)}
@@ -272,7 +272,7 @@ export function MemberSignupForm({
         </div>
       </Section>
 
-      <Section title={t("members.howWeReachYou")} hint="Enter at least an email or phone number.">
+      <Section title={t("members.howWeReachYou")} hint={t("members.enterAtLeastAnEmail")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("members.phone")}>
             <Input
@@ -294,7 +294,7 @@ export function MemberSignupForm({
       {config.collectChildren && (
         <Section
           title={t("members.yourChildren")}
-          hint="Optional — add your children so they're part of the family and celebrated too."
+          hint={t("members.optionalAddYourChildrenSo")}
         >
           <div className="space-y-3">
             {values.children.map((c, i) => (
@@ -332,7 +332,7 @@ export function MemberSignupForm({
                       </Select>
                     </Field>
                   </div>
-                  <Field label={t("members.dateOfBirth")} hint="Year optional">
+                  <Field label={t("members.dateOfBirth")} hint={t("members.yearOptional")}>
                     <BirthdayInput
                       value={c.dateOfBirth}
                       onChange={(v) => setChild(i, { dateOfBirth: v })}
@@ -351,7 +351,7 @@ export function MemberSignupForm({
       )}
 
       {config.collectAnniversary && (
-        <Section title={t("members.milestones")} hint="Optional — so we can celebrate with you.">
+        <Section title={t("members.milestones")} hint={t("members.optionalSoWeCanCelebrate")}>
           <Field label={t("members.weddingAnniversary")}>
             <Input
               type="date"
@@ -364,7 +364,7 @@ export function MemberSignupForm({
       )}
 
       {config.collectAddress && (
-        <Section title={t("members.whereYouLive")} hint="Optional.">
+        <Section title={t("members.whereYouLive")} hint={t("members.optional")}>
           <div className="grid gap-4">
             <Field label={t("members.address")}>
               <Input value={values.address} onChange={(e) => set("address", e.target.value)} />
@@ -384,7 +384,7 @@ export function MemberSignupForm({
       {config.allowGroupSelect && groups.length > 0 && (
         <Section
           title={t("members.ministriesGroups")}
-          hint="Tick any you belong to (or would like to join)."
+          hint={t("members.tickAnyYouBelongTo")}
         >
           <div className="grid gap-2 sm:grid-cols-2">
             {groups.map((g) => (

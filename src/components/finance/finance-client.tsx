@@ -248,14 +248,14 @@ export function FinanceClient({
           value={formatMoney(summary.income, currency)}
           icon={ArrowDownLeft}
           tone="text-emerald-600 dark:text-emerald-400"
-          hint="in the selected range"
+          hint={t("finance.inTheSelectedRange")}
         />
         <StatCard
           label={t("finance.expenses")}
           value={formatMoney(summary.expense, currency)}
           icon={ArrowUpRight}
           tone="text-rose-600 dark:text-rose-400"
-          hint="in the selected range"
+          hint={t("finance.inTheSelectedRange")}
         />
         <StatCard
           label={t("finance.net")}
@@ -273,7 +273,7 @@ export function FinanceClient({
           value={formatMoney(summary.cashOnHand, currency)}
           icon={Wallet}
           tone="text-foreground"
-          hint="across all open accounts, today"
+          hint={t("finance.acrossAllOpenAccountsToday")}
         />
       </div>
 

@@ -22,7 +22,7 @@ export default async function SettingsLayout({
     <PageContainer className="max-w-6xl">
       <PageHeader
         title={t("settings.settings")}
-        description="Manage your church profile, services, giving, finances and team."
+        description={t("settings.manageYourChurchProfileServices")}
       />
       <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
         <SettingsNav

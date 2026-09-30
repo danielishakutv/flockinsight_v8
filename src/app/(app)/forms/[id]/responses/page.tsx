@@ -11,6 +11,7 @@ import { type FormField, type FieldValue } from "@/lib/forms-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { FormResponsesLive } from "@/components/forms/form-responses-live";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Responses" };
 
@@ -19,6 +20,7 @@ export default async function FormResponsesPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = await getT();
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
 
@@ -56,7 +58,7 @@ export default async function FormResponsesPage({
           <ArrowLeft className="size-4" /> Forms
         </Link>
       </Button>
-      <PageHeader title={f.title} description="Responses update live as they come in." />
+      <PageHeader title={f.title} description={t("forms.responsesUpdateLiveAsThey")} />
 
       <FormResponsesLive
         formId={id}
