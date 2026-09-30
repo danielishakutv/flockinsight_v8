@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { UsersRound } from "lucide-react";
 import type { MemberBreakdown } from "@/lib/dashboard-data";
+import { getT } from "@/lib/i18n/server";
 import { CategoryDonut } from "@/components/charts/category-donut";
 import {
   Card,
@@ -45,7 +46,8 @@ function StatusBar({
  * Who's in the congregation: the gender split as a donut, plus how people are
  * classified and how many we can actually reach.
  */
-export function PeopleSnapshot({ data }: { data: MemberBreakdown }) {
+export async function PeopleSnapshot({ data }: { data: MemberBreakdown }) {
+  const t = await getT();
   const donut = [
     { name: "Men", value: data.male, color: "var(--chart-1)" },
     { name: "Women", value: data.female, color: "var(--chart-5)" },
@@ -74,25 +76,25 @@ export function PeopleSnapshot({ data }: { data: MemberBreakdown }) {
 
         <div className="space-y-3 self-center">
           <StatusBar
-            label="Active members"
+            label={t("dashboard.activeMembers")}
             value={data.active}
             total={data.total}
             color="var(--chart-1)"
           />
           <StatusBar
-            label="Visitors"
+            label={t("dashboard.visitors")}
             value={data.visitors}
             total={data.total}
             color="var(--chart-2)"
           />
           <StatusBar
-            label="New converts"
+            label={t("dashboard.newConverts")}
             value={data.newConverts}
             total={data.total}
             color="var(--chart-4)"
           />
           <StatusBar
-            label="Inactive"
+            label={t("dashboard.inactiveMembers")}
             value={data.inactive}
             total={data.total}
             color="var(--chart-3)"

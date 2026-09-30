@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Nigerian Pidgin (pcm). NOT yet reviewed by a fluent speaker — the picker
@@ -22,7 +22,7 @@ import type { Dictionary } from "./en";
  *   - Instructions are written the way somebody would actually say them out
  *     loud, because that is the whole reason to offer Pidgin at all.
  */
-export const pcm: Dictionary = {
+export const pcm: PartialDictionary = {
   common: {
     save: "Keep am",
     saveChanges: "Keep di changes",

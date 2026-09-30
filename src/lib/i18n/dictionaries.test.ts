@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DICTIONARIES, en } from "@/lib/i18n/dictionaries";
+import { DICTIONARIES, mergedDictionary, en } from "@/lib/i18n/dictionaries";
 import { LOCALES, matchAcceptLanguage, type LocaleCode } from "@/lib/i18n/locales";
 import { makeT } from "@/lib/i18n/translate";
 
@@ -83,12 +83,22 @@ describe("the locale list", () => {
 describe.each(CODES)("%s", (code) => {
   const dict = flatten(DICTIONARIES[code]);
 
-  it("has exactly the English keys", () => {
-    // `tsc` enforces this too. Asserted here so the failure names the key
-    // rather than printing a hundred-line structural type error.
-    const missing = [...ENGLISH.keys()].filter((k) => !dict.has(k));
+  it("has no key English does not have", () => {
+    /*
+     * Missing keys are LEGAL now — a language is translated a screen at a
+     * time and anything absent falls back to English. An EXTRA key never is:
+     * it is a typo or a key renamed in English and not here, and either way
+     * it is a string that will never be read by anybody.
+     */
     const extra = [...dict.keys()].filter((k) => !ENGLISH.has(k));
-    expect({ missing, extra }).toEqual({ missing: [], extra: [] });
+    expect(extra).toEqual([]);
+  });
+
+  it("is complete once merged with English", () => {
+    // Whatever a locale has not translated, the reader still gets a real
+    // English sentence rather than "dashboard.weeklyAverage".
+    const merged = flatten(mergedDictionary(code));
+    expect([...ENGLISH.keys()].filter((k) => !merged.has(k))).toEqual([]);
   });
 
   it("has no blank strings", () => {

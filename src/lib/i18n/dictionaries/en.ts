@@ -212,6 +212,30 @@ export const en = {
     startMeeting: "Start a meeting",
     upcoming: "Coming up",
     noDataYet: "Record your first service and this fills up.",
+    weeklyAverage: "Weekly average",
+    totalMembers: "Total members",
+    registered: "Registered",
+    recentServices: "Recent services",
+    activeMembers: "Active members",
+    visitors: "Visitors",
+    newConverts: "New converts",
+    inactiveMembers: "Inactive",
+    invitePeople: "Invite people",
+    inviteLinkCopied: "Invite link copied",
+    acrossYourChurch: "Across your church",
+    tapAnyNumber: "Tap any number to open that module",
+    unlimitedOnPlan: "Unlimited on your plan.",
+    addTask: "Add task",
+    addTaskPlaceholder: "Add a task…",
+    deleteTask: "Delete task",
+    taskAddFailed: "Couldn't add that task.",
+    taskDeleteFailed: "Couldn't remove that task.",
+    enableNotifications: "Enable notifications for your church",
+    pushEnabled: "Push notifications enabled on this device.",
+    dismiss: "Dismiss",
+    markDone: "Mark done",
+    markNotDone: "Mark not done",
+    tapRecordHint: "Tap Record in the bar below to start.",
   },
 
   /* ============================================================
@@ -911,3 +935,18 @@ export const en = {
  * `{ one, other }` pair wherever English has one.
  */
 export type Dictionary = typeof en;
+
+/**
+ * A dictionary that has only been partly translated.
+ *
+ * Section-level partial, not `Partial<Dictionary>` — that would let a locale
+ * omit a whole section but demand every key of any section it touched, which
+ * is the opposite of how translating actually goes. A language is worked
+ * through a screen at a time, so `nav` may have six of its fifty keys.
+ *
+ * Anything missing is filled from English by `mergedDictionary`, so a reader
+ * never sees a key, only an untranslated string.
+ */
+export type PartialDictionary = {
+  [K in keyof Dictionary]?: Partial<Dictionary[K]>;
+};

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
 import { Mail, MessageSquare, Plus, Send, Wallet } from "lucide-react";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  * priced in NGN (Paystack), so amounts show in NGN regardless of the church's
  * display currency.
  */
-export function WalletCard({
+export async function WalletCard({
   walletBalance,
   emailUsed,
   emailAllowance,
@@ -28,6 +29,7 @@ export function WalletCard({
   country: string;
   smsApproved: boolean;
 }) {
+  const t = await getT();
   const emailPct =
     emailAllowance && emailAllowance > 0
       ? Math.min(100, Math.round((emailUsed / emailAllowance) * 100))
@@ -88,7 +90,7 @@ export function WalletCard({
               )}
             </>
           ) : (
-            <p className="text-muted-foreground mt-1 text-xs">Unlimited on your plan.</p>
+            <p className="text-muted-foreground mt-1 text-xs">{t("dashboard.unlimitedOnPlan")}</p>
           )}
         </div>
 

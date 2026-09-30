@@ -7,7 +7,7 @@
  * a parser to a phone on a 400kbps link to render "Save" would be a poor trade.
  */
 
-import type { Dictionary } from "./dictionaries/en";
+import type { Dictionary, PartialDictionary } from "./dictionaries/en";
 import { DEFAULT_LOCALE, localeInfo, type LocaleCode } from "./locales";
 
 /** A dictionary value: either a plain string, or a pair chosen by a count. */
@@ -97,7 +97,7 @@ function humanise(key: string): string {
  */
 export function makeT(
   locale: LocaleCode,
-  dict: Dictionary | Partial<Dictionary>,
+  dict: Dictionary | PartialDictionary,
   fallback?: Dictionary,
 ): TFunction {
   const info = localeInfo(locale);

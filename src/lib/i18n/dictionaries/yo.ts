@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Yoruba. NOT yet reviewed by a fluent speaker — the picker says so.
@@ -15,7 +15,7 @@ import type { Dictionary } from "./en";
  *     stripping them would make the interface guesswork rather than merely
  *     plain.
  */
-export const yo: Dictionary = {
+export const yo: PartialDictionary = {
   common: {
     save: "Fi pamọ́",
     saveChanges: "Fi àwọn àyípadà pamọ́",

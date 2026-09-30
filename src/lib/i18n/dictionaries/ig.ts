@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Igbo. NOT yet reviewed by a fluent speaker — the picker says so.
@@ -13,7 +13,7 @@ import type { Dictionary } from "./en";
  *   - Diacritics are written properly (ụ, ọ, ị, ǹ). An Igbo reader notices
  *     when they are dropped, and several pairs of words differ only by them.
  */
-export const ig: Dictionary = {
+export const ig: PartialDictionary = {
   common: {
     save: "Chekwaa",
     saveChanges: "Chekwaa mgbanwe",

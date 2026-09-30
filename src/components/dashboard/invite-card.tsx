@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n-provider";
 import { Check, Copy, Share2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 
 /** Lets any staff member copy/share the church's public invite link. */
 export function InviteCard({ url, churchName }: { url: string; churchName: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   function copy() {
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
-      toast.success("Invite link copied");
+      toast.success(t("dashboard.inviteLinkCopied"));
       setTimeout(() => setCopied(false), 1500);
     });
   }
@@ -38,7 +40,7 @@ export function InviteCard({ url, churchName }: { url: string; churchName: strin
             <UserPlus className="size-5" />
           </div>
           <div>
-            <p className="font-bold leading-tight">Invite people</p>
+            <p className="font-bold leading-tight">{t("dashboard.invitePeople")}</p>
             <p className="text-muted-foreground text-xs">
               Share your church page link
             </p>

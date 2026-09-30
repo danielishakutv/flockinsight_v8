@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Hausa. NOT yet reviewed by a fluent speaker — the picker says so.
@@ -14,7 +14,7 @@ import type { Dictionary } from "./en";
  *   - The hooked letters (ƙ, ɓ, ɗ) are written properly. A Hausa reader
  *     notices when they are flattened to k, b, d.
  */
-export const ha: Dictionary = {
+export const ha: PartialDictionary = {
   common: {
     save: "Ajiye",
     saveChanges: "Ajiye canje-canje",

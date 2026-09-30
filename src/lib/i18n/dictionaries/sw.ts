@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Swahili. NOT yet reviewed by a fluent speaker — the picker says so.
@@ -15,7 +15,7 @@ import type { Dictionary } from "./en";
  *   - Established borrowings are kept: dashibodi, akaunti, kamera, skrini,
  *     slaidi, fomu, kozi, data.
  */
-export const sw: Dictionary = {
+export const sw: PartialDictionary = {
   common: {
     save: "Hifadhi",
     saveChanges: "Hifadhi mabadiliko",
@@ -197,6 +197,30 @@ export const sw: Dictionary = {
     startMeeting: "Anzisha mkutano",
     upcoming: "Yanayokuja",
     noDataYet: "Andika ibada yako ya kwanza, ukurasa huu utajaa.",
+    weeklyAverage: "Wastani wa kila wiki",
+    totalMembers: "Jumla ya waumini",
+    registered: "Waliojiandikisha",
+    recentServices: "Ibada za hivi karibuni",
+    activeMembers: "Waumini hai",
+    visitors: "Wageni",
+    newConverts: "Waamini wapya",
+    inactiveMembers: "Wasio hai",
+    invitePeople: "Alika watu",
+    inviteLinkCopied: "Kiungo cha mwaliko kimenakiliwa",
+    acrossYourChurch: "Katika kanisa lako lote",
+    tapAnyNumber: "Gusa nambari yoyote kufungua moduli hiyo",
+    unlimitedOnPlan: "Bila kikomo kwenye mpango wako.",
+    addTask: "Ongeza kazi",
+    addTaskPlaceholder: "Ongeza kazi…",
+    deleteTask: "Ondoa kazi",
+    taskAddFailed: "Imeshindwa kuongeza kazi hiyo.",
+    taskDeleteFailed: "Imeshindwa kuondoa kazi hiyo.",
+    enableNotifications: "Washa arifa kwa kanisa lako",
+    pushEnabled: "Arifa zimewashwa kwenye kifaa hiki.",
+    dismiss: "Ondoa",
+    markDone: "Weka kama imekamilika",
+    markNotDone: "Weka kama haijakamilika",
+    tapRecordHint: "Gusa Rekodi kwenye upau ulio hapa chini kuanza.",
   },
 
   attendance: {

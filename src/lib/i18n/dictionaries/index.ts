@@ -13,7 +13,7 @@
  * language it is reading and not the other seven.
  */
 
-import { en, type Dictionary } from "./en";
+import { en, type Dictionary, type PartialDictionary } from "./en";
 import { fr } from "./fr";
 import { pt } from "./pt";
 import { ha } from "./ha";
@@ -36,7 +36,7 @@ import { DEFAULT_LOCALE, type LocaleCode } from "../locales";
  * Anything missing falls through to English by way of `mergedDictionary`
  * below, so a half-translated language shows real English rather than a key.
  */
-export const DICTIONARIES: Record<LocaleCode, Partial<Dictionary>> = {
+export const DICTIONARIES: Record<LocaleCode, PartialDictionary> = {
   en,
   fr,
   pt,
@@ -47,7 +47,7 @@ export const DICTIONARIES: Record<LocaleCode, Partial<Dictionary>> = {
   pcm,
 };
 
-export function dictionaryFor(locale: LocaleCode): Partial<Dictionary> {
+export function dictionaryFor(locale: LocaleCode): PartialDictionary {
   return DICTIONARIES[locale] ?? DICTIONARIES[DEFAULT_LOCALE];
 }
 

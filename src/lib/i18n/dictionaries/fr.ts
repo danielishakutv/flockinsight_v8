@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * French. Reviewed.
@@ -9,7 +9,7 @@ import type { Dictionary } from "./en";
  * "culte" for a service, "dîme" for tithe, "offrande" for offering, "fidèles"
  * for the congregation.
  */
-export const fr: Dictionary = {
+export const fr: PartialDictionary = {
   common: {
     save: "Enregistrer",
     saveChanges: "Enregistrer les modifications",
@@ -191,6 +191,30 @@ export const fr: Dictionary = {
     startMeeting: "Démarrer une réunion",
     upcoming: "À venir",
     noDataYet: "Saisissez votre premier culte et cette page se remplira.",
+    weeklyAverage: "Moyenne hebdomadaire",
+    totalMembers: "Total des membres",
+    registered: "Inscrits",
+    recentServices: "Cultes récents",
+    activeMembers: "Membres actifs",
+    visitors: "Visiteurs",
+    newConverts: "Nouveaux convertis",
+    inactiveMembers: "Inactifs",
+    invitePeople: "Inviter des personnes",
+    inviteLinkCopied: "Lien d'invitation copié",
+    acrossYourChurch: "Dans toute votre église",
+    tapAnyNumber: "Touchez un chiffre pour ouvrir ce module",
+    unlimitedOnPlan: "Illimité avec votre forfait.",
+    addTask: "Ajouter une tâche",
+    addTaskPlaceholder: "Ajouter une tâche…",
+    deleteTask: "Supprimer la tâche",
+    taskAddFailed: "Impossible d'ajouter cette tâche.",
+    taskDeleteFailed: "Impossible de supprimer cette tâche.",
+    enableNotifications: "Activer les notifications pour votre église",
+    pushEnabled: "Notifications activées sur cet appareil.",
+    dismiss: "Ignorer",
+    markDone: "Marquer comme fait",
+    markNotDone: "Marquer comme non fait",
+    tapRecordHint: "Touchez Enregistrer dans la barre ci-dessous pour commencer.",
   },
 
   attendance: {

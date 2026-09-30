@@ -1,4 +1,4 @@
-import type { Dictionary } from "./en";
+import type { PartialDictionary } from "./en";
 
 /**
  * Portuguese. Reviewed.
@@ -9,7 +9,7 @@ import type { Dictionary } from "./en";
  * favour of the impersonal form. Church words: "culto" for a service, "dízimo"
  * for tithe, "oferta" for offering, "membros" for the congregation.
  */
-export const pt: Dictionary = {
+export const pt: PartialDictionary = {
   common: {
     save: "Guardar",
     saveChanges: "Guardar alterações",
@@ -191,6 +191,30 @@ export const pt: Dictionary = {
     startMeeting: "Iniciar uma reunião",
     upcoming: "A seguir",
     noDataYet: "Registe o primeiro culto e esta página enche-se.",
+    weeklyAverage: "Média semanal",
+    totalMembers: "Total de membros",
+    registered: "Registados",
+    recentServices: "Cultos recentes",
+    activeMembers: "Membros ativos",
+    visitors: "Visitantes",
+    newConverts: "Novos convertidos",
+    inactiveMembers: "Inativos",
+    invitePeople: "Convidar pessoas",
+    inviteLinkCopied: "Link de convite copiado",
+    acrossYourChurch: "Em toda a sua igreja",
+    tapAnyNumber: "Toque num número para abrir esse módulo",
+    unlimitedOnPlan: "Ilimitado no seu plano.",
+    addTask: "Adicionar tarefa",
+    addTaskPlaceholder: "Adicionar uma tarefa…",
+    deleteTask: "Remover tarefa",
+    taskAddFailed: "Não foi possível adicionar essa tarefa.",
+    taskDeleteFailed: "Não foi possível remover essa tarefa.",
+    enableNotifications: "Ativar notificações para a sua igreja",
+    pushEnabled: "Notificações ativadas neste dispositivo.",
+    dismiss: "Dispensar",
+    markDone: "Marcar como feito",
+    markNotDone: "Marcar como não feito",
+    tapRecordHint: "Toque em Registar na barra abaixo para começar.",
   },
 
   attendance: {

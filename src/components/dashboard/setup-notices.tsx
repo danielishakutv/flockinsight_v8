@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n-provider";
 import Link from "next/link";
 import { ArrowRight, Bell, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ function parseDismissed(raw: string | null): Set<string> {
 }
 
 export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
+  const t = useT();
   // Read straight from storage rather than copying it into state on mount:
   // one render instead of two, and dismissing updates every reader at once.
   const dismissed = parseDismissed(useStoredValue(KEY));
@@ -69,7 +71,7 @@ export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
       toast.error(res.error || "Could not enable notifications.");
       return;
     }
-    toast.success("Push notifications enabled on this device.");
+    toast.success(t("dashboard.pushEnabled"));
     setShowPush(false);
   }
 
@@ -87,7 +89,7 @@ export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
             <Bell className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-bold">Enable notifications for your church</p>
+            <p className="font-bold">{t("dashboard.enableNotifications")}</p>
             <p className="text-muted-foreground text-sm">
               Get push alerts for announcements and updates on this device.
             </p>
@@ -107,7 +109,7 @@ export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
           </div>
           <button
             onClick={() => dismiss("push")}
-            aria-label="Dismiss"
+            aria-label={t("dashboard.dismiss")}
             className="text-muted-foreground hover:text-foreground p-1"
           >
             <X className="size-4" />
@@ -133,7 +135,7 @@ export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
           </div>
           <button
             onClick={() => dismiss(n.id)}
-            aria-label="Dismiss"
+            aria-label={t("dashboard.dismiss")}
             className="text-muted-foreground hover:text-foreground p-1"
           >
             <X className="size-4" />

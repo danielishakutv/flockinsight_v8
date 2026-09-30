@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
 import {
   BookOpen,
   CalendarDays,
@@ -35,7 +36,7 @@ type Tile = {
  * happening across my church?" without a tour of every screen. Tiles link
  * through to their module — they're data, not a second navigation bar.
  */
-export function ModuleHighlights({
+export async function ModuleHighlights({
   data,
   perms,
   isOwner,
@@ -46,6 +47,7 @@ export function ModuleHighlights({
   isOwner: boolean;
   periodLabel: string;
 }) {
+  const t = await getT();
   const tiles: Tile[] = [
     {
       label: "Groups",
@@ -122,8 +124,8 @@ export function ModuleHighlights({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Across your church</CardTitle>
-        <CardDescription>Tap any number to open that module</CardDescription>
+        <CardTitle className="text-lg">{t("dashboard.acrossYourChurch")}</CardTitle>
+        <CardDescription>{t("dashboard.tapAnyNumber")}</CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {visible.map((t) => (

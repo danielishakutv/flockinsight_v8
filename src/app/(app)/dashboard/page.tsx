@@ -24,6 +24,7 @@ import {
   todo,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { getT } from "@/lib/i18n/server";
 import { getAccess } from "@/lib/permissions";
 import {
   getAnchoredWeeklySeries,
@@ -69,6 +70,7 @@ export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const { user, church } = await requireChurch();
+  const t = await getT();
 
   const now = new Date();
   const fmtMonthStart = (d: Date) =>
@@ -243,7 +245,7 @@ export default async function DashboardPage() {
               so a new church still sees its people data. */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             <StatCard
-              label="Last service"
+              label={t("dashboard.lastService")}
               value={last ? last.total : "—"}
               sub={
                 last
@@ -254,20 +256,20 @@ export default async function DashboardPage() {
               accent
             />
             <StatCard
-              label="Weekly average"
+              label={t("dashboard.weeklyAverage")}
               value={avg}
               sub="Last 8 weeks"
               icon={CalendarDays}
               delta={growth}
             />
             <StatCard
-              label="Total members"
+              label={t("dashboard.totalMembers")}
               value={memberCount}
               sub={`${breakdown.active.toLocaleString()} active`}
               icon={UsersRound}
             />
             <StatCard
-              label="Registered"
+              label={t("dashboard.registered")}
               value={newThisMonth}
               sub={`${monthLabel} · ${registrations.total} in 6 months`}
               icon={UserPlus}
@@ -280,7 +282,7 @@ export default async function DashboardPage() {
               className="block transition-transform hover:-translate-y-0.5"
             >
               <StatCard
-                label="Giving this month"
+                label={t("dashboard.givingThisMonth")}
                 value={formatMoney(givingMonth, church.currency)}
                 sub={`${format(now, "MMMM yyyy")} · tap to view giving`}
                 icon={HandCoins}
@@ -312,18 +314,18 @@ export default async function DashboardPage() {
                     <CalendarDays className="size-7" />
                   </div>
                   <p className="text-muted-foreground text-sm">
-                    Record your first service to unlock attendance insights.
+                    {t("dashboard.noDataYet")}
                   </p>
                   {/* On mobile this is the centre button of the bottom bar,
                       so the duplicate is only shown on wide screens. */}
                   <Button asChild size="lg" className="hidden lg:inline-flex">
                     <Link href="/attendance/record">
                       <Plus className="size-5" />
-                      Record attendance
+                      {t("attendance.record")}
                     </Link>
                   </Button>
                   <p className="text-muted-foreground text-xs lg:hidden">
-                    Tap <strong>Record</strong> in the bar below to start.
+                    {t("dashboard.tapRecordHint")}
                   </p>
                 </div>
               )}
@@ -358,7 +360,7 @@ export default async function DashboardPage() {
           {last && (
             <Card>
               <CardHeader className="flex-row items-center justify-between">
-                <CardTitle className="text-lg">Recent services</CardTitle>
+                <CardTitle className="text-lg">{t("dashboard.recentServices")}</CardTitle>
                 {/* Attendance has its own tab in the mobile bottom bar. */}
                 <Button
                   asChild

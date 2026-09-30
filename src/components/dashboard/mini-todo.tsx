@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/components/i18n-provider";
 import { ListTodo, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export function MiniTodo({ initial }: { initial: TodoRow[] }) {
+  const t = useT();
   const [todos, setTodos] = useState<TodoRow[]>(initial);
   const [text, setText] = useState("");
   const [adding, setAdding] = useState(false);
@@ -45,7 +47,7 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
       setTodos((p) =>
         p.map((x) => (x.id === item.id ? { ...x, done: item.done } : x)),
       );
-      toast.error("Couldn't sync. Try again.");
+      toast.error(t("dashboard.taskAddFailed"));
     }
   }
 
@@ -54,11 +56,11 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
     const res = await deleteTodo(item.id);
     if (!res.ok) {
       setTodos((p) => [item, ...p]);
-      toast.error("Couldn't delete. Try again.");
+      toast.error(t("dashboard.taskDeleteFailed"));
     }
   }
 
-  const open = todos.filter((t) => !t.done).length;
+  const open = todos.filter((todo) => !todo.done).length;
 
   return (
     <Card>
@@ -78,7 +80,7 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
-            placeholder="Add a task…"
+            placeholder={t("dashboard.addTaskPlaceholder")}
             className="h-9"
             maxLength={300}
           />
@@ -87,7 +89,7 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
             className="size-9 shrink-0"
             onClick={add}
             disabled={adding}
-            aria-label="Add task"
+            aria-label={t("dashboard.addTask")}
           >
             {adding ? (
               <Loader2 className="size-4 animate-spin" />
@@ -103,22 +105,22 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
           </p>
         ) : (
           <ul className="space-y-1">
-            {todos.map((t) => (
+            {todos.map((todo) => (
               <li
-                key={t.id}
+                key={todo.id}
                 className="hover:bg-accent group flex items-center gap-2 rounded-lg px-1.5 py-1.5"
               >
                 <button
-                  onClick={() => toggle(t)}
-                  aria-label={t.done ? "Mark not done" : "Mark done"}
+                  onClick={() => toggle(todo)}
+                  aria-label={todo.done ? t("dashboard.markNotDone") : t("dashboard.markDone")}
                   className={cn(
                     "grid size-5 shrink-0 place-items-center rounded-md border transition-colors",
-                    t.done
+                    todo.done
                       ? "bg-primary border-primary text-primary-foreground"
                       : "border-input",
                   )}
                 >
-                  {t.done && (
+                  {todo.done && (
                     <svg
                       viewBox="0 0 24 24"
                       className="size-3.5"
@@ -135,14 +137,14 @@ export function MiniTodo({ initial }: { initial: TodoRow[] }) {
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate text-sm",
-                    t.done && "text-muted-foreground line-through",
+                    todo.done && "text-muted-foreground line-through",
                   )}
                 >
-                  {t.text}
+                  {todo.text}
                 </span>
                 <button
-                  onClick={() => remove(t)}
-                  aria-label="Delete task"
+                  onClick={() => remove(todo)}
+                  aria-label={t("dashboard.deleteTask")}
                   className="text-muted-foreground hover:text-destructive grid size-11 shrink-0 place-items-center transition-opacity pointer-fine:size-auto pointer-fine:p-1 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                 >
                   <Trash2 className="size-4" />
