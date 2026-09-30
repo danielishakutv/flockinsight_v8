@@ -54,6 +54,7 @@ export default async function WatchPage({
       description: livestream.description,
       status: livestream.status,
       scheduledFor: livestream.scheduledFor,
+      embedUrl: livestream.embedUrl,
       whepUrl: livestream.whepUrl,
       hlsUrl: livestream.hlsUrl,
       visibility: livestream.visibility,
@@ -136,6 +137,7 @@ export default async function WatchPage({
         </div>
 
         <LivePlayer
+          embedUrl={s.embedUrl}
           whepUrl={s.whepUrl}
           hlsUrl={s.hlsUrl}
           status={s.status}

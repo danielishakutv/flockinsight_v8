@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createLivestream } from "@/app/(app)/livestreams/actions";
+import { PROVIDER_LABEL, parseEmbed } from "@/lib/stream-embed";
 
 /**
  * Creating a livestream is deliberately a short form.
@@ -33,7 +34,12 @@ import { createLivestream } from "@/app/(app)/livestreams/actions";
  * is on the stream's own page, because the thing somebody wants at this moment
  * is the RTMP credentials, and every extra field is between them and those.
  */
-export function NewLivestream() {
+export function NewLivestream({
+  streamConfigured = false,
+}: {
+  /** Whether this server can ingest video itself. */
+  streamConfigured?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -43,6 +49,16 @@ export function NewLivestream() {
   const [scheduledFor, setScheduledFor] = useState("");
   const [visibility, setVisibility] = useState<"public" | "members">("public");
   const [allowChat, setAllowChat] = useState(false);
+  const [source, setSource] = useState<"external" | "cloudflare">("external");
+  const [externalUrl, setExternalUrl] = useState("");
+
+  /*
+   * Checked as they type rather than on submit. The link is the one field here
+   * somebody can get wrong in a way they cannot see, and finding out after
+   * pressing Create — possibly on a Sunday morning — is the wrong moment.
+   */
+  const parsed = externalUrl.trim() ? parseEmbed(externalUrl) : null;
+  const externalReady = source !== "external" || !!parsed?.embedUrl;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +69,8 @@ export function NewLivestream() {
         scheduledFor: scheduledFor || null,
         visibility,
         allowChat,
+        source,
+        externalUrl: source === "external" ? externalUrl : null,
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -62,7 +80,12 @@ export function NewLivestream() {
       setTitle("");
       setDescription("");
       setScheduledFor("");
-      toast.success("Livestream ready — here are your broadcast details.");
+      setExternalUrl("");
+      toast.success(
+        source === "external"
+          ? "Livestream added — share the watch link."
+          : "Livestream ready — here are your broadcast details.",
+      );
       if (res.id) router.push(`/livestreams/${res.id}`);
     });
   };
@@ -91,6 +114,60 @@ export function NewLivestream() {
               maxLength={120}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Where does the video come from?</Label>
+            <Select
+              value={source}
+              onValueChange={(v) => setSource(v as "external" | "cloudflare")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="external">
+                  YouTube, Facebook or Vimeo
+                </SelectItem>
+                <SelectItem value="cloudflare" disabled={!streamConfigured}>
+                  Through FlockInsight
+                  {streamConfigured ? "" : " — not set up on this server"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              {source === "external"
+                ? "Stream the way you already do, and we show it on your own watch page. Nothing to install and no limit on how many people watch."
+                : "We receive the video and deliver it ourselves. About a second of delay instead of twenty, and it can be limited to people signed in."}
+            </p>
+          </div>
+
+          {source === "external" && (
+            <div className="space-y-2">
+              <Label htmlFor="ls-url">Link to your stream</Label>
+              <Input
+                id="ls-url"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=… or your channel's /live link"
+                inputMode="url"
+                maxLength={500}
+                aria-invalid={!!parsed && !parsed.embedUrl}
+              />
+              {parsed?.embedUrl && (
+                <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  {PROVIDER_LABEL[parsed.provider]} link recognised.
+                </p>
+              )}
+              {parsed && !parsed.embedUrl && (
+                <p className="text-destructive text-xs leading-relaxed">{parsed.error}</p>
+              )}
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                If you stream every week, use your channel&rsquo;s permanent{" "}
+                <code className="font-mono">/live</code> address — it stays the
+                same, so this page keeps working next Sunday without editing.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="ls-desc">A line for the watch page (optional)</Label>
@@ -142,7 +219,10 @@ export function NewLivestream() {
           </label>
 
           <DialogFooter>
-            <Button type="submit" disabled={pending || title.trim().length < 2}>
+            <Button
+              type="submit"
+              disabled={pending || title.trim().length < 2 || !externalReady}
+            >
               {pending ? "Setting up…" : "Create"}
             </Button>
           </DialogFooter>

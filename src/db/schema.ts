@@ -3460,6 +3460,24 @@ export const livestream = pgTable(
     /** "idle" | "live" | "ended". What the church last did, not what is arriving. */
     status: text().notNull().default("idle"),
 
+    /**
+     * Where the video comes from.
+     *
+     * "external" — the church already broadcasts to YouTube or Facebook and we
+     * simply show that player. Costs nothing, needs no configuration, and
+     * carries any size of congregation, because somebody else is paying for
+     * the delivery. This is the default for that reason.
+     *
+     * "cloudflare" — we ingest and deliver it ourselves, which buys about a
+     * second of latency and members-only viewing, and bills per minute
+     * delivered.
+     */
+    source: text().notNull().default("external"),
+    /** The link the church pasted, kept so the page can show what they gave us. */
+    externalUrl: text(),
+    /** What actually goes in the iframe, derived from it on save. */
+    embedUrl: text(),
+
     /** When it is meant to begin, for a stream announced in advance. */
     scheduledFor: timestamp({ withTimezone: true }),
 

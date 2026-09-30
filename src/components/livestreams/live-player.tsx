@@ -16,7 +16,50 @@ import { Radio } from "lucide-react";
  * prompt, no sign-in unless the church asked for one. Somebody opening this
  * from a WhatsApp message should see their pastor and nothing else.
  */
-export function LivePlayer({
+/**
+ * Picks the player. Two components rather than one with a branch, because the
+ * WebRTC player's hooks must run on every render of it — an early return above
+ * them makes them conditional, which React forbids and which would only have
+ * broken when a church switched source.
+ */
+export function LivePlayer(props: {
+  whepUrl: string | null;
+  hlsUrl: string | null;
+  status: string;
+  scheduledFor: string | null;
+  /** A YouTube, Facebook or Vimeo player, when the church streams there. */
+  embedUrl?: string | null;
+}) {
+  if (props.embedUrl) return <EmbeddedPlayer src={props.embedUrl} />;
+  return <WebRtcPlayer {...props} />;
+}
+
+/**
+ * Somebody else's player, in a frame.
+ *
+ * None of the machinery below applies: YouTube and Facebook do their own
+ * buffering, their own fallbacks and their own "starts in 5 minutes" holding
+ * screen, and the most useful thing we can do is get out of the way. The
+ * sandbox is the one thing we do insist on — it is their javascript running on
+ * a page carrying a church's name.
+ */
+function EmbeddedPlayer({ src }: { src: string }) {
+  return (
+    <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black">
+      <iframe
+        src={src}
+        title="Livestream"
+        className="size-full"
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+      />
+    </div>
+  );
+}
+
+function WebRtcPlayer({
   whepUrl,
   hlsUrl,
   status,

@@ -17,6 +17,7 @@ import {
   STREAM_TARGETS,
   StreamError,
 } from "@/lib/stream";
+import { parseEmbed } from "@/lib/stream-embed";
 
 export type ActionResult =
   | { ok: true; id?: string; slug?: string }
@@ -71,6 +72,9 @@ const createSchema = z.object({
   scheduledFor: z.string().optional().nullable(),
   visibility: z.enum(["public", "members"]).default("public"),
   allowChat: z.coerce.boolean().default(false),
+  source: z.enum(["external", "cloudflare"]).default("external"),
+  /** Only for an external stream: the YouTube/Facebook/Vimeo link. */
+  externalUrl: z.string().trim().max(500).optional().nullable(),
 });
 
 /**
@@ -91,26 +95,41 @@ export async function createLivestream(input: unknown): Promise<ActionResult> {
   }
   const v = parsed.data;
 
-  if (!isStreamConfigured()) {
-    return {
-      ok: false,
-      error: "Livestreaming isn't set up on this server yet. Ask your administrator.",
-    };
-  }
-
   const scheduledFor = v.scheduledFor ? new Date(v.scheduledFor) : null;
   if (scheduledFor && Number.isNaN(scheduledFor.getTime())) {
     return { ok: false, error: "Pick a real date and time." };
   }
 
+  /*
+   * An external stream needs nothing from us but a valid link, so it is
+   * checked and saved without touching Cloudflare at all — which is the whole
+   * reason it exists. Only the Cloudflare path needs the server configured.
+   */
+  let embedUrl: string | null = null;
+  if (v.source === "external") {
+    const parsed = parseEmbed(v.externalUrl ?? "");
+    if (!parsed.embedUrl) {
+      return { ok: false, error: parsed.error ?? "Paste the link to your stream." };
+    }
+    embedUrl = parsed.embedUrl;
+  } else if (!isStreamConfigured()) {
+    return {
+      ok: false,
+      error:
+        "Streaming through FlockInsight isn't set up on this server. You can still add a stream from YouTube or Facebook.",
+    };
+  }
+
   const slug = await uniqueSlug(v.title);
 
-  let live;
-  try {
-    live = await createLiveInput({ name: `${v.title} · ${g.churchId.slice(0, 8)}` });
-  } catch (e) {
-    const why = e instanceof StreamError ? e.message : "Could not reach the streaming service.";
-    return { ok: false, error: why };
+  let live = null;
+  if (v.source === "cloudflare") {
+    try {
+      live = await createLiveInput({ name: `${v.title} · ${g.churchId.slice(0, 8)}` });
+    } catch (e) {
+      const why = e instanceof StreamError ? e.message : "Could not reach the streaming service.";
+      return { ok: false, error: why };
+    }
   }
 
   const [row] = await db
@@ -123,12 +142,15 @@ export async function createLivestream(input: unknown): Promise<ActionResult> {
       scheduledFor,
       visibility: v.visibility,
       allowChat: v.allowChat,
-      inputUid: live.uid,
-      whipUrl: live.whipUrl,
-      whepUrl: live.whepUrl,
-      rtmpUrl: live.rtmpUrl,
-      rtmpKey: live.rtmpStreamKey,
-      hlsUrl: live.hlsUrl,
+      source: v.source,
+      externalUrl: v.source === "external" ? (v.externalUrl ?? null) : null,
+      embedUrl,
+      inputUid: live?.uid ?? null,
+      whipUrl: live?.whipUrl ?? null,
+      whepUrl: live?.whepUrl ?? null,
+      rtmpUrl: live?.rtmpUrl ?? null,
+      rtmpKey: live?.rtmpStreamKey ?? null,
+      hlsUrl: live?.hlsUrl ?? null,
       createdBy: g.userId,
     })
     .returning({ id: livestream.id, slug: livestream.slug });

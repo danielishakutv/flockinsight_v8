@@ -52,22 +52,33 @@ export default async function LivestreamsPage() {
       <PageHeader
         title="Livestreams"
         description="Broadcast a service to anyone with the link — and on to YouTube or Facebook."
-        action={canManage && configured ? <NewLivestream /> : undefined}
+        action={
+          canManage ? <NewLivestream streamConfigured={configured} /> : undefined
+        }
       />
 
       {!configured && (
         /*
-          Said once, at the top, rather than as a failure when somebody fills
-          in the form. Setting this up is an administrator's job and there is
-          nothing the person reading this can do about it from here.
+          Said once, at the top, and no longer as a blocker. Streaming through
+          FlockInsight needs an administrator; streaming from YouTube or
+          Facebook needs nothing at all, so the notice now says what a church
+          CAN do rather than only what it cannot.
         */
-        <Card className="mb-5 border-amber-500/30 bg-amber-500/5">
+        <Card className="mb-5 border-primary/25 bg-primary/5">
           <CardContent className="py-4">
-            <p className="text-sm font-semibold">Livestreaming isn&apos;t set up yet</p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              It needs a Cloudflare Stream account on the server. Until then,
-              meetings still work — a meeting can hold a congregation, it just
-              cannot be watched from a public link.
+            <p className="text-sm font-semibold">
+              Stream from YouTube or Facebook — no setup needed
+            </p>
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+              Broadcast the way you already do, paste the link, and your service
+              plays on your own watch page with your church&apos;s name on it.
+              There is no limit on how many people can watch and it costs
+              nothing.
+            </p>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              Streaming through FlockInsight itself — about a second of delay
+              instead of twenty, and streams only your members can see — needs a
+              Cloudflare Stream account on the server.
             </p>
           </CardContent>
         </Card>

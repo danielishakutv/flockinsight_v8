@@ -99,31 +99,68 @@ export default async function LivestreamPage({
         )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="min-w-0 space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Going live</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <LivestreamCredentials
-                rtmpUrl={s.rtmpUrl}
-                rtmpKey={s.rtmpKey}
-                watchUrl={watchUrl}
-                canSimulcast={outputs.length > 0}
-              />
-            </CardContent>
-          </Card>
-        </div>
+      {/*
+        An external stream has no credentials to hand out and nothing to
+        forward on — the church's own platform is already doing both. Showing
+        an empty RTMP box and a simulcast panel that cannot work would be three
+        controls that do nothing, on the page somebody opens under pressure.
+      */}
+      {s.source === "external" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Going live</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Start your broadcast on your own platform as usual. This page
+              shows it automatically — there is nothing to press here.
+            </p>
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold">Watch page</p>
+              <p className="wrap-anywhere font-mono text-sm">{watchUrl}</p>
+            </div>
+            {s.externalUrl && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold">Streaming from</p>
+                <a
+                  href={s.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary wrap-anywhere text-sm underline underline-offset-2"
+                >
+                  {s.externalUrl}
+                </a>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-5">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Going live</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <LivestreamCredentials
+                  rtmpUrl={s.rtmpUrl}
+                  rtmpKey={s.rtmpKey}
+                  watchUrl={watchUrl}
+                  canSimulcast={outputs.length > 0}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-        <div className="min-w-0 space-y-5">
-          <LivestreamOutputs
-            livestreamId={s.id}
-            outputs={outputs}
-            canManage={canManage}
-          />
+          <div className="min-w-0 space-y-5">
+            <LivestreamOutputs
+              livestreamId={s.id}
+              outputs={outputs}
+              canManage={canManage}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </PageContainer>
   );
 }
