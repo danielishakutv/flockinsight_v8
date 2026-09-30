@@ -14,6 +14,25 @@ const UUID_RE =
 // The id is a random UUID and the bytes never change, so responses are
 // cacheable forever. Cloudinary-backed rows redirect to the optimised remote
 // asset; legacy db-backed rows are streamed from Postgres.
+//
+// DELIBERATELY UNAUTHENTICATED, and worth saying out loud because it is the
+// only route under (app) that is.
+//
+// A route handler is not wrapped by the (app) layout, so requireChurch() never
+// runs here even though the path sits inside it. That is the intent rather
+// than an oversight: the media library has a "Copy link" button so a church
+// can put a sermon recording in a WhatsApp group or an email, and those
+// readers have no account. The Cloudinary URL behind most rows is itself
+// unsigned and public, so gating this route would protect nothing but the
+// legacy database-backed bytes.
+//
+// What actually guards a file is that a v4 UUID is not guessable — unlisted,
+// not private. The library says so beside the button, because a church that
+// believes a link is team-only will share it as though it were.
+//
+// If private media is ever needed, this is the place: require a session, scope
+// the row to the caller's church, and move Cloudinary to signed URLs. Two of
+// those three are here; the third is the reason it has not been done.
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },

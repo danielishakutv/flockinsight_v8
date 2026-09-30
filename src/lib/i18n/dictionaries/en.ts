@@ -1054,6 +1054,8 @@ export const en = {
     delete: "Delete",
     downloadThisFile: "Download this file",
     linkCopied: "Link copied",
+    linkPublicHint:
+      "Anyone with this link can open the file — no sign-in needed.",
     couldnTCopyLink: "Couldn't copy link",
     fileDeleted: "File deleted",
     dismiss: "Dismiss",

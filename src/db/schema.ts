@@ -463,24 +463,43 @@ export const media = pgTable(
   ],
 );
 
-export const staff = pgTable("staff", {
-  id: text().primaryKey(),
-  organizationId: text()
-    .notNull()
-    .references(() => church.id, { onDelete: "cascade" }),
-  userId: text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  // Better Auth org role ("owner"/"admin"/"member"). Owner = church creator,
-  // always full access. `roleId` (below) is the church-defined feature role.
-  role: text().notNull().default("member"),
-  roleId: uuid().references(() => role.id, { onDelete: "set null" }),
-  // Temporary membership created while a superadmin "acts as" this church, so
-  // org-plugin operations (invites etc.) work. Cleaned up on exit; hidden from
-  // the church's own team list.
-  temp: boolean().notNull().default(false),
-  createdAt: timestamp().notNull().defaultNow(),
-});
+export const staff = pgTable(
+  "staff",
+  {
+    id: text().primaryKey(),
+    organizationId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Better Auth org role ("owner"/"admin"/"member"). Owner = church creator,
+    // always full access. `roleId` (below) is the church-defined feature role.
+    role: text().notNull().default("member"),
+    roleId: uuid().references(() => role.id, { onDelete: "set null" }),
+    // Temporary membership created while a superadmin "acts as" this church, so
+    // org-plugin operations (invites etc.) work. Cleaned up on exit; hidden from
+    // the church's own team list.
+    temp: boolean().notNull().default(false),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (t) => [
+    /*
+     * The busiest lookup in the app, and it had no index at all.
+     *
+     * getAccess() resolves a role from (church, user) on every page load, and
+     * Postgres does not index a foreign key for you — so every permission
+     * check was a sequential scan of the whole staff table. Invisible at 37
+     * users; the first thing to hurt at ten thousand.
+     *
+     * Not unique: a superadmin acting as a church gets a temporary row, and a
+     * uniqueness constraint here would turn that into a failed impersonation.
+     */
+    index("staff_org_user_idx").on(t.organizationId, t.userId),
+    // "Which churches is this person in" — run when a session is created.
+    index("staff_user_idx").on(t.userId),
+  ],
+);
 
 /* ============================================================
  * FlockInsight domain — roles & permissions (church-defined RBAC)

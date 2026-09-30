@@ -1021,6 +1021,8 @@ export const pt: PartialDictionary = {
     delete: "Eliminar",
     downloadThisFile: "Transferir este ficheiro",
     linkCopied: "Link copiado",
+    linkPublicHint:
+      "Qualquer pessoa com este link pode abrir o ficheiro, sem iniciar sessão.",
     couldnTCopyLink: "Não foi possível copiar o link",
     fileDeleted: "Ficheiro eliminado",
     dismiss: "Dispensar",

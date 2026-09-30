@@ -527,6 +527,15 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
               {formatBytes(item.bytes)}
             </span>
           </div>
+
+          {/*
+            The link is unlisted, not private — a church that thinks it is
+            team-only will share it as though it were. Said beside the button
+            rather than in a toast, so it is there before the decision.
+          */}
+          <p className="text-muted-foreground text-xs">
+            {t("media.linkPublicHint")}
+          </p>
         </div>
       </DialogContent>
     </Dialog>

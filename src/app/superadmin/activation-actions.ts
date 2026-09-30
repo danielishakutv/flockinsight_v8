@@ -87,7 +87,16 @@ export async function optOutChurch(churchId: string): Promise<ActionResult> {
   return { ok: true, message: "That church will not be emailed automatically." };
 }
 
-/** Whether automation is currently on, for the board. */
+/**
+ * Whether automation is currently on, for the board.
+ *
+ * Guarded like every other export here. "use server" makes each one a POST
+ * endpoint anyone on the internet can call by name, so an unguarded read is
+ * not a read of the board — it is an unauthenticated database query that
+ * anybody can run, and it answers a question about how the platform is
+ * operated. The answer is dull; being the one endpoint with no check is not.
+ */
 export async function nudgesEnabled(): Promise<boolean> {
+  await requirePlatform("platform.messaging.send");
   return (await getSetting(ENABLED_KEY, "off")) === "on";
 }
