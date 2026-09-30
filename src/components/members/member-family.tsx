@@ -66,6 +66,7 @@ export function MemberFamily({
   canManage,
   householdId = null,
   households = [],
+  churchCountry,
 }: {
   parentId: string;
   parentName: string;
@@ -77,6 +78,8 @@ export function MemberFamily({
   /** The parent's household — a new child inherits it by default. */
   householdId?: string | null;
   households?: HouseholdOption[];
+  /** The church's own country, so a new child does not default to Nigeria. */
+  churchCountry?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -122,7 +125,7 @@ export function MemberFamily({
 
   function openAdd() {
     setForm({
-      ...emptyMember(),
+      ...emptyMember(churchCountry),
       isMinor: true,
       guardianId: parentId,
       // Inherit the parent's household by default (still editable).

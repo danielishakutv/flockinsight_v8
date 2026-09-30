@@ -8,6 +8,7 @@ import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/geo";
 import {
   countryFromIso2,
   currencyForCountry,
+  timezoneForCountry,
   localeForCountry,
 } from "@/lib/country-profile";
 import { LOCALE_COOKIE } from "@/lib/i18n/locales";
@@ -152,6 +153,14 @@ export async function createChurchAccount(input: {
            */
           country,
           currency: currencyForCountry(country),
+          /*
+           * And its clock. Birthday greetings, service reminders and pledge
+           * reminders all ask "what is today, there" — a Maputo church left
+           * on Africa/Lagos has an hour of every day filed under the wrong
+           * date, so a member born just after midnight is greeted a day late
+           * every year. Changeable in Settings; right from the first minute.
+           */
+          timezone: timezoneForCountry(country),
           // Start the "first 7 Sundays free" trial from today.
           trialEndsAt: trialEndDate(new Date()),
           referredByChurchId,

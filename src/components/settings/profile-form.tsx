@@ -8,6 +8,7 @@ import Link from "next/link";
 import { updateChurchProfile } from "@/app/(app)/settings/actions";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/money";
 import { COUNTRIES, NIGERIAN_STATES } from "@/lib/geo";
+import { knownTimezones } from "@/lib/country-profile";
 import { planName } from "@/lib/plans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,18 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const TIMEZONES = [
-  "Africa/Lagos",
-  "Africa/Accra",
-  "Africa/Nairobi",
-  "Africa/Johannesburg",
-  "Africa/Cairo",
-  "Europe/London",
-  "America/New_York",
-  "America/Chicago",
-  "America/Los_Angeles",
-  "UTC",
-];
+/*
+ * Built from the country table, never hand-written.
+ *
+ * The hand-written version had ten entries and no Africa/Maputo, so a
+ * Mozambican church saw Lagos selected and saving this page overwrote its
+ * real timezone — moving every birthday and reminder by an hour, silently.
+ */
+const TIMEZONES = knownTimezones();
 
 export function ProfileForm({
   initialName,
@@ -56,7 +53,9 @@ export function ProfileForm({
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(initialName);
   const [timezone, setTimezone] = useState(
-    TIMEZONES.includes(initialTimezone) ? initialTimezone : "Africa/Lagos",
+    // The church's own value wins, always. A value this list does not know is
+    // a gap in the list, not a mistake by the church.
+    initialTimezone || "Africa/Lagos",
   );
   const [currency, setCurrency] = useState(
     CURRENCIES.some((c) => c.code === initialCurrency)
@@ -65,6 +64,15 @@ export function ProfileForm({
   );
   const [country, setCountry] = useState(initialCountry || "Nigeria");
   const [state, setState] = useState(initialState ?? "");
+
+  /*
+   * A Select cannot show a value that is not among its options — it renders
+   * blank, and the next save writes the blank. So a timezone the table does
+   * not know is added to the list rather than dropped from the church.
+   */
+  const timezoneOptions = TIMEZONES.includes(timezone)
+    ? TIMEZONES
+    : [timezone, ...TIMEZONES];
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -105,7 +113,7 @@ export function ProfileForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TIMEZONES.map((tz) => (
+                {timezoneOptions.map((tz) => (
                   <SelectItem key={tz} value={tz}>
                     {tz.replace("_", " ")}
                   </SelectItem>

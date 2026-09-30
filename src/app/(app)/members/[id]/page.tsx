@@ -296,6 +296,7 @@ export default async function MemberDetailPage({
         canManage={canManage}
         householdId={m.householdId}
         households={households}
+        churchCountry={church.country ?? undefined}
       />
 
       {canManage && (

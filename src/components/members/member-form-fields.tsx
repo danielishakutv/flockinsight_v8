@@ -78,7 +78,20 @@ function todayLocal(): string {
  * Fresh defaults for a NEW member: Nigeria / Adamawa, joined today. A function
  * (not a constant) so "today" is evaluated each time the Add form opens.
  */
-export function emptyMember(): MemberFormState {
+/**
+ * A blank member.
+ *
+ * `country` is the CHURCH's country, not Nigeria. Every church used to start
+ * its members in Nigeria and Adamawa State, so a church in Maputo filed every
+ * person it added under a country on another continent unless somebody
+ * remembered to change two dropdowns, every time. That is not a small
+ * annoyance: it is their membership demographics, wrong by default.
+ *
+ * The state only gets a default when the country actually has the cascading
+ * State -> LGA lists behind it, which today means Nigeria alone. Anywhere else
+ * it is a free-text field and a pre-filled Nigerian state would be nonsense.
+ */
+export function emptyMember(country: string = DEFAULT_COUNTRY): MemberFormState {
   return {
     photoUrl: "",
     firstName: "",
@@ -103,8 +116,8 @@ export function emptyMember(): MemberFormState {
     street: "",
     city: "",
     lga: "",
-    state: DEFAULT_STATE,
-    country: DEFAULT_COUNTRY,
+    state: country === DEFAULT_COUNTRY ? DEFAULT_STATE : "",
+    country,
     notes: "",
   };
 }

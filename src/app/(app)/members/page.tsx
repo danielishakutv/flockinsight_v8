@@ -121,6 +121,7 @@ export default async function MembersPage() {
         households={households}
         canManageTeam={canManageTeam}
         accessRoles={accessRoles}
+        churchCountry={church.country ?? undefined}
       />
     </PageContainer>
   );

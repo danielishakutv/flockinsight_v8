@@ -2,16 +2,11 @@ import { redirect } from "next/navigation";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getPlanPrice } from "@/lib/pricing";
+import { planPriceLabelFor, priceForCountry } from "@/lib/plan-price";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AboutSoftware } from "@/components/settings/about-software";
 
 export const metadata = { title: "Settings" };
-
-function priceLabel(price: number | null): string {
-  if (price === null) return "Custom";
-  if (price === 0) return "Free";
-  return `₦${price.toLocaleString()}/mo`;
-}
 
 export default async function GeneralSettingsPage() {
   const { church } = await requireChurch();
@@ -19,7 +14,17 @@ export default async function GeneralSettingsPage() {
     // Team-only managers land on the Team tab instead.
     redirect((await can("team.manage")) ? "/settings/team" : "/dashboard");
   }
-  const planPrice = await getPlanPrice(church.plan);
+  const basePrice = await getPlanPrice(church.plan);
+  /*
+   * Quoted in the church's own money, including the international card fee,
+   * so this agrees with the Billing tab and with what the card is charged.
+   * A naira figure here and meticais there is how a church starts doubting
+   * both.
+   */
+  const planPrice =
+    basePrice === null
+      ? "Custom"
+      : planPriceLabelFor(await priceForCountry(basePrice, church.country));
   return (
     <div className="space-y-6">
       <ProfileForm
@@ -29,7 +34,7 @@ export default async function GeneralSettingsPage() {
         initialCountry={church.country}
         initialState={church.state}
         plan={church.plan}
-        planPriceLabel={priceLabel(planPrice)}
+        planPriceLabel={planPrice}
       />
       <AboutSoftware churchName={church.name} />
     </div>

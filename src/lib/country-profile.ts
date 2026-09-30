@@ -21,6 +21,19 @@ export type CountryProfile = {
   locale: LocaleCode;
   /** International dialling code, without the plus. */
   dial: string;
+  /**
+   * IANA timezone, used as the church's clock until somebody changes it.
+   *
+   * This is not cosmetic. Birthday greetings, service reminders and pledge
+   * reminders all ask "what is today, there" — so a Maputo church left on
+   * Africa/Lagos gets an hour of every day attributed to the wrong date, and
+   * a member born just after midnight is greeted a day late, every year.
+   *
+   * Countries that span several zones get their largest city's, which is the
+   * right default and the wrong answer for a minority who can change it in
+   * Settings.
+   */
+  tz: string;
 };
 
 /**
@@ -52,77 +65,77 @@ export function smsAvailableForCountry(country: string | null | undefined): bool
  */
 const PROFILES: Record<string, CountryProfile> = {
   // ---- West Africa
-  Nigeria: { currency: "NGN", locale: "en", dial: "234" },
-  Ghana: { currency: "GHS", locale: "en", dial: "233" },
-  "Sierra Leone": { currency: "SLE", locale: "en", dial: "232" },
-  Liberia: { currency: "LRD", locale: "en", dial: "231" },
-  Gambia: { currency: "GMD", locale: "en", dial: "220" },
-  Guinea: { currency: "GNF", locale: "fr", dial: "224" },
-  Senegal: { currency: "XOF", locale: "fr", dial: "221" },
-  "Ivory Coast": { currency: "XOF", locale: "fr", dial: "225" },
-  "Côte d'Ivoire": { currency: "XOF", locale: "fr", dial: "225" },
-  Mali: { currency: "XOF", locale: "fr", dial: "223" },
-  "Burkina Faso": { currency: "XOF", locale: "fr", dial: "226" },
-  Benin: { currency: "XOF", locale: "fr", dial: "229" },
-  Togo: { currency: "XOF", locale: "fr", dial: "228" },
-  Niger: { currency: "XOF", locale: "fr", dial: "227" },
-  "Guinea-Bissau": { currency: "XOF", locale: "pt", dial: "245" },
-  "Cabo Verde": { currency: "CVE", locale: "pt", dial: "238" },
+  Nigeria: { currency: "NGN", locale: "en", dial: "234", tz: "Africa/Lagos" },
+  Ghana: { currency: "GHS", locale: "en", dial: "233", tz: "Africa/Accra" },
+  "Sierra Leone": { currency: "SLE", locale: "en", dial: "232", tz: "Africa/Freetown" },
+  Liberia: { currency: "LRD", locale: "en", dial: "231", tz: "Africa/Monrovia" },
+  Gambia: { currency: "GMD", locale: "en", dial: "220", tz: "Africa/Banjul" },
+  Guinea: { currency: "GNF", locale: "fr", dial: "224", tz: "Africa/Conakry" },
+  Senegal: { currency: "XOF", locale: "fr", dial: "221", tz: "Africa/Dakar" },
+  "Ivory Coast": { currency: "XOF", locale: "fr", dial: "225", tz: "Africa/Abidjan" },
+  "Côte d'Ivoire": { currency: "XOF", locale: "fr", dial: "225", tz: "Africa/Abidjan" },
+  Mali: { currency: "XOF", locale: "fr", dial: "223", tz: "Africa/Bamako" },
+  "Burkina Faso": { currency: "XOF", locale: "fr", dial: "226", tz: "Africa/Ouagadougou" },
+  Benin: { currency: "XOF", locale: "fr", dial: "229", tz: "Africa/Porto-Novo" },
+  Togo: { currency: "XOF", locale: "fr", dial: "228", tz: "Africa/Lome" },
+  Niger: { currency: "XOF", locale: "fr", dial: "227", tz: "Africa/Niamey" },
+  "Guinea-Bissau": { currency: "XOF", locale: "pt", dial: "245", tz: "Africa/Bissau" },
+  "Cabo Verde": { currency: "CVE", locale: "pt", dial: "238", tz: "Atlantic/Cape_Verde" },
 
   // ---- Central Africa
-  Cameroon: { currency: "XAF", locale: "fr", dial: "237" },
-  Chad: { currency: "XAF", locale: "fr", dial: "235" },
-  "Central African Republic": { currency: "XAF", locale: "fr", dial: "236" },
-  Gabon: { currency: "XAF", locale: "fr", dial: "241" },
-  "Republic of the Congo": { currency: "XAF", locale: "fr", dial: "242" },
-  "Democratic Republic of the Congo": { currency: "CDF", locale: "fr", dial: "243" },
-  "Equatorial Guinea": { currency: "XAF", locale: "pt", dial: "240" },
-  Angola: { currency: "AOA", locale: "pt", dial: "244" },
+  Cameroon: { currency: "XAF", locale: "fr", dial: "237", tz: "Africa/Douala" },
+  Chad: { currency: "XAF", locale: "fr", dial: "235", tz: "Africa/Ndjamena" },
+  "Central African Republic": { currency: "XAF", locale: "fr", dial: "236", tz: "Africa/Bangui" },
+  Gabon: { currency: "XAF", locale: "fr", dial: "241", tz: "Africa/Libreville" },
+  "Republic of the Congo": { currency: "XAF", locale: "fr", dial: "242", tz: "Africa/Brazzaville" },
+  "Democratic Republic of the Congo": { currency: "CDF", locale: "fr", dial: "243", tz: "Africa/Kinshasa" },
+  "Equatorial Guinea": { currency: "XAF", locale: "pt", dial: "240", tz: "Africa/Malabo" },
+  Angola: { currency: "AOA", locale: "pt", dial: "244", tz: "Africa/Luanda" },
 
   // ---- East Africa
-  Kenya: { currency: "KES", locale: "sw", dial: "254" },
-  Tanzania: { currency: "TZS", locale: "sw", dial: "255" },
-  Uganda: { currency: "UGX", locale: "en", dial: "256" },
-  Rwanda: { currency: "RWF", locale: "fr", dial: "250" },
-  Burundi: { currency: "BIF", locale: "fr", dial: "257" },
-  Ethiopia: { currency: "ETB", locale: "en", dial: "251" },
-  "South Sudan": { currency: "SSP", locale: "en", dial: "211" },
-  Somalia: { currency: "SOS", locale: "en", dial: "252" },
+  Kenya: { currency: "KES", locale: "sw", dial: "254", tz: "Africa/Nairobi" },
+  Tanzania: { currency: "TZS", locale: "sw", dial: "255", tz: "Africa/Dar_es_Salaam" },
+  Uganda: { currency: "UGX", locale: "en", dial: "256", tz: "Africa/Kampala" },
+  Rwanda: { currency: "RWF", locale: "fr", dial: "250", tz: "Africa/Kigali" },
+  Burundi: { currency: "BIF", locale: "fr", dial: "257", tz: "Africa/Bujumbura" },
+  Ethiopia: { currency: "ETB", locale: "en", dial: "251", tz: "Africa/Addis_Ababa" },
+  "South Sudan": { currency: "SSP", locale: "en", dial: "211", tz: "Africa/Juba" },
+  Somalia: { currency: "SOS", locale: "en", dial: "252", tz: "Africa/Mogadishu" },
 
   // ---- Southern Africa
-  Mozambique: { currency: "MZN", locale: "pt", dial: "258" },
-  "South Africa": { currency: "ZAR", locale: "en", dial: "27" },
-  Zambia: { currency: "ZMW", locale: "en", dial: "260" },
-  Zimbabwe: { currency: "ZWL", locale: "en", dial: "263" },
-  Malawi: { currency: "MWK", locale: "en", dial: "265" },
-  Botswana: { currency: "BWP", locale: "en", dial: "267" },
-  Namibia: { currency: "NAD", locale: "en", dial: "264" },
-  Lesotho: { currency: "LSL", locale: "en", dial: "266" },
-  Eswatini: { currency: "SZL", locale: "en", dial: "268" },
-  "São Tomé and Príncipe": { currency: "STN", locale: "pt", dial: "239" },
+  Mozambique: { currency: "MZN", locale: "pt", dial: "258", tz: "Africa/Maputo" },
+  "South Africa": { currency: "ZAR", locale: "en", dial: "27", tz: "Africa/Johannesburg" },
+  Zambia: { currency: "ZMW", locale: "en", dial: "260", tz: "Africa/Lusaka" },
+  Zimbabwe: { currency: "ZWL", locale: "en", dial: "263", tz: "Africa/Harare" },
+  Malawi: { currency: "MWK", locale: "en", dial: "265", tz: "Africa/Blantyre" },
+  Botswana: { currency: "BWP", locale: "en", dial: "267", tz: "Africa/Gaborone" },
+  Namibia: { currency: "NAD", locale: "en", dial: "264", tz: "Africa/Windhoek" },
+  Lesotho: { currency: "LSL", locale: "en", dial: "266", tz: "Africa/Maseru" },
+  Eswatini: { currency: "SZL", locale: "en", dial: "268", tz: "Africa/Mbabane" },
+  "São Tomé and Príncipe": { currency: "STN", locale: "pt", dial: "239", tz: "Africa/Sao_Tome" },
 
   // ---- North Africa
-  Egypt: { currency: "EGP", locale: "en", dial: "20" },
-  Morocco: { currency: "MAD", locale: "fr", dial: "212" },
-  Algeria: { currency: "DZD", locale: "fr", dial: "213" },
-  Tunisia: { currency: "TND", locale: "fr", dial: "216" },
-  Libya: { currency: "LYD", locale: "en", dial: "218" },
-  Sudan: { currency: "SDG", locale: "en", dial: "249" },
+  Egypt: { currency: "EGP", locale: "en", dial: "20", tz: "Africa/Cairo" },
+  Morocco: { currency: "MAD", locale: "fr", dial: "212", tz: "Africa/Casablanca" },
+  Algeria: { currency: "DZD", locale: "fr", dial: "213", tz: "Africa/Algiers" },
+  Tunisia: { currency: "TND", locale: "fr", dial: "216", tz: "Africa/Tunis" },
+  Libya: { currency: "LYD", locale: "en", dial: "218", tz: "Africa/Tripoli" },
+  Sudan: { currency: "SDG", locale: "en", dial: "249", tz: "Africa/Khartoum" },
 
   // ---- Where the diaspora is
-  "United Kingdom": { currency: "GBP", locale: "en", dial: "44" },
-  "United States": { currency: "USD", locale: "en", dial: "1" },
-  Canada: { currency: "CAD", locale: "en", dial: "1" },
-  France: { currency: "EUR", locale: "fr", dial: "33" },
-  Belgium: { currency: "EUR", locale: "fr", dial: "32" },
-  Portugal: { currency: "EUR", locale: "pt", dial: "351" },
-  Brazil: { currency: "BRL", locale: "pt", dial: "55" },
-  Germany: { currency: "EUR", locale: "en", dial: "49" },
-  Ireland: { currency: "EUR", locale: "en", dial: "353" },
-  Netherlands: { currency: "EUR", locale: "en", dial: "31" },
-  Italy: { currency: "EUR", locale: "en", dial: "39" },
-  Spain: { currency: "EUR", locale: "en", dial: "34" },
-  Australia: { currency: "AUD", locale: "en", dial: "61" },
+  "United Kingdom": { currency: "GBP", locale: "en", dial: "44", tz: "Europe/London" },
+  "United States": { currency: "USD", locale: "en", dial: "1", tz: "America/New_York" },
+  Canada: { currency: "CAD", locale: "en", dial: "1", tz: "America/Toronto" },
+  France: { currency: "EUR", locale: "fr", dial: "33", tz: "Europe/Paris" },
+  Belgium: { currency: "EUR", locale: "fr", dial: "32", tz: "Europe/Brussels" },
+  Portugal: { currency: "EUR", locale: "pt", dial: "351", tz: "Europe/Lisbon" },
+  Brazil: { currency: "BRL", locale: "pt", dial: "55", tz: "America/Sao_Paulo" },
+  Germany: { currency: "EUR", locale: "en", dial: "49", tz: "Europe/Berlin" },
+  Ireland: { currency: "EUR", locale: "en", dial: "353", tz: "Europe/Dublin" },
+  Netherlands: { currency: "EUR", locale: "en", dial: "31", tz: "Europe/Amsterdam" },
+  Italy: { currency: "EUR", locale: "en", dial: "39", tz: "Europe/Rome" },
+  Spain: { currency: "EUR", locale: "en", dial: "34", tz: "Europe/Madrid" },
+  Australia: { currency: "AUD", locale: "en", dial: "61", tz: "Australia/Sydney" },
 };
 
 /** Where we land when a country is not in the table. */
@@ -130,6 +143,9 @@ export const FALLBACK_PROFILE: CountryProfile = {
   currency: "USD",
   locale: "en",
   dial: "",
+  // UTC, not Lagos: a country we cannot place should not be quietly filed
+  // under West Africa. Wrong in a way the church will notice and can fix.
+  tz: "UTC",
 };
 
 export function countryProfile(country: string | null | undefined): CountryProfile {
@@ -145,9 +161,31 @@ export function localeForCountry(country: string | null | undefined): LocaleCode
   return countryProfile(country).locale;
 }
 
+export function timezoneForCountry(country: string | null | undefined): string {
+  return countryProfile(country).tz;
+}
+
 /** Every country we have a profile for. Useful for tests and the admin. */
 export function knownCountries(): string[] {
   return Object.keys(PROFILES);
+}
+
+/**
+ * Every timezone any profiled country lands on, plus UTC.
+ *
+ * The settings dropdown is built from this rather than a hand-written list.
+ * A hand-written one had ten entries and did not include Africa/Maputo, so a
+ * Mozambican church saw "Africa/Lagos" selected, and saving anything else on
+ * that page overwrote its real timezone with Lagos — a silent data loss that
+ * then moved every birthday greeting and service reminder by an hour.
+ *
+ * Derived, so adding a country can never again leave its churches unable to
+ * see their own clock.
+ */
+export function knownTimezones(): string[] {
+  const all = new Set(Object.values(PROFILES).map((p) => p.tz));
+  all.add("UTC");
+  return [...all].sort();
 }
 
 /* ============================================================

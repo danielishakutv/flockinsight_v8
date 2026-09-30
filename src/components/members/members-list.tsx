@@ -151,6 +151,7 @@ export function MembersList({
   households = [],
   canManageTeam = false,
   accessRoles = [],
+  churchCountry,
 }: {
   members: MemberRow[];
   /** Completed training per member id, keyed for O(1) lookup while rendering. */
@@ -162,6 +163,8 @@ export function MembersList({
   /** Whether the viewer may grant app access (team.manage). */
   canManageTeam?: boolean;
   accessRoles?: { id: string; name: string }[];
+  /** The church's own country, so a new member does not default to Nigeria. */
+  churchCountry?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -170,7 +173,9 @@ export function MembersList({
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false);
   const [bulkRoleId, setBulkRoleId] = useState("__none__");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<MemberFormState>(emptyMember);
+  const [form, setForm] = useState<MemberFormState>(() =>
+    emptyMember(churchCountry),
+  );
   const [confirmId, setConfirmId] = useState<string | null>(null);
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -316,7 +321,7 @@ export function MembersList({
   }
 
   function openAdd() {
-    setForm(emptyMember());
+    setForm(emptyMember(churchCountry));
     setOpen(true);
   }
 
@@ -330,7 +335,7 @@ export function MembersList({
       toast.success(t("members.memberAdded"));
       track("member.added");
       setOpen(false);
-      setForm(emptyMember());
+      setForm(emptyMember(churchCountry));
       router.refresh();
     });
   }

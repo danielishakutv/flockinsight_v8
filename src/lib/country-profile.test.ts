@@ -99,6 +99,56 @@ describe("SMS availability", () => {
   });
 });
 
+describe("timezones", () => {
+  it("gives every profiled country a timezone the runtime can actually use", async () => {
+    // A bad IANA name throws at format time, inside a cron, at 6am.
+    const { knownCountries, countryProfile } = await import(
+      "@/lib/country-profile"
+    );
+    for (const country of knownCountries()) {
+      const tz = countryProfile(country).tz;
+      expect(() =>
+        new Intl.DateTimeFormat("en", { timeZone: tz }).format(new Date()),
+        `${country} -> ${tz}`,
+      ).not.toThrow();
+    }
+  });
+
+  it("does not put a Mozambican church on Lagos time", async () => {
+    /*
+     * An hour of every day filed under the wrong date. Birthday greetings and
+     * service reminders both ask "what is today, there", so the church would
+     * see the symptom as messages arriving on the wrong day, which looks like
+     * a bug in reminders rather than a bug in a default.
+     */
+    const { timezoneForCountry } = await import("@/lib/country-profile");
+    expect(timezoneForCountry("Mozambique")).toBe("Africa/Maputo");
+    expect(timezoneForCountry("Kenya")).toBe("Africa/Nairobi");
+    expect(timezoneForCountry("Nigeria")).toBe("Africa/Lagos");
+  });
+
+  it("uses UTC for a country we cannot place, not Lagos", async () => {
+    const { timezoneForCountry } = await import("@/lib/country-profile");
+    expect(timezoneForCountry("Mongolia")).toBe("UTC");
+  });
+
+  it("offers every profiled timezone in the settings list", async () => {
+    /*
+     * The settings dropdown is built from this. A hand-written list missing
+     * Africa/Maputo meant a Mozambican church saw Lagos selected, and saving
+     * that page silently overwrote its real timezone.
+     */
+    const { knownTimezones, knownCountries, countryProfile } = await import(
+      "@/lib/country-profile"
+    );
+    const offered = new Set(knownTimezones());
+    for (const country of knownCountries()) {
+      expect(offered.has(countryProfile(country).tz), country).toBe(true);
+    }
+    expect(offered.has("UTC")).toBe(true);
+  });
+});
+
 describe("dial codes", () => {
   it("knows the codes for the countries we are onboarding first", () => {
     expect(countryProfile("Mozambique").dial).toBe("258");
