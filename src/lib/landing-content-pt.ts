@@ -249,4 +249,36 @@ export const pt: LandingContent = {
     "Sete domingos grátis. Sem cartão. Os seus dados continuam a ser seus.",
   footerTagline:
     "A dar às igrejas ferramentas de gestão modernas para crescerem e prosperarem.",
+  pricing: {
+    title: "Preços simples para cada igreja",
+    intro:
+      "Comece gratuitamente e cresça ao ritmo da sua congregação. Não é preciso cartão para começar.",
+    promo: "Promoção de lançamento: os seus primeiros 7 domingos são grátis",
+    mostPopular: "Mais escolhido",
+    free: "Grátis",
+    firstSundays: "Os primeiros 7 domingos",
+    getStarted: "Começar",
+    contactUs: "Fale connosco",
+    perMonth: "/mês",
+    customTitle:
+      "Precisa de algo à medida para uma denominação ou um ministério com várias congregações?",
+    talkToUs: "Fale connosco",
+    fullDetailsPre: "Veja todos os detalhes dos planos na",
+    pricingPageLink: "página de preços",
+    nairaNote: "Preços em nairas.",
+    currencyNote:
+      "Preços apresentados em {currency}. O seu cartão é debitado em nairas nigerianas, e o total inclui {fee} referentes a taxas de cartão internacional. Convertido à taxa de câmbio de hoje.",
+    currencyNoteIndicative:
+      "Preços apresentados em {currency}. O seu cartão é debitado em nairas nigerianas, e o total inclui {fee} referentes a taxas de cartão internacional. O serviço de taxas de câmbio está indisponível neste momento, pelo que o valor convertido é indicativo.",
+  },
+  nav: {
+    features: "Funcionalidades",
+    howItWorks: "Como funciona",
+    pricing: "Preços",
+    faq: "Perguntas frequentes",
+    findChurch: "Encontrar uma igreja",
+    bookDemo: "Marcar uma demonstração",
+    logIn: "Entrar",
+    startFree: "Começar gratuitamente",
+  },
 };

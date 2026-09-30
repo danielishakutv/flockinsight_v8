@@ -6,6 +6,7 @@ import { requireCan } from "@/lib/permissions";
 import { applyDiscount, getPlanPrices } from "@/lib/pricing";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { computeStanding } from "@/lib/trial";
+import { pricesForCountry, planPriceLabelFor } from "@/lib/plan-price";
 import { PlanBilling } from "@/components/settings/plan-billing";
 
 export const metadata = { title: "Billing · Settings" };
@@ -55,6 +56,28 @@ export default async function BillingPage({
 
   const standing = computeStanding(c);
 
+  /*
+   * A church outside Nigeria is quoted in its own currency and charged a
+   * surcharge covering the international card fee. Computed here, on the
+   * server, from the SAME helper the checkout action uses — if the card and
+   * the charge ever disagreed, the church would find out on its statement.
+   */
+  const localised = await pricesForCountry(prices, c.country);
+  const first = Object.values(localised).find((p) => p?.international);
+  const international = first
+    ? {
+        labels: Object.fromEntries(
+          Object.entries(localised).map(([id, p]) => [
+            id,
+            p && p.baseNgn > 0 ? planPriceLabelFor(p) : null,
+          ]),
+        ),
+        currency: first.displayCurrency,
+        surchargeNgn: first.surchargeNgn,
+        live: first.live,
+      }
+    : null;
+
   return (
     <PlanBilling
       currentPlan={row.plan}
@@ -74,6 +97,7 @@ export default async function BillingPage({
         createdAt: (p.paidAt ?? p.createdAt).toISOString(),
       }))}
       status={status ?? null}
+      international={international}
     />
   );
 }

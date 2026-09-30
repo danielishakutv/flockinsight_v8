@@ -39,6 +39,7 @@ export function PlanBilling({
   payments,
   status,
   trial,
+  international,
 }: {
   currentPlan: string;
   renewsAt: string | null;
@@ -48,6 +49,21 @@ export function PlanBilling({
   payments: PaymentRow[];
   status: string | null;
   trial?: { state: string; daysLeft: number | null } | null;
+  /**
+   * Set only for a church outside Nigeria. Everything is computed on the
+   * server — this component never converts a currency, so the figure on the
+   * card and the figure Paystack charges come from the same calculation.
+   */
+  international?: {
+    /** Per plan: the price in the church's own money, ready to print. */
+    labels: Record<string, string | null>;
+    currency: string;
+    /** What the card is actually charged, in naira, for the priciest plan
+     *  shown — used only in the explanatory note. */
+    surchargeNgn: number;
+    /** False when the rate came from the stale fallback table. */
+    live: boolean;
+  } | null;
 }) {
   const onTrial = trial?.state === "trialing";
   const trialExpired = trial?.state === "expired";
@@ -144,8 +160,15 @@ export function PlanBilling({
         {PLANS.map((p, i) => {
           const isCurrent = p.id === currentPlan;
           const price = prices[p.id];
+          // A church abroad sees its own money; the naira total is explained
+          // once below the grid rather than repeated on every card.
           const priceLabel =
-            price === null ? "Custom" : price === 0 ? "Free" : `₦${price.toLocaleString()}/mo`;
+            price === null
+              ? "Custom"
+              : price === 0
+                ? "Free"
+                : (international?.labels[p.id] ??
+                  `₦${price.toLocaleString()}/mo`);
           const action =
             p.id === "enterprise"
               ? "contact"
@@ -220,6 +243,26 @@ export function PlanBilling({
           );
         })}
       </div>
+
+      {/*
+        Said once, under the grid, rather than on four cards. A church abroad
+        needs three facts: the money it is quoted in, the money its card is
+        charged in, and why the total is above the Nigerian list price. Leaving
+        the third unsaid turns a covered cost into a surprise on a statement.
+      */}
+      {international && (
+        <p className="text-muted-foreground rounded-xl border border-dashed p-3 text-xs leading-relaxed">
+          Prices are shown in {international.currency}. Your card is charged in
+          Nigerian naira — the total includes{" "}
+          <span className="font-semibold">
+            ₦{international.surchargeNgn.toLocaleString()}
+          </span>{" "}
+          toward international card fees, which are far higher than local ones.
+          {international.live
+            ? " Converted at today's exchange rate; your bank's rate may differ slightly."
+            : " The exchange rate service is unreachable right now, so the converted figure is indicative — the naira amount charged is exact."}
+        </p>
+      )}
 
       {/* Payment history */}
       <Card>

@@ -33,7 +33,12 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { PromoPopup } from "@/components/public/promo-popup";
 import { siteUrl } from "@/lib/site";
 import { getPlans } from "@/lib/pricing";
-import { planPriceLabel } from "@/lib/plans";
+import {
+  currencyNoteFor,
+  planPriceLabelFor,
+  pricesForCountry,
+  requestCountry,
+} from "@/lib/plan-price";
 import { APP_VERSION } from "@/lib/version";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,7 +73,17 @@ export const metadata: Metadata = {
 };
 
 /** Static: the copy only changes when we deploy, so serve it from the edge. */
-export const revalidate = 3600;
+/*
+ * Rendered per request, not cached as a build-time copy.
+ *
+ * This page reads the language cookie and the visitor's country, so the words
+ * AND the prices differ per visitor. It carried `revalidate = 3600` before,
+ * which did nothing once those reads were added — and worse, the try/catch
+ * around them used to swallow Next's bail-out, so the page really was frozen
+ * as one English build-time copy. The rethrow in `getLocale` fixed that; this
+ * note exists so nobody re-adds the revalidate and wonders why French stopped
+ * working.
+ */
 
 /** Feature icon keys → components. Keeps the copy free of JSX. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
@@ -95,6 +110,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
 export default async function LandingPage() {
   const locale = await getLocale();
   const c = landingContent(locale);
+  const nav = c.nav;
   const site = siteUrl();
   /**
    * Structured data, for search engines and for AI assistants.
@@ -179,6 +195,18 @@ export default async function LandingPage() {
     },
   ];
   const plans = await getPlans();
+
+  /*
+   * Plan prices in the visitor's own currency. A church outside Nigeria also
+   * carries a surcharge covering the international card fee, so the figure
+   * here is the figure checkout charges — same helper, one calculation.
+   */
+  const priced = await pricesForCountry(
+    Object.fromEntries(plans.map((p) => [p.id, p.priceMonthly])),
+    await requestCountry(),
+  );
+  const currencyNote = currencyNoteFor(priced, c.pricing);
+
   return (
     <div className="flex min-h-dvh flex-col">
       <JsonLd data={jsonLd} />
@@ -188,11 +216,11 @@ export default async function LandingPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 lg:px-8">
           <Wordmark />
           <nav className="hidden items-center gap-8 text-sm font-semibold md:flex">
-            <a href="#features" className="hover:text-primary">Features</a>
-            <a href="#how" className="hover:text-primary">How It Works</a>
-            <a href="#pricing" className="hover:text-primary">Pricing</a>
-            <a href="#faq" className="hover:text-primary">FAQ</a>
-            <Link href="/churches" className="hover:text-primary">Find a church</Link>
+            <a href="#features" className="hover:text-primary">{nav.features}</a>
+            <a href="#how" className="hover:text-primary">{nav.howItWorks}</a>
+            <a href="#pricing" className="hover:text-primary">{nav.pricing}</a>
+            <a href="#faq" className="hover:text-primary">{nav.faq}</a>
+            <Link href="/churches" className="hover:text-primary">{nav.findChurch}</Link>
           </nav>
           <div className="flex items-center gap-2">
             <PublicLanguageMenu />
@@ -406,18 +434,25 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-primary text-sm font-bold uppercase tracking-wider">
-                Pricing
+                {nav.pricing}
               </p>
               <h2 className="mt-2 text-3xl font-extrabold tracking-tight lg:text-4xl">
-                Simple pricing for every church
+                {c.pricing.title}
               </h2>
               <p className="text-muted-foreground mt-4 text-lg">
-                Start free and grow as your congregation grows. Prices in Naira,
-                no card required to begin.
+                {c.pricing.intro}
               </p>
             </div>
             <div className="mt-12 grid gap-5 lg:grid-cols-4">
-              {plans.map((p) => (
+              {plans.map((p) => {
+                const localised = priced[p.id];
+                const priceLabel = localised
+                  ? planPriceLabelFor(localised, {
+                      free: c.pricing.free,
+                      perMonth: c.pricing.perMonth,
+                    })
+                  : "—";
+                return (
                 <div
                   key={p.id}
                   className={cn(
@@ -427,7 +462,7 @@ export default async function LandingPage() {
                 >
                   {p.highlight && (
                     <span className="bg-primary text-primary-foreground absolute -top-3 left-6 rounded-full px-3 py-1 text-xs font-bold">
-                      Most popular
+                      {c.pricing.mostPopular}
                     </span>
                   )}
                   <h3 className="text-xl font-extrabold">{p.name}</h3>
@@ -438,18 +473,18 @@ export default async function LandingPage() {
                     {p.priceMonthly && p.priceMonthly > 0 ? (
                       <>
                         <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
-                          {planPriceLabel(p)}
+                          {priceLabel}
                         </span>
                         <span className="text-primary ml-2 text-2xl font-extrabold">
-                          Free
+                          {c.pricing.free}
                         </span>
                         <p className="text-primary mt-0.5 text-xs font-bold uppercase tracking-wide">
-                          First 7 Sundays
+                          {c.pricing.firstSundays}
                         </p>
                       </>
                     ) : (
                       <span className="text-3xl font-extrabold tracking-tight">
-                        {planPriceLabel(p)}
+                        {p.priceMonthly === null ? "—" : priceLabel}
                       </span>
                     )}
                   </div>
@@ -468,16 +503,23 @@ export default async function LandingPage() {
                     size="lg"
                   >
                     <Link href="/signup">
-                      {p.priceMonthly === null ? "Contact us" : "Get started"}
+                      {p.priceMonthly === null
+                        ? c.pricing.contactUs
+                        : c.pricing.getStarted}
                     </Link>
                   </Button>
                 </div>
-              ))}
+                );
+              })}
             </div>
-            <p className="text-muted-foreground mt-8 text-center text-sm">
-              See full plan details on the{" "}
+            {/* The currency and the card fee, said once. */}
+            <p className="text-muted-foreground mt-8 text-center text-xs leading-relaxed">
+              {currencyNote}
+            </p>
+            <p className="text-muted-foreground mt-4 text-center text-sm">
+              {c.pricing.fullDetailsPre}{" "}
               <Link href="/pricing" className="text-primary font-semibold underline">
-                pricing page
+                {c.pricing.pricingPageLink}
               </Link>
               .
             </p>

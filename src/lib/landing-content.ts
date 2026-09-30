@@ -299,6 +299,60 @@ export type LandingContent = {
   ctaTitle: string;
   ctaBody: string;
   footerTagline: string;
+  pricing: PricingCopy;
+  nav: NavCopy;
+};
+
+/**
+ * The public header. Short words, and every one of them a link somebody has to
+ * recognise in their own language before they will click it.
+ */
+export type NavCopy = {
+  features: string;
+  howItWorks: string;
+  pricing: string;
+  faq: string;
+  findChurch: string;
+  bookDemo: string;
+  logIn: string;
+  startFree: string;
+};
+
+/**
+ * The pricing section, on the landing page and on /pricing.
+ *
+ * Separate from the rest because the numbers inside it are not translated —
+ * they are converted. A church in Maputo reads Portuguese around a price in
+ * meticais, and the note explaining the card fee has to be as fluent as the
+ * marketing copy or it reads as a catch.
+ */
+export type PricingCopy = {
+  title: string;
+  /** Deliberately says nothing about which currency: that depends on who is
+   *  reading, and `currencyNote` answers it. */
+  intro: string;
+  promo: string;
+  mostPopular: string;
+  free: string;
+  firstSundays: string;
+  getStarted: string;
+  contactUs: string;
+  /** The "/mo" after a price. Moves in translation. */
+  perMonth: string;
+  customTitle: string;
+  talkToUs: string;
+  fullDetailsPre: string;
+  pricingPageLink: string;
+  /** Shown to a Nigerian visitor. */
+  nairaNote: string;
+  /**
+   * Shown to everyone else. `{currency}` and `{fee}` are replaced at render;
+   * a template rather than concatenation because the order of the two moves
+   * between languages.
+   */
+  currencyNote: string;
+  /** Replaces the last sentence of `currencyNote` when the rate is stale. */
+  currencyNoteIndicative: string;
 };
 
 export const en: LandingContent = {
@@ -331,6 +385,37 @@ export const en: LandingContent = {
   ctaBody: "Seven Sundays free. No card required. Your data stays yours.",
   footerTagline:
     "Empowering churches with modern management tools to grow and thrive.",
+  pricing: {
+    title: "Simple pricing for every church",
+    intro: "Start free and grow as your congregation grows. No card required to begin.",
+    promo: "Launch promo: your first 7 Sundays are free",
+    mostPopular: "Most popular",
+    free: "Free",
+    firstSundays: "First 7 Sundays",
+    getStarted: "Get started",
+    contactUs: "Contact us",
+    perMonth: "/mo",
+    customTitle:
+      "Need something custom for a denomination or multi-branch ministry?",
+    talkToUs: "Talk to us",
+    fullDetailsPre: "See full plan details on the",
+    pricingPageLink: "pricing page",
+    nairaNote: "Prices in Naira.",
+    currencyNote:
+      "Prices shown in {currency}. Your card is charged in Nigerian Naira, and the total includes {fee} toward international card fees. Converted at today's exchange rate.",
+    currencyNoteIndicative:
+      "Prices shown in {currency}. Your card is charged in Nigerian Naira, and the total includes {fee} toward international card fees. The exchange rate service is unreachable right now, so the converted figure is indicative.",
+  },
+  nav: {
+    features: "Features",
+    howItWorks: "How It Works",
+    pricing: "Pricing",
+    faq: "FAQ",
+    findChurch: "Find a church",
+    bookDemo: "Book a demo",
+    logIn: "Log in",
+    startFree: "Start free",
+  },
 };
 
 /**

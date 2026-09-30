@@ -7,6 +7,7 @@ import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { effectivePrice, activatePlan } from "@/lib/billing";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
+import { priceForCountry, planAmountLabel } from "@/lib/plan-price";
 import { notifySupport } from "@/lib/support";
 import { audit } from "@/lib/audit";
 import type { PlanId } from "@/lib/plans";
@@ -67,35 +68,65 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
       error: "Online payment isn't set up yet. Please contact us.",
     };
 
+  /*
+   * A church outside Nigeria pays a surcharge covering the international card
+   * fee, and is shown the total in its own currency. The CHARGE stays in naira
+   * because that is what Paystack settles in and what an international card
+   * can already pay — so this is the amount that must reach paystackInit, the
+   * payment row, and the audit line. Passing `price` to any of the three would
+   * bill the Nigerian figure and eat the fee silently.
+   */
+  const priced = await priceForCountry(price, c.country);
+
   const reference = `FI-${c.id.slice(0, 8)}-${plan}-${Date.now()}`;
   await db.insert(payment).values({
     churchId: c.id,
     plan,
-    amount: price,
+    amount: priced.chargeNgn,
     currency: "NGN",
     gateway: "paystack",
     reference,
     status: "pending",
     periodMonths: 1,
     createdBy: user.id,
+    // Recorded on the row so a refund or a query months later can see why the
+    // amount is not the list price, without re-running today's exchange rate.
+    note: priced.international
+      ? `International card fee included (₦${priced.surchargeNgn.toLocaleString()}) — shown to the church as ${planAmountLabel(priced.displayAmount, priced.displayCurrency)}`
+      : null,
   });
 
   const init = await paystackInit({
     email: user.email,
-    amountNaira: price,
+    amountNaira: priced.chargeNgn,
     reference,
     callbackUrl: `${BASE_URL}/settings/billing/callback`,
-    metadata: { churchId: c.id, plan },
+    metadata: {
+      churchId: c.id,
+      plan,
+      country: c.country ?? null,
+      baseNgn: priced.baseNgn,
+      surchargeNgn: priced.surchargeNgn,
+      displayAmount: priced.displayAmount,
+      displayCurrency: priced.displayCurrency,
+    },
   });
   if (!init.ok) return init;
 
   await audit({
     churchId: c.id,
     action: "billing.checkout.create",
-    summary: `Started checkout for the ${plan} plan (₦${price.toLocaleString()})`,
+    summary: `Started checkout for the ${plan} plan (₦${priced.chargeNgn.toLocaleString()})`,
     targetType: "payment",
     targetLabel: reference,
-    meta: { plan, price, reference },
+    meta: {
+      plan,
+      price: priced.chargeNgn,
+      baseNgn: priced.baseNgn,
+      surchargeNgn: priced.surchargeNgn,
+      country: c.country ?? null,
+      reference,
+    },
     severity: "notice",
   });
 

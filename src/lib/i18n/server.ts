@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, user } from "@/db/schema";
@@ -54,8 +55,18 @@ export const getLocale = cache(async (): Promise<LocaleCode> => {
 
     const h = await headers();
     return matchAcceptLanguage(h.get("accept-language")) ?? DEFAULT_LOCALE;
-  } catch {
-    // No request scope (a script, a cron tick calling a shared helper).
+  } catch (err) {
+    /*
+     * MUST come first. `cookies()` and `headers()` bail out of a static render
+     * by THROWING, and this catch used to swallow that signal — so every page
+     * calling getLocale was prerendered at build time, in English, and stayed
+     * English for every visitor no matter which language they picked. The
+     * translations were all present; the page serving them was a build-time
+     * copy. See next/navigation#unstable_rethrow.
+     */
+    unstable_rethrow(err);
+    // Genuinely no request scope: a script, or a cron tick calling a shared
+    // helper. English is the only answer available.
     return DEFAULT_LOCALE;
   }
 });
@@ -138,7 +149,8 @@ export async function getLocalePreference(): Promise<LocaleCode | "auto"> {
     if (chosen && isLocale(chosen)) return chosen;
     const fromAccount = await accountLocale();
     return fromAccount ?? AUTO_LOCALE;
-  } catch {
+  } catch (err) {
+    unstable_rethrow(err);
     return AUTO_LOCALE;
   }
 }

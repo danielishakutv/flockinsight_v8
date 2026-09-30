@@ -250,4 +250,36 @@ export const fr: LandingContent = {
     "Sept dimanches gratuits. Sans carte bancaire. Vos données restent les vôtres.",
   footerTagline:
     "Donner aux églises des outils de gestion modernes pour grandir et prospérer.",
+  pricing: {
+    title: "Des tarifs simples pour chaque église",
+    intro:
+      "Commencez gratuitement et progressez au rythme de votre assemblée. Aucune carte bancaire n’est demandée pour débuter.",
+    promo: "Offre de lancement : vos 7 premiers dimanches sont gratuits",
+    mostPopular: "Le plus choisi",
+    free: "Gratuit",
+    firstSundays: "Les 7 premiers dimanches",
+    getStarted: "Commencer",
+    contactUs: "Nous contacter",
+    perMonth: "/mois",
+    customTitle:
+      "Besoin d’une formule sur mesure pour une dénomination ou un ministère multi-sites ?",
+    talkToUs: "Parlons-en",
+    fullDetailsPre: "Tous les détails des formules sur la",
+    pricingPageLink: "page des tarifs",
+    nairaNote: "Tarifs en nairas.",
+    currencyNote:
+      "Tarifs affichés en {currency}. Votre carte est débitée en nairas nigérians, et le total comprend {fee} au titre des frais de carte à l’international. Conversion au taux de change du jour.",
+    currencyNoteIndicative:
+      "Tarifs affichés en {currency}. Votre carte est débitée en nairas nigérians, et le total comprend {fee} au titre des frais de carte à l’international. Le service de taux de change est momentanément injoignable : le montant converti est donc indicatif.",
+  },
+  nav: {
+    features: "Fonctionnalités",
+    howItWorks: "Comment ça marche",
+    pricing: "Tarifs",
+    faq: "Questions fréquentes",
+    findChurch: "Trouver une église",
+    bookDemo: "Réserver une démo",
+    logIn: "Se connecter",
+    startFree: "Commencer gratuitement",
+  },
 };
