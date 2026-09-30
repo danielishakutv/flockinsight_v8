@@ -28,8 +28,33 @@ describe("roundUpPrice", () => {
   });
 
   it("lands on a number that reads like a price", () => {
-    expect(roundUpPrice(7431.88) % 100).toBe(0);
-    expect(roundUpPrice(120) % 50).toBe(0);
+    expect(roundUpPrice(7431.88)).toBe(7500);
+    expect(roundUpPrice(1269)).toBe(1300);
+    expect(roundUpPrice(616)).toBe(620);
+  });
+
+  it("stays sane in a currency where the price is single digits", () => {
+    /*
+     * The bug this exists to catch: naira-shaped steps of 50 turned €8.49 into
+     * €50, so every plan on the French page showed the same number and it was
+     * six times the real one. A relative step has to hold across currencies
+     * three orders of magnitude apart.
+     */
+    expect(roundUpPrice(8.49)).toBe(9);
+    expect(roundUpPrice(5.03)).toBe(6);
+    expect(roundUpPrice(18.3)).toBe(19);
+  });
+
+  it("never rounds finer than a whole unit", () => {
+    // No subscription anywhere is priced in cents.
+    expect(roundUpPrice(0.4)).toBe(1);
+    expect(Number.isInteger(roundUpPrice(2.2))).toBe(true);
+  });
+
+  it("keeps different plans different", () => {
+    // Three plans collapsing onto one price is how the €50 bug showed itself.
+    const prices = [5.03, 8.49, 18.3].map(roundUpPrice);
+    expect(new Set(prices).size).toBe(3);
   });
 
   it("is zero for nothing", () => {

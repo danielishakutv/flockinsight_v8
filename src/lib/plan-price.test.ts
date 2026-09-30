@@ -13,7 +13,7 @@ vi.mock("@/lib/fx", async (importOriginal) => {
   return {
     ...actual,
     getRates: async () => ({
-      perNgn: { USD: 1 / 1550, MZN: 1 / 24, EUR: 1 / 1650 },
+      perNgn: { USD: 1 / 1550, MZN: 1 / 24, EUR: 1 / 1650, KES: 1 / 10.25 },
       fetchedAt: "2026-09-30T00:00:00.000Z",
       live: true,
     }),
@@ -97,6 +97,32 @@ describe("pricing a whole table at once", () => {
   it("leaves a custom plan as null rather than pricing it at zero", async () => {
     const table = await pricesForCountry({ enterprise: null }, "Kenya");
     expect(table.enterprise).toBeNull();
+  });
+});
+
+describe("plans stay distinguishable abroad", () => {
+  it("does not collapse three plans onto one price", async () => {
+    /*
+     * A French visitor saw €50 on Growth, Pro AND Enterprise, because the
+     * rounding step was a naira-sized 50 applied to single-digit euros. A
+     * pricing table where every tier costs the same is not a pricing table.
+     */
+    const table = await pricesForCountry(
+      { growth: 5000, pro: 10_000, enterprise: 25_000 },
+      "France",
+    );
+    const shown = Object.values(table).map((p) => p!.displayAmount);
+    expect(new Set(shown).size).toBe(3);
+    expect(shown[0]).toBeLessThan(shown[1]);
+    expect(shown[1]).toBeLessThan(shown[2]);
+  });
+
+  it("keeps the order of the tiers in every currency we sell in", async () => {
+    for (const country of ["Mozambique", "Kenya", "France", "United States"]) {
+      const t = await pricesForCountry({ a: 5000, b: 10_000, c: 25_000 }, country);
+      expect(t.a!.displayAmount, country).toBeLessThan(t.b!.displayAmount);
+      expect(t.b!.displayAmount, country).toBeLessThan(t.c!.displayAmount);
+    }
   });
 });
 

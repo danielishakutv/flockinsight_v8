@@ -138,12 +138,27 @@ export type InternationalPrice = {
  * Round up to something that looks like a price.
  *
  * A converted figure lands on 7,431.88, which reads as an accident rather than
- * a decision. Rounding UP to a round number also means the surcharge is never
- * eroded by rounding the wrong way.
+ * a decision. Rounding UP also means the surcharge is never eroded by rounding
+ * the wrong way.
+ *
+ * The step is derived from the SIZE of the amount rather than fixed, and that
+ * is the whole point. Fixed naira-shaped steps (50 / 100 / 500) are sensible
+ * for ₦7,657 and absurd for €8.49 — which rounded up to €50, so every plan
+ * on the French page showed the same price, six times what the church would
+ * actually pay. This sells in currencies three orders of magnitude apart; the
+ * only rule that survives all of them is a relative one.
+ *
+ * Two significant figures, always up, never finer than 1 whole unit:
+ *
+ *     €8.49      -> €9          MT 616   -> MT 620
+ *     KSh 1,269  -> KSh 1,300   ₦7,657  -> ₦7,700
+ *
+ * Never finer than 1 because no subscription anywhere is priced in cents.
  */
 export function roundUpPrice(amount: number): number {
   if (amount <= 0) return 0;
-  const step = amount < 1000 ? 50 : amount < 10_000 ? 100 : 500;
+  const digits = Math.floor(Math.log10(amount)) + 1;
+  const step = Math.max(1, 10 ** (digits - 2));
   return Math.ceil(amount / step) * step;
 }
 
