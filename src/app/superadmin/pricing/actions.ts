@@ -3,7 +3,13 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
-import { setPlanPrice, setPlanFeatures, setStorageBundles } from "@/lib/pricing";
+import {
+  setPlanEmails,
+  setPlanFeatures,
+  setPlanPrice,
+  setPlanStorageMb,
+  setStorageBundles,
+} from "@/lib/pricing";
 import { planName, type PlanId } from "@/lib/plans";
 import { recordAudit } from "@/lib/audit";
 import { setReferralRewards } from "@/lib/referrals";
@@ -136,5 +142,59 @@ export async function setReferralRewardsAction(
 
   revalidatePath("/superadmin/pricing");
   revalidatePath("/settings/referrals");
+  return { ok: true };
+}
+
+/* ----- Included storage & emails ----- */
+
+const allowanceSchema = z.object({
+  plan: z.enum(["starter", "growth", "pro", "enterprise"]),
+  /** Megabytes, so the operator types 500 rather than 524288000. */
+  storageMb: z.coerce.number().int().min(0).max(1_000_000),
+  /** Blank means unlimited — the only thing somebody can type that is not zero. */
+  emails: z.string().trim().max(12),
+});
+
+/**
+ * What a plan includes, as opposed to what it costs.
+ *
+ * Separate from the price action on purpose: these are the numbers that decide
+ * the supplier bill, and they move for entirely different reasons than a price
+ * does. An operator raising storage is answering Cloudinary; one raising a
+ * price is answering the market.
+ */
+export async function setPlanAllowancesAction(
+  input: z.input<typeof allowanceSchema>,
+): Promise<ActionResult> {
+  const admin = await requirePlatform("platform.pricing.manage");
+  const parsed = allowanceSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check those numbers." };
+  const d = parsed.data;
+
+  const emails =
+    d.emails === "" || d.emails.toLowerCase() === "unlimited"
+      ? null
+      : Number(d.emails);
+  if (emails !== null && (!Number.isFinite(emails) || emails < 0)) {
+    return { ok: false, error: "Emails must be a number, or blank for unlimited." };
+  }
+
+  await Promise.all([
+    setPlanStorageMb(d.plan, d.storageMb),
+    setPlanEmails(d.plan, emails),
+  ]);
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_pricing",
+    severity: "notice",
+    summary: `Updated ${d.plan} allowances — ${d.storageMb} MB storage, ${emails === null ? "unlimited" : emails} emails/month`,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/superadmin/pricing");
   return { ok: true };
 }

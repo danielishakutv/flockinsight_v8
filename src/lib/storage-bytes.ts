@@ -19,9 +19,9 @@ export const GB = 1024 * MB;
  */
 export const PLAN_STORAGE_BYTES: Record<string, number> = {
   starter: 200 * MB,
-  growth: 2 * GB,
-  pro: 10 * GB,
-  enterprise: 50 * GB,
+  growth: 500 * MB,
+  pro: 2 * GB,
+  enterprise: 20 * GB,
 };
 
 /** What a plan we do not recognise gets. The smallest, on purpose. */

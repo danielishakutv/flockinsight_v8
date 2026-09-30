@@ -29,3 +29,15 @@ export async function memberLimitStatus(
   const usedN = Number(used);
   return { plan, limit, used: usedN, atLimit: limit !== null && usedN >= limit };
 }
+
+/**
+ * The email allowance actually in force, admin value first.
+ *
+ * `emailAllowanceFor` in lib/plans.ts stays as the compiled-in default; this
+ * is what anything enforcing a ceiling should call, so a number changed in
+ * /superadmin/pricing takes effect without a deploy.
+ */
+export async function emailAllowanceInForce(plan: string): Promise<number | null> {
+  const { getPlanEmails } = await import("@/lib/pricing");
+  return getPlanEmails(plan as PlanId);
+}

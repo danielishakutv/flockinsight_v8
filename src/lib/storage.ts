@@ -2,7 +2,8 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, media } from "@/db/schema";
-import { planStorageBytes } from "@/lib/storage-bytes";
+import { MB, planStorageBytes } from "@/lib/storage-bytes";
+import type { PlanId } from "@/lib/plans";
 
 /** Effective storage limit for a church = free base + purchased extra. */
 export function storageLimitBytes(extraBytes: number, plan?: string | null): number {
@@ -45,7 +46,14 @@ export async function getStorageInfo(
     .where(eq(church.id, churchId))
     .limit(1);
 
-  const limit = storageLimitBytes(extraBytes, row?.plan);
+  /*
+   * The admin's number wins over the one compiled in. Storage is the cost
+   * that moves when a supplier changes their pricing, and the operator has to
+   * be able to answer that from /superadmin/pricing rather than from a deploy.
+   */
+  const { getPlanStorageMb } = await import("@/lib/pricing");
+  const mb = await getPlanStorageMb((row?.plan ?? "starter") as PlanId);
+  const limit = mb * MB + Math.max(0, extraBytes || 0);
   return {
     used,
     limit,

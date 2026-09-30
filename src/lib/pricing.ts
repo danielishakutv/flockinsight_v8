@@ -1,6 +1,7 @@
 import "server-only";
 import { PLANS, PLAN_BY_ID, type Plan, type PlanId } from "@/lib/plans";
 import { getSetting, setSetting } from "@/lib/platform-settings";
+import { MB, planStorageBytes } from "@/lib/storage-bytes";
 import {
   DEFAULT_STORAGE_BUNDLES,
   type StorageBundle,
@@ -104,6 +105,63 @@ export async function getAllPlanFeatures(): Promise<Record<PlanId, string[]>> {
 /** Persist a plan's feature list (admin only — caller must authorize). */
 export async function setPlanFeatures(id: PlanId, features: string[]): Promise<void> {
   await setSetting(planFeaturesKey(id), JSON.stringify(cleanFeatures(features)));
+}
+
+/* ----- Storage & email allowances (admin-managed) ----- */
+
+/*
+ * These two are what the bill is actually made of, so they live here rather
+ * than only in code: the operator must be able to change what a plan includes
+ * from the admin, on a phone, the day a supplier's pricing moves — without a
+ * deploy. The values in lib/plans.ts stay as the defaults a fresh install
+ * shows and the floor these fall back to.
+ */
+
+export const planStorageKey = (id: PlanId) => `plan_storage_mb_${id}`;
+export const planEmailsKey = (id: PlanId) => `plan_emails_${id}`;
+
+/** Included storage for a plan, in MEGABYTES. */
+export async function getPlanStorageMb(id: PlanId): Promise<number> {
+  const fallback = Math.round(planStorageBytes(id) / MB);
+  const raw = Number(await getSetting(planStorageKey(id), String(fallback)));
+  return Number.isFinite(raw) && raw >= 0 ? Math.round(raw) : fallback;
+}
+
+export async function getAllPlanStorageMb(): Promise<Record<PlanId, number>> {
+  const out = {} as Record<PlanId, number>;
+  await Promise.all(PLANS.map(async (p) => (out[p.id] = await getPlanStorageMb(p.id))));
+  return out;
+}
+
+export async function setPlanStorageMb(id: PlanId, mb: number): Promise<void> {
+  await setSetting(planStorageKey(id), String(Math.max(0, Math.round(mb || 0))));
+}
+
+/**
+ * Included emails per month. `null` means unlimited, stored as an empty
+ * string — which is the only value an operator can type that unambiguously
+ * means "no ceiling" rather than "zero".
+ */
+export async function getPlanEmails(id: PlanId): Promise<number | null> {
+  const fallback = PLAN_BY_ID[id]?.emailAllowance ?? null;
+  const raw = (await getSetting(planEmailsKey(id), "")).trim();
+  if (raw === "") return fallback;
+  if (raw === "unlimited") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+}
+
+export async function getAllPlanEmails(): Promise<Record<PlanId, number | null>> {
+  const out = {} as Record<PlanId, number | null>;
+  await Promise.all(PLANS.map(async (p) => (out[p.id] = await getPlanEmails(p.id))));
+  return out;
+}
+
+export async function setPlanEmails(id: PlanId, emails: number | null): Promise<void> {
+  await setSetting(
+    planEmailsKey(id),
+    emails === null ? "unlimited" : String(Math.max(0, Math.round(emails))),
+  );
 }
 
 /** Apply an admin discount to a base price. */

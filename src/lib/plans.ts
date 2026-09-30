@@ -2,30 +2,26 @@
 //
 // WHAT THE NUMBERS ARE FOR. The allowances here are not arbitrary generosity —
 // they are the difference between this platform paying for itself and not.
-// Two suppliers set the shape:
+// Two suppliers set the shape, and they behave very differently:
 //
-//   Cloudinary  ~1 credit per GB stored per month, 25 credits free, and then
-//               a cliff to $99/month. Storage is the cost that never goes
-//               away, so what each plan may KEEP is the main lever.
-//   Resend      3,000 emails free, $20 for 50,000, $90 for 100,000. The
-//               allowance is a promise; multiply it by every church.
+//   Cloudinary  roughly one credit per GB stored per month, 25 credits free,
+//               and then a CLIFF to $99/month. Storage is the cost that never
+//               goes away and the one that steps rather than slopes, so what
+//               each plan may KEEP is the main lever there is.
+//   ZeptoMail   1 credit = 10,000 emails, pay-as-you-go, first credit free,
+//               no monthly commitment. Email is therefore a gentle per-send
+//               cost rather than a tier to fall off, which is why these
+//               allowances can be generous where storage cannot.
 //
-// At forty churches on a 24 free / 11 Growth / 5 Pro mix, the allowances below
-// come to roughly 38 GB and 27,000 emails a month — which is one Cloudinary
-// tier and one Resend tier, against about ₦130,000 of subscriptions. That is
-// close to break-even, and it is close BECAUSE of these numbers. Raising any
-// of them is a decision about the bill, not about marketing copy.
+// The asymmetry is the whole point: an extra thousand emails costs pennies,
+// an extra gigabyte per church across forty churches is the difference
+// between $0 and $99 a month. Raising a storage number is a decision about
+// the bill; raising an email number mostly is not.
 //
-// IMPORTANT: only `memberLimit` and `emailAllowance` are actually enforced
-// (lib/plan-limits.ts). Every module is open on every plan. So `features` is
-// marketing copy describing what a church is BUYING INTO, not a gate — a
-// Starter church can still open Finance today.
+// These values are the DEFAULTS. The live numbers are admin-editable at
+// /superadmin/pricing (lib/pricing.ts), so a supplier's price change is
+// answered from a phone rather than from a deploy.
 //
-// Keep this list current. When a module ships it belongs on a tier here and on
-// the pricing page, or churches never learn it exists and it drives no
-// upgrades. The list is also the default behind the admin-editable copy in
-// lib/pricing.ts, so what is written here is what a new deployment shows.
-
 export type PlanId = "starter" | "growth" | "pro" | "enterprise";
 
 export type Plan = {
@@ -74,7 +70,7 @@ export const PLANS: Plan[] = [
     features: [
       "Up to 1,000 members",
       "Everything in Starter",
-      "2 GB media storage",
+      "500 MB media storage",
       "1,500 emails a month",
       "Training & classes — Foundation, Baptism, Pre-Marital, leadership, with badges beside members' names",
       "Virtual meetings — video, audio, screen sharing and scripture on screen, straight from a browser. Built for weak connections, with a one-tap audio-only mode. Up to 25 people, 8 hours a month",
@@ -99,7 +95,7 @@ export const PLANS: Plan[] = [
     features: [
       "Unlimited members",
       "Everything in Growth",
-      "10 GB media storage",
+      "2 GB media storage",
       "5,000 emails a month",
       "Meetings for up to 100 people, 30 hours a month",
       "Church finance — income, expenses, accounts & funds that fill themselves from giving",
@@ -121,7 +117,7 @@ export const PLANS: Plan[] = [
     emailAllowance: null,
     features: [
       "Everything in Pro",
-      "50 GB media storage, and email volume to suit",
+      "20 GB media storage, and email volume to suit",
       "Branches & denominations — one report across every branch, grouped by zone",
       "Automatic weekly or monthly branch reports by email",
       "Dedicated account manager",
