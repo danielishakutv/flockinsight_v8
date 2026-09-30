@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Clock, Search } from "lucide-react";
 import { sectionBlocks, type Guide } from "@/lib/help-guides";
 import { helpIcon } from "@/components/help/icons";
+import { useT } from "@/components/i18n-provider";
 
 export function HelpBrowser({
   guides,
@@ -13,6 +14,7 @@ export function HelpBrowser({
   guides: Guide[];
   categories: { key: string; title: string }[];
 }) {
+  const t = useT();
   const [q, setQ] = useState("");
 
   /**
@@ -81,7 +83,7 @@ export function HelpBrowser({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search guides… (e.g. SMS, reminders, members)"
+          placeholder={t("help.searchGuidesEGSms")}
           className="bg-background h-12 w-full rounded-xl border pl-11 pr-4 text-base shadow-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>

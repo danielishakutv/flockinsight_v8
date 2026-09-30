@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 export type ReferredRow = {
   id: string;
@@ -40,16 +41,17 @@ export function ReferralPanel({
   summary: { total: number; subscribed: number; pending: number; earned: number };
   churches: ReferredRow[];
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      toast.success("Link copied");
+      toast.success(t("settings.linkCopied"));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Couldn't copy — select the link and copy it by hand.");
+      toast.error(t("settings.couldnTCopySelectThe"));
     }
   }
 
@@ -141,12 +143,12 @@ export function ReferralPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Churches you referred</CardTitle>
+          <CardTitle className="text-lg">{t("settings.churchesYouReferred")}</CardTitle>
         </CardHeader>
         <CardContent>
           {churches.length === 0 ? (
             <div className="py-8 text-center">
-              <p className="font-bold">Nobody yet</p>
+              <p className="font-bold">{t("settings.nobodyYet")}</p>
               <p className="text-muted-foreground mx-auto mt-1 max-w-md text-sm">
                 Send your link to a pastor who is still counting attendance in a
                 notebook. Most churches here arrived because another church
@@ -191,7 +193,7 @@ export function ReferralPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">How it works</CardTitle>
+          <CardTitle className="text-lg">{t("settings.howItWorks")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ol className="space-y-3">

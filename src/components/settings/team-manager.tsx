@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 type Member = {
   memberId: string;
@@ -58,6 +59,7 @@ export function TeamManager({
   currentUserId: string;
   invitableMembers?: { id: string; name: string; email: string | null }[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
@@ -114,7 +116,7 @@ export function TeamManager({
         toast.error(error.message || "Could not cancel.");
         return;
       }
-      toast.success("Invitation cancelled");
+      toast.success(t("settings.invitationCancelled"));
       router.refresh();
     });
   }
@@ -148,7 +150,7 @@ export function TeamManager({
   function copyInviteLink(id: string) {
     const url = `${window.location.origin}/accept-invitation/${id}`;
     navigator.clipboard.writeText(url);
-    toast.success("Invite link copied");
+    toast.success(t("settings.inviteLinkCopied"));
   }
 
   return (
@@ -179,7 +181,7 @@ export function TeamManager({
                   }}
                 >
                   <SelectTrigger id="invite-member" className="w-full">
-                    <SelectValue placeholder="Pick a member to invite" />
+                    <SelectValue placeholder={t("settings.pickAMemberToInvite")} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     <SelectItem value={NO_MEMBER}>
@@ -200,13 +202,13 @@ export function TeamManager({
                 email invite still uses Better Auth's member/admin below. */}
             {selectedMemberId && roles.length > 0 && (
               <div className="space-y-2">
-                <Label htmlFor="invite-church-role">Role</Label>
+                <Label htmlFor="invite-church-role">{t("settings.role")}</Label>
                 <Select value={churchRoleId} onValueChange={setChurchRoleId}>
                   <SelectTrigger id="invite-church-role" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_ROLE}>No role yet</SelectItem>
+                    <SelectItem value={NO_ROLE}>{t("settings.noRoleYet")}</SelectItem>
                     {roles.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         {r.name}
@@ -221,7 +223,7 @@ export function TeamManager({
             )}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
               <div className="space-y-2">
-                <Label htmlFor="invite-email">Invite by email</Label>
+                <Label htmlFor="invite-email">{t("settings.inviteByEmail")}</Label>
                 <Input
                   id="invite-email"
                   type="email"
@@ -232,14 +234,14 @@ export function TeamManager({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="invite-role">Access</Label>
+                <Label htmlFor="invite-role">{t("settings.access")}</Label>
                 <Select value={inviteRole} onValueChange={setInviteRole}>
                   <SelectTrigger id="invite-role" className="w-full sm:w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="member">Member</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="member">{t("settings.member")}</SelectItem>
+                    <SelectItem value="admin">{t("settings.admin")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -292,7 +294,7 @@ export function TeamManager({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Cancel invitation"
+                  aria-label={t("settings.cancelInvitation")}
                   onClick={() => cancelInvite(inv.id)}
                   disabled={pending}
                 >
@@ -350,11 +352,11 @@ export function TeamManager({
                     onValueChange={(v) => changeRole(m, v)}
                     disabled={pending || isSelf}
                   >
-                    <SelectTrigger className="w-40" aria-label="Role">
-                      <SelectValue placeholder="No role" />
+                    <SelectTrigger className="w-40" aria-label={t("settings.role")}>
+                      <SelectValue placeholder={t("settings.noRole")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_ROLE}>No role</SelectItem>
+                      <SelectItem value={NO_ROLE}>{t("settings.noRole")}</SelectItem>
                       {roles.map((r) => (
                         <SelectItem key={r.id} value={r.id}>
                           {r.name}
@@ -368,7 +370,7 @@ export function TeamManager({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Remove member"
+                    aria-label={t("settings.removeMember")}
                     onClick={() => removeMember(m)}
                     disabled={pending}
                   >

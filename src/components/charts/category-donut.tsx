@@ -1,10 +1,12 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useT } from "@/components/i18n-provider";
 
 type Slice = { name: string; value: number; color: string };
 
 export function CategoryDonut({ data }: { data: Slice[] }) {
+  const t = useT();
   const total = data.reduce((a, d) => a + d.value, 0);
 
   return (
@@ -43,7 +45,7 @@ export function CategoryDonut({ data }: { data: Slice[] }) {
       {/* center total */}
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-3xl font-extrabold tabular-nums">{total}</span>
-        <span className="text-muted-foreground text-xs font-medium">total</span>
+        <span className="text-muted-foreground text-xs font-medium">{t("charts.total")}</span>
       </div>
 
       <div className="mt-2 flex flex-wrap justify-center gap-4">

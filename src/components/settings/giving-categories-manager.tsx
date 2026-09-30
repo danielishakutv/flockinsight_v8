@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 export type GivingCategoryRow = {
   id: string;
@@ -57,6 +58,7 @@ export function GivingCategoriesManager({
   currency: string;
   canManageFinance: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -129,7 +131,7 @@ export function GivingCategoriesManager({
         setConfirmId(null);
         return;
       }
-      toast.success("Category deleted");
+      toast.success(t("settings.categoryDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -199,13 +201,13 @@ export function GivingCategoriesManager({
                   <Switch
                     checked={c.isActive}
                     onCheckedChange={(v) => toggleActive(c, v)}
-                    aria-label="Active"
+                    aria-label={t("settings.active")}
                     className="mr-1"
                   />
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Edit"
+                    aria-label={t("settings.edit")}
                     onClick={() => openEdit(c)}
                   >
                     <Pencil className="size-4" />
@@ -223,7 +225,7 @@ export function GivingCategoriesManager({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Delete"
+                      aria-label={t("settings.delete")}
                       onClick={() => setConfirmId(c.id)}
                     >
                       <Trash2 className="size-4" />
@@ -290,22 +292,22 @@ export function GivingCategoriesManager({
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cat-name">Name</Label>
+              <Label htmlFor="cat-name">{t("settings.name")}</Label>
               <Input
                 id="cat-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Tithe, Offering, Building Project"
+                placeholder={t("settings.eGTitheOfferingBuilding")}
                 autoFocus
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cat-desc">Description</Label>
+              <Label htmlFor="cat-desc">{t("settings.description")}</Label>
               <Textarea
                 id="cat-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional note about this category"
+                placeholder={t("settings.optionalNoteAboutThisCategory")}
                 rows={2}
               />
             </div>

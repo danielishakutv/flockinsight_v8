@@ -9,6 +9,7 @@ import {
   requestInstall,
   useInstall,
 } from "@/components/pwa/use-install";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * A quiet line on the dashboard that stays until the app is installed.
@@ -29,6 +30,7 @@ import {
  * is not a quiet line, it is a broken one.
  */
 export function InstallNotice() {
+  const t = useT();
   const { standalone, route, installed } = useInstall();
   const [showIOS, setShowIOS] = useState(false);
 
@@ -48,7 +50,7 @@ export function InstallNotice() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Smartphone className="text-primary size-4 shrink-0" />
         <p className="min-w-0 flex-1 text-sm">
-          <span className="font-semibold">Install FlockInsight</span>{" "}
+          <span className="font-semibold">{t("pwa.installFlockinsight")}</span>{" "}
           <span className="text-muted-foreground">
             — open it from your home screen, and keep working when the network
             drops.
@@ -62,8 +64,8 @@ export function InstallNotice() {
           size="icon"
           variant="ghost"
           className="text-muted-foreground size-11 shrink-0 sm:size-8"
-          title="I already have it installed"
-          aria-label="I already have FlockInsight installed — stop showing this"
+          title={t("pwa.iAlreadyHaveItInstalled")}
+          aria-label={t("pwa.iAlreadyHaveFlockinsightInstalled")}
           onClick={markInstalled}
         >
           <X className="size-4" />

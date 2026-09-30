@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 function Toggle({
   checked,
@@ -91,6 +92,7 @@ export function SignupForm({
   /** SMS is available in this country AND the sender ID is approved. */
   smsReady?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [regen, startRegen] = useTransition();
@@ -104,10 +106,10 @@ export function SignupForm({
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success("Link copied");
+      toast.success(t("settings.linkCopied"));
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      toast.error("Couldn't copy — long-press the link to copy it.");
+      toast.error(t("settings.couldnTCopyLongPress"));
     }
   }
 
@@ -118,7 +120,7 @@ export function SignupForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Sign-up link settings saved");
+      toast.success(t("settings.signUpLinkSettingsSaved"));
       router.refresh();
     });
   }
@@ -137,7 +139,7 @@ export function SignupForm({
         return;
       }
       setUrl(url.replace(/\/join\/.*$/, `/join/${res.slug}`));
-      toast.success("New link generated");
+      toast.success(t("settings.newLinkGenerated"));
       router.refresh();
     });
   }
@@ -174,7 +176,7 @@ export function SignupForm({
           </div>
           <div className="flex items-center justify-between gap-3">
             <ToggleRow
-              title="Link is active"
+              title={t("settings.linkIsActive")}
               desc="Turn off to temporarily stop new sign-ups."
               checked={f.enabled}
               onChange={(v) => set({ enabled: v })}
@@ -200,11 +202,11 @@ export function SignupForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Page content</CardTitle>
+          <CardTitle className="text-lg">{t("settings.pageContent")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Heading</Label>
+            <Label htmlFor="title">{t("settings.heading")}</Label>
             <Input
               id="title"
               value={f.title}
@@ -212,7 +214,7 @@ export function SignupForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="intro">Intro text</Label>
+            <Label htmlFor="intro">{t("settings.introText")}</Label>
             <Textarea
               id="intro"
               rows={3}
@@ -221,7 +223,7 @@ export function SignupForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="success">Thank-you message</Label>
+            <Label htmlFor="success">{t("settings.thankYouMessage")}</Label>
             <Textarea
               id="success"
               rows={2}
@@ -234,41 +236,41 @@ export function SignupForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">What to collect</CardTitle>
+          <CardTitle className="text-lg">{t("settings.whatToCollect")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ToggleRow
-            title="Date of birth"
+            title={t("settings.dateOfBirth")}
             desc="So you can celebrate their birthday."
             checked={f.collectBirthday}
             onChange={(v) => set({ collectBirthday: v })}
           />
           <ToggleRow
-            title="Wedding anniversary"
+            title={t("settings.weddingAnniversary")}
             desc="So you can celebrate their milestones."
             checked={f.collectAnniversary}
             onChange={(v) => set({ collectAnniversary: v })}
           />
           <ToggleRow
-            title="Home address"
+            title={t("settings.homeAddress")}
             desc="Address, city and state."
             checked={f.collectAddress}
             onChange={(v) => set({ collectAddress: v })}
           />
           <ToggleRow
-            title="Children"
+            title={t("settings.children")}
             desc="Let parents add their children, registered as members under them."
             checked={f.collectChildren}
             onChange={(v) => set({ collectChildren: v })}
           />
           <ToggleRow
-            title="Ministries & groups"
+            title={t("settings.ministriesGroups")}
             desc="Let people pick the groups they belong to."
             checked={f.allowGroupSelect}
             onChange={(v) => set({ allowGroupSelect: v })}
           />
           <div className="space-y-2 rounded-xl border p-3">
-            <Label htmlFor="status">Add new people as</Label>
+            <Label htmlFor="status">{t("settings.addNewPeopleAs")}</Label>
             <Select
               value={f.newMemberStatus}
               onValueChange={(v) =>
@@ -279,9 +281,9 @@ export function SignupForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active member</SelectItem>
-                <SelectItem value="visitor">Visitor</SelectItem>
-                <SelectItem value="new_convert">New convert</SelectItem>
+                <SelectItem value="active">{t("settings.activeMember")}</SelectItem>
+                <SelectItem value="visitor">{t("settings.visitor")}</SelectItem>
+                <SelectItem value="new_convert">{t("settings.newConvert")}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
@@ -305,13 +307,13 @@ export function SignupForm({
             and <code>{"{church}"}</code> for your church name.
           </p>
           <ToggleRow
-            title="Send a confirmation email"
+            title={t("settings.sendAConfirmationEmail")}
             desc="Free — included in your plan's email allowance."
             checked={f.confirmEmail}
             onChange={(v) => set({ confirmEmail: v })}
           />
           <ToggleRow
-            title="Send a confirmation SMS"
+            title={t("settings.sendAConfirmationSms")}
             desc={
               smsReady
                 ? "Costs one SMS from your wallet per registration."
@@ -321,7 +323,7 @@ export function SignupForm({
             onChange={(v) => set({ confirmSms: v })}
           />
           <div className="space-y-2">
-            <Label htmlFor="csubj">Email subject</Label>
+            <Label htmlFor="csubj">{t("settings.emailSubject")}</Label>
             <Input
               id="csubj"
               value={f.confirmSubject}
@@ -329,7 +331,7 @@ export function SignupForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cmsg">Message</Label>
+            <Label htmlFor="cmsg">{t("settings.message")}</Label>
             <Textarea
               id="cmsg"
               rows={3}
@@ -357,11 +359,11 @@ export function SignupForm({
           <p className="text-muted-foreground text-sm">
             From any member&apos;s profile you can share a personal link that
             opens their details pre-filled to review and correct. Each link can
-            be used <strong>once</strong> — after they save, generate a new one
+            be used <strong>{t("settings.once")}</strong> — after they save, generate a new one
             to let them update again.
           </p>
           <ToggleRow
-            title="Require verification before update"
+            title={t("settings.requireVerificationBeforeUpdate")}
             desc="Send the member a one-time code (to their email/phone on file) that they must enter before their changes are saved."
             checked={f.requireUpdateOtp}
             onChange={(v) => set({ requireUpdateOtp: v })}
@@ -371,17 +373,17 @@ export function SignupForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Notifications</CardTitle>
+          <CardTitle className="text-lg">{t("settings.notifications")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ToggleRow
-            title="Notify in the app"
+            title={t("settings.notifyInTheApp")}
             desc="Alert your managers when someone signs up or updates their details."
             checked={f.notifyInApp}
             onChange={(v) => set({ notifyInApp: v })}
           />
           <ToggleRow
-            title="Email the church"
+            title={t("settings.emailTheChurch")}
             desc="Also email your public church email address (set in Settings → Public page)."
             checked={f.notifyEmail}
             onChange={(v) => set({ notifyEmail: v })}

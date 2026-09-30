@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Radio } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The player on the public watch page.
@@ -44,11 +45,12 @@ export function LivePlayer(props: {
  * a page carrying a church's name.
  */
 function EmbeddedPlayer({ src }: { src: string }) {
+  const t = useT();
   return (
     <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black">
       <iframe
         src={src}
-        title="Livestream"
+        title={t("livestreams.livestream")}
         className="size-full"
         allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen

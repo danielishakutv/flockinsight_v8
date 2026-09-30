@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { saveAttendanceBands } from "@/app/(app)/settings/attendance/actions";
+import { useT } from "@/components/i18n-provider";
 
 type Row = {
   key: string;
@@ -28,6 +29,7 @@ type Row = {
  * afterwards.
  */
 export function AttendanceBandsForm({ bands }: { bands: Row[] }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [rows, setRows] = useState(bands);
@@ -52,7 +54,7 @@ export function AttendanceBandsForm({ bands }: { bands: Row[] }) {
         toast.error(res.error);
         return;
       }
-      toast.success("Saved. Your next attendance sheet uses these.");
+      toast.success(t("settings.savedYourNextAttendanceSheet"));
       router.refresh();
     });
 

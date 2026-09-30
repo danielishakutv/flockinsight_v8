@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type ServiceRow = {
   id: string;
@@ -56,6 +57,7 @@ function dayTimeLabel(s: ServiceRow) {
 }
 
 export function ServicesManager({ services }: { services: ServiceRow[] }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -127,7 +129,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
         toast.error(res.error);
         return;
       }
-      toast.success("Service deleted");
+      toast.success(t("settings.serviceDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -177,13 +179,13 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
                   <Switch
                     checked={s.isActive}
                     onCheckedChange={(v) => toggleActive(s, v)}
-                    aria-label="Active"
+                    aria-label={t("settings.active")}
                   />
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Edit"
+                  aria-label={t("settings.edit")}
                   onClick={() => openEdit(s)}
                 >
                   <Pencil className="size-4" />
@@ -205,7 +207,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Delete"
+                    aria-label={t("settings.delete")}
                     onClick={() => setConfirmId(s.id)}
                   >
                     <Trash2 className="size-4" />
@@ -226,24 +228,24 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="svc-name">Name</Label>
+              <Label htmlFor="svc-name">{t("settings.name")}</Label>
               <Input
                 id="svc-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Sunday First Service"
+                placeholder={t("settings.eGSundayFirstService")}
                 autoFocus
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="min-w-0 space-y-2">
-                <Label htmlFor="svc-day">Day</Label>
+                <Label htmlFor="svc-day">{t("settings.day")}</Label>
                 <Select value={day} onValueChange={setDay}>
                   <SelectTrigger id="svc-day" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_DAY}>No fixed day</SelectItem>
+                    <SelectItem value={NO_DAY}>{t("settings.noFixedDay")}</SelectItem>
                     {DAYS.map((d, i) => (
                       <SelectItem key={d} value={String(i)}>
                         {d}
@@ -253,7 +255,7 @@ export function ServicesManager({ services }: { services: ServiceRow[] }) {
                 </Select>
               </div>
               <div className="min-w-0 space-y-2">
-                <Label htmlFor="svc-time">Start time</Label>
+                <Label htmlFor="svc-time">{t("settings.startTime")}</Label>
                 <Input
                   id="svc-time"
                   type="time"

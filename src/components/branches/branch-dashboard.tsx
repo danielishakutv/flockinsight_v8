@@ -144,25 +144,25 @@ export function BranchDashboard({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           icon={MapPin}
-          label="Branches"
+          label={t("branches.branches")}
           value={totals.branches}
           sub={rangeLabel(filters.range)}
         />
         <Stat
           icon={Users}
-          label="Members"
+          label={t("branches.members")}
           value={totals.members.toLocaleString()}
           sub={`${totals.newMembers} joined in range`}
         />
         <Stat
           icon={CalendarCheck}
-          label="Average attendance"
+          label={t("branches.averageAttendance")}
           value={avgAttendance.toLocaleString()}
           sub={`${totals.services} services recorded`}
         />
         <Stat
           icon={HandCoins}
-          label="Giving"
+          label={t("branches.giving")}
           value={formatMoney(totals.giving, currency)}
           sub="Across the network"
         />
@@ -173,7 +173,7 @@ export function BranchDashboard({
         <CardContent className="space-y-3 py-4">
           <div className="flex flex-wrap items-center gap-2">
             <Select value={filters.range} onValueChange={(v) => go({ range: v })}>
-              <SelectTrigger size="sm" className="w-40" aria-label="Date range">
+              <SelectTrigger size="sm" className="w-40" aria-label={t("branches.dateRange")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -200,7 +200,7 @@ export function BranchDashboard({
               <Input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
-                placeholder="Find a branch…"
+                placeholder={t("branches.findABranch")}
                 className="h-9 pl-9"
               />
             </form>
@@ -209,7 +209,7 @@ export function BranchDashboard({
               <a
                 href={`/branches/export?${params.toString()}`}
                 download
-                title="Download this view as a spreadsheet"
+                title={t("branches.downloadThisViewAsA")}
               >
                 <Download className="size-4" /> Export
               </a>
@@ -223,7 +223,7 @@ export function BranchDashboard({
               <Input
                 value={zone}
                 onChange={(e) => setZone(e.target.value)}
-                placeholder="Zone name, e.g. North Zone"
+                placeholder={t("branches.zoneNameEGNorth")}
                 className="h-9 w-56"
               />
               <Button size="sm" onClick={applyZone} disabled={pending}>
@@ -249,7 +249,7 @@ export function BranchDashboard({
           {rows.length === 0 ? (
             <div className="text-muted-foreground px-4 py-12 text-center">
               <Sparkles className="mx-auto mb-2 size-7 opacity-40" />
-              <p className="font-medium">No branches to show</p>
+              <p className="font-medium">{t("branches.noBranchesToShow")}</p>
               <p className="text-sm">
                 {canManage
                   ? "Invite a church you already run, and its numbers appear here."
@@ -272,13 +272,13 @@ export function BranchDashboard({
                 <thead className="text-muted-foreground border-b text-left text-xs uppercase">
                   <tr>
                     {canManage && <th className="w-8 px-3 py-2" />}
-                    <th className="px-3 py-2 font-semibold">Branch</th>
-                    <th className="px-3 py-2 text-right font-semibold">Members</th>
-                    <th className="px-3 py-2 text-right font-semibold">New</th>
-                    <th className="px-3 py-2 text-right font-semibold">Services</th>
-                    <th className="px-3 py-2 text-right font-semibold">Avg att.</th>
-                    <th className="px-3 py-2 text-right font-semibold">Giving</th>
-                    <th className="px-3 py-2 font-semibold">Last recorded</th>
+                    <th className="px-3 py-2 font-semibold">{t("branches.branch")}</th>
+                    <th className="px-3 py-2 text-right font-semibold">{t("branches.members")}</th>
+                    <th className="px-3 py-2 text-right font-semibold">{t("branches.new")}</th>
+                    <th className="px-3 py-2 text-right font-semibold">{t("branches.services")}</th>
+                    <th className="px-3 py-2 text-right font-semibold">{t("branches.avgAtt")}</th>
+                    <th className="px-3 py-2 text-right font-semibold">{t("branches.giving")}</th>
+                    <th className="px-3 py-2 font-semibold">{t("branches.lastRecorded")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">

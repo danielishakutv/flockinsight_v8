@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 type State = ReminderInput;
 
@@ -88,6 +89,7 @@ export function RemindersForm({
   smsApproved: boolean;
   smsBalance: number;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [testing, startTest] = useTransition();
@@ -104,7 +106,7 @@ export function RemindersForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Reminder settings saved");
+      toast.success(t("settings.reminderSettingsSaved"));
       router.refresh();
     });
   }
@@ -116,7 +118,7 @@ export function RemindersForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Test email sent to you");
+      toast.success(t("settings.testEmailSentToYou"));
     });
   }
 
@@ -130,7 +132,7 @@ export function RemindersForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
-            title="Send service reminders"
+            title={t("settings.sendServiceReminders")}
             desc="Automatically remind members about your services."
             checked={f.enabled}
             onChange={(v) => set({ enabled: v })}
@@ -149,11 +151,11 @@ export function RemindersForm({
       {/* Channels */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Channels</CardTitle>
+          <CardTitle className="text-lg">{t("settings.channels")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ToggleRow
-            title="Email"
+            title={t("settings.email")}
             desc="Free. Sent to members who have an email address."
             checked={f.email}
             onChange={(v) => set({ email: v })}
@@ -183,18 +185,18 @@ export function RemindersForm({
       {/* Timing */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">When to send</CardTitle>
+          <CardTitle className="text-lg">{t("settings.whenToSend")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
-            title="Send the day before"
+            title={t("settings.sendTheDayBefore")}
             desc="On for a day-ahead heads-up; off to remind on the service day."
             checked={f.dayBefore}
             onChange={(v) => set({ dayBefore: v })}
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="sendTime">Time of day</Label>
+              <Label htmlFor="sendTime">{t("settings.timeOfDay")}</Label>
               <Input
                 id="sendTime"
                 type="time"
@@ -207,7 +209,7 @@ export function RemindersForm({
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="audience">Send to</Label>
+              <Label htmlFor="audience">{t("settings.sendTo")}</Label>
               <Select
                 value={f.audience}
                 onValueChange={(v) => set({ audience: v as "active" | "all" })}
@@ -216,8 +218,8 @@ export function RemindersForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Active members</SelectItem>
-                  <SelectItem value="all">All members</SelectItem>
+                  <SelectItem value="active">{t("settings.activeMembers")}</SelectItem>
+                  <SelectItem value="all">{t("settings.allMembers")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -228,7 +230,7 @@ export function RemindersForm({
       {/* Templates */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Message templates</CardTitle>
+          <CardTitle className="text-lg">{t("settings.messageTemplates")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -247,9 +249,9 @@ export function RemindersForm({
 
           {f.email && (
             <div className="space-y-3 rounded-xl border p-3">
-              <p className="text-sm font-bold">Email</p>
+              <p className="text-sm font-bold">{t("settings.email")}</p>
               <div className="space-y-2">
-                <Label htmlFor="emailSubject">Subject</Label>
+                <Label htmlFor="emailSubject">{t("settings.subject")}</Label>
                 <Input
                   id="emailSubject"
                   value={f.emailSubject}
@@ -257,7 +259,7 @@ export function RemindersForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="emailTemplate">Body</Label>
+                <Label htmlFor="emailTemplate">{t("settings.body")}</Label>
                 <Textarea
                   id="emailTemplate"
                   rows={5}

@@ -17,12 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export function NewTicketForm({
   categories,
 }: {
   categories: { value: string; label: string }[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [subject, setSubject] = useState("");
@@ -36,7 +38,7 @@ export function NewTicketForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Sent! We'll reply by email.");
+      toast.success(t("help.sentWeLlReplyBy"));
       router.push(`/help/support/${res.id}`);
     });
   }
@@ -44,21 +46,21 @@ export function NewTicketForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Send us a message</CardTitle>
+        <CardTitle className="text-lg">{t("help.sendUsAMessage")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="subject">Subject</Label>
+            <Label htmlFor="subject">{t("help.subject")}</Label>
             <Input
               id="subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="What do you need help with?"
+              placeholder={t("help.whatDoYouNeedHelp")}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category">{t("help.category")}</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger id="category" className="w-full">
                 <SelectValue />
@@ -74,13 +76,13 @@ export function NewTicketForm({
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="message">Message</Label>
+          <Label htmlFor="message">{t("help.message")}</Label>
           <Textarea
             id="message"
             rows={5}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Describe your issue or question in detail. Include screenshots links if helpful."
+            placeholder={t("help.describeYourIssueOrQuestion")}
           />
         </div>
         <div className="flex justify-end">

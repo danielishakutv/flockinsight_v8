@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
 import { useStoredValue, writeStoredValue } from "@/lib/client-state";
+import { useT } from "@/components/i18n-provider";
 
 const KEY = "fi_seen_version";
 
@@ -14,6 +15,7 @@ const KEY = "fi_seen_version";
  * Brand-new users (no stored version) are not nagged. No DB, no network.
  */
 export function WhatsNewBanner() {
+  const t = useT();
   const seen = useStoredValue(KEY);
 
   // First visit on this device: record the version silently rather than
@@ -36,7 +38,7 @@ export function WhatsNewBanner() {
           <Sparkles className="size-5" />
         </div>
         <div className="min-w-0 flex-1 text-sm">
-          <span className="font-semibold">FlockInsight just got an update. </span>
+          <span className="font-semibold">{t("app.flockinsightJustGotAnUpdate")}</span>
           <span className="text-muted-foreground">
             Branches for churches that run several campuses, and a search box
             in every long dropdown.
@@ -52,7 +54,7 @@ export function WhatsNewBanner() {
         <button
           type="button"
           onClick={dismiss}
-          aria-label="Dismiss"
+          aria-label={t("app.dismiss")}
           className="text-muted-foreground hover:text-foreground shrink-0"
         >
           <X className="size-4" />

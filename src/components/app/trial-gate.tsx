@@ -13,6 +13,7 @@ import { signOut } from "@/lib/auth-client";
 import type { PlanId } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type PlanOpt = { id: PlanId; name: string; tagline: string; priceLabel: string };
 
@@ -26,6 +27,7 @@ export function TrialGate({
   canManageBilling: boolean;
   plans: PlanOpt[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [paying, setPaying] = useState<PlanId | null>(null);
   const [requesting, startRequest] = useTransition();
@@ -48,7 +50,7 @@ export function TrialGate({
       const res = await requestTrialExtension();
       if (res.ok) {
         setRequested(true);
-        toast.success("Request sent to our team.");
+        toast.success(t("app.requestSentToOurTeam"));
       } else toast.error(res.error);
     });
   }
@@ -58,7 +60,7 @@ export function TrialGate({
       <div className="w-full max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <span className="text-lg font-extrabold">
-            Flock<span className="text-primary">Insight</span>
+            Flock<span className="text-primary">{t("app.insight")}</span>
           </span>
           <button
             type="button"
@@ -144,7 +146,7 @@ export function TrialGate({
         </div>
 
         <p className="text-muted-foreground mt-4 text-center text-xs">
-          Questions? <Link href="/help/support" className="font-medium underline">Contact us</Link>.
+          Questions? <Link href="/help/support" className="font-medium underline">{t("app.contactUs")}</Link>.
           Your church&apos;s data is safe and waiting for you.
         </p>
       </div>
@@ -160,6 +162,7 @@ export function TrialBanner({
   daysLeft: number;
   canManageBilling: boolean;
 }) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
@@ -184,7 +187,7 @@ export function TrialBanner({
       <button
         type="button"
         onClick={() => setDismissed(true)}
-        aria-label="Dismiss"
+        aria-label={t("app.dismiss")}
         className="shrink-0 opacity-80 hover:opacity-100"
       >
         <X className="size-4" />

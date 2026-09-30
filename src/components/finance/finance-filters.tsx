@@ -24,6 +24,7 @@ import {
   FINANCE_METHODS,
   type FinanceFilterState,
 } from "@/lib/finance-shared";
+import { useT } from "@/components/i18n-provider";
 
 type Option = { id: string; name: string };
 
@@ -45,6 +46,7 @@ export function FinanceFilters({
   resultCount: number;
   resultSummary: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [q, setQ] = useState(value.q);
@@ -79,11 +81,11 @@ export function FinanceFilters({
   // Debounce typing so the ledger does not re-query on every keystroke.
   useEffect(() => {
     if (q === pushedQ.current) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       pushedQ.current = q;
       apply({ q });
     }, 400);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
@@ -121,9 +123,9 @@ export function FinanceFilters({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search payee, reference, note or amount…"
+            placeholder={t("finance.searchPayeeReferenceNoteOr")}
             className="pl-9"
-            aria-label="Search finance records"
+            aria-label={t("finance.searchFinanceRecords")}
           />
           {(pending || q) && (
             <span className="absolute top-1/2 right-2 -translate-y-1/2">
@@ -132,7 +134,7 @@ export function FinanceFilters({
               ) : (
                 <button
                   type="button"
-                  aria-label="Clear search"
+                  aria-label={t("finance.clearSearch")}
                   onClick={() => setQ("")}
                   className="text-muted-foreground hover:text-foreground relative grid size-6 place-items-center rounded-md after:absolute after:-inset-2.5 after:content-['']"
                 >
@@ -149,7 +151,7 @@ export function FinanceFilters({
           aria-expanded={open}
         >
           <SlidersHorizontal className="size-4" />
-          <span className="hidden sm:inline">Filters</span>
+          <span className="hidden sm:inline">{t("finance.filters")}</span>
           {count > 0 && (
             <span className="bg-background/25 grid size-5 place-items-center rounded-full text-xs font-bold">
               {count}
@@ -162,7 +164,7 @@ export function FinanceFilters({
         <div className="bg-card space-y-4 rounded-2xl border p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
-              <Label>Type</Label>
+              <Label>{t("finance.type")}</Label>
               <Select
                 value={value.kind || ANY}
                 onValueChange={(v) => apply({ kind: v === ANY ? "" : v })}
@@ -179,7 +181,7 @@ export function FinanceFilters({
             </div>
 
             <div className="space-y-2">
-              <Label>Account</Label>
+              <Label>{t("finance.account")}</Label>
               <Select
                 value={value.accountId || ANY}
                 onValueChange={(v) => apply({ accountId: v === ANY ? "" : v })}
@@ -191,19 +193,19 @@ export function FinanceFilters({
                   className="max-h-72"
                   searchPlaceholder="Search accounts…"
                 >
-                  <SelectItem value={ANY}>All accounts</SelectItem>
+                  <SelectItem value={ANY}>{t("finance.allAccounts")}</SelectItem>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value={FINANCE_FILTER_NONE}>No account</SelectItem>
+                  <SelectItem value={FINANCE_FILTER_NONE}>{t("finance.noAccount")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Category</Label>
+              <Label>{t("finance.category")}</Label>
               <Select
                 value={value.categoryId || ANY}
                 onValueChange={(v) => apply({ categoryId: v === ANY ? "" : v })}
@@ -215,7 +217,7 @@ export function FinanceFilters({
                   className="max-h-72"
                   searchPlaceholder="Search categories…"
                 >
-                  <SelectItem value={ANY}>All categories</SelectItem>
+                  <SelectItem value={ANY}>{t("finance.allCategories")}</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
@@ -229,7 +231,7 @@ export function FinanceFilters({
             </div>
 
             <div className="space-y-2">
-              <Label>Method</Label>
+              <Label>{t("finance.method")}</Label>
               <Select
                 value={value.method || ANY}
                 onValueChange={(v) => apply({ method: v === ANY ? "" : v })}
@@ -238,7 +240,7 @@ export function FinanceFilters({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ANY}>All methods</SelectItem>
+                  <SelectItem value={ANY}>{t("finance.allMethods")}</SelectItem>
                   {FINANCE_METHODS.map((m) => (
                     <SelectItem key={m} value={m}>
                       {METHOD_LABEL[m]}
@@ -250,7 +252,7 @@ export function FinanceFilters({
           </div>
 
           <div className="space-y-2">
-            <Label>Date range</Label>
+            <Label>{t("finance.dateRange")}</Label>
             <div className="flex flex-wrap gap-2">
               {financePresets(today).map((p) => {
                 const on = value.from === p.from && value.to === p.to;

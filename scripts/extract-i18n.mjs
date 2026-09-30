@@ -28,6 +28,36 @@ const ROOT = process.cwd();
 const EN = "src/lib/i18n/dictionaries/en.ts";
 const TEXT_PROPS = ["placeholder", "title", "aria-label", "label", "alt"];
 
+/**
+ * Which hook this file may call.
+ *
+ * `useT()` THROWS when there is no <I18nProvider> above it. There is one at the
+ * root now, so app code is safe — but a primitive under ui/ is also rendered by
+ * tests, by storybook-ish one-offs, and by any tree a future layout forgets to
+ * wrap. A crash is a blank page; an untranslated word is a word. So the shared
+ * layers get the forgiving hook and everything else gets the strict one, which
+ * is what makes a missing provider in app code a loud error rather than silent
+ * English.
+ */
+function hookFor(rel) {
+  return /src\/components\/(ui|charts)\//.test(rel) ? "useOptionalT" : "useT";
+}
+
+/** Index of the closing `}` of `export const en = { ... }`, or -1. */
+function endOfEnObject(en) {
+  const start = en.indexOf("export const en = {");
+  if (start === -1) return -1;
+  let depth = 0;
+  for (let i = en.indexOf("{", start); i < en.length; i++) {
+    if (en[i] === "{") depth++;
+    else if (en[i] === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
 /** Which dictionary section a file's strings belong in, from its path. */
 function sectionFor(rel) {
   const m =
@@ -79,6 +109,31 @@ function looksLikeCode(t) {
   if (/&&|\|\||==|=>|;|\breturn\b|\bconst\b/.test(t)) return true;
   if (/\b\w+\.\w+\(/.test(t)) return true;
   if (!/^[A-Za-z"'£$€₦]/.test(t)) return true;
+  /*
+   * A ternary between two elements: `count > total ? <A/> : <B/>` leaves
+   * " total ? " looking like a sentence. Prose writes "Sure?" against the
+   * word it belongs to; only code writes " ? " with a space on both sides.
+   */
+  if (/ \? | : /.test(t)) return true;
+  return false;
+}
+
+/**
+ * Does this file already use `t` for something that is not a translator?
+ *
+ * `transfers.map((t) => ...)` and a module-level `const t` are both common,
+ * and putting `const t = useT()` at the top of such a component does not
+ * fail loudly — the inner `t` shadows it and `t("finance.transfers")` becomes
+ * a call on a TransferRow. In meeting-room.tsx it collided outright.
+ *
+ * So the file is handed back to a person instead. A codemod that handles the
+ * easy files and mangles the interesting ones is worse than none, because the
+ * interesting ones are where the strings are.
+ */
+function bindsTElsewhere(src) {
+  if (/\(\s*t\s*[,):]/.test(src)) return true; // (t) => , (t, i) => , (t: X)
+  if (/\bt\s*=>/.test(src)) return true; // t => ...
+  if (/\b(?:const|let|var)\s+t\s*[=:](?!\s*use\w*T\(\))/.test(src)) return true;
   return false;
 }
 
@@ -98,7 +153,7 @@ function walk(dir, out = []) {
  * because a component's strings are as often in a dialog or a row renderer
  * defined below it as in the default export.
  */
-function addHooks(src) {
+function addHooks(src, hook) {
   const lines = src.split("\n");
   const out = [];
   for (let i = 0; i < lines.length; i++) {
@@ -128,9 +183,16 @@ function addHooks(src) {
       depth += (lines[k].match(/\{/g) || []).length;
       depth -= (lines[k].match(/\}/g) || []).length;
       if (/\bt\(["'`]/.test(lines[k])) uses = true;
-      if (/const t = useT\(\)/.test(lines[k])) hasOwn = true;
+      /*
+       * ANY hook that binds `t`, not just useT. `useOptionalT` exists for a
+       * component that may render outside the provider, and matching only
+       * `useT` put `const t = useT()` directly above an existing
+       * `const t = useOptionalT()` — a redeclaration, in the one file that had
+       * already been translated by hand.
+       */
+      if (/const t = use\w*T\(\)/.test(lines[k])) hasOwn = true;
     }
-    if (uses && !hasOwn) out.push(`${sig[1]}  const t = useT();`);
+    if (uses && !hasOwn) out.push(`${sig[1]}  const t = ${hook}();`);
     i = open;
   }
   return out.join("\n");
@@ -184,12 +246,31 @@ for (const file of files) {
     return `${section}.${key}`;
   };
 
-  src = src.replace(/>([^<>{}\n]{2,118})</g, (m, text) => {
-    const t = text.trim();
-    if (isNotProse(t) || looksLikeCode(t)) return m;
-    const path = take(t);
-    return path ? `>{t("${path}")}<` : m;
-  });
+  /*
+   * A JSX text node, and the reason this pattern is as fussy as it is.
+   *
+   * `>text<` on its own has no idea whether that `>` closed a tag. It matched
+   * `=> Promise<void>` and rewrote a type annotation into a translation key —
+   * the same failure as the first version turning
+   * `xhr.status >= 200 && xhr.status < 300` into one. Both times the file
+   * stopped parsing, so tsc caught it. But a codemod that needs tsc to tell it
+   * what a `>` was is not timid, it is reckless.
+   *
+   * So: the `>` must NOT follow `=`, `!`, `-`, `<` or `>` — ruling out `=>`,
+   * `!=`, `->`, `<<` and the `>>` that closes nested generics — and the `<`
+   * after the text must begin a tag, `</` or `<Identifier`. Both are
+   * lookarounds rather than captures, so adjacent text nodes still match the
+   * way they did before.
+   */
+  src = src.replace(
+    /(?<![=!<>\-])>([^<>{}\n]{2,118})<(?=\/|[A-Za-z])/g,
+    (m, text) => {
+      const t = text.trim();
+      if (isNotProse(t) || looksLikeCode(t)) return m;
+      const path = take(t);
+      return path ? `>{t("${path}")}<` : m;
+    },
+  );
 
   for (const prop of TEXT_PROPS) {
     const re = new RegExp(`(\\b${prop}=)"([^"\\n]{2,118})"`, "g");
@@ -216,10 +297,32 @@ for (const file of files) {
     continue;
   }
 
-  if (!src.includes('from "@/components/i18n-provider"')) {
+  if (bindsTElsewhere(src)) {
+    skipped.push(`${rel}: already uses \`t\` for something else — by hand`);
+    continue;
+  }
+
+  /*
+   * The file needs the SYMBOL, not just the module.
+   *
+   * Checking only for `from "@/components/i18n-provider"` meant a file that
+   * imported `useOptionalT` was treated as already having `useT`, so the hook
+   * went in uncalled and undeclared. Three cases, in order: the symbol is
+   * there already, the module is there and the symbol joins its braces, or
+   * neither and a fresh import line goes in.
+   */
+  const hook = hookFor(rel);
+  const importRe =
+    /import \{([^}]*)\} from ["']@\/components\/i18n-provider["'];/;
+  const existing = src.match(importRe);
+  if (existing && !new RegExp(`\\b${hook}\\b`).test(existing[1])) {
+    src = src.replace(importRe, (m, names) =>
+      m.replace(names, ` ${hook},${names.replace(/^ /, " ")}`),
+    );
+  } else if (!existing) {
     const withImport = addImport(
       src,
-      'import { useT } from "@/components/i18n-provider";',
+      `import { ${hook} } from "@/components/i18n-provider";`,
     );
     if (!withImport) {
       skipped.push(`${rel}: no import block`);
@@ -228,9 +331,9 @@ for (const file of files) {
     src = withImport;
   }
 
-  src = addHooks(src);
+  src = addHooks(src, hook);
 
-  if (/\bt\(["'`]/.test(src) && !/const t = useT\(\)/.test(src)) {
+  if (/\bt\(["'`]/.test(src) && !/const t = use\w*T\(\)/.test(src)) {
     skipped.push(`${rel}: uses t() but no component to attach it to`);
     continue;
   }
@@ -257,7 +360,21 @@ if (write && newKeys.size) {
       const start = en.indexOf(m[0]) + m[0].length;
       en = en.slice(0, start) + "\n" + lines.join("\n") + en.slice(start);
     } else {
-      const close = en.lastIndexOf("};");
+      /*
+       * A NEW section goes at the end of the `en` OBJECT.
+       *
+       * `en.lastIndexOf("};")` found the last one in the FILE, which is the
+       * close of the `PartialDictionary` mapped type below `en` — so two new
+       * sections were written into a type declaration as string literals
+       * ("A mapped type may not declare properties or methods"), which broke
+       * `Dictionary`, which broke `TKey`, which broke every t() call in the
+       * run. Brace-match from `export const en` instead.
+       */
+      const close = endOfEnObject(en);
+      if (close === -1) {
+        skipped.push(`${EN}: could not find the end of the en object`);
+        continue;
+      }
       en =
         en.slice(0, close) +
         `\n  ${section}: {\n${lines.join("\n")}\n  },\n` +

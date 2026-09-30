@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import { replyTicket } from "@/app/(app)/help/support/actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 export function TicketReplyBox({ ticketId }: { ticketId: string }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [message, setMessage] = useState("");
@@ -21,7 +23,7 @@ export function TicketReplyBox({ ticketId }: { ticketId: string }) {
         return;
       }
       setMessage("");
-      toast.success("Reply sent");
+      toast.success(t("help.replySent"));
       router.refresh();
     });
   }
@@ -32,7 +34,7 @@ export function TicketReplyBox({ ticketId }: { ticketId: string }) {
         rows={3}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder="Write a reply…"
+        placeholder={t("help.writeAReply")}
       />
       <div className="flex justify-end">
         <Button onClick={submit} disabled={pending || !message.trim()}>

@@ -19,6 +19,7 @@ import {
   addLivestreamOutput,
   removeLivestreamOutput,
 } from "@/app/(app)/livestreams/actions";
+import { useT } from "@/components/i18n-provider";
 
 type Output = { id: string; label: string; platform: string; url: string };
 
@@ -46,6 +47,7 @@ export function LivestreamOutputs({
   outputs: Output[];
   canManage: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState(false);
@@ -73,7 +75,7 @@ export function LivestreamOutputs({
       setLabel("");
       setStreamKey("");
       setUrl("");
-      toast.success("Destination added.");
+      toast.success(t("livestreams.destinationAdded"));
       router.refresh();
     });
   };
@@ -85,14 +87,14 @@ export function LivestreamOutputs({
         toast.error(res.error);
         return;
       }
-      toast.success("Destination removed.");
+      toast.success(t("livestreams.destinationRemoved"));
       router.refresh();
     });
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Also send it to</CardTitle>
+        <CardTitle className="text-base">{t("livestreams.alsoSendItTo")}</CardTitle>
         <p className="text-muted-foreground mt-1 text-xs">
           Forward the service to your own YouTube or Facebook page at the same
           time. Only applies when you broadcast from OBS or an encoder.
@@ -101,7 +103,7 @@ export function LivestreamOutputs({
 
       <CardContent className="space-y-3">
         {outputs.length === 0 && !adding && (
-          <p className="text-muted-foreground text-sm">Nowhere yet.</p>
+          <p className="text-muted-foreground text-sm">{t("livestreams.nowhereYet")}</p>
         )}
 
         {outputs.map((o) => (
@@ -120,7 +122,7 @@ export function LivestreamOutputs({
                 onClick={() => remove(o.id)}
                 disabled={pending}
                 aria-label={`Stop sending to ${o.label}`}
-                title="Remove"
+                title={t("livestreams.remove")}
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -132,19 +134,19 @@ export function LivestreamOutputs({
           (adding ? (
             <form onSubmit={add} className="space-y-3 rounded-lg border p-3">
               <div className="space-y-2">
-                <Label htmlFor="out-label">Call it</Label>
+                <Label htmlFor="out-label">{t("livestreams.callIt")}</Label>
                 <Input
                   id="out-label"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Main YouTube channel"
+                  placeholder={t("livestreams.mainYoutubeChannel")}
                   required
                   maxLength={60}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Platform</Label>
+                <Label>{t("livestreams.platform")}</Label>
                 <Select value={platform} onValueChange={setPlatform}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -161,12 +163,12 @@ export function LivestreamOutputs({
 
               {platform === "custom" && (
                 <div className="space-y-2">
-                  <Label htmlFor="out-url">RTMP address</Label>
+                  <Label htmlFor="out-url">{t("livestreams.rtmpAddress")}</Label>
                   <Input
                     id="out-url"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    placeholder="rtmp://…"
+                    placeholder={t("livestreams.rtmp")}
                     inputMode="url"
                     required
                   />
@@ -174,7 +176,7 @@ export function LivestreamOutputs({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="out-key">Stream key</Label>
+                <Label htmlFor="out-key">{t("livestreams.streamKey")}</Label>
                 <Input
                   id="out-key"
                   type="password"

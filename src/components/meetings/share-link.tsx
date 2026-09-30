@@ -5,6 +5,7 @@ import { Check, Copy, Mail, MessageCircle, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Getting the link to people.
@@ -28,6 +29,7 @@ export function ShareLink({
   compact?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const message = [
@@ -46,9 +48,9 @@ export function ShareLink({
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast.success("Link copied.");
+      toast.success(t("meetings.linkCopied"));
     } catch {
-      toast.error("Couldn't copy — select the link and copy it by hand.");
+      toast.error(t("meetings.couldnTCopySelectThe"));
     }
   };
 
@@ -70,7 +72,7 @@ export function ShareLink({
       {!compact && (
         <div className="bg-muted flex items-center gap-2 rounded-lg px-3 py-2">
           <code className="min-w-0 flex-1 truncate text-sm">{url}</code>
-          <Button size="sm" variant="ghost" onClick={copy} aria-label="Copy the link">
+          <Button size="sm" variant="ghost" onClick={copy} aria-label={t("meetings.copyTheLink")}>
             {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
           </Button>
         </div>

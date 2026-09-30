@@ -10,6 +10,7 @@ import {
   type FormField,
 } from "@/lib/forms-shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Answering a platform survey.
@@ -26,6 +27,7 @@ export function SurveySubmit({
   fields: FormField[];
   anonymous: boolean;
 }) {
+  const t = useT();
   const [values, setValues] = useState<Record<string, FieldValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -69,7 +71,7 @@ export function SurveySubmit({
     return (
       <div className="bg-card rounded-2xl border p-8 text-center">
         <CheckCircle2 aria-hidden className="text-success mx-auto size-10" />
-        <p className="mt-3 text-lg font-semibold">Thank you.</p>
+        <p className="mt-3 text-lg font-semibold">{t("surveys.thankYou")}</p>
         <p className="text-muted-foreground mt-1 text-sm">
           That is genuinely useful — it goes straight to the people building
           FlockInsight.

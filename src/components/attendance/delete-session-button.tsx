@@ -6,8 +6,10 @@ import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteAttendance } from "@/app/(app)/attendance/actions";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/i18n-provider";
 
 export function DeleteSessionButton({ id }: { id: string }) {
+  const t = useT();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -19,7 +21,7 @@ export function DeleteSessionButton({ id }: { id: string }) {
         toast.error(res.error);
         return;
       }
-      toast.success("Attendance deleted");
+      toast.success(t("attendance.attendanceDeleted"));
       router.push("/attendance");
       router.refresh();
     });

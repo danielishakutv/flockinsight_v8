@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { PROMO_TITLE, PROMO_BLURB } from "@/lib/trial";
+import { useT } from "@/components/i18n-provider";
 
 const KEY = "fi-promo-seen";
 
@@ -28,6 +29,7 @@ const SCROLL_TRIGGER = 0.5;
  * it, and the offer reaches the people actually considering it.
  */
 export function PromoPopup() {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function PromoPopup() {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Promotion"
+      aria-label={t("public.promotion")}
       onClick={close}
       className="fixed inset-0 z-[100] grid place-items-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in"
     >
@@ -95,7 +97,7 @@ export function PromoPopup() {
         <button
           type="button"
           onClick={close}
-          aria-label="Close"
+          aria-label={t("public.close")}
           className="bg-background/70 text-muted-foreground hover:text-foreground absolute top-3 right-3 z-10 grid size-11 place-items-center rounded-full backdrop-blur sm:size-8"
         >
           <X className="size-4" />

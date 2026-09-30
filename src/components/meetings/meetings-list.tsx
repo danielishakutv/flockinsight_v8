@@ -44,6 +44,7 @@ import {
   type MeetingKind,
 } from "@/lib/meetings-shared";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export type MeetingRow = {
   id: string;
@@ -83,6 +84,7 @@ export function MeetingsList({
   origin: string;
   canManage: boolean;
 }) {
+  const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MeetingFormValues>(BLANK_MEETING);
   const router = useRouter();
@@ -144,7 +146,7 @@ export function MeetingsList({
       )}
 
       {live.length > 0 && (
-        <Section title="Happening now" tone="live">
+        <Section title={t("meetings.happeningNow")} tone="live">
           {live.map((m) => (
             <MeetingCard
               key={m.id}
@@ -182,7 +184,7 @@ export function MeetingsList({
       </Section>
 
       {past.length > 0 && (
-        <Section title="Past">
+        <Section title={t("meetings.past")}>
           {past.slice(0, 40).map((m) => (
             <MeetingCard
               key={m.id}
@@ -203,7 +205,7 @@ export function MeetingsList({
         onSaved={({ code }) => {
           void navigator.clipboard
             .writeText(meetingLink(origin, code))
-            .then(() => toast.success("Link copied — share it with whoever should join."))
+            .then(() => toast.success(t("meetings.linkCopiedShareItWith")))
             .catch(() => {});
         }}
       />
@@ -262,6 +264,7 @@ function MeetingCard({
   onEdit: (m: MeetingRow) => void;
   onChanged: () => void;
 }) {
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const url = meetingLink(origin, m.code);
   const isLive = m.status === "live";
@@ -371,7 +374,7 @@ function MeetingCard({
           )}
           {isPast && (
             <Button asChild variant="secondary" size="sm">
-              <Link href={`/meetings/${m.id}`}>Details</Link>
+              <Link href={`/meetings/${m.id}`}>{t("meetings.details")}</Link>
             </Button>
           )}
 

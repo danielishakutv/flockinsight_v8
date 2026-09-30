@@ -9,6 +9,7 @@ import {
   requestInstall,
   useInstall,
 } from "@/components/pwa/use-install";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The occasional nudge to install.
@@ -23,6 +24,7 @@ import {
  * rendered nothing at all on iOS as a result.
  */
 export function InstallPrompt() {
+  const t = useT();
   const { standalone, route, mayAsk } = useInstall();
   const [showIOS, setShowIOS] = useState(false);
 
@@ -41,12 +43,12 @@ export function InstallPrompt() {
       className="bg-card animate-in slide-in-from-bottom-4 fixed inset-x-3 z-40 rounded-2xl border p-3 shadow-xl duration-300 lg:inset-x-auto lg:right-6 lg:w-96"
       style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.5rem)" }}
       role="dialog"
-      aria-label="Install FlockInsight"
+      aria-label={t("pwa.installFlockinsight")}
     >
       <div className="flex items-center gap-3">
         <Logo className="size-10 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">Install FlockInsight</p>
+          <p className="text-sm font-bold">{t("pwa.installFlockinsight")}</p>
           <p className="text-muted-foreground text-xs">
             Opens like an app, works offline, and starts faster.
           </p>
@@ -59,7 +61,7 @@ export function InstallPrompt() {
         )}
         <button
           onClick={dismissInstall}
-          aria-label="Not now"
+          aria-label={t("pwa.notNow")}
           className="text-muted-foreground hover:text-foreground p-1"
         >
           <X className="size-4" />
@@ -78,6 +80,7 @@ export function InstallPrompt() {
  * an arrow" is how everyone actually finds the Share button.
  */
 export function IOSSteps({ className }: { className?: string }) {
+  const t = useT();
   return (
     <ol className={`mt-3 space-y-2 border-t pt-3 text-xs ${className ?? ""}`}>
       <li className="flex items-center gap-2">
@@ -86,7 +89,7 @@ export function IOSSteps({ className }: { className?: string }) {
         </span>
         <span className="flex items-center gap-1.5">
           Tap <Share className="size-3.5 shrink-0" />
-          <span className="font-semibold">Share</span> at the bottom of Safari
+          <span className="font-semibold">{t("pwa.share")}</span> at the bottom of Safari
         </span>
       </li>
       <li className="flex items-center gap-2">
@@ -95,7 +98,7 @@ export function IOSSteps({ className }: { className?: string }) {
         </span>
         <span className="flex items-center gap-1.5">
           Choose <SquarePlus className="size-3.5 shrink-0" />
-          <span className="font-semibold">Add to Home Screen</span>
+          <span className="font-semibold">{t("pwa.addToHomeScreen")}</span>
         </span>
       </li>
     </ol>

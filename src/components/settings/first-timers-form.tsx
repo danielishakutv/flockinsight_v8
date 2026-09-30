@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 type State = {
   enabled: boolean;
@@ -86,6 +87,7 @@ export function FirstTimersForm({
   timezone: string;
   smsApproved: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState<State>(initial);
@@ -98,7 +100,7 @@ export function FirstTimersForm({
         toast.error(res.error);
         return;
       }
-      toast.success("First-timer settings saved");
+      toast.success(t("settings.firstTimerSettingsSaved"));
       router.refresh();
     });
   }
@@ -113,13 +115,13 @@ export function FirstTimersForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
-            title="Automate first-timer messages"
+            title={t("settings.automateFirstTimerMessages")}
             desc="Thank new visitors, then invite them to become members — automatically."
             checked={f.enabled}
             onChange={(v) => set({ enabled: v })}
           />
           <p className="text-muted-foreground text-xs">
-            Applies to members with a <b>Visitor</b> or <b>New convert</b> status.
+            Applies to members with a <b>{t("settings.visitor")}</b>{t("settings.or")}<b>{t("settings.newConvert")}</b> status.
             Once they become a member, the invite stops. Sent around your local
             timezone ({timezone}).
           </p>
@@ -128,11 +130,11 @@ export function FirstTimersForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Channels</CardTitle>
+          <CardTitle className="text-lg">{t("settings.channels")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ToggleRow
-            title="Email"
+            title={t("settings.email")}
             desc="Free. Sent to first-timers who gave an email address."
             checked={f.email}
             onChange={(v) => set({ email: v })}
@@ -155,11 +157,11 @@ export function FirstTimersForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Timing</CardTitle>
+          <CardTitle className="text-lg">{t("settings.timing")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="welcomeDelay">Send welcome after (days)</Label>
+            <Label htmlFor="welcomeDelay">{t("settings.sendWelcomeAfterDays")}</Label>
             <Input
               id="welcomeDelay"
               type="number"
@@ -174,7 +176,7 @@ export function FirstTimersForm({
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="inviteDelay">Send membership invite after (days)</Label>
+            <Label htmlFor="inviteDelay">{t("settings.sendMembershipInviteAfterDays")}</Label>
             <Input
               id="inviteDelay"
               type="number"
@@ -184,14 +186,14 @@ export function FirstTimersForm({
               onChange={(e) => set({ inviteDelayDays: Number(e.target.value) })}
               className="h-11"
             />
-            <p className="text-muted-foreground text-xs">Typically around 2 weeks.</p>
+            <p className="text-muted-foreground text-xs">{t("settings.typicallyAround2Weeks")}</p>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Message templates</CardTitle>
+          <CardTitle className="text-lg">{t("settings.messageTemplates")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -210,11 +212,11 @@ export function FirstTimersForm({
           </div>
 
           <div className="space-y-3 rounded-xl border p-3">
-            <p className="text-sm font-bold">Welcome message</p>
+            <p className="text-sm font-bold">{t("settings.welcomeMessage")}</p>
             {f.email && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="wsub">Email subject</Label>
+                  <Label htmlFor="wsub">{t("settings.emailSubject")}</Label>
                   <Input
                     id="wsub"
                     value={f.welcomeEmailSubject}
@@ -222,7 +224,7 @@ export function FirstTimersForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="wbody">Email body</Label>
+                  <Label htmlFor="wbody">{t("settings.emailBody")}</Label>
                   <Textarea
                     id="wbody"
                     rows={5}
@@ -246,11 +248,11 @@ export function FirstTimersForm({
           </div>
 
           <div className="space-y-3 rounded-xl border p-3">
-            <p className="text-sm font-bold">Membership invite</p>
+            <p className="text-sm font-bold">{t("settings.membershipInvite")}</p>
             {f.email && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="isub">Email subject</Label>
+                  <Label htmlFor="isub">{t("settings.emailSubject")}</Label>
                   <Input
                     id="isub"
                     value={f.inviteEmailSubject}
@@ -258,7 +260,7 @@ export function FirstTimersForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ibody">Email body</Label>
+                  <Label htmlFor="ibody">{t("settings.emailBody")}</Label>
                   <Textarea
                     id="ibody"
                     rows={6}

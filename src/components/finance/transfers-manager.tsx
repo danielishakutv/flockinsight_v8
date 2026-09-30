@@ -68,6 +68,7 @@ export function TransfersManager({
   transfers: TransferRow[];
   today: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const tr = useT();
   const [pending, startTransition] = useTransition();
@@ -117,7 +118,7 @@ export function TransfersManager({
         toast.error(res.error);
         return;
       }
-      toast.success("Transfer recorded");
+      toast.success(t("finance.transferRecorded"));
       setOpen(false);
       router.refresh();
     });
@@ -130,7 +131,7 @@ export function TransfersManager({
         toast.error(res.error);
         return;
       }
-      toast.success("Transfer deleted");
+      toast.success(t("finance.transferDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -140,7 +141,7 @@ export function TransfersManager({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Transfers</h2>
+          <h2 className="text-base font-bold">{t("finance.transfers")}</h2>
           <p className="text-muted-foreground text-sm">
             Money moved between your own accounts. Not income or expense — the
             totals above ignore it, only the balances change.
@@ -159,7 +160,7 @@ export function TransfersManager({
           <div className="bg-muted mx-auto grid size-12 place-items-center rounded-full">
             <Repeat className="size-6" />
           </div>
-          <p className="mt-3 text-sm font-semibold">No transfers yet</p>
+          <p className="mt-3 text-sm font-semibold">{t("finance.noTransfersYet")}</p>
           <p className="mt-1 text-sm">
             {accounts.length < 2
               ? "You need at least two accounts to move money between them."
@@ -176,36 +177,36 @@ export function TransfersManager({
             <table className="w-full min-w-[40rem] text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Movement</th>
-                  <th className="px-4 py-3 font-semibold">Reference</th>
-                  <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.date")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.movement")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.reference")}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t("finance.amount")}</th>
                   {canManage && <th className="px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {transfers.map((t) => (
-                  <tr key={t.id} className="hover:bg-muted/30">
+                {transfers.map((transfer) => (
+                  <tr key={transfer.id} className="hover:bg-muted/30">
                     <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
-                      {format(parseISO(t.date), "d MMM yyyy")}
+                      {format(parseISO(transfer.date), "d MMM yyyy")}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex flex-wrap items-center gap-1.5 font-medium">
-                        {t.fromAccountName ?? "—"}
+                        {transfer.fromAccountName ?? "—"}
                         <ArrowRight className="text-muted-foreground size-3.5" />
-                        {t.toAccountName ?? "—"}
+                        {transfer.toAccountName ?? "—"}
                       </span>
-                      {t.note && (
+                      {transfer.note && (
                         <span className="text-muted-foreground block text-xs">
-                          {t.note}
+                          {transfer.note}
                         </span>
                       )}
                     </td>
                     <td className="text-muted-foreground px-4 py-3">
-                      {t.reference ?? "—"}
+                      {transfer.reference ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums whitespace-nowrap">
-                      {formatMoney(t.amount, currency)}
+                      {formatMoney(transfer.amount, currency)}
                     </td>
                     {canManage && (
                       <td className="px-4 py-3">
@@ -213,8 +214,8 @@ export function TransfersManager({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Delete transfer"
-                            onClick={() => setConfirmId(t.id)}
+                            aria-label={t("finance.deleteTransfer")}
+                            onClick={() => setConfirmId(transfer.id)}
                           >
                             <Trash2 className="text-destructive size-4" />
                           </Button>
@@ -235,21 +236,21 @@ export function TransfersManager({
           aria-describedby={undefined}
         >
           <DialogHeader>
-            <DialogTitle>Move money between accounts</DialogTitle>
+            <DialogTitle>{t("finance.moveMoneyBetweenAccounts")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>From</Label>
+              <Label>{t("finance.from")}</Label>
               <Select value={fromId} onValueChange={setFromId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pick an account" />
+                  <SelectValue placeholder={t("finance.pickAnAccount")} />
                 </SelectTrigger>
                 <SelectContent
                   className="max-h-72"
                   searchPlaceholder="Search accounts…"
                 >
-                  <SelectItem value={NONE}>Pick an account</SelectItem>
+                  <SelectItem value={NONE}>{t("finance.pickAnAccount")}</SelectItem>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.name}
@@ -261,16 +262,16 @@ export function TransfersManager({
             </div>
 
             <div className="space-y-2">
-              <Label>To</Label>
+              <Label>{t("finance.to")}</Label>
               <Select value={toId} onValueChange={setToId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pick an account" />
+                  <SelectValue placeholder={t("finance.pickAnAccount")} />
                 </SelectTrigger>
                 <SelectContent
                   className="max-h-72"
                   searchPlaceholder="Search accounts…"
                 >
-                  <SelectItem value={NONE}>Pick an account</SelectItem>
+                  <SelectItem value={NONE}>{t("finance.pickAnAccount")}</SelectItem>
                   {destinations.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.name}
@@ -293,7 +294,7 @@ export function TransfersManager({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="t-amount">Amount</Label>
+                <Label htmlFor="t-amount">{t("finance.amount")}</Label>
                 <Input
                   id="t-amount"
                   inputMode="decimal"
@@ -303,7 +304,7 @@ export function TransfersManager({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="t-date">Date</Label>
+                <Label htmlFor="t-date">{t("finance.date")}</Label>
                 <Input
                   id="t-date"
                   type="date"
@@ -314,23 +315,23 @@ export function TransfersManager({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="t-ref">Reference</Label>
+              <Label htmlFor="t-ref">{t("finance.reference")}</Label>
               <Input
                 id="t-ref"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
-                placeholder="Teller or transaction reference"
+                placeholder={t("finance.tellerOrTransactionReference")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="t-note">Note</Label>
+              <Label htmlFor="t-note">{t("finance.note")}</Label>
               <Textarea
                 id="t-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                placeholder="What this movement was for"
+                placeholder={t("finance.whatThisMovementWasFor")}
               />
             </div>
           </div>
@@ -366,7 +367,7 @@ export function TransfersManager({
       >
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Delete this transfer?</DialogTitle>
+            <DialogTitle>{t("finance.deleteThisTransfer")}</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
             Both account balances go back to what they were. This cannot be

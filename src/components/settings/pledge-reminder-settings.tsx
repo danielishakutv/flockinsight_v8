@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 function ToggleRow({
   title,
@@ -45,6 +46,7 @@ export function PledgeReminderSettings({
   initial: PledgeReminderInput;
   smsReady: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [f, setF] = useState<PledgeReminderInput>(initial);
   const [pending, start] = useTransition();
@@ -55,7 +57,7 @@ export function PledgeReminderSettings({
     start(async () => {
       const res = await savePledgeReminderSettings(f);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Pledge reminder settings saved");
+      toast.success(t("settings.pledgeReminderSettingsSaved"));
       router.refresh();
     });
   }
@@ -78,7 +80,7 @@ export function PledgeReminderSettings({
         </p>
 
         <ToggleRow
-          title="Send pledge reminders"
+          title={t("settings.sendPledgeReminders")}
           desc="Only for members with contact details; one-time pledges aren't reminded."
           checked={f.enabled}
           onChange={(v) => set({ enabled: v })}
@@ -87,13 +89,13 @@ export function PledgeReminderSettings({
         {f.enabled && (
           <>
             <ToggleRow
-              title="Send by email"
+              title={t("settings.sendByEmail")}
               desc="Free — included in your plan's email allowance."
               checked={f.email}
               onChange={(v) => set({ email: v })}
             />
             <ToggleRow
-              title="Send by SMS"
+              title={t("settings.sendBySms")}
               desc={
                 smsReady
                   ? "Costs one SMS from your wallet per reminder."
@@ -103,7 +105,7 @@ export function PledgeReminderSettings({
               onChange={(v) => set({ sms: v })}
             />
             <div className="space-y-2">
-              <Label htmlFor="pr-subj">Email subject</Label>
+              <Label htmlFor="pr-subj">{t("settings.emailSubject")}</Label>
               <Input
                 id="pr-subj"
                 value={f.emailSubject}
@@ -111,7 +113,7 @@ export function PledgeReminderSettings({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pr-body">Email message</Label>
+              <Label htmlFor="pr-body">{t("settings.emailMessage")}</Label>
               <Textarea
                 id="pr-body"
                 rows={7}
@@ -120,7 +122,7 @@ export function PledgeReminderSettings({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pr-sms">SMS message</Label>
+              <Label htmlFor="pr-sms">{t("settings.smsMessage")}</Label>
               <Textarea
                 id="pr-sms"
                 rows={3}

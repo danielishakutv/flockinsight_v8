@@ -18,6 +18,7 @@ import {
   splitOnMatches,
 } from "@/lib/option-search";
 import { claimsKeyForSearch } from "@/lib/select-keys";
+import { useOptionalT } from "@/components/i18n-provider";
 
 /** Layout effect on the client, no-op during SSR. */
 const useIsomorphicLayoutEffect =
@@ -438,6 +439,7 @@ function SelectSearchField({
   placeholder: string;
   resultCount: number;
 }) {
+  const t = useOptionalT();
   // Radix focuses the selected option once the popover is positioned; take the
   // focus back so the person can just start typing. On touch we leave it alone
   // so the on-screen keyboard doesn't cover the list before they ask for it.
@@ -475,7 +477,7 @@ function SelectSearchField({
         {value && (
           <button
             type="button"
-            aria-label="Clear search"
+            aria-label={t("ui.clearSearch")}
             onClick={() => {
               onValueChange("");
               ref.current?.focus({ preventScroll: true });

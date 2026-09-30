@@ -5,6 +5,7 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Resize + re-encode an image to WebP in the browser before upload. This keeps
@@ -162,6 +163,7 @@ export function GalleryUpload({
   onChange: (next: { url: string; caption?: string }[]) => void;
   max?: number;
 }) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -218,7 +220,7 @@ export function GalleryUpload({
                 practice and leaves the picture visible.
               */
               className="absolute top-1 right-1 grid size-9 place-items-center rounded-full bg-black/60 text-white transition-opacity pointer-fine:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-              aria-label="Remove photo"
+              aria-label={t("settings.removePhoto")}
             >
               <X className="size-3.5" />
             </button>

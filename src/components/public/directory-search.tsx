@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 /** Radix selects can't hold an empty value, so "all countries" gets a sentinel. */
 const ANY_COUNTRY = "__any__";
@@ -27,6 +28,7 @@ export function DirectorySearch({
   initialDenom: string;
   near: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(initialQ);
@@ -74,7 +76,7 @@ export function DirectorySearch({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, denomination, city…"
+          placeholder={t("public.searchByNameDenominationCity")}
           className="bg-background h-12 w-full rounded-xl border pl-11 pr-4 text-base shadow-sm outline-none focus:ring-2 focus:ring-violet-500"
         />
       </div>
@@ -85,13 +87,13 @@ export function DirectorySearch({
         >
           <SelectTrigger
             size="sm"
-            aria-label="Country"
+            aria-label={t("public.country")}
             className="bg-background h-10 w-auto min-w-40 rounded-lg text-sm"
           >
-            <SelectValue placeholder="All countries" />
+            <SelectValue placeholder={t("public.allCountries")} />
           </SelectTrigger>
           <SelectContent searchPlaceholder="Search countries…">
-            <SelectItem value={ANY_COUNTRY}>All countries</SelectItem>
+            <SelectItem value={ANY_COUNTRY}>{t("public.allCountries")}</SelectItem>
             {countries.map((c) => (
               <SelectItem key={c} value={c}>
                 {c}
@@ -102,7 +104,7 @@ export function DirectorySearch({
         <input
           value={denom}
           onChange={(e) => setDenom(e.target.value)}
-          placeholder="Denomination / type"
+          placeholder={t("public.denominationType")}
           className="bg-background h-10 rounded-lg border px-3 text-sm"
         />
         <button

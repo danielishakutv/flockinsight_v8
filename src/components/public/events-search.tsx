@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Loader2, MapPin, Search } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 
 export function EventsSearch({
   initialQ,
@@ -11,6 +12,7 @@ export function EventsSearch({
   initialQ: string;
   near: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(initialQ);
@@ -53,7 +55,7 @@ export function EventsSearch({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search events, churches, venues…"
+          placeholder={t("public.searchEventsChurchesVenues")}
           className="bg-background h-12 w-full rounded-xl border pl-11 pr-4 text-base shadow-sm outline-none focus:ring-2 focus:ring-violet-500"
         />
       </div>

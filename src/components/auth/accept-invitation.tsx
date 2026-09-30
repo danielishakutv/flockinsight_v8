@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useT } from "@/components/i18n-provider";
 
 export type AcceptMode =
   | "invalid"
@@ -57,6 +58,7 @@ export function AcceptInvitation({
   email: string | null;
   sessionEmail: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [mode, setMode] = useState<AcceptMode>(initialMode);
   const [pending, startTransition] = useTransition();
@@ -93,14 +95,14 @@ export function AcceptInvitation({
   }
 
   function doSignup() {
-    if (!name.trim()) return toast.error("Please enter your name.");
+    if (!name.trim()) return toast.error(t("auth.pleaseEnterYourName"));
     if (password.length < 8)
-      return toast.error("Password must be at least 8 characters.");
+      return toast.error(t("auth.passwordMustBeAtLeast"));
     startTransition(async () => {
       const res = await joinAsNewUser(id, name, password);
       if (!res.ok) {
         if (res.code === "EXISTS") {
-          toast.info("You already have an account — please log in.");
+          toast.info(t("auth.youAlreadyHaveAnAccount"));
           setMode("login");
           return;
         }
@@ -113,7 +115,7 @@ export function AcceptInvitation({
         password,
       });
       if (error) {
-        toast.success("Account created. Please log in to continue.");
+        toast.success(t("auth.accountCreatedPleaseLogIn"));
         router.push(
           `/login?redirect=${encodeURIComponent(`/accept-invitation/${id}`)}`,
         );
@@ -124,12 +126,12 @@ export function AcceptInvitation({
   }
 
   function doLogin() {
-    if (!password) return toast.error("Enter your password.");
+    if (!password) return toast.error(t("auth.enterYourPassword"));
     startTransition(async () => {
       const { error } = await signIn.email({ email: email ?? "", password });
       if (error) {
         if (error.status === 403 || error.code === "EMAIL_NOT_VERIFIED") {
-          toast.error("Please verify your email, then try again.");
+          toast.error(t("auth.pleaseVerifyYourEmailThen"));
           return;
         }
         toast.error(error.message || "Wrong password. Please try again.");
@@ -187,12 +189,12 @@ export function AcceptInvitation({
           <div className="bg-destructive/10 text-destructive mx-auto mb-2 grid size-12 place-items-center rounded-full">
             <XCircle className="size-6" />
           </div>
-          <CardTitle className="text-2xl">Invitation unavailable</CardTitle>
+          <CardTitle className="text-2xl">{t("auth.invitationUnavailable")}</CardTitle>
           <CardDescription>{msg}</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild size="lg" variant="outline" className="w-full">
-            <Link href="/login">Go to login</Link>
+            <Link href="/login">{t("auth.goToLogin")}</Link>
           </Button>
         </CardContent>
       </Shell>
@@ -203,7 +205,7 @@ export function AcceptInvitation({
     return (
       <Shell>
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Wrong account</CardTitle>
+          <CardTitle className="text-2xl">{t("auth.wrongAccount")}</CardTitle>
           <CardDescription>
             This invitation is for{" "}
             <span className="text-foreground font-semibold">{email}</span>, but
@@ -257,24 +259,24 @@ export function AcceptInvitation({
         {mode === "signup" && (
           <>
             <div className="space-y-2">
-              <Label htmlFor="name">Your name</Label>
+              <Label htmlFor="name">{t("auth.yourName")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
-                placeholder="e.g. Mary Johnson"
+                placeholder={t("auth.eGMaryJohnson")}
                 autoFocus
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Choose a password</Label>
+              <Label htmlFor="password">{t("auth.chooseAPassword")}</Label>
               <PasswordInput
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                placeholder="At least 8 characters"
+                placeholder={t("auth.atLeast8Characters")}
                 minLength={8}
                 onKeyDown={(e) => e.key === "Enter" && doSignup()}
               />
@@ -304,17 +306,17 @@ export function AcceptInvitation({
         {mode === "login" && (
           <>
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label>{t("auth.email")}</Label>
               <Input value={email ?? ""} disabled />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
+              <Label htmlFor="login-password">{t("auth.password")}</Label>
               <PasswordInput
                 id="login-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                placeholder="Your password"
+                placeholder={t("auth.yourPassword")}
                 autoFocus
                 onKeyDown={(e) => e.key === "Enter" && doLogin()}
               />

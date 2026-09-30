@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { subscribeNewsletter } from "@/app/c/[handle]/actions";
+import { useT } from "@/components/i18n-provider";
 
 export function NewsletterSignup({
   handle,
@@ -11,6 +12,7 @@ export function NewsletterSignup({
   handle: string;
   churchName: string;
 }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,7 +50,7 @@ export function NewsletterSignup({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Your name (optional)"
+          placeholder={t("public.yourNameOptional")}
           className="h-12 flex-1 rounded-xl border border-white/25 bg-white/10 px-4 text-white placeholder:text-white/60 focus:border-white/60 focus:outline-none"
         />
         <input

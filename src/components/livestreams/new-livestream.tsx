@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { createLivestream } from "@/app/(app)/livestreams/actions";
 import { PROVIDER_LABEL, parseEmbed } from "@/lib/stream-embed";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Creating a livestream is deliberately a short form.
@@ -40,6 +41,7 @@ export function NewLivestream({
   /** Whether this server can ingest video itself. */
   streamConfigured?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -99,24 +101,24 @@ export function NewLivestream({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New livestream</DialogTitle>
+          <DialogTitle>{t("livestreams.newLivestream")}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="ls-title">What is it?</Label>
+            <Label htmlFor="ls-title">{t("livestreams.whatIsIt")}</Label>
             <Input
               id="ls-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Sunday Service"
+              placeholder={t("livestreams.sundayService")}
               required
               maxLength={120}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Where does the video come from?</Label>
+            <Label>{t("livestreams.whereDoesTheVideoCome")}</Label>
             <Select
               value={source}
               onValueChange={(v) => setSource(v as "external" | "cloudflare")}
@@ -143,7 +145,7 @@ export function NewLivestream({
 
           {source === "external" && (
             <div className="space-y-2">
-              <Label htmlFor="ls-url">Link to your stream</Label>
+              <Label htmlFor="ls-url">{t("livestreams.linkToYourStream")}</Label>
               <Input
                 id="ls-url"
                 value={externalUrl}
@@ -170,7 +172,7 @@ export function NewLivestream({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="ls-desc">A line for the watch page (optional)</Label>
+            <Label htmlFor="ls-desc">{t("livestreams.aLineForTheWatch")}</Label>
             <Textarea
               id="ls-desc"
               value={description}
@@ -182,7 +184,7 @@ export function NewLivestream({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="ls-when">When (optional)</Label>
+              <Label htmlFor="ls-when">{t("livestreams.whenOptional")}</Label>
               <Input
                 id="ls-when"
                 type="datetime-local"
@@ -191,7 +193,7 @@ export function NewLivestream({
               />
             </div>
             <div className="space-y-2">
-              <Label>Who can watch</Label>
+              <Label>{t("livestreams.whoCanWatch")}</Label>
               <Select
                 value={visibility}
                 onValueChange={(v) => setVisibility(v as "public" | "members")}
@@ -200,8 +202,8 @@ export function NewLivestream({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Anyone with the link</SelectItem>
-                  <SelectItem value="members">Only people signed in</SelectItem>
+                  <SelectItem value="public">{t("livestreams.anyoneWithTheLink")}</SelectItem>
+                  <SelectItem value="members">{t("livestreams.onlyPeopleSignedIn")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -210,7 +212,7 @@ export function NewLivestream({
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-3">
             <Switch checked={allowChat} onCheckedChange={setAllowChat} className="mt-0.5" />
             <span className="min-w-0">
-              <span className="text-sm font-semibold">Let viewers chat</span>
+              <span className="text-sm font-semibold">{t("livestreams.letViewersChat")}</span>
               <span className="text-muted-foreground mt-0.5 block text-xs">
                 Off by default. A chat nobody is watching during a service is a
                 liability rather than a feature.

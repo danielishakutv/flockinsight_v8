@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,6 +32,7 @@ export function BranchReportSettings({
     lastSentAt: string | null;
   };
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [enabled, setEnabled] = useState(initial.enabled);
@@ -41,9 +43,9 @@ export function BranchReportSettings({
   function addRecipient() {
     const value = draft.trim().toLowerCase();
     if (!value) return;
-    if (!EMAIL_RE.test(value)) return toast.error("Check that email address.");
+    if (!EMAIL_RE.test(value)) return toast.error(t("branches.checkThatEmailAddress"));
     if (recipients.includes(value)) return setDraft("");
-    if (recipients.length >= 10) return toast.error("Ten addresses is the limit.");
+    if (recipients.length >= 10) return toast.error(t("branches.tenAddressesIsTheLimit"));
     setRecipients([...recipients, value]);
     setDraft("");
   }
@@ -82,30 +84,30 @@ export function BranchReportSettings({
           <Switch
             checked={enabled}
             onCheckedChange={setEnabled}
-            aria-label="Enable automatic reports"
+            aria-label={t("branches.enableAutomaticReports")}
           />
         </div>
 
         {enabled && (
           <>
             <div className="space-y-2">
-              <Label>How often</Label>
+              <Label>{t("branches.howOften")}</Label>
               <Select
                 value={frequency}
                 onValueChange={(v) => setFrequency(v as "weekly" | "monthly")}
               >
-                <SelectTrigger className="w-48" aria-label="Frequency" size="sm">
+                <SelectTrigger className="w-48" aria-label={t("branches.frequency")} size="sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="weekly">Every week (Monday)</SelectItem>
-                  <SelectItem value="monthly">Every month</SelectItem>
+                  <SelectItem value="weekly">{t("branches.everyWeekMonday")}</SelectItem>
+                  <SelectItem value="monthly">{t("branches.everyMonth")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="r-email">Also send to</Label>
+              <Label htmlFor="r-email">{t("branches.alsoSendTo")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="r-email"

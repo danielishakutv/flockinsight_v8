@@ -22,10 +22,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 type Match = { id: string; name: string; city: string | null; state: string | null };
 
 export function InviteBranchDialog() {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -48,7 +50,7 @@ export function InviteBranchDialog() {
   }
 
   function submit() {
-    if (!picked) return toast.error("Choose the church you want to invite.");
+    if (!picked) return toast.error(t("branches.chooseTheChurchYouWant"));
     startTransition(async () => {
       const res = await inviteBranch({ churchId: picked.id, message });
       if (!res.ok) return void toast.error(res.error);
@@ -71,7 +73,7 @@ export function InviteBranchDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Invite a church to your network</DialogTitle>
+          <DialogTitle>{t("branches.inviteAChurchToYour")}</DialogTitle>
           <DialogDescription>
             They keep their own account, data and plan. Accepting only lets you
             see roll-up numbers — never their member records.
@@ -80,14 +82,14 @@ export function InviteBranchDialog() {
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="b-search">Find the church</Label>
+            <Label htmlFor="b-search">{t("branches.findTheChurch")}</Label>
             <div className="relative">
               <Search className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 id="b-search"
                 value={query}
                 onChange={(e) => search(e.target.value)}
-                placeholder="Start typing its name…"
+                placeholder={t("branches.startTypingItsName")}
                 className="pl-9"
                 autoComplete="off"
               />
@@ -135,13 +137,13 @@ export function InviteBranchDialog() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="b-message">A note for them (optional)</Label>
+            <Label htmlFor="b-message">{t("branches.aNoteForThemOptional")}</Label>
             <Textarea
               id="b-message"
               rows={3}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Hello Pastor — linking the branches so we can see one report across the province."
+              placeholder={t("branches.helloPastorLinkingTheBranches")}
             />
           </div>
         </div>

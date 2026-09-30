@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { Stepper } from "@/components/attendance/stepper";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * One counted group, collapsed to a single tappable row.
@@ -54,6 +55,7 @@ export function CountGroup({
   /** First-timers and new converts: counted, but already inside the total. */
   muted?: boolean;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const split = male + female;
   const total = split > 0 ? split : carried;
@@ -65,11 +67,11 @@ export function CountGroup({
    */
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(
+    const timer = setTimeout(
       () => ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
       320,
     );
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [open]);
 
   return (
@@ -131,8 +133,8 @@ export function CountGroup({
         <div className="overflow-hidden">
           <div className="space-y-2 px-3 pb-3">
             <div className="grid grid-cols-2 gap-3">
-              <Stepper label="Male" value={male} onChange={onMale} accent />
-              <Stepper label="Female" value={female} onChange={onFemale} accent />
+              <Stepper label={t("attendance.male")} value={male} onChange={onMale} accent />
+              <Stepper label={t("attendance.female")} value={female} onChange={onFemale} accent />
             </div>
             {note && <p className="text-muted-foreground px-1 text-xs">{note}</p>}
           </div>

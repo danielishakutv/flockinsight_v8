@@ -16,6 +16,7 @@ import type { StorageInfo } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export function StorageSettings({
   storage,
@@ -34,6 +35,7 @@ export function StorageSettings({
   extraBytes: number;
   renewsAt: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [acting, setActing] = useState<number | "cancel" | null>(null);
@@ -44,7 +46,7 @@ export function StorageSettings({
 
   function subscribe(b: StorageBundle) {
     if (balance < b.price) {
-      toast.error("Not enough wallet balance. Top up your wallet first.");
+      toast.error(t("settings.notEnoughWalletBalanceTop"));
       return;
     }
     setActing(b.gb);
@@ -71,7 +73,7 @@ export function StorageSettings({
     start(async () => {
       const res = await cancelStorage();
       if (res.ok) {
-        toast.success("Storage add-on cancelled.");
+        toast.success(t("settings.storageAddOnCancelled"));
         router.refresh();
       } else {
         toast.error(res.error);
@@ -104,7 +106,7 @@ export function StorageSettings({
               </div>
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link href="/media">Manage files</Link>
+              <Link href="/media">{t("settings.manageFiles")}</Link>
             </Button>
           </div>
           <div className="bg-muted mt-3 h-2.5 w-full overflow-hidden rounded-full">
@@ -162,7 +164,7 @@ export function StorageSettings({
 
       {/* Bundles */}
       <div>
-        <h3 className="mb-2 font-semibold">Upgrade storage</h3>
+        <h3 className="mb-2 font-semibold">{t("settings.upgradeStorage")}</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Extra storage is a monthly subscription billed from your wallet.
         </p>
@@ -215,13 +217,13 @@ export function StorageSettings({
         {/* More storage — contact us */}
         <div className="bg-muted/40 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed p-4">
           <div>
-            <p className="font-semibold">Need more than 10GB?</p>
+            <p className="font-semibold">{t("settings.needMoreThan10gb")}</p>
             <p className="text-muted-foreground text-sm">
               We&apos;ll set up a custom storage plan for your church.
             </p>
           </div>
           <Button asChild variant="outline" size="sm">
-            <Link href="/help/support">Contact us</Link>
+            <Link href="/help/support">{t("settings.contactUs")}</Link>
           </Button>
         </div>
       </div>

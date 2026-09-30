@@ -223,7 +223,7 @@ export function FinanceClient({
         toast.error(res.error);
         return;
       }
-      toast.success("Record deleted");
+      toast.success(t("finance.recordDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -244,21 +244,21 @@ export function FinanceClient({
       {/* Headline figures */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
-          label="Income"
+          label={t("finance.income")}
           value={formatMoney(summary.income, currency)}
           icon={ArrowDownLeft}
           tone="text-emerald-600 dark:text-emerald-400"
           hint="in the selected range"
         />
         <StatCard
-          label="Expenses"
+          label={t("finance.expenses")}
           value={formatMoney(summary.expense, currency)}
           icon={ArrowUpRight}
           tone="text-rose-600 dark:text-rose-400"
           hint="in the selected range"
         />
         <StatCard
-          label="Net"
+          label={t("finance.net")}
           value={formatMoney(summary.net, currency)}
           icon={Scale}
           tone={
@@ -269,7 +269,7 @@ export function FinanceClient({
           hint={summary.net < 0 ? "spent more than received" : "income less expenses"}
         />
         <StatCard
-          label="Cash on hand"
+          label={t("finance.cashOnHand")}
           value={formatMoney(summary.cashOnHand, currency)}
           icon={Wallet}
           tone="text-foreground"
@@ -331,7 +331,7 @@ export function FinanceClient({
 
       {!hasAnyAccounts && canManage && (
         <div className="bg-muted/40 rounded-2xl border border-dashed p-4 text-sm">
-          <p className="font-semibold">Add an account first</p>
+          <p className="font-semibold">{t("finance.addAnAccountFirst")}</p>
           <p className="text-muted-foreground mt-1">
             You can record money without one, but naming where it sits — the
             bank account, the offering box — is what makes the balances mean
@@ -347,7 +347,7 @@ export function FinanceClient({
       {topCategories.length > 0 && (
         <Card>
           <CardContent className="space-y-3 pt-6">
-            <h2 className="text-sm font-bold">Biggest lines in this range</h2>
+            <h2 className="text-sm font-bold">{t("finance.biggestLinesInThisRange")}</h2>
             {topCategories.map((c) => (
               <div key={`${c.kind}-${c.id ?? "none"}`} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -415,11 +415,11 @@ export function FinanceClient({
             <table className="w-full min-w-[46rem] text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Details</th>
-                  <th className="px-4 py-3 font-semibold">Category</th>
-                  <th className="px-4 py-3 font-semibold">Account</th>
-                  <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.date")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.details")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.category")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("finance.account")}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t("finance.amount")}</th>
                   {canManage && <th className="px-4 py-3" />}
                 </tr>
               </thead>
@@ -470,7 +470,7 @@ export function FinanceClient({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Edit record"
+                            aria-label={t("finance.editRecord")}
                             onClick={() => openEdit(r)}
                           >
                             <Pencil className="size-4" />
@@ -478,7 +478,7 @@ export function FinanceClient({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Delete record"
+                            aria-label={t("finance.deleteRecord")}
                             onClick={() => setConfirmId(r.id)}
                           >
                             <Trash2 className="text-destructive size-4" />
@@ -566,7 +566,7 @@ export function FinanceClient({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">{t("finance.amount")}</Label>
                 <Input
                   id="amount"
                   inputMode="decimal"
@@ -577,7 +577,7 @@ export function FinanceClient({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date">{t("finance.date")}</Label>
                 <Input
                   id="date"
                   type="date"
@@ -589,19 +589,19 @@ export function FinanceClient({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Category</Label>
+                <Label>{t("finance.category")}</Label>
                 <Select
                   value={form.categoryId}
                   onValueChange={(v) => set({ categoryId: v })}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Uncategorised" />
+                    <SelectValue placeholder={t("finance.uncategorised")} />
                   </SelectTrigger>
                   <SelectContent
                     className="max-h-72"
                     searchPlaceholder="Search categories…"
                   >
-                    <SelectItem value={NONE}>Uncategorised</SelectItem>
+                    <SelectItem value={NONE}>{t("finance.uncategorised")}</SelectItem>
                     {categoriesForKind.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
@@ -623,19 +623,19 @@ export function FinanceClient({
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Account</Label>
+                <Label>{t("finance.account")}</Label>
                 <Select
                   value={form.accountId}
                   onValueChange={(v) => set({ accountId: v })}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Not specified" />
+                    <SelectValue placeholder={t("finance.notSpecified")} />
                   </SelectTrigger>
                   <SelectContent
                     className="max-h-72"
                     searchPlaceholder="Search accounts…"
                   >
-                    <SelectItem value={NONE}>Not specified</SelectItem>
+                    <SelectItem value={NONE}>{t("finance.notSpecified")}</SelectItem>
                     {accountsForKind.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name}
@@ -668,7 +668,7 @@ export function FinanceClient({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Method</Label>
+                <Label>{t("finance.method")}</Label>
                 <Select
                   value={form.method}
                   onValueChange={(v) => set({ method: v })}
@@ -677,7 +677,7 @@ export function FinanceClient({
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NONE}>Not specified</SelectItem>
+                    <SelectItem value={NONE}>{t("finance.notSpecified")}</SelectItem>
                     {FINANCE_METHODS.map((m) => (
                       <SelectItem key={m} value={m}>
                         {METHOD_LABEL[m]}
@@ -689,22 +689,22 @@ export function FinanceClient({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="reference">Reference</Label>
+              <Label htmlFor="reference">{t("finance.reference")}</Label>
               <Input
                 id="reference"
                 value={form.reference}
                 onChange={(e) => set({ reference: e.target.value })}
-                placeholder="Cheque or teller number, invoice reference"
+                placeholder={t("finance.chequeOrTellerNumberInvoice")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="note">Note</Label>
+              <Label htmlFor="note">{t("finance.note")}</Label>
               <Textarea
                 id="note"
                 value={form.note}
                 onChange={(e) => set({ note: e.target.value })}
-                placeholder="Anything the next person reading the books should know"
+                placeholder={t("finance.anythingTheNextPersonReading")}
                 rows={2}
               />
             </div>
@@ -733,7 +733,7 @@ export function FinanceClient({
       >
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Delete this record?</DialogTitle>
+            <DialogTitle>{t("finance.deleteThisRecord")}</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
             It will be removed from the ledger and from every total. This cannot

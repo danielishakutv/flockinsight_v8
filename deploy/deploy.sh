@@ -223,6 +223,50 @@ if [ -z "$smoke_ok" ]; then
 fi
 note "new build boots and reports $SHORT"
 
+# --------------------------------------------------- do the pages render?
+#
+# /api/health answering proves the server booted. It does NOT prove a page
+# renders: a React hook that throws during render — say a context hook with no
+# provider above it — returns 500 on every page while health stays perfectly
+# green. That is a blank marketing site with a passing deploy, so these three
+# pages are checked too, and they are the three that would take the longest to
+# notice: the front page, the price list, and the way in.
+#
+# Restarted for the check because `cleanup` above has already stopped it.
+log "Rendering pages on port $SMOKE_PORT"
+( cd "$RELEASE" && PORT="$SMOKE_PORT" exec node node_modules/next/dist/bin/next start -p "$SMOKE_PORT" -H 127.0.0.1 ) \
+  >> "$RELEASE/smoke.log" 2>&1 &
+SMOKE_PID=$!
+
+pages_ok=""
+for _ in $(seq 1 60); do
+  if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
+  if curl -fsS --max-time 5 -o /dev/null "http://127.0.0.1:$SMOKE_PORT/api/health" 2>/dev/null; then
+    pages_ok=yes
+    for path in / /pricing /login; do
+      code="$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' \
+        "http://127.0.0.1:$SMOKE_PORT$path" 2>/dev/null || echo 000)"
+      if [ "$code" != "200" ]; then
+        note "  $path answered $code"
+        pages_ok=""
+      else
+        note "  $path 200"
+      fi
+    done
+    break
+  fi
+  sleep 1
+done
+cleanup
+SMOKE_PID=""
+
+if [ -z "$pages_ok" ]; then
+  note "--- last 40 lines of smoke.log ---"
+  tail -40 "$RELEASE/smoke.log" || true
+  die "a page did not render on the new build — nothing was swapped, the site is untouched"
+fi
+note "pages render"
+
 # --------------------------------------------------------------- go live
 # ln + mv -T replaces the symlink in one syscall: no instant where `current`
 # is missing or points at nothing.

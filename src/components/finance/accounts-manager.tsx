@@ -49,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type AccountRow = {
   id: string;
@@ -108,6 +109,7 @@ export function AccountsManager({
   currency: string;
   accounts: AccountRow[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -181,7 +183,7 @@ export function AccountsManager({
         toast.error(res.error);
         return;
       }
-      toast.success("Unlinked — the account and its records are unchanged");
+      toast.success(t("finance.unlinkedTheAccountAndIts"));
       router.refresh();
     });
   }
@@ -193,7 +195,7 @@ export function AccountsManager({
         toast.error(res.error);
         return;
       }
-      toast.success("Account removed");
+      toast.success(t("finance.accountRemoved"));
       setConfirmId(null);
       router.refresh();
     });
@@ -229,7 +231,7 @@ export function AccountsManager({
           <div className="bg-muted mx-auto grid size-14 place-items-center rounded-full">
             <Wallet className="size-7" />
           </div>
-          <p className="mt-4 font-semibold">No accounts yet</p>
+          <p className="mt-4 font-semibold">{t("finance.noAccountsYet")}</p>
           <p className="mt-1 text-sm">
             Add the church bank account, and the offering box if you keep cash.
             Balances are worked out from what you record.
@@ -251,7 +253,7 @@ export function AccountsManager({
                         <p className="truncate font-semibold">
                           {a.name}
                           {a.givingCategoryId && (
-                            <Badge className="ml-2 text-[10px]">Fund</Badge>
+                            <Badge className="ml-2 text-[10px]">{t("finance.fund")}</Badge>
                           )}
                           {!a.isActive && (
                             <Badge variant="secondary" className="ml-2 text-[10px]">
@@ -371,19 +373,19 @@ export function AccountsManager({
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">{t("finance.name")}</Label>
               <Input
                 id="name"
                 value={form.name}
                 onChange={(e) => set({ name: e.target.value })}
-                placeholder="e.g. Main current account"
+                placeholder={t("finance.eGMainCurrentAccount")}
                 autoFocus
               />
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>{t("finance.type")}</Label>
                 <Select
                   value={form.type}
                   onValueChange={(v) => set({ type: v as FinanceAccountType })}
@@ -392,37 +394,37 @@ export function AccountsManager({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ACCOUNT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {ACCOUNT_TYPE_LABEL[t]}
+                    {ACCOUNT_TYPES.map((accountType) => (
+                      <SelectItem key={accountType} value={accountType}>
+                        {ACCOUNT_TYPE_LABEL[accountType]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="institution">Bank / provider</Label>
+                <Label htmlFor="institution">{t("finance.bankProvider")}</Label>
                 <Input
                   id="institution"
                   value={form.institution}
                   onChange={(e) => set({ institution: e.target.value })}
-                  placeholder="e.g. First Bank"
+                  placeholder={t("finance.eGFirstBank")}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="accountNumber">Account number</Label>
+                <Label htmlFor="accountNumber">{t("finance.accountNumber")}</Label>
                 <Input
                   id="accountNumber"
                   value={form.accountNumber}
                   onChange={(e) => set({ accountNumber: e.target.value })}
-                  placeholder="Optional"
+                  placeholder={t("finance.optional")}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="openingBalance">Opening balance</Label>
+                <Label htmlFor="openingBalance">{t("finance.openingBalance")}</Label>
                 <Input
                   id="openingBalance"
                   inputMode="decimal"
@@ -438,20 +440,20 @@ export function AccountsManager({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="note">Note</Label>
+              <Label htmlFor="note">{t("finance.note")}</Label>
               <Textarea
                 id="note"
                 value={form.note}
                 onChange={(e) => set({ note: e.target.value })}
                 rows={2}
-                placeholder="Optional — who operates it, what it is for"
+                placeholder={t("finance.optionalWhoOperatesItWhat")}
               />
             </div>
 
             {form.id && (
               <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
                 <span>
-                  <span className="block text-sm font-semibold">Open</span>
+                  <span className="block text-sm font-semibold">{t("finance.open")}</span>
                   <span className="text-muted-foreground block text-xs">
                     A closed account keeps its history but stops appearing when
                     recording money.

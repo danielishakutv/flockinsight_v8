@@ -5,6 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useOptionalT } from "@/components/i18n-provider";
 
 function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -49,6 +50,14 @@ function DialogContent({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  /*
+   * useOptionalT, not useT: a primitive must never assume a provider.
+   * `useT()` throws without one, and this dialog renders in trees that have
+   * none of their own — so a missing provider would be a blank page rather
+   * than an untranslated word. Falls back to English, which for a key named
+   * after its words is exactly the English.
+   */
+  const t = useOptionalT();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -81,7 +90,7 @@ function DialogContent({
         */}
         <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent absolute top-4 right-4 z-10 grid size-11 place-items-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none sm:size-8">
           <XIcon className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t("ui.close")}</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPortal>

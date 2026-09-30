@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 type Txn = {
   id: string;
@@ -70,6 +71,7 @@ export function SmsSettings({
   payStatus: string | null;
   txns: Txn[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [sid, setSid] = useState(senderId ?? "");
@@ -82,16 +84,16 @@ export function SmsSettings({
   useEffect(() => {
     if (toasted.current || !payStatus) return;
     toasted.current = true;
-    if (payStatus === "success") toast.success("Wallet topped up!");
-    else if (payStatus === "failed") toast.error("Payment failed or cancelled.");
-    else if (payStatus === "error") toast.error("Something went wrong.");
+    if (payStatus === "success") toast.success(t("settings.walletToppedUp"));
+    else if (payStatus === "failed") toast.error(t("settings.paymentFailedOrCancelled"));
+    else if (payStatus === "error") toast.error(t("settings.somethingWentWrong"));
     router.replace("/settings/sms");
-  }, [payStatus, router]);
+  }, [payStatus, router, t]);
 
   async function topUp() {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 100)
-      return toast.error("Minimum top-up is ₦100.");
+      return toast.error(t("settings.minimumTopUpIs100"));
     setPaying(true);
     const res = await startSmsTopup(amt);
     if (!res.ok) {
@@ -110,10 +112,10 @@ export function SmsSettings({
         return;
       }
       if (res.outcome === "approved")
-        toast.success("That sender ID is already approved — you can send SMS now!");
+        toast.success(t("settings.thatSenderIdIsAlready"));
       else
         toast.success(
-          "Request received — we'll review it and submit it to the network for approval.",
+          t("settings.requestReceivedWeLlReview"),
         );
       router.refresh();
     });
@@ -126,8 +128,8 @@ export function SmsSettings({
         toast.error(res.error);
         return;
       }
-      if (res.status === "approved") toast.success("Approved! You can send SMS now.");
-      else if (res.status === "rejected") toast.error("This sender ID was rejected.");
+      if (res.status === "approved") toast.success(t("settings.approvedYouCanSendSms"));
+      else if (res.status === "rejected") toast.error(t("settings.thisSenderIdWasRejected"));
       else toast.message("Still under review — please check again later.");
       router.refresh();
     });
@@ -178,7 +180,7 @@ export function SmsSettings({
             <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
               <Clock className="mt-0.5 size-5 shrink-0 text-amber-500" />
               <div>
-                <p className="font-semibold">SMS is coming soon</p>
+                <p className="font-semibold">{t("settings.smsIsComingSoon")}</p>
                 <p className="text-muted-foreground text-sm">
                   SMS sending isn&apos;t available in {country ?? "your country"}{" "}
                   yet — we&apos;re working on it and it&apos;ll be available soon.
@@ -194,7 +196,7 @@ export function SmsSettings({
               <div className="flex-1">
                 <p className="font-semibold">
                   “{senderId}” requested{" "}
-                  <Badge variant="secondary">Awaiting review</Badge>
+                  <Badge variant="secondary">{t("settings.awaitingReview")}</Badge>
                 </p>
                 <p className="text-muted-foreground text-sm">
                   We&apos;ve received your request. Our team will review it and
@@ -211,7 +213,7 @@ export function SmsSettings({
               <div className="flex-1">
                 <p className="font-semibold">
                   “{senderId}” is processing{" "}
-                  <Badge variant="secondary">Processing</Badge>
+                  <Badge variant="secondary">{t("settings.processing")}</Badge>
                 </p>
                 <p className="text-muted-foreground text-sm">
                   Your sender ID has been submitted to the network for approval.
@@ -237,7 +239,7 @@ export function SmsSettings({
               <div>
                 <p className="font-semibold">
                   “{senderId}” approved{" "}
-                  <Badge variant="success">Approved</Badge>
+                  <Badge variant="success">{t("settings.approved")}</Badge>
                 </p>
                 <p className="text-muted-foreground text-sm">
                   Your messages will be sent from this sender ID.
@@ -252,7 +254,7 @@ export function SmsSettings({
               <div>
                 <p className="font-semibold">
                   Application rejected{" "}
-                  <Badge variant="destructive">Rejected</Badge>
+                  <Badge variant="destructive">{t("settings.rejected")}</Badge>
                 </p>
                 {note && (
                   <p className="text-muted-foreground text-sm">Reason: {note}</p>
@@ -270,7 +272,7 @@ export function SmsSettings({
               <div>
                 <p className="font-semibold">
                   “{senderId}” revoked{" "}
-                  <Badge variant="destructive">Revoked</Badge>
+                  <Badge variant="destructive">{t("settings.revoked")}</Badge>
                 </p>
                 {note && (
                   <p className="text-muted-foreground text-sm">Reason: {note}</p>
@@ -286,12 +288,12 @@ export function SmsSettings({
           {showForm && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="sid">Requested sender ID</Label>
+                <Label htmlFor="sid">{t("settings.requestedSenderId")}</Label>
                 <Input
                   id="sid"
                   value={sid}
                   onChange={(e) => setSid(e.target.value)}
-                  placeholder="e.g. GraceChapel"
+                  placeholder={t("settings.eGGracechapel")}
                   maxLength={11}
                 />
                 <p className="text-muted-foreground text-xs">
@@ -307,7 +309,7 @@ export function SmsSettings({
                   id="sid-note"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Service reminders and announcements to our members."
+                  placeholder={t("settings.eGServiceRemindersAnd")}
                   rows={2}
                 />
               </div>
@@ -324,34 +326,34 @@ export function SmsSettings({
       {txns.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Wallet history</CardTitle>
+            <CardTitle className="text-lg">{t("settings.walletHistory")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {txns.map((t) => (
+            {txns.map((txn) => (
               <div
-                key={t.id}
+                key={txn.id}
                 className="flex items-center justify-between gap-3 text-sm"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {t.reason ?? (t.kind === "credit" ? "Top-up" : "SMS")}
+                    {txn.reason ?? (txn.kind === "credit" ? "Top-up" : "SMS")}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    {format(parseISO(t.createdAt), "MMM d, yyyy · h:mm a")}
+                    {format(parseISO(txn.createdAt), "MMM d, yyyy · h:mm a")}
                   </p>
                 </div>
                 <div className="text-right">
                   <p
                     className={
                       "font-bold tabular-nums " +
-                      (t.kind === "credit" ? "text-success" : "")
+                      (txn.kind === "credit" ? "text-success" : "")
                     }
                   >
-                    {t.kind === "credit" ? "+" : "−"}
-                    {formatMoney(t.amount, currency)}
+                    {txn.kind === "credit" ? "+" : "−"}
+                    {formatMoney(txn.amount, currency)}
                   </p>
                   <p className="text-muted-foreground text-xs tabular-nums">
-                    {formatMoney(t.balanceAfter, currency)}
+                    {formatMoney(txn.balanceAfter, currency)}
                   </p>
                 </div>
               </div>
@@ -363,7 +365,7 @@ export function SmsSettings({
       <Dialog open={topupOpen} onOpenChange={(o) => !paying && setTopupOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Top up wallet</DialogTitle>
+            <DialogTitle>{t("settings.topUpWallet")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -384,7 +386,7 @@ export function SmsSettings({
               ))}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="topup-amt">Amount (₦)</Label>
+              <Label htmlFor="topup-amt">{t("settings.amount")}</Label>
               <Input
                 id="topup-amt"
                 type="number"

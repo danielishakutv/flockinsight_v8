@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 /** Presets covering the periods people actually report on. */
 const PRESETS: { label: string; range: () => { from: string; to: string } }[] = [
@@ -81,6 +82,7 @@ export function ReportsBrowser({
   datasets: Dataset[];
   counts: Record<string, number>;
 }) {
+  const t = useT();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
@@ -129,7 +131,7 @@ export function ReportsBrowser({
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <div className="space-y-1.5">
-              <Label htmlFor="from">From</Label>
+              <Label htmlFor="from">{t("reports.from")}</Label>
               <Input
                 id="from"
                 type="date"
@@ -139,7 +141,7 @@ export function ReportsBrowser({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="to">To</Label>
+              <Label htmlFor="to">{t("reports.to")}</Label>
               <Input
                 id="to"
                 type="date"
@@ -211,7 +213,7 @@ export function ReportsBrowser({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search reports"
+            placeholder={t("reports.searchReports")}
             className="pl-9"
           />
         </div>
@@ -219,7 +221,7 @@ export function ReportsBrowser({
           <FilterChip
             active={category === "all"}
             onClick={() => setCategory("all")}
-            label="All"
+            label={t("reports.all")}
             count={datasets.length}
           />
           {CATEGORIES.filter((c) => available.has(c.key)).map((c) => (

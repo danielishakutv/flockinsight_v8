@@ -29,7 +29,7 @@ import {
 } from "@/lib/audit-catalog";
 import { cn } from "@/lib/utils";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
-import { useOptionalT } from "@/components/i18n-provider";
+import { useT, useOptionalT } from "@/components/i18n-provider";
 
 export type ActivityEntry = {
   id: string;
@@ -72,6 +72,7 @@ export function ActivityLog({
   /** The platform view names the church each row happened in. */
   showChurch?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const [query, setQuery] = useState(params.get("q") ?? "");
@@ -106,9 +107,9 @@ export function ActivityLog({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search what happened, or who did it…"
+              placeholder={t("settings.searchWhatHappenedOrWho")}
               className="pl-9"
-              aria-label="Search the activity log"
+              aria-label={t("settings.searchTheActivityLog")}
             />
           </div>
           <Button type="submit" variant="secondary">
@@ -117,7 +118,7 @@ export function ActivityLog({
         </form>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Filter label="Area">
+          <Filter label={t("settings.area")}>
             <Select
               value={params.get("module") ?? "all"}
               onValueChange={(v) => setParam("module", v)}
@@ -126,7 +127,7 @@ export function ActivityLog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Everything</SelectItem>
+                <SelectItem value="all">{t("settings.everything")}</SelectItem>
                 {modules.map((m) => (
                   <SelectItem key={m} value={m}>
                     {AUDIT_MODULE_LABEL[m] ?? m}
@@ -136,13 +137,13 @@ export function ActivityLog({
             </Select>
           </Filter>
 
-          <Filter label="Who">
+          <Filter label={t("settings.who")}>
             <Select value={params.get("who") ?? "all"} onValueChange={(v) => setParam("who", v)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent searchPlaceholder="Search people…">
-                <SelectItem value="all">Anyone</SelectItem>
+                <SelectItem value="all">{t("settings.anyone")}</SelectItem>
                 {actors.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
@@ -152,7 +153,7 @@ export function ActivityLog({
             </Select>
           </Filter>
 
-          <Filter label="From">
+          <Filter label={t("settings.from")}>
             <Input
               type="date"
               value={params.get("from") ?? ""}
@@ -160,7 +161,7 @@ export function ActivityLog({
             />
           </Filter>
 
-          <Filter label="To">
+          <Filter label={t("settings.to")}>
             <Input
               type="date"
               value={params.get("to") ?? ""}
@@ -178,9 +179,9 @@ export function ActivityLog({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All entries</SelectItem>
-              <SelectItem value="warning">Needs attention</SelectItem>
-              <SelectItem value="critical">Sensitive only</SelectItem>
+              <SelectItem value="all">{t("settings.allEntries")}</SelectItem>
+              <SelectItem value="warning">{t("settings.needsAttention")}</SelectItem>
+              <SelectItem value="critical">{t("settings.sensitiveOnly")}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -334,7 +335,7 @@ function Entry({
           </p>
           {entry.targetLabel && (
             <p>
-              <span className="text-muted-foreground">On: </span>
+              <span className="text-muted-foreground">{t("settings.on")}</span>
               {entry.targetLabel}
             </p>
           )}

@@ -7,8 +7,10 @@ import { setNewPassword } from "@/app/set-password/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useT } from "@/components/i18n-provider";
 
 export function SetPasswordForm() {
+  const t = useT();
   const [pending, start] = useTransition();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -25,7 +27,7 @@ export function SetPasswordForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="new-pw">New password</Label>
+        <Label htmlFor="new-pw">{t("auth.newPassword")}</Label>
         <PasswordInput
           id="new-pw"
           value={password}
@@ -35,7 +37,7 @@ export function SetPasswordForm() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="confirm-pw">Confirm password</Label>
+        <Label htmlFor="confirm-pw">{t("auth.confirmPassword")}</Label>
         <PasswordInput
           id="confirm-pw"
           value={confirm}

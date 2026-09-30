@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 export function DemoRequestForm() {
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
   const [form, setForm] = useState({
@@ -49,7 +51,7 @@ export function DemoRequestForm() {
           .
         </p>
         <Button className="mt-5" asChild>
-          <a href="/signup">Or start free right now</a>
+          <a href="/signup">{t("public.orStartFreeRightNow")}</a>
         </Button>
       </div>
     );
@@ -62,27 +64,27 @@ export function DemoRequestForm() {
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="d-church">Church name</Label>
+          <Label htmlFor="d-church">{t("public.churchName")}</Label>
           <Input
             id="d-church"
             value={form.churchName}
             onChange={(e) => set("churchName", e.target.value)}
-            placeholder="Grace Chapel"
+            placeholder={t("public.graceChapel")}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="d-name">Your name</Label>
+          <Label htmlFor="d-name">{t("public.yourName")}</Label>
           <Input
             id="d-name"
             value={form.contactName}
             onChange={(e) => set("contactName", e.target.value)}
-            placeholder="Pastor Daniel"
+            placeholder={t("public.pastorDaniel")}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="d-phone">Phone / WhatsApp</Label>
+          <Label htmlFor="d-phone">{t("public.phoneWhatsapp")}</Label>
           <Input
             id="d-phone"
             value={form.phone}
@@ -93,7 +95,7 @@ export function DemoRequestForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="d-email">Email (optional)</Label>
+          <Label htmlFor="d-email">{t("public.emailOptional")}</Label>
           <Input
             id="d-email"
             type="email"
@@ -103,16 +105,16 @@ export function DemoRequestForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="d-city">City</Label>
+          <Label htmlFor="d-city">{t("public.city")}</Label>
           <Input
             id="d-city"
             value={form.city}
             onChange={(e) => set("city", e.target.value)}
-            placeholder="Yola"
+            placeholder={t("public.yola")}
           />
         </div>
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="d-size">Roughly how many members?</Label>
+          <Label htmlFor="d-size">{t("public.roughlyHowManyMembers")}</Label>
           <Input
             id="d-size"
             value={form.size}
@@ -130,7 +132,7 @@ export function DemoRequestForm() {
             value={form.note}
             onChange={(e) => set("note", e.target.value)}
             rows={3}
-            placeholder="Counting attendance across three services and chasing first-timers."
+            placeholder={t("public.countingAttendanceAcrossThreeServices")}
           />
         </div>
       </div>

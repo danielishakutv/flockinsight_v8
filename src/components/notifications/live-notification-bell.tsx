@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type Item = {
   id: string;
@@ -34,6 +35,7 @@ export function LiveNotificationBell({
   initial?: number;
   className?: string;
 }) {
+  const t = useT();
   const [count, setCount] = useState(initial);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
@@ -122,7 +124,7 @@ export function LiveNotificationBell({
         className="w-[22rem] max-w-[calc(100vw-1rem)] p-0"
       >
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
-          <p className="text-sm font-bold">Notifications</p>
+          <p className="text-sm font-bold">{t("notifications.notifications")}</p>
           {count > 0 && (
             <button
               type="button"

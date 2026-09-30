@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/notifications/actions";
 import { useMounted } from "@/lib/client-state";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/i18n-provider";
 
 const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
@@ -22,6 +23,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export function PushToggle() {
+  const t = useT();
   const mounted = useMounted();
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -56,7 +58,7 @@ export function PushToggle() {
     try {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
-        toast.error("Notifications are blocked in your browser settings.");
+        toast.error(t("notifications.notificationsAreBlockedInYour"));
         return;
       }
       const reg = await navigator.serviceWorker.ready;
@@ -77,9 +79,9 @@ export function PushToggle() {
         return;
       }
       setSubscribed(true);
-      toast.success("Push notifications enabled on this device.");
+      toast.success(t("notifications.pushNotificationsEnabledOnThis"));
     } catch {
-      toast.error("Could not enable push notifications.");
+      toast.error(t("notifications.couldNotEnablePushNotifications"));
     } finally {
       setBusy(false);
     }
@@ -95,9 +97,9 @@ export function PushToggle() {
         await sub.unsubscribe();
       }
       setSubscribed(false);
-      toast.success("Push notifications turned off on this device.");
+      toast.success(t("notifications.pushNotificationsTurnedOffOn"));
     } catch {
-      toast.error("Could not turn off push notifications.");
+      toast.error(t("notifications.couldNotTurnOffPush"));
     } finally {
       setBusy(false);
     }

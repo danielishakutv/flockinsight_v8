@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 /*
  * Built from the country table, never hand-written.
@@ -49,6 +50,7 @@ export function ProfileForm({
   plan: string;
   planPriceLabel: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(initialName);
@@ -88,7 +90,7 @@ export function ProfileForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Church profile updated");
+      toast.success(t("settings.churchProfileUpdated"));
       router.refresh();
     });
   }
@@ -98,7 +100,7 @@ export function ProfileForm({
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Church name</Label>
+            <Label htmlFor="name">{t("settings.churchName")}</Label>
             <Input
               id="name"
               value={name}
@@ -107,7 +109,7 @@ export function ProfileForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tz">Timezone</Label>
+            <Label htmlFor="tz">{t("settings.timezone")}</Label>
             <Select value={timezone} onValueChange={setTimezone}>
               <SelectTrigger id="tz" className="w-full">
                 <SelectValue />
@@ -123,7 +125,7 @@ export function ProfileForm({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="currency">Currency</Label>
+              <Label htmlFor="currency">{t("settings.currency")}</Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger id="currency" className="w-full">
                   <SelectValue />
@@ -141,7 +143,7 @@ export function ProfileForm({
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
+              <Label htmlFor="country">{t("settings.country")}</Label>
               <Select
                 value={country}
                 onValueChange={(v) => {
@@ -165,10 +167,10 @@ export function ProfileForm({
 
           {country === "Nigeria" && (
             <div className="space-y-2">
-              <Label htmlFor="state">State / Region</Label>
+              <Label htmlFor="state">{t("settings.stateRegion")}</Label>
               <Select value={state} onValueChange={setState}>
                 <SelectTrigger id="state" className="w-full">
-                  <SelectValue placeholder="Select a state" />
+                  <SelectValue placeholder={t("settings.selectAState")} />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
                   {NIGERIAN_STATES.map((s) => (
@@ -189,14 +191,14 @@ export function ProfileForm({
           {/* Current plan */}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Your plan</span>
+              <span className="text-sm font-medium">{t("settings.yourPlan")}</span>
               <Badge variant="secondary">{planName(plan)}</Badge>
               <span className="text-muted-foreground text-xs">
                 {planPriceLabel}
               </span>
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link href="/settings/billing">Manage plan</Link>
+              <Link href="/settings/billing">{t("settings.managePlan")}</Link>
             </Button>
           </div>
         </form>

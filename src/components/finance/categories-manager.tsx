@@ -117,7 +117,7 @@ export function CategoriesManager({
         toast.error(res.error);
         return;
       }
-      toast.success("Category removed");
+      toast.success(t("finance.categoryRemoved"));
       setConfirmId(null);
       router.refresh();
     });
@@ -198,11 +198,11 @@ export function CategoriesManager({
                 <table className="w-full min-w-[32rem] text-sm">
                   <thead className="bg-muted/50 text-muted-foreground text-left text-xs uppercase">
                     <tr>
-                      <th className="px-2 py-3 font-semibold sm:px-4">Name</th>
+                      <th className="px-2 py-3 font-semibold sm:px-4">{t("finance.name")}</th>
                       <th className="px-2 py-3 text-right font-semibold sm:px-4">
                         Records
                       </th>
-                      <th className="px-2 py-3 text-right font-semibold sm:px-4">Total</th>
+                      <th className="px-2 py-3 text-right font-semibold sm:px-4">{t("finance.total")}</th>
                       {canManage && <th className="px-2 py-3 sm:px-4" />}
                     </tr>
                   </thead>
@@ -282,7 +282,7 @@ export function CategoriesManager({
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cat-name">Name</Label>
+              <Label htmlFor="cat-name">{t("finance.name")}</Label>
               <Input
                 id="cat-name"
                 value={form.name}
@@ -303,7 +303,7 @@ export function CategoriesManager({
                 </p>
                 <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
                   <span>
-                    <span className="block text-sm font-semibold">In use</span>
+                    <span className="block text-sm font-semibold">{t("finance.inUse")}</span>
                     <span className="text-muted-foreground block text-xs">
                       A retired category keeps its records but stops appearing
                       on the form.

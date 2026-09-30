@@ -14,6 +14,7 @@ import {
   reopenMeeting,
   rotatePasscode,
 } from "@/app/(app)/meetings/actions";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The host's controls from outside the room — the things that still need doing
@@ -33,6 +34,7 @@ export function MeetingActions({
   hasParticipants: boolean;
   canRecordAttendance: boolean;
 }) {
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -50,7 +52,7 @@ export function MeetingActions({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Manage</CardTitle>
+        <CardTitle className="text-base">{t("meetings.manage")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {canRecordAttendance && hasParticipants && (

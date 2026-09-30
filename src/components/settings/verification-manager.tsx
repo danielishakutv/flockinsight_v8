@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 type Channel = "email" | "phone";
 
@@ -53,6 +54,7 @@ export function VerificationManager({
   emailVerifiedAt: string | null;
   phoneVerifiedAt: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<Channel | null>(null);
@@ -173,7 +175,7 @@ export function VerificationManager({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Account contact details</CardTitle>
+          <CardTitle className="text-lg">{t("settings.accountContactDetails")}</CardTitle>
           <CardDescription>
             These are how FlockInsight reaches your church about its account —
             separate from what visitors see on your public page. Changing one
@@ -185,7 +187,7 @@ export function VerificationManager({
           <ChannelRow
             channel="email"
             icon={Mail}
-            label="Account email address"
+            label={t("settings.accountEmailAddress")}
             hint="We'll send receipts, alerts and account notices here."
             placeholder="office@yourchurch.org"
             inputType="email"
@@ -207,7 +209,7 @@ export function VerificationManager({
           <ChannelRow
             channel="phone"
             icon={Phone}
-            label="Account phone number"
+            label={t("settings.accountPhoneNumber")}
             hint="Used for urgent account messages. Nigerian numbers: 0803… or +234803…"
             placeholder="08012345678"
             inputType="tel"
@@ -292,6 +294,7 @@ function ChannelRow({
   onSend: (v: string) => void;
   onConfirm: (otpId: string, code: string) => void;
 }) {
+  const t = useT();
   const idBase = `verify-${channel}`;
 
   return (
@@ -314,7 +317,7 @@ function ChannelRow({
           </p>
           <p className="truncate text-sm">
             {value || (
-              <span className="text-muted-foreground italic">Not set yet</span>
+              <span className="text-muted-foreground italic">{t("settings.notSetYet")}</span>
             )}
           </p>
           <p className="text-muted-foreground mt-0.5 text-xs">

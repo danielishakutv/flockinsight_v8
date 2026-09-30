@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { rotateHostKey } from "@/app/(app)/meetings/actions";
 import { hostMeetingLink } from "@/lib/meetings-shared";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The host's own link.
@@ -30,6 +31,7 @@ export function HostLink({
   code: string;
   hostKey: string | null;
 }) {
+  const t = useT();
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
   const [key, setKey] = useState(hostKey);
@@ -44,9 +46,9 @@ export function HostLink({
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast.success("Host link copied. Keep it to yourself.");
+      toast.success(t("meetings.hostLinkCopiedKeepIt"));
     } catch {
-      toast.error("Couldn't copy — reveal it and copy it by hand.");
+      toast.error(t("meetings.couldnTCopyRevealIt"));
     }
   };
 
@@ -59,7 +61,7 @@ export function HostLink({
       }
       setKey(res.hostKey ?? null);
       setShown(true);
-      toast.success("New host link issued. The old one no longer works.");
+      toast.success(t("meetings.newHostLinkIssuedThe"));
       router.refresh();
     });
 

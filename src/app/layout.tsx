@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { PostHogProvider } from "@/components/analytics/posthog-provider";
 import { MatomoProvider } from "@/components/analytics/matomo-provider";
+import { I18nProvider } from "@/components/i18n-provider";
+import { getI18n } from "@/lib/i18n/server";
 
 const SITE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -77,11 +79,29 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+/*
+ * The i18n provider lives here, at the root, and that is a change of mind.
+ *
+ * It used to be added only by the app, auth and meeting layouts, to keep the
+ * marketing pages static. Two things made that wrong. Those pages are dynamic
+ * now anyway — they read the language cookie to choose their own copy — so the
+ * saving no longer exists. And every shared component was a trap: `useT()`
+ * throws without a provider, so putting one into `ui/dialog.tsx` would have
+ * crashed every dialog on the public site AND in /superadmin, neither of which
+ * had a provider at all.
+ *
+ * One provider at the root means one hook, no trap, and the public pages and
+ * the admin translate like everything else. The app and auth layouts still
+ * nest their own, because those resolve a locale this one cannot see — the
+ * signed-in user's saved preference and their church's default — and the
+ * innermost provider wins.
+ */
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { locale, dict } = await getI18n();
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -100,7 +120,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <PostHogProvider>
-            {children}
+            <I18nProvider locale={locale} dict={dict}>
+              {children}
+            </I18nProvider>
             <ServiceWorkerRegister />
             <MatomoProvider />
           </PostHogProvider>

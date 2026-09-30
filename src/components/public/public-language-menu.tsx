@@ -14,6 +14,7 @@ import {
 import { LOCALES, LOCALE_COOKIE, DEFAULT_LOCALE } from "@/lib/i18n/locales";
 import { useMounted } from "@/lib/client-state";
 import { switchLanguage } from "@/app/(app)/settings/language/actions";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Choosing a language before you have an account.
@@ -35,6 +36,7 @@ import { switchLanguage } from "@/app/(app)/settings/language/actions";
  * this software is worth their time.
  */
 export function PublicLanguageMenu({ className }: { className?: string }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -57,7 +59,7 @@ export function PublicLanguageMenu({ className }: { className?: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         className={className}
-        aria-label="Choose a language"
+        aria-label={t("public.chooseALanguage")}
         disabled={pending}
       >
         <span className="text-muted-foreground hover:text-foreground inline-flex h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold transition-colors sm:h-9">

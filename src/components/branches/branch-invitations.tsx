@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 type Received = {
   id: string;
@@ -42,6 +43,7 @@ export function BranchInvitations({
   churchId: string;
   canManage: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
@@ -202,7 +204,7 @@ export function BranchInvitations({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Pending</Badge>
+                  <Badge variant="secondary">{t("branches.pending")}</Badge>
                   {canManage && (
                     <Button
                       size="sm"

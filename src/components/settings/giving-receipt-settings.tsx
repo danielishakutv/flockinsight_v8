@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 function ToggleRow({
   title,
@@ -45,6 +46,7 @@ export function GivingReceiptSettings({
   initial: GivingReceiptInput;
   smsReady: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [f, setF] = useState<GivingReceiptInput>(initial);
   const [pending, start] = useTransition();
@@ -55,7 +57,7 @@ export function GivingReceiptSettings({
     start(async () => {
       const res = await saveGivingReceiptSettings(f);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Giving receipt settings saved");
+      toast.success(t("settings.givingReceiptSettingsSaved"));
       router.refresh();
     });
   }
@@ -72,11 +74,11 @@ export function GivingReceiptSettings({
           When you record a gift for a member, automatically thank them and speak
           a blessing over them. Use <code>{"{name}"}</code>,{" "}
           <code>{"{amount}"}</code>, <code>{"{category}"}</code>,{" "}
-          <code>{"{date}"}</code> and <code>{"{church}"}</code> in your messages.
+          <code>{"{date}"}</code>{t("settings.and")}<code>{"{church}"}</code> in your messages.
         </p>
 
         <ToggleRow
-          title="Send giving receipts"
+          title={t("settings.sendGivingReceipts")}
           desc="Only sent for gifts recorded against a member who has contact details."
           checked={f.enabled}
           onChange={(v) => set({ enabled: v })}
@@ -85,13 +87,13 @@ export function GivingReceiptSettings({
         {f.enabled && (
           <>
             <ToggleRow
-              title="Send by email"
+              title={t("settings.sendByEmail")}
               desc="Free — included in your plan's email allowance."
               checked={f.email}
               onChange={(v) => set({ email: v })}
             />
             <ToggleRow
-              title="Send by SMS"
+              title={t("settings.sendBySms")}
               desc={
                 smsReady
                   ? "Costs one SMS from your wallet per receipt."
@@ -102,7 +104,7 @@ export function GivingReceiptSettings({
             />
 
             <div className="space-y-2">
-              <Label htmlFor="rs-subj">Email subject</Label>
+              <Label htmlFor="rs-subj">{t("settings.emailSubject")}</Label>
               <Input
                 id="rs-subj"
                 value={f.emailSubject}
@@ -110,7 +112,7 @@ export function GivingReceiptSettings({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="rs-body">Email message</Label>
+              <Label htmlFor="rs-body">{t("settings.emailMessage")}</Label>
               <Textarea
                 id="rs-body"
                 rows={7}
@@ -119,7 +121,7 @@ export function GivingReceiptSettings({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="rs-sms">SMS message</Label>
+              <Label htmlFor="rs-sms">{t("settings.smsMessage")}</Label>
               <Textarea
                 id="rs-sms"
                 rows={3}

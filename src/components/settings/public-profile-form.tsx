@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload, GalleryUpload } from "@/components/settings/image-upload";
 import { CHURCH_THEMES } from "@/lib/church-themes";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type Initial = {
   handle: string;
@@ -65,6 +66,7 @@ export function PublicProfileForm({
   baseUrl: string;
   initial: Initial;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
@@ -90,19 +92,19 @@ export function PublicProfileForm({
       }
     } else {
       copy();
-      toast.success("Link copied — paste it anywhere to invite people.");
+      toast.success(t("settings.linkCopiedPasteItAnywhere"));
     }
   }
 
   function useMyLocation() {
-    if (!navigator.geolocation) return toast.error("Location not available.");
+    if (!navigator.geolocation) return toast.error(t("settings.locationNotAvailable"));
     navigator.geolocation.getCurrentPosition(
       (pos) =>
         set({
           lat: +pos.coords.latitude.toFixed(6),
           lng: +pos.coords.longitude.toFixed(6),
         }),
-      () => toast.error("Couldn't get your location."),
+      () => toast.error(t("settings.couldnTGetYourLocation")),
     );
   }
 
@@ -133,7 +135,7 @@ export function PublicProfileForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Public page saved");
+      toast.success(t("settings.publicPageSaved"));
       router.refresh();
     });
   }
@@ -149,7 +151,7 @@ export function PublicProfileForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="handle">Page link</Label>
+            <Label htmlFor="handle">{t("settings.pageLink")}</Label>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground hidden text-sm sm:inline">
                 {baseUrl}/c/
@@ -196,7 +198,7 @@ export function PublicProfileForm({
             className="flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left"
           >
             <div>
-              <p className="text-sm font-semibold">List in public directory</p>
+              <p className="text-sm font-semibold">{t("settings.listInPublicDirectory")}</p>
               <p className="text-muted-foreground text-xs">
                 When on, your page is live and people can find you in search.
               </p>
@@ -221,11 +223,11 @@ export function PublicProfileForm({
       {/* Branding */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Branding</CardTitle>
+          <CardTitle className="text-lg">{t("settings.branding")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ImageUpload
-            label="Logo"
+            label={t("settings.logo")}
             kind="logo"
             maxDim={512}
             aspect="square"
@@ -233,7 +235,7 @@ export function PublicProfileForm({
             onChange={(url) => set({ logo: url })}
           />
           <ImageUpload
-            label="Cover photo"
+            label={t("settings.coverPhoto")}
             kind="cover"
             maxDim={1600}
             aspect="wide"
@@ -243,23 +245,23 @@ export function PublicProfileForm({
 
           {/* Colour theme */}
           <div className="space-y-2">
-            <Label>Colour theme</Label>
+            <Label>{t("settings.colourTheme")}</Label>
             <div className="flex flex-wrap gap-2.5">
-              {CHURCH_THEMES.map((t) => (
+              {CHURCH_THEMES.map((churchTheme) => (
                 <button
-                  key={t.id}
+                  key={churchTheme.id}
                   type="button"
-                  onClick={() => set({ theme: t.id })}
-                  title={t.name}
+                  onClick={() => set({ theme: churchTheme.id })}
+                  title={churchTheme.name}
                   className={cn(
                     "group relative size-11 rounded-xl ring-offset-2 transition-all ring-offset-background",
-                    f.theme === t.id
+                    f.theme === churchTheme.id
                       ? "ring-foreground ring-2"
                       : "hover:ring-foreground/30 ring-1 ring-transparent",
                   )}
-                  style={{ background: `linear-gradient(135deg, ${t.from}, ${t.to})` }}
+                  style={{ background: `linear-gradient(135deg, ${churchTheme.from}, ${churchTheme.to})` }}
                 >
-                  {f.theme === t.id && (
+                  {f.theme === churchTheme.id && (
                     <Check className="absolute inset-0 m-auto size-5 text-white drop-shadow" />
                   )}
                 </button>
@@ -275,36 +277,36 @@ export function PublicProfileForm({
       {/* About */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">About</CardTitle>
+          <CardTitle className="text-lg">{t("settings.about")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="tagline">Tagline</Label>
+              <Label htmlFor="tagline">{t("settings.tagline")}</Label>
               <Input
                 id="tagline"
                 value={f.tagline}
-                placeholder="A short line about your church"
+                placeholder={t("settings.aShortLineAboutYour")}
                 onChange={(e) => set({ tagline: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="denomination">Denomination / type</Label>
+              <Label htmlFor="denomination">{t("settings.denominationType")}</Label>
               <Input
                 id="denomination"
                 value={f.denomination}
-                placeholder="e.g. Pentecostal, Catholic, Baptist"
+                placeholder={t("settings.eGPentecostalCatholicBaptist")}
                 onChange={(e) => set({ denomination: e.target.value })}
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="about">Description</Label>
+            <Label htmlFor="about">{t("settings.description")}</Label>
             <Textarea
               id="about"
               value={f.about}
               rows={5}
-              placeholder="Tell visitors about your church, services and what to expect."
+              placeholder={t("settings.tellVisitorsAboutYourChurch")}
               onChange={(e) => set({ about: e.target.value })}
             />
           </div>
@@ -314,21 +316,21 @@ export function PublicProfileForm({
       {/* Location */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Location</CardTitle>
+          <CardTitle className="text-lg">{t("settings.location")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+            <Label htmlFor="address">{t("settings.address")}</Label>
             <Input
               id="address"
               value={f.addressText}
-              placeholder="Street, area"
+              placeholder={t("settings.streetArea")}
               onChange={(e) => set({ addressText: e.target.value })}
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="city">City / Town</Label>
+              <Label htmlFor="city">{t("settings.cityTown")}</Label>
               <Input
                 id="city"
                 value={f.city}
@@ -336,11 +338,11 @@ export function PublicProfileForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="landmarks">Landmarks</Label>
+              <Label htmlFor="landmarks">{t("settings.landmarks")}</Label>
               <Input
                 id="landmarks"
                 value={f.landmarks}
-                placeholder="e.g. opposite the market"
+                placeholder={t("settings.eGOppositeTheMarket")}
                 onChange={(e) => set({ landmarks: e.target.value })}
               />
             </div>
@@ -353,7 +355,7 @@ export function PublicProfileForm({
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
-              <Label htmlFor="lat">Latitude</Label>
+              <Label htmlFor="lat">{t("settings.latitude")}</Label>
               <Input
                 id="lat"
                 value={f.lat ?? ""}
@@ -365,7 +367,7 @@ export function PublicProfileForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lng">Longitude</Label>
+              <Label htmlFor="lng">{t("settings.longitude")}</Label>
               <Input
                 id="lng"
                 value={f.lng ?? ""}
@@ -389,12 +391,12 @@ export function PublicProfileForm({
       {/* Contact + socials */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Contact & social</CardTitle>
+          <CardTitle className="text-lg">{t("settings.contactSocial")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="pphone">Phone</Label>
+              <Label htmlFor="pphone">{t("settings.phone")}</Label>
               <Input
                 id="pphone"
                 type="tel"
@@ -404,7 +406,7 @@ export function PublicProfileForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pemail">Email</Label>
+              <Label htmlFor="pemail">{t("settings.email")}</Label>
               <Input
                 id="pemail"
                 type="email"
@@ -413,7 +415,7 @@ export function PublicProfileForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="website">Website</Label>
+              <Label htmlFor="website">{t("settings.website")}</Label>
               <Input
                 id="website"
                 type="url"
@@ -445,7 +447,7 @@ export function PublicProfileForm({
       {/* Photos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Photos</CardTitle>
+          <CardTitle className="text-lg">{t("settings.photos")}</CardTitle>
         </CardHeader>
         <CardContent>
           <GalleryUpload

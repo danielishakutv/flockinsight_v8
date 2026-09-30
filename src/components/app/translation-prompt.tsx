@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Languages, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { useLocale } from "@/components/i18n-provider";
+import { useT, useLocale } from "@/components/i18n-provider";
 import { sendTranslationFeedback } from "@/app/(app)/translation-feedback-actions";
 import {
   PROMPT_KEY,
@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
  * reputation.
  */
 export function TranslationPrompt() {
+  const t = useT();
   const locale = useLocale();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -97,7 +98,7 @@ export function TranslationPrompt() {
     persist(markAnswered(state));
     setOpen(false);
     setSuggestion("");
-    toast.success("Thank you — that goes straight to the people fixing it.");
+    toast.success(t("app.thankYouThatGoesStraight"));
   };
 
   return (
@@ -113,7 +114,7 @@ export function TranslationPrompt() {
             persist(dismiss(state));
             setOpen(false);
           }}
-          aria-label="Close"
+          aria-label={t("app.close")}
           className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-lg sm:size-8"
         >
           <X className="size-4" />
@@ -132,7 +133,7 @@ export function TranslationPrompt() {
         maxLength={2000}
         className="mt-3"
         placeholder={`e.g. "Offering" should be …`}
-        aria-label="What should it say instead?"
+        aria-label={t("app.whatShouldItSayInstead")}
       />
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -164,6 +165,7 @@ function Bar({
   onOpen: () => void;
   onDismiss: () => void;
 }) {
+  const t = useT();
   return (
     <div className="bg-card fixed inset-x-3 bottom-20 z-40 flex items-center gap-3 rounded-xl border p-3 shadow-lg lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-80">
       <Languages aria-hidden className="text-primary size-4 shrink-0" />
@@ -176,7 +178,7 @@ function Bar({
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Not now"
+        aria-label={t("app.notNow")}
         className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-lg sm:size-8"
       >
         <X className="size-4" />

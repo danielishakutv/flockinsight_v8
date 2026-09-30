@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deleteLivestream, setLivestreamStatus } from "@/app/(app)/livestreams/actions";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Go live, end, delete.
@@ -32,6 +33,7 @@ export function LivestreamActions({
   status: string;
   watchUrl: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -54,7 +56,7 @@ export function LivestreamActions({
         toast.error(res.error);
         return;
       }
-      toast.success("Livestream deleted.");
+      toast.success(t("livestreams.livestreamDeleted"));
       router.push("/livestreams");
     });
 
@@ -81,8 +83,8 @@ export function LivestreamActions({
         size="icon"
         className="text-muted-foreground hover:text-destructive"
         onClick={() => setConfirmDelete(true)}
-        aria-label="Delete this livestream"
-        title="Delete"
+        aria-label={t("livestreams.deleteThisLivestream")}
+        title={t("livestreams.delete")}
       >
         <Trash2 className="size-4" />
       </Button>
@@ -90,7 +92,7 @@ export function LivestreamActions({
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete this livestream?</DialogTitle>
+            <DialogTitle>{t("livestreams.deleteThisLivestream")}</DialogTitle>
           </DialogHeader>
           {/*
             Spelled out, because it is not obvious and cannot be undone: the

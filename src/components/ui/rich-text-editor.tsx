@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { needsCodeView } from "@/lib/rich-text-shared";
+import { useOptionalT } from "@/components/i18n-provider";
 
 /**
  * A small formatting editor for notification bodies.
@@ -86,6 +87,7 @@ export function RichTextEditor({
   className?: string;
   ariaLabel?: string;
 }) {
+  const t = useOptionalT();
   const ref = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
   const [empty, setEmpty] = useState(true);
@@ -228,9 +230,9 @@ export function RichTextEditor({
         {!code && (
           <>
             <span className="bg-border mx-1 h-5 w-px" aria-hidden />
-            <ToolButton label="Add link" icon={Link2} onClick={addLink} />
+            <ToolButton label={t("ui.addLink")} icon={Link2} onClick={addLink} />
             <ToolButton
-              label="Remove link"
+              label={t("ui.removeLink")}
               icon={Link2Off}
               onClick={removeLink}
             />

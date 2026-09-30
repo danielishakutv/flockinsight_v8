@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 type PaymentRow = {
   id: string;
@@ -65,6 +66,7 @@ export function PlanBilling({
     live: boolean;
   } | null;
 }) {
+  const t = useT();
   const onTrial = trial?.state === "trialing";
   const trialExpired = trial?.state === "expired";
   const router = useRouter();
@@ -75,11 +77,11 @@ export function PlanBilling({
   useEffect(() => {
     if (toasted.current || !status) return;
     toasted.current = true;
-    if (status === "success") toast.success("Payment successful — plan updated!");
-    else if (status === "failed") toast.error("Payment failed or was cancelled.");
-    else if (status === "error") toast.error("Something went wrong with that payment.");
+    if (status === "success") toast.success(t("settings.paymentSuccessfulPlanUpdated"));
+    else if (status === "failed") toast.error(t("settings.paymentFailedOrWasCancelled"));
+    else if (status === "error") toast.error(t("settings.somethingWentWrongWithThat"));
     router.replace("/settings/billing");
-  }, [status, router]);
+  }, [status, router, t]);
 
   const currentIndex = PLANS.findIndex((p) => p.id === currentPlan);
 
@@ -96,7 +98,7 @@ export function PlanBilling({
         window.location.href = res.url; // to Paystack
         return;
       }
-      toast.success("Plan updated.");
+      toast.success(t("settings.planUpdated"));
       setBusyPlan(null);
       router.refresh();
     });
@@ -187,7 +189,7 @@ export function PlanBilling({
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-extrabold">{p.name}</h3>
-                {isCurrent && <Badge>Current</Badge>}
+                {isCurrent && <Badge>{t("settings.current")}</Badge>}
               </div>
               <p className="mt-1 text-xl font-extrabold tracking-tight">
                 {onTrial && price !== null && price > 0 ? (
@@ -195,7 +197,7 @@ export function PlanBilling({
                     <span className="text-muted-foreground text-base font-bold line-through decoration-2">
                       {priceLabel}
                     </span>
-                    <span className="text-primary ml-2">Free now</span>
+                    <span className="text-primary ml-2">{t("settings.freeNow")}</span>
                   </>
                 ) : (
                   <>
@@ -267,11 +269,11 @@ export function PlanBilling({
       {/* Payment history */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Payment history</CardTitle>
+          <CardTitle className="text-lg">{t("settings.paymentHistory")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {payments.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No payments yet.</p>
+            <p className="text-muted-foreground text-sm">{t("settings.noPaymentsYet")}</p>
           ) : (
             payments.map((p) => (
               <div

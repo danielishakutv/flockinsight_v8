@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 type Txn = {
   id: string;
@@ -55,6 +56,7 @@ export function WalletSettings({
   payStatus: string | null;
   txns: Txn[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [topupOpen, setTopupOpen] = useState(false);
   const [amount, setAmount] = useState("1000");
@@ -64,16 +66,16 @@ export function WalletSettings({
   useEffect(() => {
     if (toasted.current || !payStatus) return;
     toasted.current = true;
-    if (payStatus === "success") toast.success("Wallet topped up!");
-    else if (payStatus === "failed") toast.error("Payment failed or cancelled.");
-    else if (payStatus === "error") toast.error("Something went wrong.");
+    if (payStatus === "success") toast.success(t("settings.walletToppedUp"));
+    else if (payStatus === "failed") toast.error(t("settings.paymentFailedOrCancelled"));
+    else if (payStatus === "error") toast.error(t("settings.somethingWentWrong"));
     router.replace("/settings/wallet");
-  }, [payStatus, router]);
+  }, [payStatus, router, t]);
 
   async function topUp() {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 100)
-      return toast.error("Minimum top-up is ₦100.");
+      return toast.error(t("settings.minimumTopUpIs100"));
     setPaying(true);
     const res = await startWalletTopup(amt);
     if (!res.ok) {
@@ -131,35 +133,35 @@ export function WalletSettings({
       {txns.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Transaction history</CardTitle>
+            <CardTitle className="text-lg">{t("settings.transactionHistory")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {txns.map((t) => (
+            {txns.map((txn) => (
               <div
-                key={t.id}
+                key={txn.id}
                 className="flex items-center justify-between gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {t.reason ?? CATEGORY_LABEL[t.category]}
+                    {txn.reason ?? CATEGORY_LABEL[txn.category]}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    {CATEGORY_LABEL[t.category]} ·{" "}
-                    {format(parseISO(t.createdAt), "MMM d, yyyy · h:mm a")}
+                    {CATEGORY_LABEL[txn.category]} ·{" "}
+                    {format(parseISO(txn.createdAt), "MMM d, yyyy · h:mm a")}
                   </p>
                 </div>
                 <div className="text-right">
                   <p
                     className={
                       "font-bold tabular-nums " +
-                      (t.kind === "credit" ? "text-success" : "")
+                      (txn.kind === "credit" ? "text-success" : "")
                     }
                   >
-                    {t.kind === "credit" ? "+" : "−"}
-                    {formatMoney(t.amount, currency)}
+                    {txn.kind === "credit" ? "+" : "−"}
+                    {formatMoney(txn.amount, currency)}
                   </p>
                   <p className="text-muted-foreground text-xs tabular-nums">
-                    {formatMoney(t.balanceAfter, currency)}
+                    {formatMoney(txn.balanceAfter, currency)}
                   </p>
                 </div>
               </div>
@@ -171,7 +173,7 @@ export function WalletSettings({
       <Dialog open={topupOpen} onOpenChange={(o) => !paying && setTopupOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Top up wallet</DialogTitle>
+            <DialogTitle>{t("settings.topUpWallet")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -192,7 +194,7 @@ export function WalletSettings({
               ))}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="wtopup-amt">Amount (₦)</Label>
+              <Label htmlFor="wtopup-amt">{t("settings.amount")}</Label>
               <Input
                 id="wtopup-amt"
                 type="number"

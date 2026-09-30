@@ -163,7 +163,7 @@ function VerseTab({
           id="verse-ref"
           value={reference}
           onChange={(e) => setReference(e.target.value)}
-          placeholder="John 3:16"
+          placeholder={t("meetings.john316")}
           autoComplete="off"
           className="border-white/15 bg-white/5 text-white placeholder:text-slate-500"
         />
@@ -195,9 +195,9 @@ function VerseTab({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TRANSLATIONS.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name} ({t.short})
+            {TRANSLATIONS.map((translation) => (
+              <SelectItem key={translation.id} value={translation.id}>
+                {translation.name} ({translation.short})
               </SelectItem>
             ))}
           </SelectContent>
@@ -214,7 +214,7 @@ function VerseTab({
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
             rows={5}
-            placeholder="Paste or type the passage…"
+            placeholder={t("meetings.pasteOrTypeThePassage")}
             className="border-white/15 bg-white/5 text-white placeholder:text-slate-500"
           />
         </div>
@@ -403,7 +403,7 @@ function NoteTab({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={160}
-          placeholder="Announcement"
+          placeholder={t("meetings.announcement")}
           className="border-white/15 bg-white/5 text-white placeholder:text-slate-500"
         />
       </div>

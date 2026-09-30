@@ -32,6 +32,7 @@ import {
   type MeetingAccess,
   type MeetingKind,
 } from "@/lib/meetings-shared";
+import { useT } from "@/components/i18n-provider";
 
 export type MeetingFormValues = {
   id?: string;
@@ -88,6 +89,7 @@ export function MeetingDialog({
   initial: MeetingFormValues;
   onSaved?: (result: { id: string; code: string }) => void;
 }) {
+  const t = useT();
   const [values, setValues] = useState<MeetingFormValues>(initial);
   const [advanced, setAdvanced] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -138,7 +140,7 @@ export function MeetingDialog({
               id="m-title"
               value={values.title}
               onChange={(e) => set("title", e.target.value)}
-              placeholder="Midweek prayer"
+              placeholder={t("meetings.midweekPrayer")}
               maxLength={160}
               required
               autoFocus
@@ -147,7 +149,7 @@ export function MeetingDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label className="mb-1.5 block">Kind</Label>
+              <Label className="mb-1.5 block">{t("meetings.kind")}</Label>
               <Select value={values.kind} onValueChange={(v) => set("kind", v as MeetingKind)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -189,7 +191,7 @@ export function MeetingDialog({
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Who can join</Label>
+            <Label className="mb-1.5 block">{t("meetings.whoCanJoin")}</Label>
             <Select
               value={values.access}
               onValueChange={(v) => set("access", v as MeetingAccess)}
@@ -213,7 +215,7 @@ export function MeetingDialog({
           </div>
 
           <Toggle
-            label="Low data mode by default"
+            label={t("meetings.lowDataModeByDefault")}
             hint="Everyone starts audio-only. The right setting for a prayer meeting people join on mobile data."
             checked={values.lowDataDefault}
             onChange={(v) => set("lowDataDefault", v)}
@@ -239,7 +241,7 @@ export function MeetingDialog({
                   onChange={(e) => set("description", e.target.value)}
                   rows={2}
                   maxLength={2000}
-                  placeholder="What this meeting is for."
+                  placeholder={t("meetings.whatThisMeetingIsFor")}
                 />
               </div>
 
@@ -263,39 +265,39 @@ export function MeetingDialog({
               </div>
 
               <Toggle
-                label="Wait in a lobby"
+                label={t("meetings.waitInALobby")}
                 hint="You let each person in. Worth it for counselling or a board meeting."
                 checked={values.lobby}
                 onChange={(v) => set("lobby", v)}
               />
               <Toggle
-                label="Mute people as they arrive"
+                label={t("meetings.mutePeopleAsTheyArrive")}
                 checked={values.muteOnEntry}
                 onChange={(v) => set("muteOnEntry", v)}
               />
               <Toggle
-                label="Cameras off as they arrive"
+                label={t("meetings.camerasOffAsTheyArrive")}
                 checked={values.cameraOffOnEntry}
                 onChange={(v) => set("cameraOffOnEntry", v)}
               />
               <Toggle
-                label="Allow chat"
+                label={t("meetings.allowChat")}
                 checked={values.allowChat}
                 onChange={(v) => set("allowChat", v)}
               />
               <Toggle
-                label="Allow reactions"
+                label={t("meetings.allowReactions")}
                 checked={values.allowReactions}
                 onChange={(v) => set("allowReactions", v)}
               />
               <Toggle
-                label="Let anyone share their screen"
+                label={t("meetings.letAnyoneShareTheirScreen")}
                 hint="Hosts always can."
                 checked={values.allowScreenShare}
                 onChange={(v) => set("allowScreenShare", v)}
               />
               <Toggle
-                label="Allow recording"
+                label={t("meetings.allowRecording")}
                 hint="Only a host can start one, and everyone is told when they do."
                 checked={values.allowRecording}
                 onChange={(v) => set("allowRecording", v)}

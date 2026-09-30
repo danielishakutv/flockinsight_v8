@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 export type RoleRow = {
   id: string;
@@ -49,6 +50,7 @@ function missingModules(r: RoleRow): string[] {
 }
 
 export function RolesManager({ roles }: { roles: RoleRow[] }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -62,7 +64,7 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
         toast.error(res.error);
         return;
       }
-      toast.success("New permissions granted");
+      toast.success(t("settings.newPermissionsGranted"));
       router.refresh();
     });
   }
@@ -121,7 +123,7 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
         setOpen(false);
         router.refresh();
       } catch {
-        toast.error("Couldn't reach the server. Check your connection and try again.");
+        toast.error(t("settings.couldnTReachTheServer"));
       }
     });
   }
@@ -134,11 +136,11 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
           toast.error(res.error);
           return;
         }
-        toast.success("Role deleted");
+        toast.success(t("settings.roleDeleted"));
         setConfirmId(null);
         router.refresh();
       } catch {
-        toast.error("Couldn't reach the server. Check your connection and try again.");
+        toast.error(t("settings.couldnTReachTheServer"));
       }
     });
   }
@@ -181,7 +183,7 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold">{r.name}</p>
-                  {r.isSystem && <Badge variant="secondary">Locked</Badge>}
+                  {r.isSystem && <Badge variant="secondary">{t("settings.locked")}</Badge>}
                 </div>
                 <p className="text-muted-foreground truncate text-xs">
                   {r.isSystem
@@ -225,7 +227,7 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Edit role"
+                    aria-label={t("settings.editRole")}
                     onClick={() => openEdit(r)}
                   >
                     <Pencil className="size-4" />
@@ -243,7 +245,7 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Delete role"
+                      aria-label={t("settings.deleteRole")}
                       onClick={() => setConfirmId(r.id)}
                     >
                       <Trash2 className="size-4" />
@@ -267,27 +269,27 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="role-name">Role name</Label>
+              <Label htmlFor="role-name">{t("settings.roleName")}</Label>
               <Input
                 id="role-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Treasurer, Usher, Pastor"
+                placeholder={t("settings.eGTreasurerUsherPastor")}
                 autoFocus
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role-desc">Description</Label>
+              <Label htmlFor="role-desc">{t("settings.description")}</Label>
               <Input
                 id="role-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional"
+                placeholder={t("settings.optional")}
               />
             </div>
 
             <div className="space-y-3">
-              <Label>Permissions</Label>
+              <Label>{t("settings.permissions")}</Label>
               {PERMISSION_CATALOG.map((mod) => (
                 <div
                   key={mod.key}

@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type ServiceOption = { id: string; name: string };
 
@@ -49,6 +50,7 @@ export function RecordForm({
    */
   bands: BandDefinition[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -179,10 +181,10 @@ export function RecordForm({
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="service">Service</Label>
+            <Label htmlFor="service">{t("attendance.service")}</Label>
             <Select value={serviceKey} onValueChange={setServiceKey}>
               <SelectTrigger id="service" size="lg" className="w-full">
-                <SelectValue placeholder="Choose a service" />
+                <SelectValue placeholder={t("attendance.chooseAService")} />
               </SelectTrigger>
               <SelectContent>
                 {services.map((s) => (
@@ -190,12 +192,12 @@ export function RecordForm({
                     {s.name}
                   </SelectItem>
                 ))}
-                <SelectItem value={ADHOC}>Other / one-off event</SelectItem>
+                <SelectItem value={ADHOC}>{t("attendance.otherOneOffEvent")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="date">Date</Label>
+            <Label htmlFor="date">{t("attendance.date")}</Label>
             <Input
               id="date"
               type="date"
@@ -207,12 +209,12 @@ export function RecordForm({
           </div>
           {isAdhoc && (
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="title">Event name</Label>
+              <Label htmlFor="title">{t("attendance.eventName")}</Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Crusade, Vigil, Special Program"
+                placeholder={t("attendance.eGCrusadeVigilSpecial")}
               />
             </div>
           )}
@@ -295,7 +297,7 @@ export function RecordForm({
         </h3>
         <CountGroup
           id="first-timers"
-          title="First-timers"
+          title={t("attendance.firstTimers")}
           subtitle="Already counted above"
           muted
           male={ftM}
@@ -313,7 +315,7 @@ export function RecordForm({
         />
         <CountGroup
           id="new-converts"
-          title="New converts"
+          title={t("attendance.newConverts")}
           subtitle="Already counted above"
           muted
           male={ncM}
@@ -334,12 +336,12 @@ export function RecordForm({
       {/* Notes (collapsed by default) */}
       {showNotes ? (
         <div className="space-y-2">
-          <Label htmlFor="notes">Note</Label>
+          <Label htmlFor="notes">{t("attendance.note")}</Label>
           <Textarea
             id="notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything notable about this service…"
+            placeholder={t("attendance.anythingNotableAboutThisService")}
             autoFocus
           />
         </div>

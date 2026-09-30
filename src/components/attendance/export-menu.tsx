@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
 
@@ -45,6 +46,7 @@ export function AttendanceExportMenu({
   hasData?: boolean;
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [emailOpen, setEmailOpen] = useState(false);
   const [recipient, setRecipient] = useState(userEmail);
@@ -98,7 +100,7 @@ export function AttendanceExportMenu({
       );
       router.refresh();
     } catch {
-      toast.error("Import failed. Please try again.");
+      toast.error(t("attendance.importFailedPleaseTryAgain"));
     } finally {
       setImporting(false);
     }
@@ -111,9 +113,9 @@ export function AttendanceExportMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" aria-label="Import or export">
+          <Button variant="outline" size="lg" aria-label={t("attendance.importOrExport")}>
             <ArrowDownUp className="size-5" />
-            <span className="hidden sm:inline">Import / Export</span>
+            <span className="hidden sm:inline">{t("attendance.importExport")}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
@@ -181,13 +183,13 @@ export function AttendanceExportMenu({
       <Dialog open={emailOpen} onOpenChange={(o) => !sending && setEmailOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Email attendance report</DialogTitle>
+            <DialogTitle>{t("attendance.emailAttendanceReport")}</DialogTitle>
             <DialogDescription>
               We&apos;ll send the PDF report as an attachment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="report-recipient">Send to</Label>
+            <Label htmlFor="report-recipient">{t("attendance.sendTo")}</Label>
             <Input
               id="report-recipient"
               type="email"
@@ -225,7 +227,7 @@ export function AttendanceExportMenu({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import attendance from CSV</DialogTitle>
+            <DialogTitle>{t("attendance.importAttendanceFromCsv")}</DialogTitle>
             <DialogDescription>
               Upload a CSV with at least a “Date” column.{" "}
               <a
@@ -272,7 +274,7 @@ export function AttendanceExportMenu({
 
           <DialogFooter>
             {result ? (
-              <Button onClick={() => setImportOpen(false)}>Done</Button>
+              <Button onClick={() => setImportOpen(false)}>{t("attendance.done")}</Button>
             ) : (
               <>
                 <Button

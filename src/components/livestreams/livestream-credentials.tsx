@@ -5,6 +5,7 @@ import { Check, Copy, Eye, EyeOff, Radio, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * The two ways into a livestream, and what each one buys.
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
  */
 
 function Secret({ label, value }: { label: string; value: string }) {
+  const t = useT();
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -27,7 +29,7 @@ function Secret({ label, value }: { label: string; value: string }) {
       setTimeout(() => setCopied(false), 2000);
       toast.success(`${label} copied.`);
     } catch {
-      toast.error("Couldn't copy — select it and copy by hand.");
+      toast.error(t("livestreams.couldnTCopySelectIt"));
     }
   };
 
@@ -77,6 +79,7 @@ export function LivestreamCredentials({
   watchUrl: string;
   canSimulcast: boolean;
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const copyWatch = async () => {
@@ -84,9 +87,9 @@ export function LivestreamCredentials({
       await navigator.clipboard.writeText(watchUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast.success("Watch link copied.");
+      toast.success(t("livestreams.watchLinkCopied"));
     } catch {
-      toast.error("Couldn't copy — select it and copy by hand.");
+      toast.error(t("livestreams.couldnTCopySelectIt"));
     }
   };
 
@@ -106,7 +109,7 @@ export function LivestreamCredentials({
             variant="ghost"
             className="size-9 shrink-0 sm:size-8"
             onClick={copyWatch}
-            aria-label="Copy the watch link"
+            aria-label={t("livestreams.copyTheWatchLink")}
           >
             {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
           </Button>
@@ -125,8 +128,8 @@ export function LivestreamCredentials({
 
         {rtmpUrl && rtmpKey ? (
           <div className="mt-3 space-y-3">
-            <Secret label="Server" value={rtmpUrl} />
-            <Secret label="Stream key" value={rtmpKey} />
+            <Secret label={t("livestreams.server")} value={rtmpUrl} />
+            <Secret label={t("livestreams.streamKey")} value={rtmpKey} />
           </div>
         ) : (
           <p className="text-muted-foreground mt-3 text-sm">

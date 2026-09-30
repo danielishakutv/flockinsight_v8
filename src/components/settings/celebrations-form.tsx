@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 type State = CelebrationInput;
 
@@ -76,9 +77,10 @@ function PresetRow({
   presets: CelebrationPreset[];
   onApply: (p: CelebrationPreset) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-muted-foreground text-xs font-medium">Templates:</span>
+      <span className="text-muted-foreground text-xs font-medium">{t("settings.templates")}</span>
       {presets.map((p) => (
         <button
           key={p.id}
@@ -104,6 +106,7 @@ export function CelebrationsForm({
   smsApproved: boolean;
   queue: QueueItem[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [testing, startTest] = useTransition();
@@ -114,7 +117,7 @@ export function CelebrationsForm({
     start(async () => {
       const res = await saveCelebrations(f);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Celebration settings saved");
+      toast.success(t("settings.celebrationSettingsSaved"));
       router.refresh();
     });
   }
@@ -122,7 +125,7 @@ export function CelebrationsForm({
     startTest(async () => {
       const res = await sendTestCelebration(f);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Test email sent to you");
+      toast.success(t("settings.testEmailSentToYou"));
     });
   }
 
@@ -136,14 +139,14 @@ export function CelebrationsForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
-            title="Send automatic wishes"
+            title={t("settings.sendAutomaticWishes")}
             desc="Email/SMS members on their birthday & anniversaries."
             checked={f.enabled}
             onChange={(v) => set({ enabled: v })}
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <ToggleRow
-              title="Email"
+              title={t("settings.email")}
               desc="Free, to members with an email."
               checked={f.email}
               onChange={(v) => set({ email: v })}
@@ -162,7 +165,7 @@ export function CelebrationsForm({
             </p>
           )}
           <div className="max-w-xs space-y-2">
-            <Label htmlFor="sendTime">Send at</Label>
+            <Label htmlFor="sendTime">{t("settings.sendAt")}</Label>
             <Input
               id="sendTime"
               type="time"
@@ -178,7 +181,7 @@ export function CelebrationsForm({
       {/* Templates */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Messages</CardTitle>
+          <CardTitle className="text-lg">{t("settings.messages")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex flex-wrap gap-1.5">
@@ -211,13 +214,13 @@ export function CelebrationsForm({
                 <Input
                   value={f.birthdayEmailSubject}
                   onChange={(e) => set({ birthdayEmailSubject: e.target.value })}
-                  placeholder="Email subject"
+                  placeholder={t("settings.emailSubject")}
                 />
                 <Textarea
                   rows={4}
                   value={f.birthdayEmailBody}
                   onChange={(e) => set({ birthdayEmailBody: e.target.value })}
-                  placeholder="Email body"
+                  placeholder={t("settings.emailBody")}
                 />
               </>
             )}
@@ -226,7 +229,7 @@ export function CelebrationsForm({
                 rows={2}
                 value={f.birthdaySms}
                 onChange={(e) => set({ birthdaySms: e.target.value })}
-                placeholder="SMS text"
+                placeholder={t("settings.smsText")}
               />
             )}
           </div>
@@ -250,13 +253,13 @@ export function CelebrationsForm({
                 <Input
                   value={f.anniversaryEmailSubject}
                   onChange={(e) => set({ anniversaryEmailSubject: e.target.value })}
-                  placeholder="Email subject"
+                  placeholder={t("settings.emailSubject")}
                 />
                 <Textarea
                   rows={4}
                   value={f.anniversaryEmailBody}
                   onChange={(e) => set({ anniversaryEmailBody: e.target.value })}
-                  placeholder="Email body"
+                  placeholder={t("settings.emailBody")}
                 />
               </>
             )}
@@ -265,7 +268,7 @@ export function CelebrationsForm({
                 rows={2}
                 value={f.anniversarySms}
                 onChange={(e) => set({ anniversarySms: e.target.value })}
-                placeholder="SMS text"
+                placeholder={t("settings.smsText")}
               />
             )}
           </div>
@@ -275,7 +278,7 @@ export function CelebrationsForm({
       {/* Queue */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Coming up (next 14 days)</CardTitle>
+          <CardTitle className="text-lg">{t("settings.comingUpNext14Days")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {queue.length === 0 ? (
