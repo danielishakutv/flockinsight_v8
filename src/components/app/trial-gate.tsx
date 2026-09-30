@@ -60,7 +60,7 @@ export function TrialGate({
       <div className="w-full max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <span className="text-lg font-extrabold">
-            Flock<span className="text-primary">{t("app.insight")}</span>
+            Flock<span className="text-primary">Insight</span>
           </span>
           <button
             type="button"

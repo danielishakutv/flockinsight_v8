@@ -1689,7 +1689,6 @@ export const en = {
     whatShouldItSayInstead: "What should it say instead?",
     notNow: "Not now",
     thankYouThatGoesStraight: "Thank you — that goes straight to the people fixing it.",
-    insight: "Insight",
     contactUs: "Contact us",
     dismiss: "Dismiss",
     requestSentToOurTeam: "Request sent to our team.",
@@ -1727,7 +1726,6 @@ export const en = {
     share: "Share",
     addToHomeScreen: "Add to Home Screen",
     notNow: "Not now",
-    insight: "Insight",
   },
 
   surveys: {

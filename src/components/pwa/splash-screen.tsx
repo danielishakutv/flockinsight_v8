@@ -8,7 +8,6 @@ import {
   getSplashPhase,
   subscribeSplash,
 } from "@/components/pwa/splash-store";
-import { useT } from "@/components/i18n-provider";
 
 /**
  * The two seconds after the app icon is tapped.
@@ -25,7 +24,6 @@ import { useT } from "@/components/i18n-provider";
  */
 
 export function SplashScreen() {
-  const t = useT();
   const phase = useSyncExternalStore(
     subscribeSplash,
     getSplashPhase,
@@ -68,7 +66,7 @@ export function SplashScreen() {
           }}
         >
           <p className="text-3xl font-extrabold tracking-tight text-white">
-            Flock<span style={{ color: "#a78bfa" }}>{t("pwa.insight")}</span>
+            Flock<span style={{ color: "#a78bfa" }}>Insight</span>
           </p>
           <p
             className="mt-2 text-sm font-medium"

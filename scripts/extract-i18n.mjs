@@ -83,8 +83,16 @@ function keyFor(text) {
   return /^[a-z]/.test(k) ? k : null;
 }
 
+/*
+ * Halves of the wordmark. `Flock<span>Insight</span>` is two-tone branding, and
+ * translating the second half renders "FlockAperçu" to a French church. A name
+ * is not prose in any language.
+ */
+const BRAND_FRAGMENTS = new Set(["Flock", "Insight", "FlockInsight", "Toko"]);
+
 function isNotProse(s) {
   const t = s.trim();
+  if (BRAND_FRAGMENTS.has(t)) return true;
   if (t.length < 2 || t.length > 120) return true;
   if (!/[a-z]/i.test(t)) return true;
   if (/^(https?:|\/|#|mailto:|tel:)/.test(t)) return true;
