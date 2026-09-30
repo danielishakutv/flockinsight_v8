@@ -58,12 +58,26 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           APP_ROOT: ${{ secrets.APP_ROOT }}
         run: |
+          # A secret set from a file or a paste almost always carries a
+          # trailing newline, and a newline is not in the allowed set below —
+          # so the first run of a correctly-configured pipeline would fail on
+          # a character nobody can see. Trim first, then validate.
+          APP_ROOT="$(printf '%s' "$APP_ROOT" | tr -d '[:space:]')"
+
           # These end up inside a command string that a shell on the production
           # server parses, so refuse anything that could close a quote and run
           # something of its own.
           case "$APP_ROOT" in
             "") echo "::error::APP_ROOT is not set"; exit 1 ;;
-            *[!A-Za-z0-9._/-]*) echo "::error::APP_ROOT has characters that are not allowed in a path"; exit 1 ;;
+            *[!A-Za-z0-9._/-]*)
+              # Name the offending characters. The value is a secret and is
+              # masked in the log, so a bare "it is wrong" leaves nothing to go
+              # on; the character classes are safe to print and are the answer.
+              echo "::error::APP_ROOT contains characters that are not allowed in a path."
+              echo "Allowed: letters, digits, dot, underscore, slash, hyphen."
+              echo "Offending characters: $(printf '%s' "$APP_ROOT" | tr -d 'A-Za-z0-9._/-' | sed 's/./[&]/g')"
+              exit 1
+              ;;
           esac
           case "$GITHUB_SHA" in
             "" | *[!0-9a-f]*) echo "::error::GITHUB_SHA is not a plain hex commit id"; exit 1 ;;
