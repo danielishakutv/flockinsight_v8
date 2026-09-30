@@ -11,6 +11,7 @@ import { CheckCircle2, ChevronDown, Loader2, Upload, X } from "lucide-react";
 import { compress } from "@/components/settings/image-upload";
 import { formatBytes } from "@/lib/storage-bytes";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export type UploadResult = {
   id: string;
@@ -171,6 +172,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 }
 
 function UploadWidget() {
+  const t = useT();
   const { uploads, dismiss, clearFinished } = useUploads();
   const [open, setOpen] = useState(true);
   if (uploads.length === 0) return null;
@@ -229,7 +231,7 @@ function UploadWidget() {
                     type="button"
                     onClick={() => dismiss(u.id)}
                     className="text-muted-foreground hover:text-foreground ml-auto"
-                    aria-label="Dismiss"
+                    aria-label={t("media.dismiss")}
                   >
                     <X className="size-3.5" />
                   </button>

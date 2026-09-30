@@ -49,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 export type GroupMemberRow = {
   id: string;
@@ -93,6 +94,7 @@ export function GroupDetail({
   candidates: Candidate[];
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
@@ -118,7 +120,7 @@ export function GroupDetail({
       await navigator.clipboard.writeText(values.join(", "));
       toast.success(`Copied ${values.length} ${label}`);
     } catch {
-      toast.error("Couldn't access the clipboard.");
+      toast.error(t("groups.couldnTAccessTheClipboard"));
     }
   }
 
@@ -129,7 +131,7 @@ export function GroupDetail({
         toast.error(res.error);
         return;
       }
-      toast.success("Removed from group");
+      toast.success(t("groups.removedFromGroup"));
       router.refresh();
     });
   }
@@ -161,7 +163,7 @@ export function GroupDetail({
                 <Badge variant={TYPE_VARIANT[group.type]}>
                   {TYPE_LABEL[group.type]}
                 </Badge>
-                {!group.isActive && <Badge variant="outline">Inactive</Badge>}
+                {!group.isActive && <Badge variant="outline">{t("groups.inactive")}</Badge>}
               </div>
               {group.description && (
                 <p className="text-muted-foreground mt-2 text-sm">
@@ -220,7 +222,7 @@ export function GroupDetail({
       {/* Members */}
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="text-lg">Members</CardTitle>
+          <CardTitle className="text-lg">{t("groups.members")}</CardTitle>
           {canManage && (
             <Button onClick={() => setAddOpen(true)} size="sm">
               <Plus className="size-4" />
@@ -286,6 +288,7 @@ function MemberRow({
   canManage: boolean;
   onRemove: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [leaderPending, startLeader] = useTransition();
@@ -397,7 +400,7 @@ function MemberRow({
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Role"
+            placeholder={t("groups.role")}
             className="h-8 w-28"
             autoFocus
             onKeyDown={(e) => {
@@ -411,7 +414,7 @@ function MemberRow({
             className="size-8"
             onClick={saveRole}
             disabled={pending}
-            aria-label="Save role"
+            aria-label={t("groups.saveRole")}
           >
             {pending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -427,7 +430,7 @@ function MemberRow({
             setEditing(true);
           }}
           className="shrink-0"
-          aria-label="Set role"
+          aria-label={t("groups.setRole")}
         >
           {member.role ? (
             <Badge variant="secondary" className="gap-1">
@@ -450,7 +453,7 @@ function MemberRow({
           className="size-8"
           onClick={onRemove}
           disabled={busy}
-          aria-label="Confirm remove"
+          aria-label={t("groups.confirmRemove")}
         >
           {busy ? (
             <Loader2 className="size-4 animate-spin" />
@@ -465,7 +468,7 @@ function MemberRow({
           className="size-8"
           onClick={() => setConfirm(true)}
           onBlur={() => setConfirm(false)}
-          aria-label="Remove from group"
+          aria-label={t("groups.removeFromGroup")}
         >
           <Trash2 className="size-4" />
         </Button>
@@ -489,6 +492,7 @@ function AddMembersDialog({
   candidates: Candidate[];
   existingIds: Set<string>;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -546,7 +550,7 @@ function AddMembersDialog({
         aria-describedby={undefined}
       >
         <DialogHeader>
-          <DialogTitle>Add members</DialogTitle>
+          <DialogTitle>{t("groups.addMembers")}</DialogTitle>
         </DialogHeader>
 
         {available.length === 0 ? (
@@ -560,7 +564,7 @@ function AddMembersDialog({
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search members"
+                placeholder={t("groups.searchMembers")}
                 className="pl-9"
               />
             </div>
@@ -619,7 +623,7 @@ function AddMembersDialog({
                 <button
                   onClick={() => setSelected(new Set())}
                   className="hover:text-foreground"
-                  aria-label="Clear selection"
+                  aria-label={t("groups.clearSelection")}
                 >
                   <X className="size-3.5" />
                 </button>

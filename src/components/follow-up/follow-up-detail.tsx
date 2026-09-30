@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/components/i18n-provider";
 
 export type FollowUpInteractionRow = {
   id: string;
@@ -112,6 +113,7 @@ export function FollowUpDetail({
   smsEnabled: boolean;
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [status, setStatus] = useState<FollowUpStatus>(
     effectiveStatus(member.followUpStatus),
@@ -183,7 +185,7 @@ export function FollowUpDetail({
         toast.error(res.error);
         return;
       }
-      toast.success("Interaction logged");
+      toast.success(t("followUp.interactionLogged"));
       setLogOpen(false);
       router.refresh();
     });
@@ -196,7 +198,7 @@ export function FollowUpDetail({
         toast.error(res.error);
         return;
       }
-      toast.success("SMS sent");
+      toast.success(t("followUp.smsSent"));
       setSmsOpen(false);
       setSmsMsg("");
       router.refresh();
@@ -210,7 +212,7 @@ export function FollowUpDetail({
         toast.error(res.error);
         return;
       }
-      toast.success("Removed from follow-up");
+      toast.success(t("followUp.removedFromFollowUp"));
       router.push("/follow-up");
     });
   }
@@ -236,7 +238,7 @@ export function FollowUpDetail({
           <>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Status</Label>
+              <Label>{t("followUp.status")}</Label>
               <Select value={status} onValueChange={changeStatus}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -251,13 +253,13 @@ export function FollowUpDetail({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Assigned to</Label>
+              <Label>{t("followUp.assignedTo")}</Label>
               <Select value={assignee} onValueChange={changeAssignee}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                  <SelectItem value={UNASSIGNED}>{t("followUp.unassigned")}</SelectItem>
                   {team.map((t) => (
                     <SelectItem key={t.userId} value={t.userId}>
                       {t.name}
@@ -361,12 +363,12 @@ export function FollowUpDetail({
       <Dialog open={logOpen} onOpenChange={(o) => !savingLog && setLogOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Log an interaction</DialogTitle>
+            <DialogTitle>{t("followUp.logAnInteraction")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Type</Label>
+                <Label>{t("followUp.type")}</Label>
                 <Select
                   value={logType}
                   onValueChange={(v) => setLogType(v as InteractionType)}
@@ -384,7 +386,7 @@ export function FollowUpDetail({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="log-date">Date</Label>
+                <Label htmlFor="log-date">{t("followUp.date")}</Label>
                 <input
                   id="log-date"
                   type="date"
@@ -395,7 +397,7 @@ export function FollowUpDetail({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Outcome</Label>
+              <Label>{t("followUp.outcome")}</Label>
               <Select value={logOutcome} onValueChange={setLogOutcome}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -413,12 +415,12 @@ export function FollowUpDetail({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="log-notes">Notes</Label>
+              <Label htmlFor="log-notes">{t("followUp.notes")}</Label>
               <Textarea
                 id="log-notes"
                 value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)}
-                placeholder="What happened?"
+                placeholder={t("followUp.whatHappened")}
               />
             </div>
           </div>
@@ -442,7 +444,7 @@ export function FollowUpDetail({
       <Dialog open={smsOpen} onOpenChange={(o) => !sendingSms && setSmsOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Send SMS</DialogTitle>
+            <DialogTitle>{t("followUp.sendSms")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-muted-foreground text-sm">
@@ -451,7 +453,7 @@ export function FollowUpDetail({
             <Textarea
               value={smsMsg}
               onChange={(e) => setSmsMsg(e.target.value)}
-              placeholder="Type your message…"
+              placeholder={t("followUp.typeYourMessage")}
               rows={4}
               maxLength={800}
             />

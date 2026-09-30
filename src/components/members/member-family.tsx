@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 const REL_LABEL: Record<string, string> = {
   son: "Son",
@@ -77,6 +78,7 @@ export function MemberFamily({
   householdId?: string | null;
   households?: HouseholdOption[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -106,7 +108,7 @@ export function MemberFamily({
               <p className="truncate font-semibold">
                 {guardianName ?? "Guardian"}
               </p>
-              <p className="text-muted-foreground text-xs">Parent / guardian</p>
+              <p className="text-muted-foreground text-xs">{t("members.parentGuardian")}</p>
             </div>
             <ChevronRight className="text-muted-foreground size-5" />
           </Link>
@@ -136,7 +138,7 @@ export function MemberFamily({
         toast.error(res.error);
         return;
       }
-      toast.success("Child added");
+      toast.success(t("members.childAdded"));
       setOpen(false);
       router.refresh();
     });

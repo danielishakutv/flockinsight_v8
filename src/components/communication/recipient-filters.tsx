@@ -9,6 +9,7 @@ import {
 } from "@/lib/comm-message-shared";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Status tabs + name/number search for one message's recipient list. Like the
@@ -31,6 +32,7 @@ export function RecipientFilters({
     skipped: number;
   };
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [text, setText] = useState(q);
@@ -94,9 +96,9 @@ export function RecipientFilters({
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Search a name, phone number or email"
+          placeholder={t("communication.searchANamePhoneNumber")}
           className="pl-9"
-          aria-label="Search recipients"
+          aria-label={t("communication.searchRecipients")}
         />
         {text && (
           <button
@@ -106,7 +108,7 @@ export function RecipientFilters({
               go({ q: "" });
             }}
             className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
-            aria-label="Clear search"
+            aria-label={t("communication.clearSearch")}
           >
             <X className="size-4" />
           </button>

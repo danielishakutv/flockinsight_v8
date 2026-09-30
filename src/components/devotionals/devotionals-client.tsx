@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type Devo = {
   id: string;
@@ -178,6 +179,7 @@ function Posts({
 }
 
 function PostCard({ d, canManage }: { d: Devo; canManage: boolean }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -186,7 +188,7 @@ function PostCard({ d, canManage }: { d: Devo; canManage: boolean }) {
     start(async () => {
       const res = await deleteDevotional(d.id);
       if (res.ok) {
-        toast.success("Deleted");
+        toast.success(t("devotionals.deleted"));
         router.refresh();
       } else toast.error(res.error);
     });
@@ -223,8 +225,8 @@ function PostCard({ d, canManage }: { d: Devo; canManage: boolean }) {
               disabled={pending}
               onClick={remove}
               className="text-muted-foreground hover:text-destructive"
-              title="Delete"
-              aria-label="Delete this devotional"
+              title={t("devotionals.delete")}
+              aria-label={t("devotionals.deleteThisDevotional")}
             >
               {pending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -240,6 +242,7 @@ function PostCard({ d, canManage }: { d: Devo; canManage: boolean }) {
 }
 
 function StatusBadge({ d }: { d: Devo }) {
+  const t = useT();
   if (d.status === "sent")
     return (
       <Badge variant="success" className="gap-1">
@@ -252,7 +255,7 @@ function StatusBadge({ d }: { d: Devo }) {
         <Clock className="size-3" /> Scheduled
       </Badge>
     );
-  return <Badge variant="secondary">Draft</Badge>;
+  return <Badge variant="secondary">{t("devotionals.draft")}</Badge>;
 }
 
 function Subscribers({
@@ -264,17 +267,18 @@ function Subscribers({
   activeSubscribers: number;
   subscribers: Sub[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
   function add() {
-    if (!email.trim()) return toast.error("Enter an email.");
+    if (!email.trim()) return toast.error(t("devotionals.enterAnEmail"));
     start(async () => {
       const res = await addSubscriber(name, email);
       if (res.ok) {
-        toast.success("Subscriber added");
+        toast.success(t("devotionals.subscriberAdded"));
         setName("");
         setEmail("");
         router.refresh();
@@ -299,7 +303,7 @@ function Subscribers({
           </div>
           <div>
             <p className="text-2xl font-extrabold tabular-nums">{activeSubscribers}</p>
-            <p className="text-muted-foreground text-sm">active subscribers</p>
+            <p className="text-muted-foreground text-sm">{t("devotionals.activeSubscribers")}</p>
           </div>
         </div>
         {subscribers.length > 0 && (
@@ -315,7 +319,7 @@ function Subscribers({
         <div className="bg-card flex flex-wrap items-end gap-2 rounded-2xl border p-4">
           <div className="flex-1">
             <Input
-              placeholder="Name (optional)"
+              placeholder={t("devotionals.nameOptional")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -373,8 +377,8 @@ function Subscribers({
                     className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
                     onClick={() => remove(s.id)}
                     disabled={pending}
-                    title="Remove"
-                    aria-label="Remove this subscriber"
+                    title={t("devotionals.remove")}
+                    aria-label={t("devotionals.removeThisSubscriber")}
                   >
                     <Trash2 className="size-4" />
                   </Button>

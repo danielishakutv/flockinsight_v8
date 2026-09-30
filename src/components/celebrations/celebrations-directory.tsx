@@ -16,6 +16,7 @@ import type {
 } from "@/lib/celebrations";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 const FILTERS: { key: CelebrationCategory | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -40,6 +41,7 @@ export function CelebrationsDirectory({
   items: CelebrationListItem[];
   days: number;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState<CelebrationCategory | "all">("all");
   const [query, setQuery] = useState("");
 
@@ -86,7 +88,7 @@ export function CelebrationsDirectory({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name"
+            placeholder={t("celebrations.searchByName")}
             className="pl-9"
           />
         </div>

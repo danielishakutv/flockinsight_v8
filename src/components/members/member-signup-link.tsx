@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Members toolbar action: reveals the church's public self-registration link
@@ -24,6 +25,7 @@ export function MemberSignupLink({
   url: string;
   enabled: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -31,10 +33,10 @@ export function MemberSignupLink({
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success("Link copied");
+      toast.success(t("members.linkCopied"));
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      toast.error("Couldn't copy — long-press the link to copy it.");
+      toast.error(t("members.couldnTCopyLongPress"));
     }
   }
 
@@ -42,13 +44,13 @@ export function MemberSignupLink({
     <>
       <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
         <Share2 className="size-4" />
-        <span className="hidden sm:inline">Public link</span>
+        <span className="hidden sm:inline">{t("members.publicLink")}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Public sign-up link</DialogTitle>
+            <DialogTitle>{t("members.publicSignUpLink")}</DialogTitle>
             <DialogDescription>
               Share this so people can add themselves to your church — no account
               needed. Existing members confirm a one-time code before any change.

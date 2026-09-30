@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type AccessRole = { id: string; name: string; description: string | null };
 
@@ -45,6 +46,7 @@ export function GiveAccessDialog({
   member: { id: string; name: string; email: string | null };
   roles: AccessRole[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [email, setEmail] = useState("");
@@ -92,14 +94,14 @@ export function GiveAccessDialog({
         <form onSubmit={submit} className="space-y-4">
           {hasEmail ? (
             <div className="space-y-1">
-              <Label>Invitation goes to</Label>
+              <Label>{t("members.invitationGoesTo")}</Label>
               <p className="bg-muted rounded-lg px-3 py-2 text-sm font-medium">
                 {member.email}
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="access-email">Email address</Label>
+              <Label htmlFor="access-email">{t("members.emailAddress")}</Label>
               <Input
                 id="access-email"
                 type="email"
@@ -116,13 +118,13 @@ export function GiveAccessDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="access-role">Role</Label>
+            <Label htmlFor="access-role">{t("members.role")}</Label>
             <Select value={roleId} onValueChange={setRoleId}>
               <SelectTrigger id="access-role" className="w-full">
-                <SelectValue placeholder="Choose a role" />
+                <SelectValue placeholder={t("members.chooseARole")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_ROLE}>No role yet</SelectItem>
+                <SelectItem value={NO_ROLE}>{t("members.noRoleYet")}</SelectItem>
                 {roles.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name}

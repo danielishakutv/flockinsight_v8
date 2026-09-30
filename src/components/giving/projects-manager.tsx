@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 const STATUS: Record<
   ProjectListItem["status"],
@@ -60,6 +61,7 @@ export function ProjectsManager({
   canManage: boolean;
   currency: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
@@ -84,7 +86,7 @@ export function ProjectsManager({
       };
       const res = await saveProject(input);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Project saved");
+      toast.success(t("giving.projectSaved"));
       setOpen(false);
       router.push(`/giving/projects/${res.id}`);
     });
@@ -163,27 +165,27 @@ export function ProjectsManager({
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="pr-name">Name</Label>
+              <Label htmlFor="pr-name">{t("giving.name")}</Label>
               <Input
                 id="pr-name"
                 value={form.name}
                 onChange={(e) => set({ name: e.target.value })}
-                placeholder="e.g. Building Project"
+                placeholder={t("giving.eGBuildingProject")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pr-target">Target amount (optional)</Label>
+              <Label htmlFor="pr-target">{t("giving.targetAmountOptional")}</Label>
               <Input
                 id="pr-target"
                 inputMode="decimal"
                 value={form.targetAmount}
                 onChange={(e) => set({ targetAmount: e.target.value })}
-                placeholder="e.g. 50,000,000"
+                placeholder={t("giving.eG50000000")}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="pr-start">Start date</Label>
+                <Label htmlFor="pr-start">{t("giving.startDate")}</Label>
                 <Input
                   id="pr-start"
                   type="date"
@@ -193,7 +195,7 @@ export function ProjectsManager({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pr-end">Target end date</Label>
+                <Label htmlFor="pr-end">{t("giving.targetEndDate")}</Label>
                 <Input
                   id="pr-end"
                   type="date"
@@ -204,13 +206,13 @@ export function ProjectsManager({
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pr-desc">Description</Label>
+              <Label htmlFor="pr-desc">{t("giving.description")}</Label>
               <Textarea
                 id="pr-desc"
                 rows={3}
                 value={form.description}
                 onChange={(e) => set({ description: e.target.value })}
-                placeholder="What is this project for?"
+                placeholder={t("giving.whatIsThisProjectFor")}
               />
             </div>
           </div>

@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type RosterRow = {
   id: string;
@@ -128,6 +129,7 @@ export function CohortRoster({
   allMembers: PickerMember[];
   canManage: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -211,7 +213,7 @@ export function CohortRoster({
         toast.error(res.error);
         return;
       }
-      toast.success("Instructor added");
+      toast.success(t("training.instructorAdded"));
       setInstrOpen(false);
       setInstrMemberId("__guest__");
       setInstrName("");
@@ -259,7 +261,7 @@ export function CohortRoster({
         toast.error(res.error);
         return;
       }
-      toast.success("Recorded");
+      toast.success(t("training.recorded"));
       setResult(null);
       router.refresh();
     });
@@ -272,7 +274,7 @@ export function CohortRoster({
         toast.error(res.error);
         return;
       }
-      toast.success("Removed from the class");
+      toast.success(t("training.removedFromTheClass"));
       setConfirmId(null);
       router.refresh();
     });
@@ -285,7 +287,7 @@ export function CohortRoster({
         toast.error(res.error);
         return;
       }
-      toast.success("Everyone still taking it is marked complete");
+      toast.success(t("training.everyoneStillTakingItIs"));
       setConfirmAll(false);
       router.refresh();
     });
@@ -296,7 +298,7 @@ export function CohortRoster({
       {/* ---------- Instructors ---------- */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">Instructors</CardTitle>
+          <CardTitle className="text-base">{t("training.instructors")}</CardTitle>
           {canManage && (
             <Button size="sm" variant="outline" onClick={() => setInstrOpen(true)}>
               <Plus className="size-4" /> Add
@@ -354,7 +356,7 @@ export function CohortRoster({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the register"
+            placeholder={t("training.searchTheRegister")}
             className="pl-9"
           />
         </div>
@@ -533,7 +535,7 @@ export function CohortRoster({
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Enrol people</DialogTitle>
+            <DialogTitle>{t("training.enrolPeople")}</DialogTitle>
             <DialogDescription>
               Everyone in your church who isn&rsquo;t already on this register.
             </DialogDescription>
@@ -544,7 +546,7 @@ export function CohortRoster({
             <Input
               value={pickQuery}
               onChange={(e) => setPickQuery(e.target.value)}
-              placeholder="Search members"
+              placeholder={t("training.searchMembers")}
               className="pl-9"
             />
           </div>
@@ -615,7 +617,7 @@ export function CohortRoster({
       <Dialog open={instrOpen} onOpenChange={setInstrOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add an instructor</DialogTitle>
+            <DialogTitle>{t("training.addAnInstructor")}</DialogTitle>
             <DialogDescription>
               Pick a member, or type a name for a guest who isn&rsquo;t one.
             </DialogDescription>
@@ -623,7 +625,7 @@ export function CohortRoster({
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Member</Label>
+              <Label>{t("training.member")}</Label>
               <Select value={instrMemberId} onValueChange={setInstrMemberId}>
                 <SelectTrigger>
                   <SelectValue />
@@ -643,23 +645,23 @@ export function CohortRoster({
 
             {instrMemberId === "__guest__" && (
               <div className="space-y-1.5">
-                <Label htmlFor="i-name">Name</Label>
+                <Label htmlFor="i-name">{t("training.name")}</Label>
                 <Input
                   id="i-name"
                   value={instrName}
                   onChange={(e) => setInstrName(e.target.value)}
-                  placeholder="Pastor Emeka Obi"
+                  placeholder={t("training.pastorEmekaObi")}
                 />
               </div>
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="i-role">Role</Label>
+              <Label htmlFor="i-role">{t("training.role")}</Label>
               <Input
                 id="i-role"
                 value={instrRole}
                 onChange={(e) => setInstrRole(e.target.value)}
-                placeholder="Instructor"
+                placeholder={t("training.instructor")}
               />
             </div>
           </div>
@@ -700,7 +702,7 @@ export function CohortRoster({
           {result && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label>Status</Label>
+                <Label>{t("training.status")}</Label>
                 <Select
                   value={result.status}
                   onValueChange={(v) =>
@@ -737,21 +739,21 @@ export function CohortRoster({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="r-grade">Grade</Label>
+                  <Label htmlFor="r-grade">{t("training.grade")}</Label>
                   <Input
                     id="r-grade"
                     value={result.grade}
                     onChange={(e) =>
                       setResult({ ...result, grade: e.target.value })
                     }
-                    placeholder="A / Distinction"
+                    placeholder={t("training.aDistinction")}
                   />
                 </div>
               </div>
 
               {result.status === "completed" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="r-date">Completed on</Label>
+                  <Label htmlFor="r-date">{t("training.completedOn")}</Label>
                   <Input
                     id="r-date"
                     type="date"
@@ -768,7 +770,7 @@ export function CohortRoster({
 
               {issuesCertificate && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="r-cert">Certificate number</Label>
+                  <Label htmlFor="r-cert">{t("training.certificateNumber")}</Label>
                   <Input
                     id="r-cert"
                     value={result.certificateNo}
@@ -780,7 +782,7 @@ export function CohortRoster({
               )}
 
               <div className="space-y-1.5">
-                <Label htmlFor="r-notes">Notes</Label>
+                <Label htmlFor="r-notes">{t("training.notes")}</Label>
                 <Textarea
                   id="r-notes"
                   rows={3}

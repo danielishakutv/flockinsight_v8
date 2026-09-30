@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 const ALL = "__all__";
 
@@ -25,6 +26,7 @@ export function ReportFilter({
   projectId: string;
   includeSettled: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -49,7 +51,7 @@ export function ReportFilter({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            <SelectItem value={ALL}>All projects</SelectItem>
+            <SelectItem value={ALL}>{t("giving.allProjects")}</SelectItem>
             {projects.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}
@@ -61,7 +63,7 @@ export function ReportFilter({
       <label className="flex items-center gap-2">
         {pending && <Loader2 className="text-muted-foreground size-4 animate-spin" />}
         <Switch checked={includeSettled} onCheckedChange={(v) => go({ all: v })} />
-        <Label className="text-sm">Include settled & cancelled</Label>
+        <Label className="text-sm">{t("giving.includeSettledCancelled")}</Label>
       </label>
     </div>
   );

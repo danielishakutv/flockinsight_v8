@@ -49,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 const NONE = "__none__";
 const METHODS = ["cash", "transfer", "card", "cheque", "online", "other"] as const;
@@ -78,6 +79,7 @@ export function ProjectDetail({
   members: Member[];
   receiptsEnabled: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [pledgeOpen, setPledgeOpen] = useState(false);
@@ -116,8 +118,8 @@ export function ProjectDetail({
       <Card>
         <CardContent className="space-y-3 py-5">
           <div className="grid gap-2 text-center sm:grid-cols-3 sm:gap-3">
-            <Stat label="Raised" value={formatMoney(p.raised, currency)} accent />
-            <Stat label="Pledged" value={formatMoney(p.pledged, currency)} />
+            <Stat label={t("giving.raised")} value={formatMoney(p.raised, currency)} accent />
+            <Stat label={t("giving.pledged")} value={formatMoney(p.pledged, currency)} />
             <Stat
               label={p.targetAmount ? "Target" : "Outstanding"}
               value={formatMoney(p.targetAmount ?? outstandingTotal, currency)}
@@ -157,7 +159,7 @@ export function ProjectDetail({
                   start(async () => {
                     const res = await setPledgeStatus(pl.id, status);
                     if (!res.ok) return void toast.error(res.error);
-                    toast.success("Pledge updated");
+                    toast.success(t("giving.pledgeUpdated"));
                     router.refresh();
                   })
                 }
@@ -165,7 +167,7 @@ export function ProjectDetail({
                   start(async () => {
                     const res = await deletePledge(pl.id);
                     if (!res.ok) return void toast.error(res.error);
-                    toast.success("Pledge removed (payments kept)");
+                    toast.success(t("giving.pledgeRemovedPaymentsKept"));
                     router.refresh();
                   })
                 }
@@ -191,7 +193,7 @@ export function ProjectDetail({
             start(async () => {
               const res = await deleteProject(p.id);
               if (!res.ok) return void toast.error(res.error);
-              toast.success("Project deleted");
+              toast.success(t("giving.projectDeleted"));
               router.push("/giving/projects");
             });
           }}
@@ -273,6 +275,7 @@ function PledgeCard({
   onDelete: () => void;
   pending: boolean;
 }) {
+  const t = useT();
   const [menu, setMenu] = useState(false);
   const outstanding = Math.max(0, pl.amount - pl.paid);
   const done = pl.status === "completed" || pl.paid >= pl.amount;
@@ -282,9 +285,9 @@ function PledgeCard({
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-semibold">{pl.name}</span>
         {pl.status === "cancelled" ? (
-          <Badge variant="outline">Cancelled</Badge>
+          <Badge variant="outline">{t("giving.cancelled")}</Badge>
         ) : done ? (
-          <Badge variant="success">Fulfilled</Badge>
+          <Badge variant="success">{t("giving.fulfilled")}</Badge>
         ) : (
           <Badge variant="secondary">{cadenceLabel(pl.cadence, pl.cadenceLabel)}</Badge>
         )}
@@ -318,7 +321,7 @@ function PledgeCard({
               variant="ghost"
               size="icon"
               onClick={() => setMenu((v) => !v)}
-              aria-label="Project actions"
+              aria-label={t("giving.projectActions")}
               aria-expanded={menu}
             >
               <MoreVertical className="size-4" />
@@ -411,6 +414,7 @@ function PledgeDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [memberId, setMemberId] = useState(NONE);
   const [giverName, setGiverName] = useState("");
@@ -435,7 +439,7 @@ function PledgeDialog({
         note,
       });
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Pledge added");
+      toast.success(t("giving.pledgeAdded"));
       onSaved();
     });
   }
@@ -444,21 +448,21 @@ function PledgeDialog({
     <Dialog open onOpenChange={(o) => !o && !pending && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>Add pledge</DialogTitle>
+          <DialogTitle>{t("giving.addPledge")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
-            <Label>Pledged by</Label>
+            <Label>{t("giving.pledgedBy")}</Label>
             <Select value={memberId} onValueChange={setMemberId}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose a member" />
+                <SelectValue placeholder={t("giving.chooseAMember")} />
               </SelectTrigger>
               <SelectContent
                 className="max-h-72"
                 searchPlaceholder="Search members…"
                 emptyMessage="No member by that name"
               >
-                <SelectItem value={NONE}>Someone not in the list…</SelectItem>
+                <SelectItem value={NONE}>{t("giving.someoneNotInTheList")}</SelectItem>
                 {members.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name}
@@ -470,13 +474,13 @@ function PledgeDialog({
               <Input
                 value={giverName}
                 onChange={(e) => setGiverName(e.target.value)}
-                placeholder="Giver's name"
+                placeholder={t("giving.giverSName")}
               />
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="pl-amount">Pledge amount</Label>
+              <Label htmlFor="pl-amount">{t("giving.pledgeAmount")}</Label>
               <Input
                 id="pl-amount"
                 inputMode="decimal"
@@ -503,19 +507,19 @@ function PledgeDialog({
           </div>
           {cadence === "custom" && (
             <div className="space-y-2">
-              <Label htmlFor="pl-cl">Custom frequency label</Label>
+              <Label htmlFor="pl-cl">{t("giving.customFrequencyLabel")}</Label>
               <Input
                 id="pl-cl"
                 value={cadenceLabelText}
                 onChange={(e) => setCadenceLabelText(e.target.value)}
-                placeholder="e.g. every service, fortnightly"
+                placeholder={t("giving.eGEveryServiceFortnightly")}
               />
             </div>
           )}
           {cadence !== "one_time" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="pl-inst">Amount each time (optional)</Label>
+                <Label htmlFor="pl-inst">{t("giving.amountEachTimeOptional")}</Label>
                 <Input
                   id="pl-inst"
                   inputMode="decimal"
@@ -525,7 +529,7 @@ function PledgeDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pl-start">Starting</Label>
+                <Label htmlFor="pl-start">{t("giving.starting")}</Label>
                 <Input
                   id="pl-start"
                   type="date"
@@ -537,7 +541,7 @@ function PledgeDialog({
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="pl-note">Note</Label>
+            <Label htmlFor="pl-note">{t("giving.note")}</Label>
             <Textarea id="pl-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
         </div>
@@ -572,6 +576,7 @@ function PaymentDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const outstanding = Math.max(0, pl.amount - pl.paid);
   const [amount, setAmount] = useState(
@@ -600,7 +605,7 @@ function PaymentDialog({
         sendReceipt: !!pl.memberId && sendReceipt,
       });
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Payment recorded");
+      toast.success(t("giving.paymentRecorded"));
       onSaved();
     });
   }
@@ -618,7 +623,7 @@ function PaymentDialog({
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="pay-amt">Amount</Label>
+              <Label htmlFor="pay-amt">{t("giving.amount")}</Label>
               <Input
                 id="pay-amt"
                 inputMode="decimal"
@@ -628,7 +633,7 @@ function PaymentDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pay-date">Date</Label>
+              <Label htmlFor="pay-date">{t("giving.date")}</Label>
               <Input
                 id="pay-date"
                 type="date"
@@ -639,10 +644,10 @@ function PaymentDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Method</Label>
+            <Label>{t("giving.method")}</Label>
             <Select value={method} onValueChange={setMethod}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Optional" />
+                <SelectValue placeholder={t("giving.optional")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE}>—</SelectItem>
@@ -684,6 +689,7 @@ function EditProjectDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [name, setName] = useState(p.name);
   const [description, setDescription] = useState(p.description ?? "");
@@ -704,7 +710,7 @@ function EditProjectDialog({
         endDate: p.endDate ?? "",
       });
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Project saved");
+      toast.success(t("giving.projectSaved"));
       onSaved();
     });
   }
@@ -713,15 +719,15 @@ function EditProjectDialog({
     <Dialog open onOpenChange={(o) => !o && !pending && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>Edit project</DialogTitle>
+          <DialogTitle>{t("giving.editProject")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="ep-name">Name</Label>
+            <Label htmlFor="ep-name">{t("giving.name")}</Label>
             <Input id="ep-name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ep-target">Target amount (optional)</Label>
+            <Label htmlFor="ep-target">{t("giving.targetAmountOptional")}</Label>
             <Input
               id="ep-target"
               inputMode="decimal"
@@ -730,20 +736,20 @@ function EditProjectDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Status</Label>
+            <Label>{t("giving.status")}</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as Detail["status"])}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
+                <SelectItem value="active">{t("giving.active")}</SelectItem>
+                <SelectItem value="completed">{t("giving.completed")}</SelectItem>
+                <SelectItem value="archived">{t("giving.archived")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ep-desc">Description</Label>
+            <Label htmlFor="ep-desc">{t("giving.description")}</Label>
             <Textarea
               id="ep-desc"
               rows={3}

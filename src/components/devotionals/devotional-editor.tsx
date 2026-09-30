@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type State = {
   id: string;
@@ -35,6 +36,7 @@ type State = {
 };
 
 export function DevotionalEditor({ initial }: { initial: State }) {
+  const t = useT();
   const router = useRouter();
   const [s, setS] = useState<State>(initial);
   const [busy, start] = useTransition();
@@ -60,8 +62,8 @@ export function DevotionalEditor({ initial }: { initial: State }) {
   }
 
   function run(mode: "draft" | "schedule" | "send", scheduledAt?: string) {
-    if (!s.title.trim()) return toast.error("Add a title.");
-    if (!s.body.trim()) return toast.error("Write some content.");
+    if (!s.title.trim()) return toast.error(t("devotionals.addATitle"));
+    if (!s.body.trim()) return toast.error(t("devotionals.writeSomeContent"));
     if (mode === "send" && !confirm("Send this now to the selected audience?"))
       return;
     start(async () => {
@@ -72,8 +74,8 @@ export function DevotionalEditor({ initial }: { initial: State }) {
       }
       if (mode === "send")
         toast.success(`Sent to ${res.sent ?? 0} of ${res.recipients ?? 0} recipients.`);
-      else if (mode === "schedule") toast.success("Scheduled.");
-      else toast.success("Saved as draft.");
+      else if (mode === "schedule") toast.success(t("devotionals.scheduled"));
+      else toast.success(t("devotionals.savedAsDraft"));
       router.push("/devotionals");
     });
   }
@@ -136,14 +138,14 @@ export function DevotionalEditor({ initial }: { initial: State }) {
             onChange={(url) => set({ imageUrl: url })}
             kind="devotional"
             maxDim={1200}
-            label="Cover image (optional)"
+            label={t("devotionals.coverImageOptional")}
             aspect="wide"
           />
 
           <Textarea
             value={s.body}
             onChange={(e) => set({ body: e.target.value })}
-            placeholder="Write your message…"
+            placeholder={t("devotionals.writeYourMessage")}
             rows={12}
             className="leading-relaxed"
           />
@@ -153,7 +155,7 @@ export function DevotionalEditor({ initial }: { initial: State }) {
       <Card>
         <CardContent className="space-y-4 py-5">
           <div className="space-y-1.5">
-            <Label>Send to</Label>
+            <Label>{t("devotionals.sendTo")}</Label>
             <Select
               value={s.audience}
               onValueChange={(v) => set({ audience: v as State["audience"] })}
@@ -163,15 +165,15 @@ export function DevotionalEditor({ initial }: { initial: State }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="both">Members &amp; subscribers</SelectItem>
-                <SelectItem value="members">Members only</SelectItem>
-                <SelectItem value="subscribers">Subscribers only</SelectItem>
+                <SelectItem value="members">{t("devotionals.membersOnly")}</SelectItem>
+                <SelectItem value="subscribers">{t("devotionals.subscribersOnly")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {showSchedule && (
             <div className="space-y-1.5">
-              <Label htmlFor="when">Schedule for</Label>
+              <Label htmlFor="when">{t("devotionals.scheduleFor")}</Label>
               <Input
                 id="when"
                 type="datetime-local"
@@ -195,7 +197,7 @@ export function DevotionalEditor({ initial }: { initial: State }) {
               variant="outline"
               disabled={busy}
               onClick={() => {
-                if (!when) return toast.error("Pick a date and time.");
+                if (!when) return toast.error(t("devotionals.pickADateAndTime"));
                 run("schedule", new Date(when).toISOString());
               }}
             >

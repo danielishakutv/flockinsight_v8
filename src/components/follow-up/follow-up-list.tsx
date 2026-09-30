@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type FollowUpPerson = {
   id: string;
@@ -72,6 +73,7 @@ export function FollowUpList({
   candidates: Candidate[];
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [filter, setFilter] = useState<FollowUpStatus | "all">("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -103,7 +105,7 @@ export function FollowUpList({
         toast.error(res.error);
         return;
       }
-      toast.success("Added to follow-up");
+      toast.success(t("followUp.addedToFollowUp"));
       setAddOpen(false);
       setPickId("");
       router.refresh();
@@ -192,7 +194,7 @@ export function FollowUpList({
       <Dialog open={addOpen} onOpenChange={(o) => !pending && setAddOpen(o)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Add a member to follow-up</DialogTitle>
+            <DialogTitle>{t("followUp.addAMemberToFollow")}</DialogTitle>
           </DialogHeader>
           {candidates.length === 0 ? (
             <p className="text-muted-foreground text-sm">
@@ -201,7 +203,7 @@ export function FollowUpList({
           ) : (
             <Select value={pickId} onValueChange={setPickId}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose a member" />
+                <SelectValue placeholder={t("followUp.chooseAMember")} />
               </SelectTrigger>
               <SelectContent className="max-h-72">
                 {candidates.map((c) => (

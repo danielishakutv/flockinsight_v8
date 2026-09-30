@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 type Candidate = { id: string; name: string; isMinor: boolean };
 
@@ -59,6 +60,7 @@ export function HouseholdDetail({
   canManage: boolean;
   candidates: Candidate[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -78,7 +80,7 @@ export function HouseholdDetail({
     start(async () => {
       const res = await renameHousehold(h.id, name);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Renamed");
+      toast.success(t("members.renamed"));
       setRenameOpen(false);
       router.refresh();
     });
@@ -95,7 +97,7 @@ export function HouseholdDetail({
     start(async () => {
       const res = await removeMemberFromHousehold(h.id, memberId);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Removed from household");
+      toast.success(t("members.removedFromHousehold"));
       router.refresh();
     });
   }
@@ -103,7 +105,7 @@ export function HouseholdDetail({
     start(async () => {
       const res = await addMembersToHousehold(h.id, [...picked]);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Members added");
+      toast.success(t("members.membersAdded"));
       setAddOpen(false);
       setPicked(new Set());
       setQuery("");
@@ -120,7 +122,7 @@ export function HouseholdDetail({
     start(async () => {
       const res = await deleteHousehold(h.id);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Household deleted");
+      toast.success(t("members.householdDeleted"));
       router.push("/members/households");
     });
   }
@@ -148,7 +150,7 @@ export function HouseholdDetail({
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="text-lg">Members</CardTitle>
+          <CardTitle className="text-lg">{t("members.members")}</CardTitle>
           {canManage && (
             <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
               <Plus className="size-4" /> Add members
@@ -195,7 +197,7 @@ export function HouseholdDetail({
                         size="sm"
                         disabled={pending}
                         onClick={() => makeHead(m.id)}
-                        title="Make head of household"
+                        title={t("members.makeHeadOfHousehold")}
                       >
                         <Crown className="size-4" />
                       </Button>
@@ -205,8 +207,8 @@ export function HouseholdDetail({
                       size="icon"
                       disabled={pending}
                       onClick={() => removeMember(m.id)}
-                      title="Remove from household"
-                      aria-label="Remove from household"
+                      title={t("members.removeFromHousehold")}
+                      aria-label={t("members.removeFromHousehold")}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <UserMinus className="size-4" />
@@ -246,10 +248,10 @@ export function HouseholdDetail({
       <Dialog open={renameOpen} onOpenChange={(o) => !pending && setRenameOpen(o)}>
         <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Rename household</DialogTitle>
+            <DialogTitle>{t("members.renameHousehold")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="rn">Name</Label>
+            <Label htmlFor="rn">{t("members.name")}</Label>
             <Input
               id="rn"
               value={name}
@@ -277,7 +279,7 @@ export function HouseholdDetail({
           aria-describedby={undefined}
         >
           <DialogHeader>
-            <DialogTitle>Add members</DialogTitle>
+            <DialogTitle>{t("members.addMembers")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <div className="relative">
@@ -285,7 +287,7 @@ export function HouseholdDetail({
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search members"
+                placeholder={t("members.searchMembers")}
                 className="pl-9"
               />
             </div>

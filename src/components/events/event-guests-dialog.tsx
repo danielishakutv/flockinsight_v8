@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 export type Guest = {
   id: string;
@@ -42,6 +43,7 @@ export function EventGuestsDialog({
   guests: Guest[];
   smsAvailable: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [sending, startSend] = useTransition();
@@ -56,13 +58,13 @@ export function EventGuestsDialog({
   const [body, setBody] = useState("");
 
   function addGuest() {
-    if (!name.trim()) return toast.error("Add a name.");
+    if (!name.trim()) return toast.error(t("events.addAName"));
     if (!email.trim() && !phone.trim())
-      return toast.error("Add an email or phone number.");
+      return toast.error(t("events.addAnEmailOrPhone"));
     start(async () => {
       const res = await saveEventGuest({ eventId, name, role, email, phone });
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Guest added");
+      toast.success(t("events.guestAdded"));
       setName("");
       setEmail("");
       setPhone("");
@@ -79,9 +81,9 @@ export function EventGuestsDialog({
   }
 
   function sendMessage() {
-    if (!body.trim()) return toast.error("Write a message.");
+    if (!body.trim()) return toast.error(t("events.writeAMessage"));
     if (channel === "sms" && !smsAvailable)
-      return toast.error("SMS isn't available in your country yet.");
+      return toast.error(t("events.smsIsnTAvailableIn"));
     startSend(async () => {
       const res = await messageEventGuests({ eventId, channel, subject, body });
       if (!res.ok) return void toast.error(res.error);
@@ -105,7 +107,7 @@ export function EventGuestsDialog({
         {/* Existing guests */}
         <div className="space-y-2">
           {guests.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No guests added yet.</p>
+            <p className="text-muted-foreground text-sm">{t("events.noGuestsAddedYet")}</p>
           ) : (
             guests.map((g) => (
               <div
@@ -127,7 +129,7 @@ export function EventGuestsDialog({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Remove"
+                  aria-label={t("events.remove")}
                   onClick={() => removeGuest(g.id)}
                   disabled={pending}
                   className="text-destructive"
@@ -145,10 +147,10 @@ export function EventGuestsDialog({
             <UserPlus className="size-4" /> Add a guest
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
-            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role (e.g. Speaker)" />
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" type="tel" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("events.fullName")} />
+            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder={t("events.roleEGSpeaker")} />
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("events.email")} type="email" />
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t("events.phone")} type="tel" />
           </div>
           <Button size="sm" onClick={addGuest} disabled={pending}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
@@ -159,7 +161,7 @@ export function EventGuestsDialog({
         {/* Message guests */}
         {guests.length > 0 && (
           <div className="space-y-3 rounded-xl border p-3">
-            <p className="text-sm font-bold">Message all guests</p>
+            <p className="text-sm font-bold">{t("events.messageAllGuests")}</p>
             <div className="flex gap-2">
               {(["email", "sms"] as const).map((ch) => (
                 <button
@@ -187,7 +189,7 @@ export function EventGuestsDialog({
               <Input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Subject (optional)"
+                placeholder={t("events.subjectOptional")}
               />
             )}
             <Textarea

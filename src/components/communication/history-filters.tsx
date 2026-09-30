@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Channel / date-range / search controls. Filters live in the URL so the page
@@ -32,6 +33,7 @@ export function HistoryFilters({
   range: RangeId;
   q: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [text, setText] = useState(q);
@@ -90,7 +92,7 @@ export function HistoryFilters({
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Search message, subject or audience"
+            placeholder={t("communication.searchMessageSubjectOrAudience")}
             className="pl-9"
           />
           {text && (
@@ -101,7 +103,7 @@ export function HistoryFilters({
                 go({ q: "" });
               }}
               className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
-              aria-label="Clear search"
+              aria-label={t("communication.clearSearch")}
             >
               <X className="size-4" />
             </button>

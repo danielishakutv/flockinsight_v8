@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type Item = {
   id: string;
@@ -96,6 +97,7 @@ export function MediaLibrary({
   storage: StorageInfo;
   items: Item[];
 }) {
+  const t = useT();
   const { enqueue, onComplete } = useUploads();
   const [items, setItems] = useState<Item[]>(initial);
   const [used, setUsed] = useState(storage.used);
@@ -208,7 +210,7 @@ export function MediaLibrary({
           ) : (
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Category</label>
+                <label className="text-sm font-medium">{t("media.category")}</label>
                 <div className="flex gap-1.5">
                   {CATEGORIES.map((c) => (
                     <button
@@ -268,7 +270,7 @@ export function MediaLibrary({
         <div className="relative w-full sm:w-64">
           <Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
           <Input
-            placeholder="Search files…"
+            placeholder={t("media.searchFiles")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
@@ -316,6 +318,7 @@ function MediaCard({
   onOpen: () => void;
   onDeleted: () => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const group = groupOf(item);
   const name = item.title || item.originalName || "Untitled";
@@ -329,8 +332,8 @@ function MediaCard({
         : link;
     navigator.clipboard
       .writeText(abs)
-      .then(() => toast.success("Link copied"))
-      .catch(() => toast.error("Couldn't copy link"));
+      .then(() => toast.success(t("media.linkCopied")))
+      .catch(() => toast.error(t("media.couldnTCopyLink")));
   }
 
   function onDelete() {
@@ -338,7 +341,7 @@ function MediaCard({
     start(async () => {
       const res = await deleteMediaAction(item.id);
       if (res.ok) {
-        toast.success("File deleted");
+        toast.success(t("media.fileDeleted"));
         onDeleted();
       } else {
         toast.error(res.error);
@@ -391,7 +394,7 @@ function MediaCard({
           {fmtDuration(item.durationSec) ? ` · ${fmtDuration(item.durationSec)}` : ""}
         </p>
         <div className="mt-auto flex items-center gap-0.5 pt-1">
-          <IconBtn title="Copy link" onClick={copyLink}>
+          <IconBtn title={t("media.copyLink")} onClick={copyLink}>
             <Link2 className="size-4" />
           </IconBtn>
           <Button
@@ -399,8 +402,8 @@ function MediaCard({
             variant="ghost"
             size="icon"
             className="size-11 sm:size-7"
-            title="Download"
-            aria-label="Download this file"
+            title={t("media.download")}
+            aria-label={t("media.downloadThisFile")}
           >
             <a href={`${link}?download=1`}>
               <Download className="size-4" />
@@ -408,7 +411,7 @@ function MediaCard({
           </Button>
           {canManage && (
             <IconBtn
-              title="Delete"
+              title={t("media.delete")}
               onClick={onDelete}
               className="text-muted-foreground hover:text-destructive ml-auto"
             >
@@ -448,6 +451,7 @@ function IconBtn({
 }
 
 function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => void }) {
+  const t = useT();
   if (!item) return null;
   const group = groupOf(item);
   const name = item.title || item.originalName || "Untitled";
@@ -494,7 +498,7 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
           ) : (
             <div className="text-muted-foreground bg-muted grid place-items-center gap-3 rounded-xl p-12 text-center">
               <FileText className="size-12" />
-              <p className="text-sm">No inline preview for this file type.</p>
+              <p className="text-sm">{t("media.noInlinePreviewForThis")}</p>
               <Button asChild variant="outline" size="sm">
                 <a href={src} target="_blank" rel="noreferrer">
                   <ExternalLink className="size-4" /> Open file
@@ -509,7 +513,7 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
               size="sm"
               onClick={() => {
                 const abs = new URL(`/media/${item.id}`, window.location.origin).toString();
-                navigator.clipboard.writeText(abs).then(() => toast.success("Link copied"));
+                navigator.clipboard.writeText(abs).then(() => toast.success(t("media.linkCopied")));
               }}
             >
               <Link2 className="size-4" /> Copy link

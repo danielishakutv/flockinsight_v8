@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useT } from "@/components/i18n-provider";
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
 
@@ -36,6 +37,7 @@ export function GivingDataMenu({
   hasData?: boolean;
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -70,7 +72,7 @@ export function GivingDataMenu({
       );
       router.refresh();
     } catch {
-      toast.error("Import failed. Please try again.");
+      toast.error(t("giving.importFailedPleaseTryAgain"));
     } finally {
       setImporting(false);
     }
@@ -83,9 +85,9 @@ export function GivingDataMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" aria-label="Import or export">
+          <Button variant="outline" size="lg" aria-label={t("giving.importOrExport")}>
             <ArrowDownUp className="size-5" />
-            <span className="hidden sm:inline">Import / Export</span>
+            <span className="hidden sm:inline">{t("giving.importExport")}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
@@ -132,7 +134,7 @@ export function GivingDataMenu({
       <Dialog open={open} onOpenChange={(o) => !importing && setOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import giving from CSV</DialogTitle>
+            <DialogTitle>{t("giving.importGivingFromCsv")}</DialogTitle>
             <DialogDescription>
               Upload a CSV with at least “Date” and “Amount” columns.{" "}
               <a
@@ -179,7 +181,7 @@ export function GivingDataMenu({
 
           <DialogFooter>
             {result ? (
-              <Button onClick={() => setOpen(false)}>Done</Button>
+              <Button onClick={() => setOpen(false)}>{t("giving.done")}</Button>
             ) : (
               <>
                 <Button

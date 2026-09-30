@@ -41,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type CommMember = {
   id: string;
@@ -95,6 +96,7 @@ export function CommunicationClient({
   smsAvailable?: boolean;
   recent: LogRow[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -163,7 +165,7 @@ export function CommunicationClient({
   function send() {
     if (channel === "staff") {
       if (!staffTitle.trim() || !body.trim())
-        return toast.error("Add a title and message.");
+        return toast.error(t("communication.addATitleAndMessage"));
       startTransition(async () => {
         const res = await notifyStaff({ title: staffTitle, body, alsoEmail });
         if (!res.ok) {
@@ -185,10 +187,10 @@ export function CommunicationClient({
     const typed = audience === "contacts" ? splitContacts(contactDraft) : [];
     const allContacts = [...new Set([...contacts, ...typed])];
 
-    if (!body.trim()) return toast.error("Write a message.");
-    if (audience === "group" && !groupId) return toast.error("Pick a group.");
+    if (!body.trim()) return toast.error(t("communication.writeAMessage"));
+    if (audience === "group" && !groupId) return toast.error(t("communication.pickAGroup"));
     if (audience === "selected" && selected.size === 0)
-      return toast.error("Choose at least one member.");
+      return toast.error(t("communication.chooseAtLeastOneMember"));
     if (audience === "contacts" && allContacts.length === 0)
       return toast.error(
         channel === "sms"
@@ -196,9 +198,9 @@ export function CommunicationClient({
           : "Add at least one email address.",
       );
     if (channel === "sms" && !smsAvailable)
-      return toast.error("SMS isn't available in your country yet.");
+      return toast.error(t("communication.smsIsnTAvailableIn"));
     if (channel === "sms" && !senderApproved)
-      return toast.error("Your SMS sender ID isn't approved yet (Settings → SMS).");
+      return toast.error(t("communication.yourSmsSenderIdIsn"));
 
     startTransition(async () => {
       const res = await sendCommunication({
@@ -308,12 +310,12 @@ export function CommunicationClient({
                 <strong>{staffCount}</strong> team members.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="st">Title</Label>
+                <Label htmlFor="st">{t("communication.title")}</Label>
                 <Input
                   id="st"
                   value={staffTitle}
                   onChange={(e) => setStaffTitle(e.target.value)}
-                  placeholder="e.g. Workers' meeting this Saturday"
+                  placeholder={t("communication.eGWorkersMeetingThis")}
                   disabled={!canManage}
                 />
               </div>
@@ -322,7 +324,7 @@ export function CommunicationClient({
             <>
               {/* Audience */}
               <div className="space-y-2">
-                <Label>Send to</Label>
+                <Label>{t("communication.sendTo")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {(
                     [
@@ -352,7 +354,7 @@ export function CommunicationClient({
               {audience === "group" && (
                 <Select value={groupId} onValueChange={setGroupId}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose a group" />
+                    <SelectValue placeholder={t("communication.chooseAGroup")} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     {groups.map((g) => (
@@ -402,7 +404,7 @@ export function CommunicationClient({
                       disabled={!canManage || !contactDraft.trim()}
                     >
                       <UserPlus className="size-4" />
-                      <span className="hidden sm:inline">Add</span>
+                      <span className="hidden sm:inline">{t("communication.add")}</span>
                     </Button>
                   </div>
                   {contacts.length > 0 && (
@@ -443,7 +445,7 @@ export function CommunicationClient({
                     <Input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search members"
+                      placeholder={t("communication.searchMembers")}
                       className="pl-9"
                     />
                   </div>
@@ -493,10 +495,10 @@ export function CommunicationClient({
 
               {/* Template */}
               <div className="space-y-2">
-                <Label>Template</Label>
+                <Label>{t("communication.template")}</Label>
                 <Select onValueChange={applyTemplate}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Start from a template (optional)" />
+                    <SelectValue placeholder={t("communication.startFromATemplateOptional")} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     {templates.map((t) => (
@@ -510,12 +512,12 @@ export function CommunicationClient({
 
               {channel === "email" && (
                 <div className="space-y-2">
-                  <Label htmlFor="subj">Subject</Label>
+                  <Label htmlFor="subj">{t("communication.subject")}</Label>
                   <Input
                     id="subj"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder="Email subject"
+                    placeholder={t("communication.emailSubject")}
                     disabled={!canManage}
                   />
                 </div>
@@ -525,13 +527,13 @@ export function CommunicationClient({
 
           {/* Message body (shared) */}
           <div className="space-y-2">
-            <Label htmlFor="body">Message</Label>
+            <Label htmlFor="body">{t("communication.message")}</Label>
             <Textarea
               id="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={channel === "sms" ? 4 : 6}
-              placeholder="Type your message…"
+              placeholder={t("communication.typeYourMessage")}
               disabled={!canManage}
             />
             <p className="text-muted-foreground text-xs">
@@ -571,7 +573,7 @@ export function CommunicationClient({
           {/* Staff also-email */}
           {channel === "staff" && (
             <div className="flex items-center justify-between rounded-lg border p-3">
-              <p className="text-sm font-semibold">Also email staff</p>
+              <p className="text-sm font-semibold">{t("communication.alsoEmailStaff")}</p>
               <Switch checked={alsoEmail} onCheckedChange={setAlsoEmail} />
             </div>
           )}
@@ -602,7 +604,7 @@ export function CommunicationClient({
       {recent.length > 0 && (
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-lg">Recent messages</CardTitle>
+            <CardTitle className="text-lg">{t("communication.recentMessages")}</CardTitle>
             <Button asChild variant="ghost" size="sm">
               <Link href="/communication/history">
                 <History className="size-4" />
@@ -650,10 +652,10 @@ export function CommunicationClient({
                       size="sm"
                       className="shrink-0"
                       onClick={() => reuse(r)}
-                      title="Use this message again"
+                      title={t("communication.useThisMessageAgain")}
                     >
                       <RotateCcw className="size-4" />
-                      <span className="hidden sm:inline">Reuse</span>
+                      <span className="hidden sm:inline">{t("communication.reuse")}</span>
                     </Button>
                   )}
                 </div>

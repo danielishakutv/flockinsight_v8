@@ -61,6 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 export type MemberRow = {
   id: string;
@@ -162,6 +163,7 @@ export function MembersList({
   canManageTeam?: boolean;
   accessRoles?: { id: string; name: string }[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -307,7 +309,7 @@ export function MembersList({
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Could not generate the download. Please try again.");
+      toast.error(t("members.couldNotGenerateTheDownload"));
     } finally {
       setDownloading(false);
     }
@@ -325,7 +327,7 @@ export function MembersList({
         toast.error(res.error);
         return;
       }
-      toast.success("Member added");
+      toast.success(t("members.memberAdded"));
       track("member.added");
       setOpen(false);
       setForm(emptyMember());
@@ -340,7 +342,7 @@ export function MembersList({
         toast.error(res.error);
         return;
       }
-      toast.success("Member removed");
+      toast.success(t("members.memberRemoved"));
       setConfirmId(null);
       router.refresh();
     });
@@ -354,7 +356,7 @@ export function MembersList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, phone or email"
+            placeholder={t("members.searchByNamePhoneOr")}
             className="pl-9"
           />
         </div>
@@ -435,7 +437,7 @@ export function MembersList({
             >
               <Trash2 className="size-4" /> Delete
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Clear selection" onClick={clearSel}>
+            <Button variant="ghost" size="icon" aria-label={t("members.clearSelection")} onClick={clearSel}>
               <X className="size-4" />
             </Button>
           </div>
@@ -472,7 +474,7 @@ export function MembersList({
                 <button
                   type="button"
                   onClick={() => toggleSel(m.id)}
-                  aria-label="Select member"
+                  aria-label={t("members.selectMember")}
                   className="shrink-0"
                 >
                   <SelectBox on={selected.has(m.id)} />
@@ -523,7 +525,7 @@ export function MembersList({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Delete"
+                    aria-label={t("members.delete")}
                     onClick={() => setConfirmId(m.id)}
                   >
                     <Trash2 className="size-4" />
@@ -548,7 +550,7 @@ export function MembersList({
           aria-describedby={undefined}
         >
           <DialogHeader>
-            <DialogTitle>Add member</DialogTitle>
+            <DialogTitle>{t("members.addMember")}</DialogTitle>
           </DialogHeader>
           <MemberFormFields
             form={form}
@@ -621,13 +623,13 @@ export function MembersList({
                     impact.followUps +
                     impact.groupMemberships +
                     impact.trainingEnrollments ===
-                    0 && <li>Nothing else — these members have no history yet.</li>}
+                    0 && <li>{t("members.nothingElseTheseMembersHave")}</li>}
                 </ul>
               </div>
 
               {(impact.givingRecords > 0 || impact.pledges > 0) && (
                 <div className="rounded-xl border p-3">
-                  <p className="font-semibold">Kept, but no longer named</p>
+                  <p className="font-semibold">{t("members.keptButNoLongerNamed")}</p>
                   <ul className="text-muted-foreground mt-1.5 space-y-1">
                     <ImpactRow
                       n={impact.givingRecords}
@@ -710,13 +712,13 @@ export function MembersList({
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="bulk-role">Role for everyone selected</Label>
+            <Label htmlFor="bulk-role">{t("members.roleForEveryoneSelected")}</Label>
             <Select value={bulkRoleId} onValueChange={setBulkRoleId}>
               <SelectTrigger id="bulk-role" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">No role yet</SelectItem>
+                <SelectItem value="__none__">{t("members.noRoleYet")}</SelectItem>
                 {accessRoles.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
                     {r.name}

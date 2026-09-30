@@ -41,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 export type EventRow = {
   id: string;
@@ -101,6 +102,7 @@ export function EventsManager({
   canManageForms?: boolean;
   smsAvailable?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
@@ -114,10 +116,10 @@ export function EventsManager({
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
-      toast.success("Link copied");
+      toast.success(t("events.linkCopied"));
       setTimeout(() => setCopiedId(null), 1600);
     } catch {
-      toast.error("Couldn't copy the link.");
+      toast.error(t("events.couldnTCopyTheLink"));
     }
   }
 
@@ -145,7 +147,7 @@ export function EventsManager({
     start(async () => {
       const res = await saveEvent(form);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Event saved");
+      toast.success(t("events.eventSaved"));
       setOpen(false);
       router.refresh();
     });
@@ -155,7 +157,7 @@ export function EventsManager({
     start(async () => {
       const res = await deleteEvent(e.id);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Event deleted");
+      toast.success(t("events.eventDeleted"));
       router.refresh();
     });
   }
@@ -219,7 +221,7 @@ export function EventsManager({
                       size="sm"
                       variant="ghost"
                       onClick={() => copyLink(e.id, `${baseUrl}/events/${e.id}`)}
-                      title="Copy public link"
+                      title={t("events.copyPublicLink")}
                     >
                       {copiedId === e.id ? (
                         <Check className="size-4" />
@@ -227,7 +229,7 @@ export function EventsManager({
                         <Copy className="size-4" />
                       )}
                     </Button>
-                    <Button size="sm" variant="ghost" asChild title="Open public page">
+                    <Button size="sm" variant="ghost" asChild title={t("events.openPublicPage")}>
                       <a href={`${baseUrl}/events/${e.id}`} target="_blank" rel="noreferrer">
                         <ExternalLink className="size-4" />
                       </a>
@@ -238,7 +240,7 @@ export function EventsManager({
                   size="sm"
                   variant="ghost"
                   onClick={() => setFormsFor(e)}
-                  title="Registration forms"
+                  title={t("events.registrationForms")}
                 >
                   <FileText className="size-4" />
                   <span className="tabular-nums">
@@ -249,7 +251,7 @@ export function EventsManager({
                   size="sm"
                   variant="ghost"
                   onClick={() => setGuestsFor(e)}
-                  title="Speakers & guests"
+                  title={t("events.speakersGuests")}
                 >
                   <Users className="size-4" />
                   <span className="tabular-nums">
@@ -283,16 +285,16 @@ export function EventsManager({
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="ev-title">Title</Label>
+              <Label htmlFor="ev-title">{t("events.title")}</Label>
               <Input
                 id="ev-title"
                 value={form.title}
                 onChange={(e) => set({ title: e.target.value })}
-                placeholder="e.g. Annual Thanksgiving Service"
+                placeholder={t("events.eGAnnualThanksgivingService")}
               />
             </div>
             <ImageUpload
-              label="Flyer / poster"
+              label={t("events.flyerPoster")}
               kind="cover"
               maxDim={1600}
               aspect="wide"
@@ -301,7 +303,7 @@ export function EventsManager({
             />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div className="col-span-2 space-y-2 sm:col-span-1">
-                <Label htmlFor="ev-date">Date</Label>
+                <Label htmlFor="ev-date">{t("events.date")}</Label>
                 <Input
                   id="ev-date"
                   type="date"
@@ -311,7 +313,7 @@ export function EventsManager({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ev-start">Start</Label>
+                <Label htmlFor="ev-start">{t("events.start")}</Label>
                 <Input
                   id="ev-start"
                   type="time"
@@ -321,7 +323,7 @@ export function EventsManager({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ev-end">End</Label>
+                <Label htmlFor="ev-end">{t("events.end")}</Label>
                 <Input
                   id="ev-end"
                   type="time"
@@ -332,31 +334,31 @@ export function EventsManager({
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ev-venue">Venue</Label>
+              <Label htmlFor="ev-venue">{t("events.venue")}</Label>
               <Input
                 id="ev-venue"
                 value={form.venue ?? ""}
                 onChange={(e) => set({ venue: e.target.value })}
-                placeholder="e.g. Main Auditorium"
+                placeholder={t("events.eGMainAuditorium")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ev-address">Address</Label>
+              <Label htmlFor="ev-address">{t("events.address")}</Label>
               <Input
                 id="ev-address"
                 value={form.address ?? ""}
                 onChange={(e) => set({ address: e.target.value })}
-                placeholder="Where is it held?"
+                placeholder={t("events.whereIsItHeld")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ev-desc">About</Label>
+              <Label htmlFor="ev-desc">{t("events.about")}</Label>
               <Textarea
                 id="ev-desc"
                 rows={4}
                 value={form.description ?? ""}
                 onChange={(e) => set({ description: e.target.value })}
-                placeholder="What's happening? Who's it for?"
+                placeholder={t("events.whatSHappeningWhoS")}
               />
             </div>
             <button
@@ -365,7 +367,7 @@ export function EventsManager({
               className="flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left"
             >
               <div>
-                <p className="text-sm font-semibold">Show publicly</p>
+                <p className="text-sm font-semibold">{t("events.showPublicly")}</p>
                 <p className="text-muted-foreground text-xs">
                   List on the public events page & your church page.
                 </p>

@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type EventForm = {
   id: string;
@@ -71,6 +72,7 @@ export function EventFormsDialog({
   baseUrl: string;
   canManageForms: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function EventFormsDialog({
     start(async () => {
       const res = await createForm(eventId);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Registration form created");
+      toast.success(t("events.registrationFormCreated"));
       if (res.id) router.push(`/forms/${res.id}`);
     });
   }
@@ -89,7 +91,7 @@ export function EventFormsDialog({
     start(async () => {
       const res = await setFormEvent(pickId, eventId);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Form attached to this event");
+      toast.success(t("events.formAttachedToThisEvent"));
       setPickId("");
       router.refresh();
     });
@@ -98,7 +100,7 @@ export function EventFormsDialog({
     start(async () => {
       const res = await setFormEvent(formId, null);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Form detached");
+      toast.success(t("events.formDetached"));
       router.refresh();
     });
   }
@@ -106,10 +108,10 @@ export function EventFormsDialog({
     try {
       await navigator.clipboard.writeText(`${baseUrl}/f/${f.slug}`);
       setCopiedId(f.id);
-      toast.success("Link copied");
+      toast.success(t("events.linkCopied"));
       setTimeout(() => setCopiedId(null), 1600);
     } catch {
-      toast.error("Couldn't copy the link.");
+      toast.error(t("events.couldnTCopyTheLink"));
     }
   }
 
@@ -165,7 +167,7 @@ export function EventFormsDialog({
                             variant="ghost"
                             size="sm"
                             onClick={() => copy(f)}
-                            title="Copy public link"
+                            title={t("events.copyPublicLink")}
                           >
                             {copiedId === f.id ? (
                               <Check className="size-4" />
@@ -173,7 +175,7 @@ export function EventFormsDialog({
                               <Copy className="size-4" />
                             )}
                           </Button>
-                          <Button variant="ghost" size="sm" asChild title="Open form">
+                          <Button variant="ghost" size="sm" asChild title={t("events.openForm")}>
                             <a href={`${baseUrl}/f/${f.slug}`} target="_blank" rel="noreferrer">
                               <ExternalLink className="size-4" />
                             </a>
@@ -187,7 +189,7 @@ export function EventFormsDialog({
                           disabled={pending}
                           onClick={() => unlink(f.id)}
                           className="text-muted-foreground hover:text-destructive ml-auto"
-                          title="Detach from event"
+                          title={t("events.detachFromEvent")}
                         >
                           <Unlink className="size-4" />
                         </Button>
@@ -214,7 +216,7 @@ export function EventFormsDialog({
                 <div className="flex gap-2">
                   <Select value={pickId} onValueChange={setPickId}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Attach an existing form…" />
+                      <SelectValue placeholder={t("events.attachAnExistingForm")} />
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
                       {unlinkedForms.map((f) => (

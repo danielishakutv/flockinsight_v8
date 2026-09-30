@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 export function FormSubmit({
   slug,
@@ -115,6 +116,7 @@ export function FieldInput({
   value: FieldValue;
   onChange: (v: FieldValue) => void;
 }) {
+  const t = useT();
   switch (field.type) {
     case "long_text":
       return (
@@ -161,7 +163,7 @@ export function FieldInput({
       return (
         <Select value={(value as string) ?? ""} onValueChange={(v) => onChange(v)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Choose one" />
+            <SelectValue placeholder={t("forms.chooseOne")} />
           </SelectTrigger>
           <SelectContent>
             {(field.options ?? []).map((o) => (

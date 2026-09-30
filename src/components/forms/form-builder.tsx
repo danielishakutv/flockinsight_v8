@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n-provider";
 
 type BuilderState = {
   id: string;
@@ -79,6 +80,7 @@ export function FormBuilder({
   baseUrl: string;
   events?: EventOption[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [f, setF] = useState<BuilderState>(initial);
   const [saving, startSave] = useTransition();
@@ -111,7 +113,7 @@ export function FormBuilder({
   const link = `${baseUrl}/f/${f.slug}`;
 
   function save() {
-    if (!f.title.trim()) return toast.error("Give your form a title.");
+    if (!f.title.trim()) return toast.error(t("forms.giveYourFormATitle"));
     startSave(async () => {
       const res = await updateForm({
         id: f.id,
@@ -128,7 +130,7 @@ export function FormBuilder({
         eventId: f.eventId,
       });
       if (res.ok) {
-        toast.success("Form saved");
+        toast.success(t("forms.formSaved"));
         router.push("/forms");
       } else toast.error(res.error);
     });
@@ -155,13 +157,13 @@ export function FormBuilder({
           <Input
             value={f.title}
             onChange={(e) => set({ title: e.target.value })}
-            placeholder="Form title"
+            placeholder={t("forms.formTitle")}
             className="h-auto border-0 px-0 text-2xl font-extrabold shadow-none focus-visible:ring-0"
           />
           <Textarea
             value={f.description}
             onChange={(e) => set({ description: e.target.value })}
-            placeholder="Add a description (optional)"
+            placeholder={t("forms.addADescriptionOptional")}
             rows={2}
             className="border-0 px-0 shadow-none focus-visible:ring-0"
           />
@@ -189,18 +191,18 @@ export function FormBuilder({
       {/* Share + status */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Share</CardTitle>
+          <CardTitle className="text-lg">{t("forms.share")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Public link</Label>
+            <Label>{t("forms.publicLink")}</Label>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-muted-foreground text-sm">{baseUrl}/f/</span>
               <Input
                 value={f.slug}
                 onChange={(e) => set({ slug: slugify(e.target.value) })}
                 className="w-48"
-                placeholder="my-form"
+                placeholder={t("forms.myForm")}
               />
               <Button
                 type="button"
@@ -209,8 +211,8 @@ export function FormBuilder({
                 onClick={() =>
                   navigator.clipboard
                     .writeText(link)
-                    .then(() => toast.success("Link copied"))
-                    .catch(() => toast.error("Couldn't copy"))
+                    .then(() => toast.success(t("forms.linkCopied")))
+                    .catch(() => toast.error(t("forms.couldnTCopy")))
                 }
               >
                 <Copy className="size-4" /> Copy
@@ -230,7 +232,7 @@ export function FormBuilder({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label>{t("forms.status")}</Label>
             <div className="flex gap-1.5">
               {STATUSES.map((s) => (
                 <button
@@ -259,43 +261,43 @@ export function FormBuilder({
       {/* Settings */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Settings</CardTitle>
+          <CardTitle className="text-lg">{t("forms.settings")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
-            label="In-app notification on each response"
+            label={t("forms.inAppNotificationOnEach")}
             checked={f.notifyInApp}
             onChange={(v) => set({ notifyInApp: v })}
           />
           <ToggleRow
-            label="Email notification on each response"
+            label={t("forms.emailNotificationOnEachResponse")}
             checked={f.notifyEmail}
             onChange={(v) => set({ notifyEmail: v })}
           />
           <ToggleRow
-            label="Create / match a member from each response"
+            label={t("forms.createMatchAMemberFrom")}
             description="Uses the fields you mark as Full name, Phone or Email."
             checked={f.createMembers}
             onChange={(v) => set({ createMembers: v })}
           />
           {f.createMembers && (
             <ToggleRow
-              label="Add new members to Follow-up"
+              label={t("forms.addNewMembersToFollow")}
               checked={f.addToFollowUp}
               onChange={(v) => set({ addToFollowUp: v })}
             />
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="ev">Linked event</Label>
+            <Label htmlFor="ev">{t("forms.linkedEvent")}</Label>
             <Select
               value={f.eventId || EVENT_NONE}
               onValueChange={(v) => set({ eventId: v === EVENT_NONE ? "" : v })}
             >
               <SelectTrigger id="ev" className="w-full">
-                <SelectValue placeholder="Not linked to an event" />
+                <SelectValue placeholder={t("forms.notLinkedToAnEvent")} />
               </SelectTrigger>
               <SelectContent className="max-h-72">
-                <SelectItem value={EVENT_NONE}>Not linked to an event</SelectItem>
+                <SelectItem value={EVENT_NONE}>{t("forms.notLinkedToAnEvent")}</SelectItem>
                 {events.map((e) => (
                   <SelectItem key={e.id} value={e.id}>
                     {e.title}
@@ -309,13 +311,13 @@ export function FormBuilder({
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="confirm">Confirmation message</Label>
+            <Label htmlFor="confirm">{t("forms.confirmationMessage")}</Label>
             <Textarea
               id="confirm"
               value={f.confirmationMessage}
               onChange={(e) => set({ confirmationMessage: e.target.value })}
               rows={2}
-              placeholder="Shown after someone submits the form."
+              placeholder={t("forms.shownAfterSomeoneSubmitsThe")}
             />
           </div>
         </CardContent>
@@ -373,6 +375,7 @@ function FieldEditor({
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const meta = FIELD_TYPE_META[field.type];
   const maps = mapsForType(field.type);
 
@@ -409,8 +412,8 @@ function FieldEditor({
               className="size-11 sm:size-8"
               disabled={index === 0}
               onClick={() => onMove(-1)}
-              title="Move up"
-              aria-label="Move this question up"
+              title={t("forms.moveUp")}
+              aria-label={t("forms.moveThisQuestionUp")}
             >
               <ChevronUp className="size-4" />
             </Button>
@@ -420,8 +423,8 @@ function FieldEditor({
               className="size-11 sm:size-8"
               disabled={index === total - 1}
               onClick={() => onMove(1)}
-              title="Move down"
-              aria-label="Move this question down"
+              title={t("forms.moveDown")}
+              aria-label={t("forms.moveThisQuestionDown")}
             >
               <ChevronDown className="size-4" />
             </Button>
@@ -430,8 +433,8 @@ function FieldEditor({
               size="icon"
               className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
               onClick={onRemove}
-              title="Remove"
-              aria-label="Remove this question"
+              title={t("forms.remove")}
+              aria-label={t("forms.removeThisQuestion")}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -441,7 +444,7 @@ function FieldEditor({
         <Input
           value={field.label}
           onChange={(e) => onChange({ label: e.target.value })}
-          placeholder="Question"
+          placeholder={t("forms.question")}
         />
 
         {meta.hasOptions && (
@@ -461,7 +464,7 @@ function FieldEditor({
           </label>
           {meta.mappable && maps.length > 1 && (
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground text-xs">Use as</span>
+              <span className="text-muted-foreground text-xs">{t("forms.useAs")}</span>
               <Select
                 value={field.map ?? "none"}
                 onValueChange={(v) => onChange({ map: v as FormField["map"] })}
@@ -492,6 +495,7 @@ function OptionsEditor({
   options: string[];
   onChange: (next: string[]) => void;
 }) {
+  const t = useT();
   return (
     <div className="space-y-2">
       {options.map((opt, i) => (
@@ -510,7 +514,7 @@ function OptionsEditor({
             className="text-muted-foreground hover:text-destructive size-11 sm:size-8"
             onClick={() => onChange(options.filter((_, j) => j !== i))}
             aria-label={`Remove option ${i + 1}`}
-            title="Remove option"
+            title={t("forms.removeOption")}
           >
             <X className="size-4" />
           </Button>

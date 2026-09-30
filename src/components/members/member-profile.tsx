@@ -13,6 +13,7 @@ import { MemberEditForm } from "@/components/members/member-edit-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 type MemberRecord = Parameters<typeof memberToForm>[0];
 
@@ -87,6 +88,7 @@ function MemberView({
   isTeamMember?: boolean;
   guardianName?: string | null;
 }) {
+  const t = useT();
   const addressParts = [
     [member.house, member.street].filter(Boolean).join(" "),
     member.city,
@@ -137,17 +139,17 @@ function MemberView({
         </div>
 
         {(member.phone || member.email) && (
-          <Section title="Contact">
-            <Row label="Phone" value={member.phone} />
-            <Row label="Email" value={member.email} />
+          <Section title={t("members.contact")}>
+            <Row label={t("members.phone")} value={member.phone} />
+            <Row label={t("members.email")} value={member.email} />
           </Section>
         )}
 
-        <Section title="Personal">
-          <Row label="Gender" value={gender} />
+        <Section title={t("members.personal")}>
+          <Row label={t("members.gender")} value={gender} />
           {member.isMinor && (
             <Row
-              label="Guardian"
+              label={t("members.guardian")}
               value={
                 guardianName
                   ? member.relationship
@@ -158,21 +160,21 @@ function MemberView({
             />
           )}
           <Row
-            label="Date of birth"
+            label={t("members.dateOfBirth")}
             value={formatBirthday(member.dateOfBirth) || null}
           />
-          <Row label="Date joined" value={fmtDate(member.joinedAt)} />
+          <Row label={t("members.dateJoined")} value={fmtDate(member.joinedAt)} />
         </Section>
 
         {(member.weddingDate ||
           member.baptized ||
           (member.anniversaries?.length ?? 0) > 0) && (
-          <Section title="Milestones">
+          <Section title={t("members.milestones")}>
             {member.weddingDate && (
-              <Row label="Wedding" value={fmtDate(member.weddingDate)} />
+              <Row label={t("members.wedding")} value={fmtDate(member.weddingDate)} />
             )}
             <Row
-              label="Baptized"
+              label={t("members.baptized")}
               value={
                 member.baptized
                   ? member.baptismDate
@@ -187,13 +189,13 @@ function MemberView({
           </Section>
         )}
 
-        <Section title="Address">
-          <Row label="Address" value={address} />
+        <Section title={t("members.address")}>
+          <Row label={t("members.address")} value={address} />
         </Section>
 
         {member.notes && (
-          <Section title="Notes">
-            <Row label="Notes" value={member.notes} />
+          <Section title={t("members.notes")}>
+            <Row label={t("members.notes")} value={member.notes} />
           </Section>
         )}
       </CardContent>

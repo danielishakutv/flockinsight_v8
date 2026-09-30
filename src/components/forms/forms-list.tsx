@@ -27,6 +27,7 @@ import { useLiveCounts } from "@/components/forms/use-live-counts";
 import type { FormStatus } from "@/lib/forms-shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/i18n-provider";
 
 type FormRow = {
   id: string;
@@ -117,6 +118,7 @@ function FormCard({
   canManage: boolean;
   baseUrl: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const link = `${baseUrl}/f/${f.slug}`;
@@ -125,8 +127,8 @@ function FormCard({
   function copyLink() {
     navigator.clipboard
       .writeText(link)
-      .then(() => toast.success("Link copied"))
-      .catch(() => toast.error("Couldn't copy"));
+      .then(() => toast.success(t("forms.linkCopied")))
+      .catch(() => toast.error(t("forms.couldnTCopy")));
   }
 
   function publish(next: FormStatus) {
@@ -145,7 +147,7 @@ function FormCard({
     start(async () => {
       const res = await deleteForm(f.id);
       if (res.ok) {
-        toast.success("Form deleted");
+        toast.success(t("forms.formDeleted"));
         router.refresh();
       } else toast.error(res.error);
     });
@@ -201,7 +203,7 @@ function FormCard({
                   size="sm"
                   disabled={pending}
                   onClick={() => publish("closed")}
-                  title="Stop accepting responses"
+                  title={t("forms.stopAcceptingResponses")}
                 >
                   <XCircle className="size-4" /> Close
                 </Button>
@@ -211,7 +213,7 @@ function FormCard({
                   size="sm"
                   disabled={pending}
                   onClick={() => publish("open")}
-                  title="Publish & accept responses"
+                  title={t("forms.publishAcceptResponses")}
                 >
                   <Send className="size-4" /> {f.status === "draft" ? "Publish" : "Reopen"}
                 </Button>
@@ -222,8 +224,8 @@ function FormCard({
                 disabled={pending}
                 onClick={remove}
                 className="text-muted-foreground hover:text-destructive"
-                title="Delete"
-                aria-label="Delete this form"
+                title={t("forms.delete")}
+                aria-label={t("forms.deleteThisForm")}
               >
                 {pending ? (
                   <Loader2 className="size-4 animate-spin" />

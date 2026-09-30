@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type CourseFormValues = {
   id?: string;
@@ -68,6 +69,7 @@ export const emptyCourse: CourseFormValues = {
 
 /** Live preview of the chip that will sit beside a member's name. */
 function BadgePreview({ form }: { form: CourseFormValues }) {
+  const t = useT();
   const color = badgeColor(form.badgeColor);
   const label = badgeLabelFor({
     name: form.name || "New course",
@@ -79,7 +81,7 @@ function BadgePreview({ form }: { form: CourseFormValues }) {
       <span className="text-muted-foreground text-xs font-semibold">
         Beside a name:
       </span>
-      <span className="text-sm font-bold">Grace Adeyemi</span>
+      <span className="text-sm font-bold">{t("training.graceAdeyemi")}</span>
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ring-1 ring-inset",
@@ -102,6 +104,7 @@ export function CourseDialog({
   onOpenChange: (v: boolean) => void;
   initial: CourseFormValues;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<CourseFormValues>(initial);
@@ -154,18 +157,18 @@ export function CourseDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="c-name">Name</Label>
+            <Label htmlFor="c-name">{t("training.name")}</Label>
             <Input
               id="c-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Foundation Class"
+              placeholder={t("training.foundationClass")}
               autoFocus
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Type</Label>
+            <Label>{t("training.type")}</Label>
             <Select
               value={form.kind}
               onValueChange={(v) =>
@@ -186,7 +189,7 @@ export function CourseDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="c-desc">Description</Label>
+            <Label htmlFor="c-desc">{t("training.description")}</Label>
             <Textarea
               id="c-desc"
               rows={3}
@@ -194,13 +197,13 @@ export function CourseDialog({
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
               }
-              placeholder="What it covers, and who it's for."
+              placeholder={t("training.whatItCoversAndWho")}
             />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="c-level">Level</Label>
+              <Label htmlFor="c-level">{t("training.level")}</Label>
               <Input
                 id="c-level"
                 type="number"
@@ -218,7 +221,7 @@ export function CourseDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="c-pass">Pass mark</Label>
+              <Label htmlFor="c-pass">{t("training.passMark")}</Label>
               <Input
                 id="c-pass"
                 type="number"
@@ -226,16 +229,16 @@ export function CourseDialog({
                 max={100}
                 value={form.passMark}
                 onChange={(e) => setForm({ ...form, passMark: e.target.value })}
-                placeholder="Leave blank if not scored"
+                placeholder={t("training.leaveBlankIfNotScored")}
               />
             </div>
           </div>
 
           <div className="space-y-2 rounded-lg border p-3">
-            <p className="text-sm font-bold">Badge</p>
+            <p className="text-sm font-bold">{t("training.badge")}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="c-badge">Short label</Label>
+                <Label htmlFor="c-badge">{t("training.shortLabel")}</Label>
                 <Input
                   id="c-badge"
                   maxLength={20}
@@ -247,7 +250,7 @@ export function CourseDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Icon</Label>
+                <Label>{t("training.icon")}</Label>
                 <Select
                   value={form.badgeIcon}
                   onValueChange={(v) => setForm({ ...form, badgeIcon: v })}
@@ -267,7 +270,7 @@ export function CourseDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Colour</Label>
+              <Label>{t("training.colour")}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {BADGE_COLOR_KEYS.map((key) => (
                   <button

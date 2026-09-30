@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 type Child = { firstName: string; gender: "male" | "female" | ""; dateOfBirth: string };
 
@@ -41,6 +42,7 @@ type Values = {
  * credential).
  */
 export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
+  const t = useT();
   const { config } = data;
   const [values, setValues] = useState<Values>({
     ...data.member,
@@ -84,7 +86,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!values.firstName.trim()) {
-      toast.error("Please enter your first name.");
+      toast.error(t("members.pleaseEnterYourFirstName"));
       return;
     }
     setBusy(true);
@@ -128,7 +130,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
     if ("needsOtp" in res) {
       setOtp({ otpId: res.otpId, channel: res.channel, masked: res.masked });
       setCode("");
-      toast.success("A new code is on its way.");
+      toast.success(t("members.aNewCodeIsOn"));
     }
   }
 
@@ -193,30 +195,30 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <Section title="Your details">
+      <Section title={t("members.yourDetails")}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="First name" required>
+          <Field label={t("members.firstName")} required>
             <Input value={values.firstName} onChange={(e) => set("firstName", e.target.value)} />
           </Field>
-          <Field label="Last name">
+          <Field label={t("members.lastName")}>
             <Input value={values.lastName} onChange={(e) => set("lastName", e.target.value)} />
           </Field>
-          <Field label="Gender">
+          <Field label={t("members.gender")}>
             <Select
               value={values.gender || undefined}
               onValueChange={(v) => set("gender", v as Values["gender"])}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select" />
+                <SelectValue placeholder={t("members.select")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="male">{t("members.male")}</SelectItem>
+                <SelectItem value="female">{t("members.female")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
           {config.collectBirthday && (
-            <Field label="Date of birth" hint="Year optional">
+            <Field label={t("members.dateOfBirth")} hint="Year optional">
               <BirthdayInput
                 value={values.dateOfBirth}
                 onChange={(v) => set("dateOfBirth", v)}
@@ -226,12 +228,12 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
         </div>
       </Section>
 
-      <Section title="How we reach you" hint="Keep at least an email or phone number so we can stay in touch.">
+      <Section title={t("members.howWeReachYou")} hint="Keep at least an email or phone number so we can stay in touch.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Phone">
+          <Field label={t("members.phone")}>
             <Input type="tel" value={values.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
-          <Field label="Email">
+          <Field label={t("members.email")}>
             <Input type="email" value={values.email} onChange={(e) => set("email", e.target.value)} />
           </Field>
         </div>
@@ -239,7 +241,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
 
       {config.collectChildren && (
         <Section
-          title="Your children"
+          title={t("members.yourChildren")}
           hint="Add your children so they're part of the family and celebrated too."
         >
           {data.children.length > 0 && (
@@ -274,28 +276,28 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
                 </div>
                 <div className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="First name">
+                    <Field label={t("members.firstName")}>
                       <Input
                         value={c.firstName}
                         onChange={(e) => setChild(i, { firstName: e.target.value })}
                       />
                     </Field>
-                    <Field label="Gender">
+                    <Field label={t("members.gender")}>
                       <Select
                         value={c.gender || undefined}
                         onValueChange={(v) => setChild(i, { gender: v as Child["gender"] })}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select" />
+                          <SelectValue placeholder={t("members.select")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="male">{t("members.male")}</SelectItem>
+                          <SelectItem value="female">{t("members.female")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </Field>
                   </div>
-                  <Field label="Date of birth" hint="Year optional">
+                  <Field label={t("members.dateOfBirth")} hint="Year optional">
                     <BirthdayInput
                       value={c.dateOfBirth}
                       onChange={(v) => setChild(i, { dateOfBirth: v })}
@@ -314,8 +316,8 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.collectAnniversary && (
-        <Section title="Milestones" hint="Optional — so we can celebrate with you.">
-          <Field label="Wedding anniversary">
+        <Section title={t("members.milestones")} hint="Optional — so we can celebrate with you.">
+          <Field label={t("members.weddingAnniversary")}>
             <Input
               type="date"
               className="h-11"
@@ -327,16 +329,16 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.collectAddress && (
-        <Section title="Where you live" hint="Optional.">
+        <Section title={t("members.whereYouLive")} hint="Optional.">
           <div className="grid gap-4">
-            <Field label="Address">
+            <Field label={t("members.address")}>
               <Input value={values.address} onChange={(e) => set("address", e.target.value)} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="City / town">
+              <Field label={t("members.cityTown")}>
                 <Input value={values.city} onChange={(e) => set("city", e.target.value)} />
               </Field>
-              <Field label="State">
+              <Field label={t("members.state")}>
                 <Input value={values.state} onChange={(e) => set("state", e.target.value)} />
               </Field>
             </div>
@@ -345,7 +347,7 @@ export function MemberUpdateForm({ data }: { data: MemberUpdateData }) {
       )}
 
       {config.allowGroupSelect && data.groups.length > 0 && (
-        <Section title="Ministries & groups" hint="Tick any you belong to (or would like to join).">
+        <Section title={t("members.ministriesGroups")} hint="Tick any you belong to (or would like to join).">
           <div className="grid gap-2 sm:grid-cols-2">
             {data.groups.map((g) => (
               <label

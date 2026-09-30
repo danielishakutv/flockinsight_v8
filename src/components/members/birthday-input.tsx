@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 const MONTHS = [
   { value: "01", label: "January" },
@@ -41,6 +42,7 @@ export function BirthdayInput({
   onChange: (iso: string) => void;
   id?: string;
 }) {
+  const t = useT();
   const [parts, setParts] = useState(() => splitBirthday(value));
   const [seenValue, setSeenValue] = useState(value);
 
@@ -79,7 +81,7 @@ export function BirthdayInput({
         onValueChange={(v) => update({ day: v })}
       >
         <SelectTrigger id={id} className="h-11 min-w-0 flex-[0_1_4.5rem]">
-          <SelectValue placeholder="Day" />
+          <SelectValue placeholder={t("members.day")} />
         </SelectTrigger>
         <SelectContent className="max-h-64">
           {days.map((d) => (
@@ -95,7 +97,7 @@ export function BirthdayInput({
         onValueChange={(v) => update({ month: v })}
       >
         <SelectTrigger className="h-11 min-w-0 flex-[1_1_7rem]">
-          <SelectValue placeholder="Month" />
+          <SelectValue placeholder={t("members.month")} />
         </SelectTrigger>
         <SelectContent className="max-h-64">
           {MONTHS.map((m) => (
@@ -109,8 +111,8 @@ export function BirthdayInput({
       <Input
         type="text"
         inputMode="numeric"
-        placeholder="Year"
-        aria-label="Year (optional)"
+        placeholder={t("members.year")}
+        aria-label={t("members.yearOptional")}
         maxLength={4}
         value={parts.year}
         onChange={(e) =>

@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/components/i18n-provider";
 
 /** Whether this member can sign in, and how. */
 export type MemberAccess =
@@ -47,6 +48,7 @@ export function MemberAccessCard({
   access: MemberAccess;
   roles: AccessRole[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -72,7 +74,7 @@ export function MemberAccessCard({
         toast.error(res.error);
         return;
       }
-      toast.success("Invitation cancelled");
+      toast.success(t("members.invitationCancelled"));
       router.refresh();
     });
   }
@@ -81,7 +83,7 @@ export function MemberAccessCard({
     navigator.clipboard.writeText(
       `${window.location.origin}/accept-invitation/${invitationId}`,
     );
-    toast.success("Invite link copied");
+    toast.success(t("members.inviteLinkCopied"));
   }
 
   return (
@@ -110,11 +112,11 @@ export function MemberAccessCard({
                 <p className="flex flex-wrap items-center gap-2 font-bold">
                   Has app access
                   {access.isOwner ? (
-                    <Badge variant="default">Owner</Badge>
+                    <Badge variant="default">{t("members.owner")}</Badge>
                   ) : access.roleName ? (
                     <Badge variant="secondary">{access.roleName}</Badge>
                   ) : (
-                    <Badge variant="outline">No role assigned</Badge>
+                    <Badge variant="outline">{t("members.noRoleAssigned")}</Badge>
                   )}
                 </p>
                 <p className="text-muted-foreground text-xs">
@@ -127,7 +129,7 @@ export function MemberAccessCard({
 
             {access.state === "invited" && (
               <>
-                <p className="font-bold">Invitation sent</p>
+                <p className="font-bold">{t("members.invitationSent")}</p>
                 <p className="text-muted-foreground truncate text-xs">
                   Waiting for {access.email} to accept.
                 </p>
@@ -136,7 +138,7 @@ export function MemberAccessCard({
 
             {access.state === "none" && (
               <>
-                <p className="font-bold">No app access</p>
+                <p className="font-bold">{t("members.noAppAccess")}</p>
                 <p className="text-muted-foreground text-xs">
                   Invite them to sign in and give them a role.
                 </p>

@@ -57,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type GivingMethod =
   | "cash"
@@ -159,6 +160,7 @@ export function GivingClient({
   pageSize: number;
   hasAnyRecords: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -255,7 +257,7 @@ export function GivingClient({
         toast.error(res.error);
         return;
       }
-      toast.success("Record deleted");
+      toast.success(t("giving.recordDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -269,7 +271,7 @@ export function GivingClient({
           On larger screens: three equal cards. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <SummaryCard
-          label="This month"
+          label={t("giving.thisMonth")}
           value={formatMoney(monthTotal, currency)}
           sub={format(parseISO(today), "MMMM yyyy")}
           icon={Wallet}
@@ -278,14 +280,14 @@ export function GivingClient({
           valueClassName="text-3xl sm:text-2xl lg:text-3xl"
         />
         <SummaryCard
-          label="This year"
+          label={t("giving.thisYear")}
           value={formatMoney(yearTotal, currency)}
           sub={String(year)}
           icon={CalendarDays}
           valueClassName="text-xl sm:text-2xl lg:text-3xl"
         />
         <SummaryCard
-          label="All time"
+          label={t("giving.allTime")}
           value={formatMoney(allTimeTotal, currency)}
           sub="Total recorded"
           icon={TrendingUp}
@@ -427,7 +429,7 @@ export function GivingClient({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Edit"
+                    aria-label={t("giving.edit")}
                     onClick={() => openEdit(r)}
                   >
                     <Pencil className="size-4" />
@@ -449,7 +451,7 @@ export function GivingClient({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Delete"
+                      aria-label={t("giving.delete")}
                       onClick={() => setConfirmId(r.id)}
                     >
                       <Trash2 className="size-4" />
@@ -508,13 +510,13 @@ export function GivingClient({
           {noCategories ? (
             <p className="text-muted-foreground text-sm">
               Add at least one giving category in{" "}
-              <span className="font-semibold">Settings → Giving</span> first.
+              <span className="font-semibold">{t("giving.settingsGiving")}</span> first.
             </p>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
+                  <Label htmlFor="amount">{t("giving.amount")}</Label>
                   <Input
                     id="amount"
                     inputMode="decimal"
@@ -525,7 +527,7 @@ export function GivingClient({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Category</Label>
+                  <Label>{t("giving.category")}</Label>
                   <Select
                     value={form.categoryId}
                     onValueChange={(v) => set({ categoryId: v })}
@@ -539,7 +541,7 @@ export function GivingClient({
                           {c.name}
                         </SelectItem>
                       ))}
-                      <SelectItem value={NONE}>Uncategorised</SelectItem>
+                      <SelectItem value={NONE}>{t("giving.uncategorised")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -547,7 +549,7 @@ export function GivingClient({
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
+                  <Label htmlFor="date">{t("giving.date")}</Label>
                   <Input
                     id="date"
                     type="date"
@@ -556,7 +558,7 @@ export function GivingClient({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Method</Label>
+                  <Label>{t("giving.method")}</Label>
                   <Select
                     value={form.method}
                     onValueChange={(v) => set({ method: v })}
@@ -565,7 +567,7 @@ export function GivingClient({
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NONE}>Not specified</SelectItem>
+                      <SelectItem value={NONE}>{t("giving.notSpecified")}</SelectItem>
                       {METHODS.map((m) => (
                         <SelectItem key={m} value={m}>
                           {METHOD_LABEL[m]}
@@ -577,7 +579,7 @@ export function GivingClient({
               </div>
 
               <div className="space-y-2">
-                <Label>Giver (optional)</Label>
+                <Label>{t("giving.giverOptional")}</Label>
                 <Select
                   value={form.memberId}
                   onValueChange={(v) =>
@@ -585,14 +587,14 @@ export function GivingClient({
                   }
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Anonymous / general" />
+                    <SelectValue placeholder={t("giving.anonymousGeneral")} />
                   </SelectTrigger>
                   <SelectContent
                     className="max-h-72"
                     searchPlaceholder="Search members…"
                     emptyMessage="No member by that name"
                   >
-                    <SelectItem value={NONE}>Anonymous / general</SelectItem>
+                    <SelectItem value={NONE}>{t("giving.anonymousGeneral")}</SelectItem>
                     {members.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.name}
@@ -604,7 +606,7 @@ export function GivingClient({
                   <Input
                     value={form.giverName}
                     onChange={(e) => set({ giverName: e.target.value })}
-                    placeholder="Or type a giver name (if not a member)"
+                    placeholder={t("giving.orTypeAGiverName")}
                   />
                 )}
               </div>
@@ -630,12 +632,12 @@ export function GivingClient({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="note">Note</Label>
+                <Label htmlFor="note">{t("giving.note")}</Label>
                 <Textarea
                   id="note"
                   value={form.note}
                   onChange={(e) => set({ note: e.target.value })}
-                  placeholder="Optional reference or note"
+                  placeholder={t("giving.optionalReferenceOrNote")}
                   rows={2}
                 />
               </div>
@@ -745,6 +747,7 @@ function CategorySetupDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(
@@ -819,7 +822,7 @@ function CategorySetupDialog({
         aria-describedby={undefined}
       >
         <DialogHeader>
-          <DialogTitle>Set up giving categories</DialogTitle>
+          <DialogTitle>{t("giving.setUpGivingCategories")}</DialogTitle>
         </DialogHeader>
 
         <p className="text-muted-foreground text-sm">
@@ -869,7 +872,7 @@ function CategorySetupDialog({
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Add your own (e.g. Seed, First Fruit)"
+              placeholder={t("giving.addYourOwnEG")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();

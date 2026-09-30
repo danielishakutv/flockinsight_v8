@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/components/i18n-provider";
 
 export type GroupRow = {
   id: string;
@@ -50,6 +51,7 @@ export function GroupsList({
   candidates: Candidate[];
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -81,7 +83,7 @@ export function GroupsList({
         toast.error(res.error);
         return;
       }
-      toast.success("Group deleted");
+      toast.success(t("groups.groupDeleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -95,7 +97,7 @@ export function GroupsList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search groups, ministries or leaders"
+            placeholder={t("groups.searchGroupsMinistriesOrLeaders")}
             className="pl-9"
           />
         </div>
@@ -193,7 +195,7 @@ export function GroupsList({
 
                 <div className="flex items-center justify-between">
                   {!g.isActive ? (
-                    <Badge variant="outline">Inactive</Badge>
+                    <Badge variant="outline">{t("groups.inactive")}</Badge>
                   ) : (
                     <span />
                   )}
@@ -216,7 +218,7 @@ export function GroupsList({
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label="Delete group"
+                          aria-label={t("groups.deleteGroup")}
                           onClick={() => setConfirmId(g.id)}
                         >
                           <Trash2 className="size-4" />

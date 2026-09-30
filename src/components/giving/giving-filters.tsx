@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type GivingFilterState = {
   q: string;
@@ -86,6 +87,7 @@ export function GivingFilters({
   resultCount: number;
   resultTotalLabel: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [q, setQ] = useState(value.q);
@@ -174,9 +176,9 @@ export function GivingFilters({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search giver, note, amount…"
+            placeholder={t("giving.searchGiverNoteAmount")}
             className="pl-9"
-            aria-label="Search giving records"
+            aria-label={t("giving.searchGivingRecords")}
           />
           {(pending || q) && (
             <span className="absolute top-1/2 right-2 -translate-y-1/2">
@@ -185,7 +187,7 @@ export function GivingFilters({
               ) : (
                 <button
                   type="button"
-                  aria-label="Clear search"
+                  aria-label={t("giving.clearSearch")}
                   onClick={() => setQ("")}
                   className="text-muted-foreground hover:text-foreground relative grid size-6 place-items-center rounded-md after:absolute after:-inset-2.5 after:content-['']"
                 >
@@ -202,7 +204,7 @@ export function GivingFilters({
           aria-expanded={open}
         >
           <SlidersHorizontal className="size-4" />
-          <span className="hidden sm:inline">Filters</span>
+          <span className="hidden sm:inline">{t("giving.filters")}</span>
           {activeCount > 0 && (
             <span className="bg-background/25 grid size-5 place-items-center rounded-full text-xs font-bold">
               {activeCount}
@@ -215,7 +217,7 @@ export function GivingFilters({
         <div className="bg-card space-y-4 rounded-2xl border p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>Category</Label>
+              <Label>{t("giving.category")}</Label>
               <Select
                 value={value.categoryId || ANY}
                 onValueChange={(v) =>
@@ -226,19 +228,19 @@ export function GivingFilters({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  <SelectItem value={ANY}>All categories</SelectItem>
+                  <SelectItem value={ANY}>{t("giving.allCategories")}</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value={NONE}>Uncategorised</SelectItem>
+                  <SelectItem value={NONE}>{t("giving.uncategorised")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Method</Label>
+              <Label>{t("giving.method")}</Label>
               <Select
                 value={value.method || ANY}
                 onValueChange={(v) => apply({ method: v === ANY ? "" : v })}
@@ -247,7 +249,7 @@ export function GivingFilters({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ANY}>All methods</SelectItem>
+                  <SelectItem value={ANY}>{t("giving.allMethods")}</SelectItem>
                   {METHOD_OPTIONS.map((m) => (
                     <SelectItem key={m.value} value={m.value}>
                       {m.label}
@@ -258,7 +260,7 @@ export function GivingFilters({
             </div>
 
             <div className="space-y-2">
-              <Label>Project</Label>
+              <Label>{t("giving.project")}</Label>
               <Select
                 value={value.projectId || ANY}
                 onValueChange={(v) => apply({ projectId: v === ANY ? "" : v })}
@@ -268,20 +270,20 @@ export function GivingFilters({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  <SelectItem value={ANY}>All giving</SelectItem>
+                  <SelectItem value={ANY}>{t("giving.allGiving")}</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value={NONE}>Not toward a project</SelectItem>
+                  <SelectItem value={NONE}>{t("giving.notTowardAProject")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Date range</Label>
+            <Label>{t("giving.dateRange")}</Label>
             <div className="flex flex-wrap gap-2">
               {presets(today).map((p) => {
                 const on = value.from === p.from && value.to === p.to;

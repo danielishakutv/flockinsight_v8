@@ -41,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type CohortRowView = {
   id: string;
@@ -121,6 +122,7 @@ export function CohortsPanel({
   cohorts: CohortRowView[];
   canManage: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -184,7 +186,7 @@ export function CohortsPanel({
         toast.error(res.error);
         return;
       }
-      toast.success("Deleted");
+      toast.success(t("training.deleted"));
       setConfirmId(null);
       router.refresh();
     });
@@ -193,7 +195,7 @@ export function CohortsPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-extrabold tracking-tight">Classes</h2>
+        <h2 className="text-lg font-extrabold tracking-tight">{t("training.classes")}</h2>
         {canManage && (
           <Button size="sm" onClick={openNew}>
             <Plus className="size-4" /> New class
@@ -205,7 +207,7 @@ export function CohortsPanel({
         <Card>
           <CardContent className="py-10 text-center">
             <CalendarDays className="text-muted-foreground/50 mx-auto size-8" />
-            <p className="mt-2 font-bold">No classes yet</p>
+            <p className="mt-2 font-bold">{t("training.noClassesYet")}</p>
             <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-sm">
               A class is one running of this course — the January intake, the
               2026 set. Enrol people into a class, not the course itself.
@@ -326,7 +328,7 @@ export function CohortsPanel({
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="ch-name">Name</Label>
+              <Label htmlFor="ch-name">{t("training.name")}</Label>
               <Input
                 id="ch-name"
                 value={form.name}
@@ -337,7 +339,7 @@ export function CohortsPanel({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Status</Label>
+                <Label>{t("training.status")}</Label>
                 <Select
                   value={form.status}
                   onValueChange={(v) =>
@@ -358,7 +360,7 @@ export function CohortsPanel({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="ch-cap">Capacity</Label>
+                <Label htmlFor="ch-cap">{t("training.capacity")}</Label>
                 <Input
                   id="ch-cap"
                   type="number"
@@ -367,12 +369,12 @@ export function CohortsPanel({
                   onChange={(e) =>
                     setForm({ ...form, capacity: e.target.value })
                   }
-                  placeholder="No limit"
+                  placeholder={t("training.noLimit")}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="ch-start">Starts</Label>
+                <Label htmlFor="ch-start">{t("training.starts")}</Label>
                 <Input
                   id="ch-start"
                   type="date"
@@ -384,7 +386,7 @@ export function CohortsPanel({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="ch-end">Ends</Label>
+                <Label htmlFor="ch-end">{t("training.ends")}</Label>
                 <Input
                   id="ch-end"
                   type="date"
@@ -396,7 +398,7 @@ export function CohortsPanel({
               </div>
 
               <div className="space-y-1.5">
-                <Label>Meets on</Label>
+                <Label>{t("training.meetsOn")}</Label>
                 <Select
                   value={form.meetingDay || "__none__"}
                   onValueChange={(v) =>
@@ -407,10 +409,10 @@ export function CohortsPanel({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="No fixed day" />
+                    <SelectValue placeholder={t("training.noFixedDay")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">No fixed day</SelectItem>
+                    <SelectItem value="__none__">{t("training.noFixedDay")}</SelectItem>
                     {DAYS.map((d, i) => (
                       <SelectItem key={d} value={String(i)}>
                         {d}
@@ -421,7 +423,7 @@ export function CohortsPanel({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="ch-time">Time</Label>
+                <Label htmlFor="ch-time">{t("training.time")}</Label>
                 <Input
                   id="ch-time"
                   type="time"
@@ -434,17 +436,17 @@ export function CohortsPanel({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="ch-venue">Venue</Label>
+              <Label htmlFor="ch-venue">{t("training.venue")}</Label>
               <Input
                 id="ch-venue"
                 value={form.venue}
                 onChange={(e) => setForm({ ...form, venue: e.target.value })}
-                placeholder="Main auditorium"
+                placeholder={t("training.mainAuditorium")}
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="ch-notes">Notes</Label>
+              <Label htmlFor="ch-notes">{t("training.notes")}</Label>
               <Textarea
                 id="ch-notes"
                 rows={3}

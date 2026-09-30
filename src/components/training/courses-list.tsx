@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/components/i18n-provider";
 
 export type CourseListRow = {
   id: string;
@@ -72,6 +73,7 @@ export function CoursesList({
   courses: CourseListRow[];
   canManage: boolean;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [initial, setInitial] = useState<CourseFormValues>(emptyCourse);
@@ -104,7 +106,7 @@ export function CoursesList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search courses"
+            placeholder={t("training.searchCourses")}
             className="pl-9"
           />
         </div>

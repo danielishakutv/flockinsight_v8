@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useT } from "@/components/i18n-provider";
 
 type ImportResult = { imported: number; skipped: number; errors: string[] };
 
@@ -34,6 +35,7 @@ export function MembersDataMenu({
 }: {
   canManage?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -68,7 +70,7 @@ export function MembersDataMenu({
       );
       router.refresh();
     } catch {
-      toast.error("Import failed. Please try again.");
+      toast.error(t("members.importFailedPleaseTryAgain"));
     } finally {
       setImporting(false);
     }
@@ -78,9 +80,9 @@ export function MembersDataMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" aria-label="Import or export">
+          <Button variant="outline" size="lg" aria-label={t("members.importOrExport")}>
             <ArrowDownUp className="size-5" />
-            <span className="hidden sm:inline">Import / Export</span>
+            <span className="hidden sm:inline">{t("members.importExport")}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
@@ -116,7 +118,7 @@ export function MembersDataMenu({
       <Dialog open={open} onOpenChange={(o) => !importing && setOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import members from CSV</DialogTitle>
+            <DialogTitle>{t("members.importMembersFromCsv")}</DialogTitle>
             <DialogDescription>
               Upload a CSV with at least a “First name” column.{" "}
               <a
@@ -162,7 +164,7 @@ export function MembersDataMenu({
 
           <DialogFooter>
             {result ? (
-              <Button onClick={() => setOpen(false)}>Done</Button>
+              <Button onClick={() => setOpen(false)}>{t("members.done")}</Button>
             ) : (
               <>
                 <Button

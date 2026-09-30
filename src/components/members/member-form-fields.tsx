@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type MemberStatus = "active" | "inactive" | "visitor" | "new_convert";
 
@@ -218,6 +219,7 @@ export function MemberFormFields({
   /** Existing households this member can join. */
   households?: HouseholdOption[];
 }) {
+  const t = useT();
   const isNigeria = form.country === DEFAULT_COUNTRY;
   const lgaOptions = isNigeria ? lgasForState(form.state) : [];
   const guardianName = guardians.find((g) => g.id === form.guardianId)?.name;
@@ -248,7 +250,7 @@ export function MemberFormFields({
         {form.isMinor && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="guardian">Parent / guardian</Label>
+              <Label htmlFor="guardian">{t("members.parentGuardian")}</Label>
               {lockGuardian ? (
                 <div className="bg-muted flex h-11 items-center rounded-md border px-3 text-sm font-medium">
                   {guardianName ?? "This member"}
@@ -261,7 +263,7 @@ export function MemberFormFields({
                   }
                 >
                   <SelectTrigger id="guardian" className="w-full">
-                    <SelectValue placeholder="Select a parent/guardian" />
+                    <SelectValue placeholder={t("members.selectAParentGuardian")} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     <SelectItem value={GUARDIAN_NONE}>
@@ -277,7 +279,7 @@ export function MemberFormFields({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="relationship">Relationship</Label>
+              <Label htmlFor="relationship">{t("members.relationship")}</Label>
               <Select
                 value={form.relationship || REL_NONE}
                 onValueChange={(v) =>
@@ -289,10 +291,10 @@ export function MemberFormFields({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={REL_NONE}>—</SelectItem>
-                  <SelectItem value="son">Son</SelectItem>
-                  <SelectItem value="daughter">Daughter</SelectItem>
-                  <SelectItem value="ward">Ward</SelectItem>
-                  <SelectItem value="dependent">Dependent</SelectItem>
+                  <SelectItem value="son">{t("members.son")}</SelectItem>
+                  <SelectItem value="daughter">{t("members.daughter")}</SelectItem>
+                  <SelectItem value="ward">{t("members.ward")}</SelectItem>
+                  <SelectItem value="dependent">{t("members.dependent")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -302,7 +304,7 @@ export function MemberFormFields({
 
       {/* Household (optional, for everyone) */}
       <div className="space-y-2 rounded-xl border p-3">
-        <Label htmlFor="household">Household</Label>
+        <Label htmlFor="household">{t("members.household")}</Label>
         {makingHousehold ? (
           <div className="flex gap-2">
             <Input
@@ -310,7 +312,7 @@ export function MemberFormFields({
               autoFocus
               value={form.householdName}
               onChange={(e) => set({ householdName: e.target.value })}
-              placeholder="New household name, e.g. The Johnsons"
+              placeholder={t("members.newHouseholdNameEG")}
             />
             <button
               type="button"
@@ -336,10 +338,10 @@ export function MemberFormFields({
             }}
           >
             <SelectTrigger id="household" className="w-full">
-              <SelectValue placeholder="No household" />
+              <SelectValue placeholder={t("members.noHousehold")} />
             </SelectTrigger>
             <SelectContent className="max-h-72">
-              <SelectItem value={HH_NONE}>No household</SelectItem>
+              <SelectItem value={HH_NONE}>{t("members.noHousehold")}</SelectItem>
               {households.map((h) => (
                 <SelectItem key={h.id} value={h.id}>
                   {h.name}
@@ -360,14 +362,14 @@ export function MemberFormFields({
         onChange={(url) => set({ photoUrl: url ?? "" })}
         kind="member"
         maxDim={512}
-        label="Profile photo"
+        label={t("members.profilePhoto")}
         aspect="square"
       />
 
       {/* Names */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-2">
-          <Label htmlFor="fn">First name</Label>
+          <Label htmlFor="fn">{t("members.firstName")}</Label>
           <Input
             id="fn"
             value={form.firstName}
@@ -376,16 +378,16 @@ export function MemberFormFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="mn">Middle name</Label>
+          <Label htmlFor="mn">{t("members.middleName")}</Label>
           <Input
             id="mn"
             value={form.middleName}
             onChange={(e) => set({ middleName: e.target.value })}
-            placeholder="Optional"
+            placeholder={t("members.optional")}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="ln">Last name</Label>
+          <Label htmlFor="ln">{t("members.lastName")}</Label>
           <Input
             id="ln"
             value={form.lastName}
@@ -397,20 +399,20 @@ export function MemberFormFields({
       {/* Gender + status */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="gender">Gender</Label>
+          <Label htmlFor="gender">{t("members.gender")}</Label>
           <Select value={form.gender} onValueChange={(v) => set({ gender: v })}>
             <SelectTrigger id="gender" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={GENDER_NONE}>—</SelectItem>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="male">{t("members.male")}</SelectItem>
+              <SelectItem value="female">{t("members.female")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
+          <Label htmlFor="status">{t("members.status")}</Label>
           <Select
             value={form.status}
             onValueChange={(v) => set({ status: v as MemberStatus })}
@@ -419,10 +421,10 @@ export function MemberFormFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="visitor">Visitor</SelectItem>
-              <SelectItem value="new_convert">New convert</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="active">{t("members.active")}</SelectItem>
+              <SelectItem value="visitor">{t("members.visitor")}</SelectItem>
+              <SelectItem value="new_convert">{t("members.newConvert")}</SelectItem>
+              <SelectItem value="inactive">{t("members.inactive")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -433,7 +435,7 @@ export function MemberFormFields({
       {!form.isMinor && (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="phone">{t("members.phone")}</Label>
             <Input
               id="phone"
               type="tel"
@@ -443,7 +445,7 @@ export function MemberFormFields({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("members.email")}</Label>
             <Input
               id="email"
               type="email"
@@ -457,7 +459,7 @@ export function MemberFormFields({
       {/* Dates */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="dob">Date of birth</Label>
+          <Label htmlFor="dob">{t("members.dateOfBirth")}</Label>
           <BirthdayInput
             id="dob"
             value={form.dateOfBirth}
@@ -469,7 +471,7 @@ export function MemberFormFields({
           </p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="joined">Date joined</Label>
+          <Label htmlFor="joined">{t("members.dateJoined")}</Label>
           <Input
             id="joined"
             type="date"
@@ -488,7 +490,7 @@ export function MemberFormFields({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="wedding">Wedding anniversary</Label>
+            <Label htmlFor="wedding">{t("members.weddingAnniversary")}</Label>
             <Input
               id="wedding"
               type="date"
@@ -498,7 +500,7 @@ export function MemberFormFields({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="baptized">Baptized?</Label>
+            <Label htmlFor="baptized">{t("members.baptized")}</Label>
             <Select
               value={form.baptized ? "yes" : "no"}
               onValueChange={(v) =>
@@ -512,8 +514,8 @@ export function MemberFormFields({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="no">No</SelectItem>
-                <SelectItem value="yes">Yes</SelectItem>
+                <SelectItem value="no">{t("members.no")}</SelectItem>
+                <SelectItem value="yes">{t("members.yes")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -521,7 +523,7 @@ export function MemberFormFields({
 
         {form.baptized && (
           <div className="space-y-2">
-            <Label htmlFor="baptismDate">Baptism date</Label>
+            <Label htmlFor="baptismDate">{t("members.baptismDate")}</Label>
             <Input
               id="baptismDate"
               type="date"
@@ -534,12 +536,12 @@ export function MemberFormFields({
 
         {/* Custom anniversaries */}
         <div className="space-y-2">
-          <Label>Other anniversaries</Label>
+          <Label>{t("members.otherAnniversaries")}</Label>
           {form.anniversaries.map((a, i) => (
             <div key={i} className="flex gap-2">
               <Input
                 value={a.label}
-                placeholder="e.g. Dedication"
+                placeholder={t("members.eGDedication")}
                 className="min-w-0 flex-1"
                 onChange={(e) => {
                   const next = [...form.anniversaries];
@@ -565,7 +567,7 @@ export function MemberFormFields({
                   })
                 }
                 className="text-muted-foreground hover:text-destructive shrink-0 px-2 text-lg"
-                aria-label="Remove anniversary"
+                aria-label={t("members.removeAnniversary")}
               >
                 ×
               </button>
@@ -600,13 +602,13 @@ export function MemberFormFields({
         {/* Country + State (cascade top-down) */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
+            <Label htmlFor="country">{t("members.country")}</Label>
             <Select
               value={form.country || undefined}
               onValueChange={(v) => set({ country: v })}
             >
               <SelectTrigger id="country" className="w-full">
-                <SelectValue placeholder="Select country" />
+                <SelectValue placeholder={t("members.selectCountry")} />
               </SelectTrigger>
               <SelectContent className="max-h-72">
                 {COUNTRIES.map((c) => (
@@ -618,14 +620,14 @@ export function MemberFormFields({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="state">State</Label>
+            <Label htmlFor="state">{t("members.state")}</Label>
             {isNigeria ? (
               <Select
                 value={form.state || undefined}
                 onValueChange={(v) => set({ state: v, lga: "" })}
               >
                 <SelectTrigger id="state" className="w-full">
-                  <SelectValue placeholder="Select state" />
+                  <SelectValue placeholder={t("members.selectState")} />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
                   {NIGERIAN_STATES.map((s) => (
@@ -681,7 +683,7 @@ export function MemberFormFields({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="city">City / Town</Label>
+            <Label htmlFor="city">{t("members.cityTown")}</Label>
             <Input
               id="city"
               value={form.city}
@@ -693,7 +695,7 @@ export function MemberFormFields({
         {/* Street + House */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="street">Street</Label>
+            <Label htmlFor="street">{t("members.street")}</Label>
             <Input
               id="street"
               value={form.street}
@@ -701,7 +703,7 @@ export function MemberFormFields({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="house">House / No.</Label>
+            <Label htmlFor="house">{t("members.houseNo")}</Label>
             <Input
               id="house"
               value={form.house}
@@ -714,7 +716,7 @@ export function MemberFormFields({
 
       {/* Notes */}
       <div className="space-y-2">
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="notes">{t("members.notes")}</Label>
         <Textarea
           id="notes"
           value={form.notes}

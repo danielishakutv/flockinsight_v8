@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/components/i18n-provider";
 
 export type GroupFormValue = {
   id?: string;
@@ -66,6 +67,7 @@ export function GroupFormDialog({
   candidates: Candidate[];
   onSaved?: (id: string) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<GroupFormValue>(initial ?? emptyGroup());
@@ -117,19 +119,19 @@ export function GroupFormDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="g-name">Name</Label>
+            <Label htmlFor="g-name">{t("groups.name")}</Label>
             <Input
               id="g-name"
               value={form.name}
               onChange={(e) => set({ name: e.target.value })}
-              placeholder="e.g. Choir, Ushering, Youth Cell"
+              placeholder={t("groups.eGChoirUsheringYouth")}
               autoFocus
             />
           </div>
 
           <div className={form.id ? "" : "grid grid-cols-2 gap-3"}>
             <div className="space-y-2">
-              <Label>Type</Label>
+              <Label>{t("groups.type")}</Label>
               <Select
                 value={form.type}
                 onValueChange={(v) => set({ type: v as GroupType })}
@@ -151,16 +153,16 @@ export function GroupFormDialog({
                 afterwards from the group's member list. */}
             {!form.id && (
               <div className="space-y-2">
-                <Label>Leader / head</Label>
+                <Label>{t("groups.leaderHead")}</Label>
                 <Select
                   value={form.leaderId ?? NONE}
                   onValueChange={(v) => set({ leaderId: v === NONE ? null : v })}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="None" />
+                    <SelectValue placeholder={t("groups.none")} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    <SelectItem value={NONE}>No leader yet</SelectItem>
+                    <SelectItem value={NONE}>{t("groups.noLeaderYet")}</SelectItem>
                     {candidates.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
@@ -174,7 +176,7 @@ export function GroupFormDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Meeting day</Label>
+              <Label>{t("groups.meetingDay")}</Label>
               <Select
                 value={form.meetingDay === null ? NONE : String(form.meetingDay)}
                 onValueChange={(v) =>
@@ -182,10 +184,10 @@ export function GroupFormDialog({
                 }
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="None" />
+                  <SelectValue placeholder={t("groups.none")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>No fixed day</SelectItem>
+                  <SelectItem value={NONE}>{t("groups.noFixedDay")}</SelectItem>
                   {DAY_LABEL.map((d, i) => (
                     <SelectItem key={d} value={String(i)}>
                       {d}
@@ -196,7 +198,7 @@ export function GroupFormDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="g-time">Meeting time</Label>
+              <Label htmlFor="g-time">{t("groups.meetingTime")}</Label>
               <Input
                 id="g-time"
                 type="time"
@@ -207,19 +209,19 @@ export function GroupFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="g-desc">Description</Label>
+            <Label htmlFor="g-desc">{t("groups.description")}</Label>
             <Textarea
               id="g-desc"
               value={form.description ?? ""}
               onChange={(e) => set({ description: e.target.value || null })}
-              placeholder="What this group does (optional)"
+              placeholder={t("groups.whatThisGroupDoesOptional")}
               rows={3}
             />
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
-              <p className="text-sm font-semibold">Active</p>
+              <p className="text-sm font-semibold">{t("groups.active")}</p>
               <p className="text-muted-foreground text-xs">
                 Inactive groups are hidden from quick pickers.
               </p>

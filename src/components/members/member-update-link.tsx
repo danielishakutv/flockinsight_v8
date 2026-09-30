@@ -19,6 +19,7 @@ import {
 } from "@/app/(app)/members/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Managers share a member's personal self-update link so the member can review
@@ -37,6 +38,7 @@ export function MemberUpdateLink({
   hasEmail: boolean;
   smsAvailable: boolean;
 }) {
+  const t = useT();
   const [url, setUrl] = useState<string | null>(initialUrl);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
@@ -59,10 +61,10 @@ export function MemberUpdateLink({
       try {
         await navigator.clipboard.writeText(u);
         setCopied(true);
-        toast.success("Link copied");
+        toast.success(t("members.linkCopied"));
         setTimeout(() => setCopied(false), 1800);
       } catch {
-        toast.error("Couldn't copy — long-press the link to copy it.");
+        toast.error(t("members.couldnTCopyLongPress"));
       }
     });
   }
@@ -90,7 +92,7 @@ export function MemberUpdateLink({
       const res = await regenerateMemberUpdateLink(memberId);
       if (!res.ok) return void toast.error(res.error);
       setUrl(res.url);
-      toast.success("New link generated");
+      toast.success(t("members.newLinkGenerated"));
     });
   }
 
@@ -106,7 +108,7 @@ export function MemberUpdateLink({
         <p className="text-muted-foreground text-sm">
           A personal link that opens this member&apos;s details pre-filled so
           they can review, correct and add to them — including their children.
-          It&apos;s private to them and works <strong>once</strong>: after they
+          It&apos;s private to them and works <strong>{t("members.once")}</strong>: after they
           save, generate a new link to let them update again.
         </p>
         {url && (

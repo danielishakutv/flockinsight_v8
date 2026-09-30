@@ -15,6 +15,7 @@ import {
 } from "@/components/members/member-form-fields";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useT } from "@/components/i18n-provider";
 
 type MemberRecord = Parameters<typeof memberToForm>[0];
 
@@ -29,6 +30,7 @@ export function MemberEditForm({
   guardians?: Guardian[];
   households?: HouseholdOption[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [form, setForm] = useState<MemberFormState>(() => memberToForm(member));
   const [saving, startSave] = useTransition();
@@ -42,7 +44,7 @@ export function MemberEditForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Member saved");
+      toast.success(t("members.memberSaved"));
       router.refresh();
       onDone?.();
     });
@@ -55,7 +57,7 @@ export function MemberEditForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Member removed");
+      toast.success(t("members.memberRemoved"));
       router.push("/members");
     });
   }
