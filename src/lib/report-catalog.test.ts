@@ -114,3 +114,40 @@ describe("date ranges", () => {
     expect(rangeQuery({ from: "2026-01-01", to: null })).toBe("&from=2026-01-01");
   });
 });
+
+describe("headline figures and the date range", () => {
+  it("classifies every numeric total as activity or population", async () => {
+    /*
+     * The bug this guards against: the summary PDF printed a date range in
+     * its header over figures that had never been filtered, so a church
+     * asking for January to March got all-time numbers under those dates.
+     *
+     * Adding a figure to ChurchTotals now fails here until somebody says
+     * whether it follows the range — which is the decision that was missed.
+     */
+    const { ACTIVITY_TOTALS, POPULATION_TOTALS } = await import("@/lib/report-data");
+
+    // The numeric fields of ChurchTotals, kept in step with the type.
+    const numericFields = [
+      "members",
+      "households",
+      "groups",
+      "sessions",
+      "avgAttendance",
+      "givingTotal",
+      "givingEntries",
+      "messages",
+    ];
+
+    const classified = [...ACTIVITY_TOTALS, ...POPULATION_TOTALS];
+    expect([...classified].sort()).toEqual([...numericFields].sort());
+    expect(new Set(classified).size).toBe(classified.length);
+  });
+
+  it("treats money and attendance as activity, not population", async () => {
+    const { ACTIVITY_TOTALS } = await import("@/lib/report-data");
+    for (const k of ["givingTotal", "sessions", "avgAttendance", "messages"]) {
+      expect(ACTIVITY_TOTALS).toContain(k);
+    }
+  });
+});

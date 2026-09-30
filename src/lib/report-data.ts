@@ -2076,7 +2076,69 @@ export type ChurchTotals = {
   lastDate: string | null;
 };
 
-export async function getChurchTotals(churchId: string): Promise<ChurchTotals> {
+/**
+ * Which headline figures follow a date range, and which do not.
+ *
+ * Written down rather than left implicit, because the bug this replaces was
+ * precisely an implicit answer: the summary PDF printed a date range in its
+ * header over figures that had never been filtered, so a church asking for
+ * January to March got a document headed with those dates and filled with
+ * all-time numbers.
+ *
+ * ACTIVITY is something that happened on a date, so a range is the obvious
+ * question about it. POPULATION is something that is true now; "how many
+ * members between January and March" has no single honest answer, so those
+ * stay as totals and the report labels them that way.
+ *
+ * A test asserts these two lists together cover every numeric field of
+ * ChurchTotals, so adding a figure forces a decision instead of defaulting to
+ * the silently-wrong one.
+ */
+export const ACTIVITY_TOTALS = [
+  "sessions",
+  "avgAttendance",
+  "givingTotal",
+  "givingEntries",
+  "messages",
+] as const;
+
+export const POPULATION_TOTALS = ["members", "households", "groups"] as const;
+
+export async function getChurchTotals(
+  churchId: string,
+  range: ReportRange = { from: null, to: null },
+): Promise<ChurchTotals> {
+  /*
+   * The ACTIVITY figures honour the range; the POPULATION figures do not.
+   *
+   * This used to take no range at all while the summary PDF printed one in its
+   * header, so a church downloading "1 Jan to 31 Mar" got a document headed
+   * with those dates and filled with all-time numbers — the kind of page that
+   * gets handed to a board.
+   *
+   * Services, attendance, giving and messages are things that HAPPEN, so a
+   * date range is the obvious question about them. Members, households and
+   * groups are things that ARE: "how many members between January and March"
+   * has no single honest answer, so they stay as totals and the PDF labels
+   * them as such rather than implying they were filtered.
+   */
+  const onDate = (col: typeof attendanceSession.date | typeof giving.date) => {
+    const bounds = [];
+    if (range.from) bounds.push(gte(col, range.from));
+    if (range.to) bounds.push(lte(col, range.to));
+    return bounds;
+  };
+
+  const attWhere = and(eq(attendanceSession.churchId, churchId), ...onDate(attendanceSession.date));
+  const givWhere = and(eq(giving.churchId, churchId), ...onDate(giving.date));
+
+  const msgBounds = [];
+  if (range.from) msgBounds.push(gte(communicationLog.createdAt, new Date(`${range.from}T00:00:00.000Z`)));
+  // The end of the day, not its start — otherwise a range ending today omits
+  // everything sent today.
+  if (range.to) msgBounds.push(lte(communicationLog.createdAt, new Date(`${range.to}T23:59:59.999Z`)));
+  const msgWhere = and(eq(communicationLog.churchId, churchId), ...msgBounds);
+
   const [[c], [m], [h], [g], [att], [gv], [msg]] = await Promise.all([
     db
       .select({ currency: church.currency })
@@ -2094,18 +2156,15 @@ export async function getChurchTotals(churchId: string): Promise<ChurchTotals> {
         last: sql<string | null>`max(${attendanceSession.date})`,
       })
       .from(attendanceSession)
-      .where(eq(attendanceSession.churchId, churchId)),
+      .where(attWhere),
     db
       .select({
         total: sql<number>`coalesce(sum(${giving.amount}), 0)`,
         c: count(),
       })
       .from(giving)
-      .where(eq(giving.churchId, churchId)),
-    db
-      .select({ c: count() })
-      .from(communicationLog)
-      .where(eq(communicationLog.churchId, churchId)),
+      .where(givWhere),
+    db.select({ c: count() }).from(communicationLog).where(msgWhere),
   ]);
 
   return {

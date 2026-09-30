@@ -327,6 +327,8 @@ export async function renderSummaryPdf(args: {
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
   const totalRows = Object.values(counts).reduce((a, b) => a + b, 0);
 
+  const ranged = !!(range.from || range.to);
+
   const byCategory = CATEGORIES.map((cat) => ({
     ...cat,
     items: datasets.filter((d) => d.category === cat.key),
@@ -349,19 +351,40 @@ export async function renderSummaryPdf(args: {
             back together for analysis.
           </Text>
 
-          <Text style={styles.sectionTitle}>At a glance</Text>
+          {/*
+            Two rows, and the split is the point. The first counts things that
+            ARE and is never filtered; the second counts things that HAPPENED
+            and follows the date range. Mixing them under one heading is how
+            this page previously showed all-time figures beneath a date range
+            in the header.
+          */}
+          <Text style={styles.sectionTitle}>The church today</Text>
           <View style={styles.tileRow}>
             <Tile label="Members" value={totals.members.toLocaleString()} accent />
             <Tile label="Households" value={totals.households.toLocaleString()} />
             <Tile label="Groups" value={totals.groups.toLocaleString()} />
-            <Tile label="Services recorded" value={totals.sessions.toLocaleString()} />
+            <Tile
+              label="Recorded since"
+              value={totals.firstDate ?? "—"}
+            />
           </View>
+
+          <Text style={styles.sectionTitle}>
+            {ranged ? `Activity · ${rangeLabel(range)}` : "Activity · all time"}
+          </Text>
           <View style={styles.tileRow}>
+            <Tile label="Services recorded" value={totals.sessions.toLocaleString()} />
             <Tile label="Average attendance" value={totals.avgAttendance.toLocaleString()} />
             <Tile label="Total giving" value={money(totals.givingTotal)} accent />
-            <Tile label="Giving entries" value={totals.givingEntries.toLocaleString()} />
             <Tile label="Messages sent" value={totals.messages.toLocaleString()} />
           </View>
+
+          <Text style={styles.sectionTitle}>What is in your records</Text>
+          <Text style={styles.lead}>
+            Row counts below are for all time, whatever range this report
+            covers — they answer whether a module has anything in it at all.
+            Download any dataset to get its rows for a particular period.
+          </Text>
 
           {byCategory.map((cat) => (
             <View key={cat.key}>

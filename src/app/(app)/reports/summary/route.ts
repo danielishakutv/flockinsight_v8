@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   // Row counts are what make the summary honest — "0 rows" tells a reader that
   // a module is empty rather than leaving them to assume it failed.
   const [totals, counts] = await Promise.all([
-    getChurchTotals(church.id),
+    getChurchTotals(church.id, range),
     getDatasetCounts(church.id),
   ]);
 
