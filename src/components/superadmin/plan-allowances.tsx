@@ -4,7 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { setPlanAllowancesAction } from "@/app/superadmin/pricing/actions";
+import {
+  resetPlanCopyAction,
+  setPlanAllowancesAction,
+} from "@/app/superadmin/pricing/actions";
 import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,9 +32,12 @@ const ALL_PLANS: PlanId[] = ["starter", "growth", "pro", "enterprise"];
 export function PlanAllowances({
   storageMb,
   emails,
+  overridden,
 }: {
   storageMb: Record<PlanId, number>;
   emails: Record<PlanId, number | null>;
+  /** Whether this plan's public copy is a saved override rather than the default. */
+  overridden: Record<PlanId, boolean>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -45,6 +51,19 @@ export function PlanAllowances({
       ALL_PLANS.map((p) => [p, emails[p] === null ? "" : String(emails[p])]),
     ),
   );
+
+  const reset = (plan: PlanId) =>
+    start(async () => {
+      setBusy(plan);
+      const res = await resetPlanCopyAction(plan);
+      setBusy(null);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${PLAN_BY_ID[plan].name} back to the built-in defaults.`);
+      router.refresh();
+    });
 
   const save = (plan: PlanId) =>
     start(async () => {
@@ -108,16 +127,38 @@ export function PlanAllowances({
               />
             </div>
 
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={pending}
-              onClick={() => save(plan)}
-            >
-              {busy === plan && <Loader2 className="animate-spin" />}
-              Save
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => save(plan)}
+              >
+                {busy === plan && <Loader2 className="animate-spin" />}
+                Save
+              </Button>
+              {overridden[plan] && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => reset(plan)}
+                  title="Drop the saved copy and use the built-in defaults"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+
+            {overridden[plan] && (
+              <p className="text-muted-foreground text-xs leading-relaxed sm:col-span-3">
+                This plan is showing <strong>saved copy</strong>, not the
+                built-in defaults — so changes shipped in a release will not
+                appear on the pricing page until you reset it or edit it here.
+              </p>
+            )}
           </div>
         ))}
       </CardContent>

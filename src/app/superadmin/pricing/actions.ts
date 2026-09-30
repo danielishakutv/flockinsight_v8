@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import {
+  resetPlanCopy,
   setPlanEmails,
   setPlanFeatures,
   setPlanPrice,
@@ -191,6 +192,36 @@ export async function setPlanAllowancesAction(
     action: "set_pricing",
     severity: "notice",
     summary: `Updated ${d.plan} allowances — ${d.storageMb} MB storage, ${emails === null ? "unlimited" : emails} emails/month`,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/superadmin/pricing");
+  return { ok: true };
+}
+
+/**
+ * Put a plan's public copy back to the built-in default.
+ *
+ * The live pricing page can drift a long way from the product without anybody
+ * noticing: a feature list saved once overrides the code for ever, so the site
+ * was still advertising "Up to 70 members" and "Basic giving tracking" after
+ * both had gone. This is the way back.
+ */
+export async function resetPlanCopyAction(plan: PlanId): Promise<ActionResult> {
+  const admin = await requirePlatform("platform.pricing.manage");
+  if (!["starter", "growth", "pro", "enterprise"].includes(plan)) {
+    return { ok: false, error: "Unknown plan." };
+  }
+
+  await resetPlanCopy(plan);
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_pricing",
+    severity: "notice",
+    summary: `Reset ${planName(plan)} features and allowances to the built-in defaults`,
   });
 
   revalidatePath("/");

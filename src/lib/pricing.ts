@@ -123,7 +123,11 @@ export const planEmailsKey = (id: PlanId) => `plan_emails_${id}`;
 /** Included storage for a plan, in MEGABYTES. */
 export async function getPlanStorageMb(id: PlanId): Promise<number> {
   const fallback = Math.round(planStorageBytes(id) / MB);
-  const raw = Number(await getSetting(planStorageKey(id), String(fallback)));
+  // An empty stored value means "no override", not zero — `Number("")` is 0,
+  // which would silently give the plan no storage at all.
+  const stored = (await getSetting(planStorageKey(id), "")).trim();
+  if (stored === "") return fallback;
+  const raw = Number(stored);
   return Number.isFinite(raw) && raw >= 0 ? Math.round(raw) : fallback;
 }
 
@@ -202,4 +206,42 @@ export async function setStorageBundles(bundles: StorageBundle[]): Promise<void>
     .filter((b) => Number.isFinite(b.gb))
     .sort((a, b) => a.gb - b.gb);
   await setSetting(STORAGE_BUNDLES_KEY, JSON.stringify(clean));
+}
+
+/**
+ * Whether a plan's public copy is a saved override or the built-in default.
+ *
+ * Worth surfacing, because an override is invisible and permanent: the live
+ * pricing page was still advertising "Up to 70 members" and "Basic giving
+ * tracking" long after neither existed in the code, because somebody had once
+ * saved a feature list and nothing ever said so.
+ */
+export async function planCopyIsOverridden(id: PlanId): Promise<boolean> {
+  const [f, st, em] = await Promise.all([
+    getSetting(planFeaturesKey(id), ""),
+    getSetting(planStorageKey(id), ""),
+    getSetting(planEmailsKey(id), ""),
+  ]);
+  return !!(f.trim() || st.trim() || em.trim());
+}
+
+export async function allPlanCopyOverridden(): Promise<Record<PlanId, boolean>> {
+  const out = {} as Record<PlanId, boolean>;
+  await Promise.all(PLANS.map(async (p) => (out[p.id] = await planCopyIsOverridden(p.id))));
+  return out;
+}
+
+/**
+ * Drop a plan's overrides so the built-in copy applies again.
+ *
+ * Clearing rather than deleting: the row stays, emptied, which every reader
+ * here already treats as "no opinion". There was no way back from a stale
+ * override before this.
+ */
+export async function resetPlanCopy(id: PlanId): Promise<void> {
+  await Promise.all([
+    setSetting(planFeaturesKey(id), ""),
+    setSetting(planStorageKey(id), ""),
+    setSetting(planEmailsKey(id), ""),
+  ]);
 }
