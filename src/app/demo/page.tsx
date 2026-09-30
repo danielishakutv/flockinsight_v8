@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarCheck, MessageCircle, PhoneCall, Sparkles } from "lucide-react";
 import { Wordmark } from "@/components/brand";
+import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import { DemoRequestForm } from "@/components/public/demo-request-form";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
@@ -38,6 +39,7 @@ export default function DemoPage() {
             <Wordmark />
           </Link>
           <div className="flex items-center gap-2">
+            <PublicLanguageMenu />
             <Button asChild variant="ghost" size="sm">
               <Link href="/pricing">Pricing</Link>
             </Button>

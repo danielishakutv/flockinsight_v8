@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Wordmark } from "@/components/brand";
+import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import {
   CATEGORY_ORDER,
   releases,
@@ -29,12 +30,15 @@ export default function ChangelogPage() {
           <Link href="/">
             <Wordmark logoClassName="size-8" className="text-lg" />
           </Link>
-          <Link
-            href="/"
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm font-medium"
-          >
-            <ArrowLeft className="size-4" /> Home
-          </Link>
+          <div className="flex items-center gap-2">
+            <PublicLanguageMenu />
+            <Link
+              href="/"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm font-medium"
+            >
+              <ArrowLeft className="size-4" /> Home
+            </Link>
+          </div>
         </div>
       </header>
 

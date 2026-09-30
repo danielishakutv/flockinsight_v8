@@ -3,6 +3,7 @@ import { Check, Sparkles } from "lucide-react";
 import { planPriceLabel } from "@/lib/plans";
 import { getPlans } from "@/lib/pricing";
 import { Wordmark } from "@/components/brand";
+import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import { PromoPopup } from "@/components/public/promo-popup";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ export default async function PricingPage() {
           <Wordmark />
         </Link>
         <div className="flex items-center gap-2">
+          <PublicLanguageMenu />
           <Button asChild variant="ghost" size="sm">
             <Link href="/churches">Find a church</Link>
           </Button>

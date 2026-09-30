@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Wordmark } from "@/components/brand";
+import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import { LandingHeaderAuth } from "@/components/landing-header-auth";
 import { JsonLd } from "@/components/seo/json-ld";
 import { PromoPopup } from "@/components/public/promo-popup";
@@ -199,6 +200,7 @@ export default async function LandingPage() {
             <Link href="/churches" className="hover:text-primary">Find a church</Link>
           </nav>
           <div className="flex items-center gap-2">
+            <PublicLanguageMenu />
             <LandingHeaderAuth />
           </div>
         </div>
