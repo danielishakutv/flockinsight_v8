@@ -18,8 +18,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
+import { useT } from "@/components/i18n-provider";
 
 export default function OnboardingPage() {
+  const t = useT();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +48,7 @@ export default function OnboardingPage() {
         return;
       }
       await organization.setActive({ organizationId: created.data.id });
-      toast.success("Church created!");
+      toast.success(t("common.churchCreated"));
       router.push("/dashboard");
       router.refresh();
     } finally {
@@ -62,7 +64,7 @@ export default function OnboardingPage() {
         </div>
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Set up your church</CardTitle>
+            <CardTitle className="text-2xl">{t("common.setUpYourChurch")}</CardTitle>
             <CardDescription>
               One more step — name your church to get started.
             </CardDescription>
@@ -70,11 +72,11 @@ export default function OnboardingPage() {
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="churchName">Church name</Label>
+                <Label htmlFor="churchName">{t("common.churchName")}</Label>
                 <Input
                   id="churchName"
                   name="churchName"
-                  placeholder="Grace Chapel"
+                  placeholder={t("common.graceChapel")}
                   required
                   autoFocus
                 />

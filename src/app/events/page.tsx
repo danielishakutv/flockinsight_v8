@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church, event } from "@/db/schema";
 import { EventsSearch } from "@/components/public/events-search";
 import { BannerSlot } from "@/components/public/banner-slot";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: "Church events near you · FlockInsight",
@@ -43,6 +44,7 @@ export default async function EventsDirectoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getT();
   const sp = await searchParams;
   const q = str(sp.q);
   const near = parseNear(str(sp.near));
@@ -106,7 +108,7 @@ export default async function EventsDirectoryPage({
             Upcoming church events, services and programs near you.
           </p>
           <div className="mt-3 flex gap-3 text-sm font-semibold text-white/90">
-            <Link href="/churches" className="hover:text-white">Find a church →</Link>
+            <Link href="/churches" className="hover:text-white">{t("common.findAChurch")}</Link>
           </div>
         </div>
       </div>

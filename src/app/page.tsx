@@ -255,10 +255,10 @@ export default async function LandingPage() {
                 </Link>
               </Button>
               <Button asChild size="xl" variant="outline">
-                <Link href="/demo">Book a free walkthrough</Link>
+                <Link href="/demo">{c.footer.bookWalkthrough}</Link>
               </Button>
               <Button asChild size="xl" variant="ghost">
-                <Link href="/login">Login to Dashboard</Link>
+                <Link href="/login">{c.footer.loginToDashboard}</Link>
               </Button>
             </div>
             <p className="text-muted-foreground mt-4 text-sm">
@@ -597,29 +597,29 @@ export default async function LandingPage() {
             </p>
           </div>
           <div>
-            <p className="text-sm font-bold">Product</p>
+            <p className="text-sm font-bold">{c.footer.product}</p>
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
-              <li><a href="#features" className="hover:text-primary">Features</a></li>
-              <li><a href="#pricing" className="hover:text-primary">Pricing</a></li>
-              <li><Link href="/churches" className="hover:text-primary">Find a church</Link></li>
-              <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
-              <li><Link href="/roadmap" className="hover:text-primary">Roadmap</Link></li>
-              <li><Link href="/signup" className="hover:text-primary">Get Started</Link></li>
+              <li><a href="#features" className="hover:text-primary">{nav.features}</a></li>
+              <li><a href="#pricing" className="hover:text-primary">{nav.pricing}</a></li>
+              <li><Link href="/churches" className="hover:text-primary">{nav.findChurch}</Link></li>
+              <li><Link href="/changelog" className="hover:text-primary">{c.footer.whatsNew}</Link></li>
+              <li><Link href="/roadmap" className="hover:text-primary">{c.footer.roadmap}</Link></li>
+              <li><Link href="/signup" className="hover:text-primary">{c.pricing.getStarted}</Link></li>
             </ul>
           </div>
           <div>
-            <p className="text-sm font-bold">Company</p>
+            <p className="text-sm font-bold">{c.footer.company}</p>
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
-              <li><Link href="/blog" className="hover:text-primary">Blog</Link></li>
-              <li><a href="mailto:support@flockinsight.com" className="hover:text-primary">Contact</a></li>
-              <li><Link href="/changelog" className="hover:text-primary">What&apos;s New</Link></li>
+              <li><Link href="/blog" className="hover:text-primary">{c.footer.blog}</Link></li>
+              <li><a href="mailto:support@flockinsight.com" className="hover:text-primary">{c.footer.contact}</a></li>
+              <li><Link href="/changelog" className="hover:text-primary">{c.footer.whatsNew}</Link></li>
             </ul>
           </div>
           <div>
-            <p className="text-sm font-bold">Legal</p>
+            <p className="text-sm font-bold">{c.footer.legal}</p>
             <ul className="text-muted-foreground mt-3 space-y-2 text-sm">
-              <li><Link href="/privacy" className="hover:text-primary">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-primary">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-primary">{c.footer.privacy}</Link></li>
+              <li><Link href="/terms" className="hover:text-primary">{c.footer.terms}</Link></li>
             </ul>
           </div>
         </div>

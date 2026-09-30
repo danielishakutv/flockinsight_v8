@@ -162,7 +162,7 @@ export function AcceptInvitation({
           <div className="bg-success/10 text-success mx-auto mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircle2 className="size-6" />
           </div>
-          <CardTitle className="text-2xl">You&apos;re in</CardTitle>
+          <CardTitle className="text-2xl">{t("auth.youAposReIn")}</CardTitle>
           <CardDescription>
             You&apos;re already part of {church}.
           </CardDescription>

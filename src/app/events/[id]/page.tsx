@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { church, event, form } from "@/db/schema";
 import { siteUrl } from "@/lib/site";
 import { ShareButton } from "@/components/public/share-button";
+import { getT } from "@/lib/i18n/server";
 
 export const revalidate = 600;
 
@@ -75,6 +76,7 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = await getT();
   const { id } = await params;
   const e = await getEvent(id);
   if (!e) notFound();
@@ -194,9 +196,9 @@ export default async function EventDetailPage({
         </div>
 
         <p className="text-muted-foreground mt-6 text-center text-xs">
-          <Link href="/events" className="font-semibold hover:underline">More events</Link>
+          <Link href="/events" className="font-semibold hover:underline">{t("common.moreEvents")}</Link>
           {" · "}
-          <Link href="/" className="font-semibold hover:underline">Powered by FlockInsight</Link>
+          <Link href="/" className="font-semibold hover:underline">{t("common.poweredByFlockinsight")}</Link>
         </p>
       </div>
     </div>

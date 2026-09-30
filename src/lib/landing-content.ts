@@ -301,6 +301,29 @@ export type LandingContent = {
   footerTagline: string;
   pricing: PricingCopy;
   nav: NavCopy;
+  footer: FooterCopy;
+};
+
+/**
+ * The footer, and the two CTAs beside the hero.
+ *
+ * `privacy` and `terms` are the LINK text only. Those two documents stay in
+ * English on purpose: they are binding, and an approximate translation of a
+ * data-protection commitment misstates what the company has promised. That is
+ * a decision for a lawyer, not a codemod.
+ */
+export type FooterCopy = {
+  bookWalkthrough: string;
+  loginToDashboard: string;
+  product: string;
+  company: string;
+  legal: string;
+  whatsNew: string;
+  roadmap: string;
+  blog: string;
+  contact: string;
+  privacy: string;
+  terms: string;
 };
 
 /**
@@ -415,6 +438,19 @@ export const en: LandingContent = {
     bookDemo: "Book a demo",
     logIn: "Log in",
     startFree: "Start free",
+  },
+  footer: {
+    bookWalkthrough: "Book a free walkthrough",
+    loginToDashboard: "Login to Dashboard",
+    product: "Product",
+    company: "Company",
+    legal: "Legal",
+    whatsNew: "What's New",
+    roadmap: "Roadmap",
+    blog: "Blog",
+    contact: "Contact",
+    privacy: "Privacy Policy",
+    terms: "Terms of Service",
   },
 };
 

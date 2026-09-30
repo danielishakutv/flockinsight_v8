@@ -7,6 +7,7 @@ import {
 } from "@/lib/attendance-export";
 import { ReportToolbar } from "@/components/attendance/report-toolbar";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Attendance Report" };
 
@@ -48,6 +49,7 @@ function StatTile({
 }
 
 export default async function AttendanceReportPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   const rows = await getAttendanceRows(church.id);
   const s = summarizeAttendance(rows);
@@ -120,20 +122,20 @@ export default async function AttendanceReportPage() {
           <>
             {/* Headline stats */}
             <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile label="Total attendance" value={s.total} accent />
-              <StatTile label="Avg / service" value={s.average} />
-              <StatTile label="Peak service" value={s.peak} />
-              <StatTile label="Services" value={s.sessions} />
+              <StatTile label={t("common.totalAttendance")} value={s.total} accent />
+              <StatTile label={t("common.avgService")} value={s.average} />
+              <StatTile label={t("common.peakService")} value={s.peak} />
+              <StatTile label={t("common.services")} value={s.sessions} />
             </section>
 
             {/* Composition */}
             <section className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatTile label="Men" value={s.male} />
-              <StatTile label="Women" value={s.female} />
-              <StatTile label="Teens" value={s.teens} />
-              <StatTile label="Children" value={s.children} />
-              <StatTile label="First-timers" value={s.firstTimers} />
-              <StatTile label="New converts" value={s.newConverts} />
+              <StatTile label={t("common.men")} value={s.male} />
+              <StatTile label={t("common.women")} value={s.female} />
+              <StatTile label={t("common.teens")} value={s.teens} />
+              <StatTile label={t("common.children")} value={s.children} />
+              <StatTile label={t("common.firstTimers")} value={s.firstTimers} />
+              <StatTile label={t("common.newConverts")} value={s.newConverts} />
             </section>
 
             {/* Detailed table */}
@@ -152,21 +154,21 @@ export default async function AttendanceReportPage() {
                 <ScrollableTable
                   stickyFirstColumn
                   stickyColumnTone="inherit"
-                  hint="Scroll sideways for the rest"
-                  label="Service by service"
+                  hint={t("common.scrollSidewaysForTheRest")}
+                  label={t("common.serviceByService")}
                 >
                 <table className="w-full min-w-[36rem] border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
-                      <th className="px-3 py-2.5 font-semibold">Date</th>
-                      <th className="px-3 py-2.5 font-semibold">Service / Event</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Men</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Women</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Teens</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Children</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">First</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">New</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Total</th>
+                      <th className="px-3 py-2.5 font-semibold">{t("common.date")}</th>
+                      <th className="px-3 py-2.5 font-semibold">{t("common.serviceEvent")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.men")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.women")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.teens")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.children")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.first")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.new")}</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">{t("common.total")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -235,7 +237,7 @@ export default async function AttendanceReportPage() {
           <span>
             {church.name} · Generated {generated}
           </span>
-          <span>Powered by FlockInsight</span>
+          <span>{t("common.poweredByFlockinsight")}</span>
         </footer>
       </div>
     </div>

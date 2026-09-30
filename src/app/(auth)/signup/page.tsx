@@ -24,8 +24,10 @@ import {
   smsAvailableForCountry,
 } from "@/lib/country-profile";
 import { CURRENCIES } from "@/lib/money";
+import { useT } from "@/components/i18n-provider";
 
 function SignupForm() {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const redirectTo = params.get("redirect") || "";
@@ -128,7 +130,7 @@ function SignupForm() {
           <div className="bg-primary/10 text-primary mx-auto mb-2 grid size-12 place-items-center rounded-full">
             <MailCheck className="size-6" />
           </div>
-          <CardTitle className="text-2xl">Check your inbox</CardTitle>
+          <CardTitle className="text-2xl">{t("common.checkYourInbox")}</CardTitle>
           <CardDescription>
             {inviteMode ? "Your account is ready." : "Your church account is ready."}{" "}
             We sent a verification link to{" "}
@@ -176,18 +178,18 @@ function SignupForm() {
         <form onSubmit={onSubmit} className="space-y-4">
           {!inviteMode && (
             <div className="space-y-2">
-              <Label htmlFor="churchName">Church name</Label>
+              <Label htmlFor="churchName">{t("common.churchName")}</Label>
               <Input
                 id="churchName"
                 name="churchName"
-                placeholder="Grace Chapel"
+                placeholder={t("common.graceChapel")}
                 required
               />
             </div>
           )}
           {!inviteMode && (
             <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
+              <Label htmlFor="country">{t("common.country")}</Label>
               <select
                 id="country"
                 name="country"
@@ -222,17 +224,17 @@ function SignupForm() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="name">Your name</Label>
+            <Label htmlFor="name">{t("common.yourName")}</Label>
             <Input
               id="name"
               name="name"
               autoComplete="name"
-              placeholder="Pastor John Adeyemi"
+              placeholder={t("common.pastorJohnAdeyemi")}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("common.email")}</Label>
             <Input
               id="email"
               name="email"
@@ -248,12 +250,12 @@ function SignupForm() {
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t("common.password")}</Label>
             <PasswordInput
               id="password"
               name="password"
               autoComplete="new-password"
-              placeholder="At least 8 characters"
+              placeholder={t("common.atLeast8Characters")}
               minLength={8}
               required
             />

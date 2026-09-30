@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { subscriber } from "@/db/schema";
 import { verifyUnsubscribe, decodeUnsubEmail } from "@/lib/devotionals";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Unsubscribe", robots: { index: false } };
@@ -11,13 +12,15 @@ export default async function UnsubscribePage({
 }: {
   searchParams: Promise<{ c?: string; e?: string; t?: string }>;
 }) {
-  const { c, e, t } = await searchParams;
+  const t = await getT();
+  // `t` in the URL is the signature token; the translator owns the name now.
+  const { c, e, t: token } = await searchParams;
   let ok = false;
   let email = "";
 
-  if (c && e && t) {
+  if (c && e && token) {
     email = decodeUnsubEmail(e);
-    if (email && verifyUnsubscribe(c, email, t)) {
+    if (email && verifyUnsubscribe(c, email, token)) {
       await db
         .update(subscriber)
         .set({ status: "unsubscribed" })
@@ -36,7 +39,7 @@ export default async function UnsubscribePage({
       <div className="bg-card w-full max-w-md rounded-2xl border p-8 text-center">
         {ok ? (
           <>
-            <h1 className="text-xl font-bold">You&apos;ve been unsubscribed</h1>
+            <h1 className="text-xl font-bold">{t("common.youAposVeBeenUnsubscribed")}</h1>
             <p className="text-muted-foreground mt-2 text-sm">
               {email} will no longer receive these emails. You can resubscribe any
               time from the church&apos;s page.
@@ -44,7 +47,7 @@ export default async function UnsubscribePage({
           </>
         ) : (
           <>
-            <h1 className="text-xl font-bold">Link expired or invalid</h1>
+            <h1 className="text-xl font-bold">{t("common.linkExpiredOrInvalid")}</h1>
             <p className="text-muted-foreground mt-2 text-sm">
               We couldn&apos;t process this unsubscribe link. Please use the link
               from a recent email, or contact the church directly.

@@ -192,6 +192,13 @@ function looksLikeCode(t) {
 function bindsTElsewhere(src) {
   if (/\(\s*t\s*[,):]/.test(src)) return true; // (t) => , (t, i) => , (t: X)
   if (/\bt\s*=>/.test(src)) return true; // t => ...
+  /*
+   * Destructured: `const { c, e, t } = await searchParams`. `t` there was an
+   * unsubscribe signature token, and the codemod put `const t = await getT()`
+   * directly above it. Only a redeclaration error saved it from being a link
+   * that silently stopped verifying.
+   */
+  if (/\{[^{}\n]*\bt\b\s*[,}][^{}\n]*\}\s*=/.test(src)) return true;
   // ...unless it is a translator already: a hook, or a server component's await.
   if (
     /\b(?:const|let|var)\s+t\s*[=:](?!\s*(?:use\w*T\(\)|await getT\(\)))/.test(src)
@@ -221,7 +228,13 @@ function addHooks(src, hook) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     out.push(lines[i]);
-    const sig = lines[i].match(/^(\s*)(?:export\s+)?function\s+[A-Z]\w*\s*\(/);
+    // `export default function Page()` too, not just `export function X()`.
+    // Missing `default` meant every page-level client component came back as
+    // "uses t() but no component to attach it to" — which is most of the auth
+    // screens, where the wording matters most to somebody who is stuck.
+    const sig = lines[i].match(
+      /^(\s*)(?:export\s+(?:default\s+)?)?function\s+[A-Z]\w*\s*\(/,
+    );
     if (!sig) continue;
 
     /*

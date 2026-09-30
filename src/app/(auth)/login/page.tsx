@@ -17,8 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const redirectTo = params.get("redirect") || "/dashboard";
@@ -42,13 +44,13 @@ function LoginForm() {
       // original email can fail to deliver (e.g. provider/domain limits).
       if (error.status === 403 || error.code === "EMAIL_NOT_VERIFIED") {
         setUnverifiedEmail(email);
-        toast.error("Please verify your email before logging in.");
+        toast.error(t("common.pleaseVerifyYourEmailBefore"));
         return;
       }
       toast.error(error.message || "Could not sign in. Check your details.");
       return;
     }
-    toast.success("Welcome back!");
+    toast.success(t("common.welcomeBack"));
     router.push(redirectTo);
     router.refresh();
   }
@@ -71,8 +73,8 @@ function LoginForm() {
   return (
     <Card className="shadow-lg">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Welcome back</CardTitle>
-        <CardDescription>Log in to your FlockInsight dashboard</CardDescription>
+        <CardTitle className="text-2xl">{t("common.welcomeBack")}</CardTitle>
+        <CardDescription>{t("common.logInToYourFlockinsight")}</CardDescription>
       </CardHeader>
       <CardContent>
         {unverifiedEmail && (
@@ -94,7 +96,7 @@ function LoginForm() {
         )}
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("common.email")}</Label>
             <Input
               id="email"
               name="email"
@@ -106,7 +108,7 @@ function LoginForm() {
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("common.password")}</Label>
               <Link
                 href="/forgot-password"
                 className="text-primary text-sm font-medium hover:underline"
@@ -144,7 +146,7 @@ function LoginForm() {
         </p>
 
         <div className="bg-muted/50 mt-6 rounded-lg p-3 text-center text-xs">
-          <span className="text-muted-foreground">Demo login: </span>
+          <span className="text-muted-foreground">{t("common.demoLogin")}</span>
           <span className="font-mono font-medium">
             demo@flockinsight.app / demo1234
           </span>

@@ -281,4 +281,18 @@ export const pt: LandingContent = {
     logIn: "Entrar",
     startFree: "Começar gratuitamente",
   },
+  footer: {
+    bookWalkthrough: "Marcar uma apresentação gratuita",
+    loginToDashboard: "Entrar no painel",
+    product: "Produto",
+    company: "Empresa",
+    legal: "Informação legal",
+    whatsNew: "Novidades",
+    roadmap: "Planos",
+    blog: "Blogue",
+    contact: "Contacto",
+    // Estes dois documentos permanecem em inglês: são textos vinculativos.
+    privacy: "Política de Privacidade",
+    terms: "Termos de Serviço",
+  },
 };

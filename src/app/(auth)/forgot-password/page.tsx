@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 export default function ForgotPasswordPage() {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -44,19 +46,19 @@ export default function ForgotPasswordPage() {
             <MailCheck className="size-7" />
           </div>
           <div>
-            <p className="text-lg font-semibold">Check your email</p>
+            <p className="text-lg font-semibold">{t("common.checkYourEmail")}</p>
             <p className="text-muted-foreground text-sm">
               If an account exists, we&apos;ve sent a password reset link.
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/login">Back to login</Link>
+            <Link href="/login">{t("common.backToLogin")}</Link>
           </Button>
         </CardContent>
       ) : (
         <>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Forgot password?</CardTitle>
+            <CardTitle className="text-2xl">{t("common.forgotPassword")}</CardTitle>
             <CardDescription>
               Enter your email and we&apos;ll send a reset link.
             </CardDescription>
@@ -64,7 +66,7 @@ export default function ForgotPasswordPage() {
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("common.email")}</Label>
                 <Input
                   id="email"
                   name="email"

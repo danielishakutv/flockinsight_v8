@@ -6,6 +6,7 @@ import { Wordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { listPublishedPosts } from "@/lib/blog";
 import { siteUrl } from "@/lib/site";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BlogIndexPage() {
+  const t = await getT();
   const posts = await listPublishedPosts();
 
   return (
@@ -41,7 +43,7 @@ export default async function BlogIndexPage() {
               <ArrowLeft className="size-4" /> Home
             </Link>
             <Button asChild size="sm">
-              <Link href="/signup">Get started free</Link>
+              <Link href="/signup">{t("common.getStartedFree")}</Link>
             </Button>
           </div>
         </div>
@@ -56,7 +58,7 @@ export default async function BlogIndexPage() {
         </p>
 
         {posts.length === 0 ? (
-          <p className="text-muted-foreground mt-16">No posts yet — check back soon.</p>
+          <p className="text-muted-foreground mt-16">{t("common.noPostsYetCheckBack")}</p>
         ) : (
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {posts.map((p) => (

@@ -282,4 +282,18 @@ export const fr: LandingContent = {
     logIn: "Se connecter",
     startFree: "Commencer gratuitement",
   },
+  footer: {
+    bookWalkthrough: "Réserver une présentation gratuite",
+    loginToDashboard: "Accéder au tableau de bord",
+    product: "Produit",
+    company: "Entreprise",
+    legal: "Mentions légales",
+    whatsNew: "Nouveautés",
+    roadmap: "Feuille de route",
+    blog: "Blog",
+    contact: "Contact",
+    // Ces deux documents restent en anglais : ce sont des textes contractuels.
+    privacy: "Politique de confidentialité",
+    terms: "Conditions d'utilisation",
+  },
 };

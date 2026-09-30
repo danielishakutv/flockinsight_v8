@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/card";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/components/i18n-provider";
 
 function ResetForm() {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
@@ -27,12 +29,12 @@ function ResetForm() {
     return (
       <Card className="shadow-lg">
         <CardContent className="py-10 text-center">
-          <p className="text-lg font-semibold">Invalid or expired link</p>
+          <p className="text-lg font-semibold">{t("common.invalidOrExpiredLink")}</p>
           <p className="text-muted-foreground mt-1 text-sm">
             Please request a new password reset.
           </p>
           <Button asChild className="mt-4">
-            <Link href="/forgot-password">Request new link</Link>
+            <Link href="/forgot-password">{t("common.requestNewLink")}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -45,7 +47,7 @@ function ResetForm() {
     const newPassword = String(form.get("password"));
     const confirm = String(form.get("confirm"));
     if (newPassword !== confirm) {
-      toast.error("Passwords don't match.");
+      toast.error(t("common.passwordsDonTMatch"));
       return;
     }
     setLoading(true);
@@ -58,31 +60,31 @@ function ResetForm() {
       toast.error(error.message || "Could not reset password.");
       return;
     }
-    toast.success("Password updated — please log in.");
+    toast.success(t("common.passwordUpdatedPleaseLogIn"));
     router.push("/login");
   }
 
   return (
     <Card className="shadow-lg">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Set a new password</CardTitle>
-        <CardDescription>Choose a strong password you&apos;ll remember.</CardDescription>
+        <CardTitle className="text-2xl">{t("common.setANewPassword")}</CardTitle>
+        <CardDescription>{t("common.chooseAStrongPasswordYou")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="password">New password</Label>
+            <Label htmlFor="password">{t("common.newPassword")}</Label>
             <PasswordInput
               id="password"
               name="password"
               autoComplete="new-password"
               minLength={8}
-              placeholder="At least 8 characters"
+              placeholder={t("common.atLeast8Characters")}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm">Confirm password</Label>
+            <Label htmlFor="confirm">{t("common.confirmPassword")}</Label>
             <PasswordInput
               id="confirm"
               name="confirm"

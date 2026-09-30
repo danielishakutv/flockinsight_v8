@@ -24,22 +24,25 @@ import { join, relative } from "node:path";
 const ROOT = process.cwd();
 
 /** Where a church or a visitor reads. Superadmin is not translated on purpose. */
-const INCLUDE = [
-  "src/app/(app)",
-  "src/app/(marketing)",
-  "src/app/(public)",
-  "src/app/live",
-  "src/app/f",
-  "src/app/s",
-  "src/app/login",
-  "src/app/signup",
-  "src/app/pricing",
-  "src/app/demo",
-  "src/components",
-];
+/*
+ * All of src/app, and then subtract.
+ *
+ * This used to be a hand-written list naming `src/app/(marketing)` and
+ * `src/app/(public)` — two route groups that do not exist here — and never
+ * `src/app` itself. So the landing page, /churches, /blog, /roadmap,
+ * /changelog, /privacy and /terms were outside the count entirely, and the
+ * landing page alone had sixteen untranslated strings while this script
+ * reported the site clean. A list of what to look at goes stale silently; a
+ * list of what to skip does not.
+ */
+const INCLUDE = ["src/app", "src/components"];
 
 const EXCLUDE = [
+  // Daniel's own screens. English is the right answer and there are hundreds
+  // of strings in there; counting them would drown the number that matters.
+  "src/app/superadmin",
   "src/components/superadmin",
+  "src/app/api",
   "src/components/ui", // primitives; their text comes from callers
   "src/components/charts",
 ];

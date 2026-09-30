@@ -25,6 +25,7 @@ import { PublicThemeToggle } from "@/components/public/public-theme-toggle";
 import { JsonLd } from "@/components/seo/json-ld";
 import { VerifiedTick } from "@/components/app/verified-tick";
 import { isChurchVerified } from "@/lib/verification-shared";
+import { getT } from "@/lib/i18n/server";
 
 export const revalidate = 3600;
 
@@ -106,6 +107,7 @@ export default async function ChurchPublicPage({
 }: {
   params: Promise<{ handle: string }>;
 }) {
+  const t = await getT();
   const { handle } = await params;
   const c = await getChurch(handle);
   if (!c) notFound();
@@ -276,7 +278,7 @@ export default async function ChurchPublicPage({
         {/* ===== About ===== */}
         {c.about && (
           <section>
-            <SectionTitle>About us</SectionTitle>
+            <SectionTitle>{t("common.aboutUs")}</SectionTitle>
             <p className="mt-3 max-w-3xl whitespace-pre-line text-lg leading-relaxed text-slate-700 dark:text-slate-300">
               {c.about}
             </p>
@@ -286,7 +288,7 @@ export default async function ChurchPublicPage({
         {/* ===== Service times ===== */}
         {services.length > 0 && (
           <section>
-            <SectionTitle>Service times</SectionTitle>
+            <SectionTitle>{t("common.serviceTimes")}</SectionTitle>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {services.map((s, i) => (
                 <div
@@ -314,7 +316,7 @@ export default async function ChurchPublicPage({
         {events.length > 0 && (
           <section>
             <div className="flex items-center justify-between">
-              <SectionTitle>Upcoming events</SectionTitle>
+              <SectionTitle>{t("common.upcomingEvents")}</SectionTitle>
               <Link
                 href="/events"
                 className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand)] hover:underline"
@@ -363,7 +365,7 @@ export default async function ChurchPublicPage({
         {/* ===== Gallery ===== */}
         {c.photos && c.photos.length > 0 && (
           <section>
-            <SectionTitle>Gallery</SectionTitle>
+            <SectionTitle>{t("common.gallery")}</SectionTitle>
             <div className="mt-4 columns-2 gap-3 sm:columns-3 [&>*]:mb-3">
               {c.photos.map((p) => (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -382,7 +384,7 @@ export default async function ChurchPublicPage({
         {/* ===== Find us ===== */}
         {(locationLine || c.landmarks) && (
           <section className="rounded-3xl border bg-slate-50 p-6 dark:bg-slate-900/60">
-            <SectionTitle>Find us</SectionTitle>
+            <SectionTitle>{t("common.findUs")}</SectionTitle>
             {locationLine && (
               <p className="mt-2 text-slate-700 dark:text-slate-300">{locationLine}</p>
             )}
@@ -405,7 +407,7 @@ export default async function ChurchPublicPage({
         {/* ===== Contact ===== */}
         {(c.publicPhone || c.publicEmail || c.website || socials.length > 0) && (
           <section>
-            <SectionTitle>Get in touch</SectionTitle>
+            <SectionTitle>{t("common.getInTouch")}</SectionTitle>
             <div className="mt-4 flex flex-wrap gap-2.5">
               {c.publicPhone && (
                 <a
@@ -470,7 +472,7 @@ export default async function ChurchPublicPage({
 
         {/* ===== "Get your own page" nudge ===== */}
         <div className="rounded-3xl border border-dashed bg-slate-50 p-6 text-center dark:bg-slate-900/60">
-          <p className="text-lg font-bold">Do you lead a church or fellowship?</p>
+          <p className="text-lg font-bold">{t("common.doYouLeadAChurch")}</p>
           <p className="text-muted-foreground mx-auto mt-1 max-w-md text-sm">
             Get a beautiful page like this — plus attendance, members, giving,
             devotionals and more — free on FlockInsight.
