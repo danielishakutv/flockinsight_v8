@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NewLivestream } from "@/components/livestreams/new-livestream";
 import { cn } from "@/lib/utils";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Livestreams" };
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function LivestreamsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("meetings.view");
   const canManage = await can("meetings.manage");
@@ -50,7 +52,7 @@ export default async function LivestreamsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Livestreams"
+        title={t("livestreams.livestreams")}
         description="Broadcast a service to anyone with the link — and on to YouTube or Facebook."
         action={
           canManage ? <NewLivestream streamConfigured={configured} /> : undefined
@@ -88,7 +90,7 @@ export default async function LivestreamsPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <Radio className="text-muted-foreground mx-auto size-8" />
-            <p className="mt-3 font-semibold">No livestreams yet</p>
+            <p className="mt-3 font-semibold">{t("livestreams.noLivestreamsYet")}</p>
             <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-sm text-balance">
               A livestream is one broadcast and an audience — no room, no
               roster, and no limit on how many people watch. Use a meeting when
@@ -128,7 +130,7 @@ export default async function LivestreamsPage() {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="secondary">
-                    <Link href={`/livestreams/${s.id}`}>Open</Link>
+                    <Link href={`/livestreams/${s.id}`}>{t("livestreams.open")}</Link>
                   </Button>
                   <Button asChild size="sm" variant="ghost">
                     <a href={`/live/${s.slug}`} target="_blank" rel="noopener noreferrer">

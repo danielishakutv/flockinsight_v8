@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReportFilter } from "@/components/giving/report-filter";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Outstanding pledges · Giving" };
 
@@ -21,6 +22,7 @@ export default async function PledgeReportPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("giving.view");
 
@@ -54,7 +56,7 @@ export default async function PledgeReportPage({
         </Link>
       </Button>
       <PageHeader
-        title="Outstanding pledges"
+        title={t("giving.outstandingPledges")}
         description={
           includeSettled
             ? "Every pledge and what's still owed."
@@ -64,16 +66,16 @@ export default async function PledgeReportPage({
           <Button asChild variant="outline">
             <a href={csvHref}>
               <Download className="size-4" />
-              <span className="hidden sm:inline">Export CSV</span>
+              <span className="hidden sm:inline">{t("giving.exportCsv")}</span>
             </a>
           </Button>
         }
       />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Pledged" value={formatMoney(report.totalPledged, church.currency)} icon={HandCoins} />
-        <StatCard label="Received" value={formatMoney(report.totalPaid, church.currency)} icon={PiggyBank} accent />
-        <StatCard label="Outstanding" value={formatMoney(report.totalOutstanding, church.currency)} icon={Wallet} />
+        <StatCard label={t("giving.pledged")} value={formatMoney(report.totalPledged, church.currency)} icon={HandCoins} />
+        <StatCard label={t("giving.received")} value={formatMoney(report.totalPaid, church.currency)} icon={PiggyBank} accent />
+        <StatCard label={t("giving.outstanding")} value={formatMoney(report.totalOutstanding, church.currency)} icon={Wallet} />
       </div>
 
       <ReportFilter
@@ -125,7 +127,7 @@ export default async function PledgeReportPage({
                 <p className="font-extrabold tabular-nums">
                   {formatMoney(r.outstanding, church.currency)}
                 </p>
-                <p className="text-muted-foreground text-xs">outstanding</p>
+                <p className="text-muted-foreground text-xs">{t("giving.outstanding")}</p>
               </div>
             </div>
           ))}

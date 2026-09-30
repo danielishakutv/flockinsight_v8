@@ -70,11 +70,11 @@ export default async function TrainingPage() {
 
       <Card className="mb-5">
         <CardContent className="flex flex-wrap items-center gap-x-10 gap-y-4">
-          <Stat label="Courses" value={overview.courses} />
-          <Stat label="Classes running" value={overview.activeCohorts} />
-          <Stat label="Enrolments" value={overview.enrolled} />
-          <Stat label="Completions" value={overview.completed} />
-          <Stat label="Members certified" value={overview.certified} />
+          <Stat label={t("training.courses")} value={overview.courses} />
+          <Stat label={t("training.classesRunning")} value={overview.activeCohorts} />
+          <Stat label={t("training.enrolments")} value={overview.enrolled} />
+          <Stat label={t("training.completions")} value={overview.completed} />
+          <Stat label={t("training.membersCertified")} value={overview.certified} />
         </CardContent>
       </Card>
 

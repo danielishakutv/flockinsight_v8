@@ -6,10 +6,12 @@ import { listCategories } from "@/lib/finance-data";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { CategoriesManager } from "@/components/finance/categories-manager";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Finance categories" };
 
 export default async function FinanceCategoriesPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("finance.view");
   const canManage = await can("finance.manage");
@@ -25,7 +27,7 @@ export default async function FinanceCategoriesPage() {
         </Link>
       </Button>
       <PageHeader
-        title="Categories"
+        title={t("finance.categories")}
         description="What income and spending is counted as. These are what the breakdowns and reports group by."
       />
       <CategoriesManager

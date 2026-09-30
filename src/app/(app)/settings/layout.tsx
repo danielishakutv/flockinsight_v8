@@ -2,12 +2,14 @@ import { redirect } from "next/navigation";
 import { getAccess } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { SettingsNav } from "@/components/app/settings-nav";
+import { getT } from "@/lib/i18n/server";
 
 export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getT();
   const access = await getAccess();
   const canSettings = access.isOwner || access.perms.has("settings.manage");
   const canTeam = access.isOwner || access.perms.has("team.manage");
@@ -19,7 +21,7 @@ export default async function SettingsLayout({
   return (
     <PageContainer className="max-w-6xl">
       <PageHeader
-        title="Settings"
+        title={t("settings.settings")}
         description="Manage your church profile, services, giving, finances and team."
       />
       <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">

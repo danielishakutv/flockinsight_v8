@@ -20,6 +20,7 @@ import {
 } from "@/lib/help-guides";
 import { HELP_ICONS } from "@/components/help/icons";
 import { Button } from "@/components/ui/button";
+import { getT } from "@/lib/i18n/server";
 
 export function generateStaticParams() {
   return GUIDES.map((g) => ({ slug: g.slug }));
@@ -160,6 +161,7 @@ export default async function GuidePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  const t = await getT();
   const { slug } = await params;
   const g = getGuide(slug);
   if (!g) notFound();
@@ -274,7 +276,7 @@ export default async function GuidePage({
         <div className="mt-8 flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <Lightbulb className="mt-0.5 size-5 shrink-0 text-emerald-500" />
           <p className="text-sm">
-            <span className="font-bold">Tip: </span>
+            <span className="font-bold">{t("help.tip")}</span>
             {g.tip}
           </p>
         </div>
@@ -332,7 +334,7 @@ export default async function GuidePage({
 
       <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-5">
         <div>
-          <p className="font-bold">Still need help?</p>
+          <p className="font-bold">{t("help.stillNeedHelp")}</p>
           <p className="text-muted-foreground text-sm">
             Our team is happy to help you out.
           </p>

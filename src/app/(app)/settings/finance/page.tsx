@@ -4,6 +4,7 @@ import { can, requireCan } from "@/lib/permissions";
 import { listAccounts, listCategories } from "@/lib/finance-data";
 import { AccountsManager } from "@/components/finance/accounts-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Finance · Settings" };
 
@@ -24,6 +25,7 @@ export const metadata = { title: "Finance · Settings" };
  * books.
  */
 export default async function FinanceSettingsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   // Deliberately the finance gate, not the settings one. Being allowed into
   // Settings is not a reason to be allowed at the books.
@@ -39,7 +41,7 @@ export default async function FinanceSettingsPage() {
     <div className="space-y-10">
       <section className="space-y-4">
         <div>
-          <h2 className="text-base font-bold">Accounts</h2>
+          <h2 className="text-base font-bold">{t("settings.accounts")}</h2>
           <p className="text-muted-foreground text-sm">
             Where the church&apos;s money sits. Balances are worked out from
             what you record, so they cannot go stale. To move money between
@@ -70,7 +72,7 @@ export default async function FinanceSettingsPage() {
           >
             giving categories
           </Link>
-          , which are what a gift was given <em>for</em>.
+          , which are what a gift was given <em>{t("settings.for")}</em>.
         </p>
         <CategoriesManager
           canManage={canManage}

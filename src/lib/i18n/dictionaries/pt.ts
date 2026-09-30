@@ -233,6 +233,9 @@ export const pt: PartialDictionary = {
   },
 
   attendance: {
+    noAttendanceYet: "Ainda não há presenças",
+    recordAttendance: "Registar presenças",
+    editAttendance: "Editar presenças",
     male: "Homens",
     female: "Mulheres",
     attendanceDeleted: "Presença eliminada",
@@ -270,6 +273,8 @@ export const pt: PartialDictionary = {
   },
 
   members: {
+    fulfilled: "Cumprido",
+    cancelled: "Cancelado",
     title: "Membros",
     subtitle: "Todas as pessoas no seu registo.",
     addMember: "Adicionar membro",
@@ -449,6 +454,10 @@ export const pt: PartialDictionary = {
   },
 
   giving: {
+    projectsPledges: "Projetos e compromissos",
+    exportCsv: "Exportar CSV",
+    outstandingPledges: "Compromissos por cumprir",
+    received: "Recebido",
     title: "Ofertas",
     subtitle: "Ofertas, dízimos, donativos e projetos.",
     record: "Registar oferta",
@@ -663,6 +672,7 @@ export const pt: PartialDictionary = {
   },
 
   training: {
+    membersCertified: "Membros certificados",
     title: "Formação e aulas",
     subtitle:
       "Fundamentos, batismo, preparação para o casamento, formação de líderes — quem está a frequentar o quê, e quem já terminou.",
@@ -740,6 +750,12 @@ export const pt: PartialDictionary = {
   },
 
   meetings: {
+    name: "Nome",
+    joined: "Entrou",
+    left: "Saiu",
+    for: "Durante",
+    inMediaLibrary: "Na biblioteca de média",
+    shareThisMeeting: "Partilhar esta reunião",
     john316: "João 3:16",
     pasteOrTypeThePassage: "Cole ou escreva a passagem…",
     announcement: "Anúncio",
@@ -966,6 +982,20 @@ export const pt: PartialDictionary = {
   },
 
   communication: {
+    exportCsv: "Exportar CSV",
+    newMessage: "Nova mensagem",
+    nothingHereYet: "Ainda nada aqui",
+    sendAMessage: "Enviar uma mensagem",
+    deliveryOverTime: "Entrega ao longo do tempo",
+    byChannel: "Por canal",
+    newestFirst: "Mais recentes primeiro",
+    messageHistory: "Histórico de mensagens",
+    messagesSent: "Mensagens enviadas",
+    smsSpend: "Gasto em SMS",
+    noPerPersonDetailFor: "Sem detalhe por pessoa para este envio",
+    problemsFirst: "Problemas primeiro",
+    awaitingReport: "A aguardar relatório",
+    notDelivered: "Não entregue",
     title: "Comunicação",
     subtitle: "Enviar SMS, e-mails e avisos à sua equipa.",
     send: "Enviar",
@@ -1053,6 +1083,7 @@ export const pt: PartialDictionary = {
   },
 
   forms: {
+    memberSelfRegistration: "Autoinscrição de membros",
     title: "Formulários",
     subtitle: "Crie um formulário, partilhe a ligação, recolha as respostas.",
     newForm: "Novo formulário",
@@ -1202,6 +1233,16 @@ export const pt: PartialDictionary = {
   },
 
   analytics: {
+    recordAttendance: "Registar presenças",
+    weeklyBreakdown: "Repartição semanal",
+    demographics: "Demografia",
+    totalSplitLast12Weeks: "Repartição total · últimas 12 semanas",
+    averageByService: "Média por culto",
+    meanAttendancePerService: "Presença média por culto",
+    analytics: "Análises",
+    weeklyAverage: "Média semanal",
+    firstTimers: "Visitantes de primeira vez",
+    newConverts: "Novos convertidos",
     title: "Análises",
     subtitle: "Tendências, divisões e crescimento.",
     growth: "Crescimento",
@@ -1239,6 +1280,8 @@ export const pt: PartialDictionary = {
   },
 
   help: {
+    tip: "Dica:",
+    stillNeedHelp: "Ainda precisa de ajuda?",
     searchGuidesEGSms: "Pesquisar nos guias… (ex. SMS, lembretes, membros)",
     sendUsAMessage: "Envie-nos uma mensagem",
     subject: "Assunto",
@@ -1262,6 +1305,10 @@ export const pt: PartialDictionary = {
   },
 
   settings: {
+    whoYouCount: "Quem conta",
+    accounts: "Contas",
+    for: "para",
+    settings: "Definições",
     pageLink: "Link da página",
     listInPublicDirectory: "Constar no diretório público",
     branding: "Identidade visual",
@@ -1653,6 +1700,12 @@ export const pt: PartialDictionary = {
   },
 
   livestreams: {
+    noLivestreamsYet: "Ainda não há transmissões",
+    open: "Abrir",
+    livestreams: "Transmissões em direto",
+    goingLive: "Em breve em direto",
+    watchPage: "Página de visualização",
+    streamingFrom: "A transmitir de",
     livestream: "Transmissão em direto",
     deleteThisLivestream: "Eliminar esta transmissão",
     delete: "Eliminar",

@@ -140,10 +140,10 @@ export default async function MeetingDetailPage({
                   <table className="w-full min-w-[30rem] text-sm">
                     <thead>
                       <tr className="text-muted-foreground text-left text-xs uppercase">
-                        <th className="px-2 pb-2 font-semibold">Name</th>
-                        <th className="px-2 pb-2 font-semibold">Joined</th>
-                        <th className="px-2 pb-2 font-semibold">Left</th>
-                        <th className="px-2 pb-2 text-right font-semibold">For</th>
+                        <th className="px-2 pb-2 font-semibold">{t("meetings.name")}</th>
+                        <th className="px-2 pb-2 font-semibold">{t("meetings.joined")}</th>
+                        <th className="px-2 pb-2 font-semibold">{t("meetings.left")}</th>
+                        <th className="px-2 pb-2 text-right font-semibold">{t("meetings.for")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -162,7 +162,7 @@ export default async function MeetingDetailPage({
                               </span>
                             )}
                             {r.removed && (
-                              <span className="ml-1.5 text-[11px] text-rose-600">removed</span>
+                              <span className="ml-1.5 text-[11px] text-rose-600">{t("meetings.removed")}</span>
                             )}
                           </td>
                           <td className="text-muted-foreground px-2 py-2">
@@ -224,7 +224,7 @@ export default async function MeetingDetailPage({
                     )}
                     {r.mediaId && (
                       <Button asChild size="sm" variant="ghost">
-                        <Link href={`/media`}>In media library</Link>
+                        <Link href={`/media`}>{t("meetings.inMediaLibrary")}</Link>
                       </Button>
                     )}
                   </div>
@@ -237,22 +237,22 @@ export default async function MeetingDetailPage({
           {transcript.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Chat</CardTitle>
+                <CardTitle className="text-base">{t("meetings.chat")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="max-h-96 space-y-2 overflow-y-auto text-sm">
-                  {transcript.map((t) => (
-                    <li key={t.id} className={t.kind === "system" ? "text-muted-foreground text-xs" : ""}>
+                  {transcript.map((line) => (
+                    <li key={line.id} className={line.kind === "system" ? "text-muted-foreground text-xs" : ""}>
                       <span className="text-muted-foreground mr-2 text-xs tabular-nums">
-                        {t.createdAt.toLocaleTimeString("en-GB", {
+                        {line.createdAt.toLocaleTimeString("en-GB", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
-                      {t.kind === "chat" && (
-                        <span className="font-semibold">{t.authorName}: </span>
+                      {line.kind === "chat" && (
+                        <span className="font-semibold">{line.authorName}: </span>
                       )}
-                      <span className="wrap-anywhere">{t.body}</span>
+                      <span className="wrap-anywhere">{line.body}</span>
                     </li>
                   ))}
                 </ul>
@@ -265,7 +265,7 @@ export default async function MeetingDetailPage({
         <div className="min-w-0 space-y-5">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Share this meeting</CardTitle>
+              <CardTitle className="text-base">{t("meetings.shareThisMeeting")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <ShareLink
@@ -275,14 +275,14 @@ export default async function MeetingDetailPage({
                 when={when}
               />
               <dl className="space-y-1.5 text-sm">
-                <Row label="Code" value={<code className="text-xs">{m.code}</code>} />
+                <Row label={t("meetings.code")} value={<code className="text-xs">{m.code}</code>} />
                 <Row
-                  label="Who can join"
+                  label={t("meetings.whoCanJoin")}
                   value={MEETING_ACCESS_LABEL[m.access as MeetingAccess] ?? m.access}
                 />
                 {canManage && m.access === "passcode" && m.passcode && (
                   <Row
-                    label="Passcode"
+                    label={t("meetings.passcode")}
                     value={
                       <span className="inline-flex items-center gap-1.5 font-mono font-bold">
                         <KeyRound className="size-3.5" />
@@ -291,10 +291,10 @@ export default async function MeetingDetailPage({
                     }
                   />
                 )}
-                <Row label="Room limit" value={`${m.maxParticipants} people`} />
-                {m.lobby && <Row label="Lobby" value="On — you let people in" />}
-                {m.lowDataDefault && <Row label="Low data" value="On by default" />}
-                <Row label="Recording" value={m.allowRecording ? "Allowed" : "Off"} />
+                <Row label={t("meetings.roomLimit")} value={`${m.maxParticipants} people`} />
+                {m.lobby && <Row label={t("meetings.lobby")} value="On — you let people in" />}
+                {m.lowDataDefault && <Row label={t("meetings.lowData")} value="On by default" />}
+                <Row label={t("meetings.recording")} value={m.allowRecording ? "Allowed" : "Off"} />
               </dl>
 
               {canManage && !isOver && (

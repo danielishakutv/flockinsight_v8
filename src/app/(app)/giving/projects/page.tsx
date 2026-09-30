@@ -6,10 +6,12 @@ import { listProjects } from "@/lib/projects";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { ProjectsManager } from "@/components/giving/projects-manager";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Projects · Giving" };
 
 export default async function ProjectsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("giving.view");
   const canManage = await can("giving.manage");
@@ -25,13 +27,13 @@ export default async function ProjectsPage() {
         </Link>
       </Button>
       <PageHeader
-        title="Projects & pledges"
+        title={t("giving.projectsPledges")}
         description="Run building funds and other campaigns — track pledges and payments to completion."
         action={
           <Button asChild variant="outline">
             <Link href="/giving/projects/report">
               <ListChecks className="size-4" />
-              <span className="hidden sm:inline">Outstanding</span>
+              <span className="hidden sm:inline">{t("giving.outstanding")}</span>
             </Link>
           </Button>
         }

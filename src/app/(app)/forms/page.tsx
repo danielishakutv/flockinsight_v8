@@ -55,7 +55,7 @@ export default async function FormsPage() {
               <UserPlus className="size-5" />
             </div>
             <div>
-              <p className="font-bold">Member self-registration</p>
+              <p className="font-bold">{t("forms.memberSelfRegistration")}</p>
               <p className="text-muted-foreground text-sm">
                 A ready-made public link where people add themselves to your
                 church — with duplicate detection and group selection built in.{" "}

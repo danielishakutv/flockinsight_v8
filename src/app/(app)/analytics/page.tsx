@@ -86,7 +86,7 @@ export default async function AnalyticsPage() {
               Record a few services to see analytics here.
             </p>
             <Button asChild size="lg">
-              <Link href="/attendance/record">Record attendance</Link>
+              <Link href="/attendance/record">{t("analytics.recordAttendance")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -141,7 +141,7 @@ export default async function AnalyticsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Analytics"
+        title={t("analytics.analytics")}
         description={
           anchored
             ? `Trends, breakdowns and growth · 12 weeks to ${format(parseISO(endDate), "MMM d, yyyy")} (your most recent record)`
@@ -154,27 +154,27 @@ export default async function AnalyticsPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard
-          label="Weekly average"
+          label={t("analytics.weeklyAverage")}
           value={avg}
           sub={anchored ? "In the period shown" : "Last 8 weeks"}
           icon={CalendarDays}
           delta={growth}
         />
         <StatCard
-          label="Growth"
+          label={t("analytics.growth")}
           value={growth === null ? "—" : `${growth > 0 ? "+" : ""}${growth}%`}
           sub="vs previous 4 weeks"
           icon={TrendingUp}
           accent
         />
         <StatCard
-          label="First-timers"
+          label={t("analytics.firstTimers")}
           value={totals.firstTimers}
           sub={anchored ? "In the period shown" : "Last 12 weeks"}
           icon={Sparkles}
         />
         <StatCard
-          label="New converts"
+          label={t("analytics.newConverts")}
           value={totals.newConverts}
           sub={anchored ? "In the period shown" : "Last 12 weeks"}
           icon={UserPlus}
@@ -184,7 +184,7 @@ export default async function AnalyticsPage() {
       {/* Weekly breakdown */}
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle className="text-lg">Weekly breakdown</CardTitle>
+          <CardTitle className="text-lg">{t("analytics.weeklyBreakdown")}</CardTitle>
           <CardDescription>
             Adults, teens &amp; children per week
           </CardDescription>
@@ -198,8 +198,8 @@ export default async function AnalyticsPage() {
         {/* Demographics */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Demographics</CardTitle>
-            <CardDescription>Total split · last 12 weeks</CardDescription>
+            <CardTitle className="text-lg">{t("analytics.demographics")}</CardTitle>
+            <CardDescription>{t("analytics.totalSplitLast12Weeks")}</CardDescription>
           </CardHeader>
           <CardContent>
             <CategoryDonut data={donutData} />
@@ -209,8 +209,8 @@ export default async function AnalyticsPage() {
         {/* Service comparison */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Average by service</CardTitle>
-            <CardDescription>Mean attendance per service</CardDescription>
+            <CardTitle className="text-lg">{t("analytics.averageByService")}</CardTitle>
+            <CardDescription>{t("analytics.meanAttendancePerService")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ServiceComparison data={serviceData} />

@@ -49,6 +49,7 @@ import {
   MemberAccessCard,
   type MemberAccess,
 } from "@/components/members/member-access-card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Member" };
 
@@ -57,6 +58,7 @@ export default async function MemberDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = await getT();
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
 
@@ -405,13 +407,13 @@ export default async function MemberDetailPage({
             </p>
           ) : (
             <div className="space-y-2">
-              {training.map((t) => {
-                const color = badgeColor(t.badgeColor);
-                const done = t.enrollment.status === "completed";
+              {training.map((earned) => {
+                const color = badgeColor(earned.badgeColor);
+                const done = earned.enrollment.status === "completed";
                 return (
                   <Link
-                    key={t.enrollment.id}
-                    href={`/training/cohorts/${t.cohortId}`}
+                    key={earned.enrollment.id}
+                    href={`/training/cohorts/${earned.cohortId}`}
                     className="hover:bg-accent/60 -mx-2 flex items-center gap-3 rounded-lg px-2 py-2"
                   >
                     <span
@@ -423,14 +425,14 @@ export default async function MemberDetailPage({
                       )}
                     >
                       <BadgeIcon
-                        icon={t.badgeIcon === "none" ? "graduation" : t.badgeIcon}
+                        icon={earned.badgeIcon === "none" ? "graduation" : earned.badgeIcon}
                         className="size-4"
                         strokeWidth={2.4}
                       />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
-                        <span className="truncate">{t.courseName}</span>
+                        <span className="truncate">{earned.courseName}</span>
                         {done && (
                           <span
                             className={cn(
@@ -439,29 +441,29 @@ export default async function MemberDetailPage({
                             )}
                           >
                             {badgeLabelFor({
-                              name: t.courseName,
-                              badgeLabel: t.badgeLabel,
+                              name: earned.courseName,
+                              badgeLabel: earned.badgeLabel,
                             })}
                           </span>
                         )}
                       </p>
                       <p className="text-muted-foreground truncate text-xs">
-                        {t.cohortName} ·{" "}
+                        {earned.cohortName} ·{" "}
                         {
                           ENROLLMENT_STATUSES.find(
-                            (s) => s.value === t.enrollment.status,
+                            (s) => s.value === earned.enrollment.status,
                           )?.label
                         }
-                        {t.enrollment.completedAt &&
-                          ` · ${t.enrollment.completedAt}`}
-                        {t.enrollment.score != null &&
-                          ` · ${t.enrollment.score}`}
-                        {t.enrollment.grade && ` · ${t.enrollment.grade}`}
+                        {earned.enrollment.completedAt &&
+                          ` · ${earned.enrollment.completedAt}`}
+                        {earned.enrollment.score != null &&
+                          ` · ${earned.enrollment.score}`}
+                        {earned.enrollment.grade && ` · ${earned.enrollment.grade}`}
                       </p>
                     </div>
-                    {t.enrollment.certificateNo && (
+                    {earned.enrollment.certificateNo && (
                       <span
-                        title={`Certificate ${t.enrollment.certificateNo}`}
+                        title={`Certificate ${earned.enrollment.certificateNo}`}
                         className="text-muted-foreground shrink-0"
                       >
                         <Award className="size-4" />
@@ -495,9 +497,9 @@ export default async function MemberDetailPage({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate font-semibold">{pl.projectName}</span>
                     {pl.status === "completed" || pl.paid >= pl.amount ? (
-                      <Badge variant="success">Fulfilled</Badge>
+                      <Badge variant="success">{t("members.fulfilled")}</Badge>
                     ) : pl.status === "cancelled" ? (
-                      <Badge variant="outline">Cancelled</Badge>
+                      <Badge variant="outline">{t("members.cancelled")}</Badge>
                     ) : (
                       <Badge variant="secondary">
                         {cadenceLabel(pl.cadence, pl.cadenceLabel)}

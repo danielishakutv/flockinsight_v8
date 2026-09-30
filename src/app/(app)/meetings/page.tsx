@@ -123,10 +123,10 @@ export default async function MeetingsPage() {
 
       <Card className="mb-5">
         <CardContent className="flex flex-wrap items-center gap-x-10 gap-y-4">
-          <Stat label="Happening now" value={String(liveNow)} />
-          <Stat label="Upcoming" value={String(upcoming)} />
-          <Stat label="Held" value={String(held)} />
-          <Stat label="Recordings" value={String(recordings)} />
+          <Stat label={t("meetings.happeningNow")} value={String(liveNow)} />
+          <Stat label={t("meetings.upcoming")} value={String(upcoming)} />
+          <Stat label={t("meetings.held")} value={String(held)} />
+          <Stat label={t("meetings.recordings")} value={String(recordings)} />
         </CardContent>
       </Card>
 

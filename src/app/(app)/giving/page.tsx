@@ -149,7 +149,7 @@ export default async function GivingPage({
             <Button asChild variant="outline">
               <Link href="/giving/projects">
                 <HardHat className="size-4" />
-                <span className="hidden sm:inline">Projects</span>
+                <span className="hidden sm:inline">{t("giving.projects")}</span>
               </Link>
             </Button>
             <GivingDataMenu hasData={hasAnyRecords} canManage={canManage} />

@@ -35,6 +35,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Message · Delivery" };
 
@@ -70,6 +71,7 @@ export default async function MessageDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getT();
   const { church: c } = await requireChurch();
   await requireCan("communication.view");
 
@@ -112,7 +114,7 @@ export default async function MessageDetailPage({
                 href={`/communication/history/${id}/export${messageQuery(filters, { page: 1 })}`}
               >
                 <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
+                <span className="hidden sm:inline">{t("communication.exportCsv")}</span>
               </a>
             </Button>
           )
@@ -158,20 +160,20 @@ export default async function MessageDetailPage({
         />
         {!noDetail && (
           <Tile
-            label="Awaiting report"
+            label={t("communication.awaitingReport")}
             value={totals.sent}
             tone="flat"
             icon={Send}
           />
         )}
         <Tile
-          label="Not delivered"
+          label={t("communication.notDelivered")}
           value={noDetail ? message.failed : totals.failed}
           tone={(noDetail ? message.failed : totals.failed) > 0 ? "bad" : "flat"}
           icon={TriangleAlert}
         />
         <Tile
-          label="Skipped"
+          label={t("communication.skipped")}
           value={noDetail ? message.skipped : totals.skipped}
           tone={(noDetail ? message.skipped : totals.skipped) > 0 ? "warn" : "flat"}
           icon={Ban}
@@ -185,7 +187,7 @@ export default async function MessageDetailPage({
               <UserRound className="size-7" />
             </div>
             <div>
-              <p className="font-semibold">No per-person detail for this send</p>
+              <p className="font-semibold">{t("communication.noPerPersonDetailFor")}</p>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 This message went out before FlockInsight started recording who
                 each message reached. The totals above are all we have for it —
@@ -210,7 +212,7 @@ export default async function MessageDetailPage({
               <CardTitle className="text-lg">
                 {count.toLocaleString()} recipient{count === 1 ? "" : "s"}
               </CardTitle>
-              <CardDescription>Problems first</CardDescription>
+              <CardDescription>{t("communication.problemsFirst")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {rows.length === 0 ? (

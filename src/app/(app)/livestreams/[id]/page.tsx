@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LivestreamCredentials } from "@/components/livestreams/livestream-credentials";
 import { LivestreamOutputs } from "@/components/livestreams/livestream-outputs";
 import { LivestreamActions } from "@/components/livestreams/livestream-actions";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Livestream" };
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function LivestreamPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = await getT();
   const { id } = await params;
   const { church } = await requireChurch();
   await requireCan("meetings.view");
@@ -108,7 +110,7 @@ export default async function LivestreamPage({
       {s.source === "external" ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Going live</CardTitle>
+            <CardTitle className="text-base">{t("livestreams.goingLive")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -116,12 +118,12 @@ export default async function LivestreamPage({
               shows it automatically — there is nothing to press here.
             </p>
             <div className="space-y-1.5">
-              <p className="text-xs font-semibold">Watch page</p>
+              <p className="text-xs font-semibold">{t("livestreams.watchPage")}</p>
               <p className="wrap-anywhere font-mono text-sm">{watchUrl}</p>
             </div>
             {s.externalUrl && (
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold">Streaming from</p>
+                <p className="text-xs font-semibold">{t("livestreams.streamingFrom")}</p>
                 <a
                   href={s.externalUrl}
                   target="_blank"
@@ -139,7 +141,7 @@ export default async function LivestreamPage({
           <div className="min-w-0 space-y-5">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Going live</CardTitle>
+                <CardTitle className="text-base">{t("livestreams.goingLive")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <LivestreamCredentials

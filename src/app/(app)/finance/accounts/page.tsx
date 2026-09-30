@@ -11,10 +11,12 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { AccountsManager } from "@/components/finance/accounts-manager";
 import { TransfersManager } from "@/components/finance/transfers-manager";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Finance accounts" };
 
 export default async function FinanceAccountsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("finance.view");
   const canManage = await can("finance.manage");
@@ -37,7 +39,7 @@ export default async function FinanceAccountsPage() {
         </Link>
       </Button>
       <PageHeader
-        title="Accounts"
+        title={t("finance.accounts")}
         description="Where the church's money sits. Balances are worked out from what you record, so they cannot go stale."
       />
       <div className="space-y-10">

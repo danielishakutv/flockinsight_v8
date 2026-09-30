@@ -3,11 +3,13 @@ import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { BAND_SEEDS, bandsFor, oldestFirst } from "@/lib/attendance-bands";
 import { AttendanceBandsForm } from "@/components/settings/attendance-bands-form";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Attendance · Settings" };
 export const dynamic = "force-dynamic";
 
 export default async function AttendanceSettingsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -19,7 +21,7 @@ export default async function AttendanceSettingsPage() {
   return (
     <PageContainer className="max-w-2xl">
       <PageHeader
-        title="Who you count"
+        title={t("settings.whoYouCount")}
         description="Choose the groups your church counts on a Sunday, and what you call them."
       />
       <AttendanceBandsForm

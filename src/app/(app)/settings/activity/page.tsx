@@ -10,6 +10,7 @@ import {
 import { AUDIT_MODULE_LABEL, type AuditSeverity } from "@/lib/audit-catalog";
 import { ActivityLog, type ActivityEntry } from "@/components/settings/activity-log";
 import { Card, CardContent } from "@/components/ui/card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Activity log · Settings" };
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ const one = (v: string | string[] | undefined): string | null =>
   typeof v === "string" && v.trim() ? v.trim() : null;
 
 export default async function ActivityPage({ searchParams }: { searchParams: Search }) {
+  const t = await getT();
   const { church } = await requireChurch();
   const access = await getAccess();
 
@@ -88,7 +90,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Sea
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-bold">Activity log</h2>
+        <h2 className="text-lg font-bold">{t("settings.activityLog")}</h2>
         <p className="text-muted-foreground mt-1 text-sm">
           Everything that happens in your church&apos;s workspace — who did it,
           what changed, and when. Nothing here is ever edited or removed, by us

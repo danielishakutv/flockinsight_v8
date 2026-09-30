@@ -9,6 +9,7 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
 import { recordingBands } from "@/lib/attendance-bands";
 import { DeleteSessionButton } from "@/components/attendance/delete-session-button";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Edit Attendance" };
 
@@ -17,6 +18,7 @@ export default async function EditAttendancePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const t = await getT();
   const { id } = await params;
   // A malformed id is "not found", not a server error — Postgres rejects the
   // uuid cast outright.
@@ -47,7 +49,7 @@ export default async function EditAttendancePage({
   return (
     <PageContainer className="max-w-2xl">
       <PageHeader
-        title="Edit attendance"
+        title={t("attendance.editAttendance")}
         description="Update the headcount or remove this record."
         action={<DeleteSessionButton id={row.id} />}
       />

@@ -233,6 +233,9 @@ export const fr: PartialDictionary = {
   },
 
   attendance: {
+    noAttendanceYet: "Aucune présence pour le moment",
+    recordAttendance: "Saisir les présences",
+    editAttendance: "Modifier les présences",
     male: "Hommes",
     female: "Femmes",
     attendanceDeleted: "Présence supprimée",
@@ -270,6 +273,8 @@ export const fr: PartialDictionary = {
   },
 
   members: {
+    fulfilled: "Honoré",
+    cancelled: "Annulé",
     title: "Membres",
     subtitle: "Toutes les personnes de votre registre.",
     addMember: "Ajouter un membre",
@@ -449,6 +454,10 @@ export const fr: PartialDictionary = {
   },
 
   giving: {
+    projectsPledges: "Projets et engagements",
+    exportCsv: "Exporter en CSV",
+    outstandingPledges: "Engagements en attente",
+    received: "Reçu",
     title: "Dons",
     subtitle: "Offrandes, dîmes, dons et projets.",
     record: "Saisir un don",
@@ -663,6 +672,7 @@ export const fr: PartialDictionary = {
   },
 
   training: {
+    membersCertified: "Membres certifiés",
     title: "Formation et cours",
     subtitle:
       "Cours de fondation, baptême, préparation au mariage, formation des responsables — qui suit quoi, et qui a terminé.",
@@ -740,6 +750,12 @@ export const fr: PartialDictionary = {
   },
 
   meetings: {
+    name: "Nom",
+    joined: "Arrivé",
+    left: "Parti",
+    for: "Pendant",
+    inMediaLibrary: "Dans la médiathèque",
+    shareThisMeeting: "Partager cette réunion",
     john316: "Jean 3:16",
     pasteOrTypeThePassage: "Collez ou saisissez le passage…",
     announcement: "Annonce",
@@ -966,6 +982,20 @@ export const fr: PartialDictionary = {
   },
 
   communication: {
+    exportCsv: "Exporter en CSV",
+    newMessage: "Nouveau message",
+    nothingHereYet: "Rien ici pour le moment",
+    sendAMessage: "Envoyer un message",
+    deliveryOverTime: "Livraison dans le temps",
+    byChannel: "Par canal",
+    newestFirst: "Les plus récents d'abord",
+    messageHistory: "Historique des messages",
+    messagesSent: "Messages envoyés",
+    smsSpend: "Dépenses SMS",
+    noPerPersonDetailFor: "Aucun détail par personne pour cet envoi",
+    problemsFirst: "Les problèmes d'abord",
+    awaitingReport: "En attente du rapport",
+    notDelivered: "Non livré",
     title: "Communication",
     subtitle: "Envoyer des SMS, des e-mails et des avis à votre équipe.",
     send: "Envoyer",
@@ -1053,6 +1083,7 @@ export const fr: PartialDictionary = {
   },
 
   forms: {
+    memberSelfRegistration: "Inscription des membres",
     title: "Formulaires",
     subtitle: "Créez un formulaire, partagez le lien, recueillez les réponses.",
     newForm: "Nouveau formulaire",
@@ -1202,6 +1233,16 @@ export const fr: PartialDictionary = {
   },
 
   analytics: {
+    recordAttendance: "Saisir les présences",
+    weeklyBreakdown: "Détail hebdomadaire",
+    demographics: "Démographie",
+    totalSplitLast12Weeks: "Répartition totale · 12 dernières semaines",
+    averageByService: "Moyenne par culte",
+    meanAttendancePerService: "Présence moyenne par culte",
+    analytics: "Analyses",
+    weeklyAverage: "Moyenne hebdomadaire",
+    firstTimers: "Nouveaux venus",
+    newConverts: "Nouveaux convertis",
     title: "Analyses",
     subtitle: "Tendances, répartitions et croissance.",
     growth: "Croissance",
@@ -1240,6 +1281,8 @@ export const fr: PartialDictionary = {
   },
 
   help: {
+    tip: "Astuce :",
+    stillNeedHelp: "Besoin d'aide malgré tout ?",
     searchGuidesEGSms: "Rechercher dans les guides… (ex. SMS, rappels, membres)",
     sendUsAMessage: "Envoyez-nous un message",
     subject: "Objet",
@@ -1263,6 +1306,10 @@ export const fr: PartialDictionary = {
   },
 
   settings: {
+    whoYouCount: "Qui vous comptez",
+    accounts: "Comptes",
+    for: "pour",
+    settings: "Réglages",
     pageLink: "Lien de la page",
     listInPublicDirectory: "Figurer dans l'annuaire public",
     branding: "Identité visuelle",
@@ -1654,6 +1701,12 @@ export const fr: PartialDictionary = {
   },
 
   livestreams: {
+    noLivestreamsYet: "Aucune diffusion pour le moment",
+    open: "Ouvrir",
+    livestreams: "Diffusions en direct",
+    goingLive: "Bientôt en direct",
+    watchPage: "Page de visionnage",
+    streamingFrom: "Diffusé depuis",
     livestream: "Diffusion en direct",
     deleteThisLivestream: "Supprimer cette diffusion",
     delete: "Supprimer",

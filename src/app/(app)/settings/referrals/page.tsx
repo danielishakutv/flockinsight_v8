@@ -6,6 +6,7 @@ import {
   ReferralPanel,
   type ReferredRow,
 } from "@/components/settings/referral-panel";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Referrals · Settings" };
 
@@ -13,6 +14,7 @@ export const metadata = { title: "Referrals · Settings" };
 export const dynamic = "force-dynamic";
 
 export default async function ReferralsSettingsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -31,7 +33,7 @@ export default async function ReferralsSettingsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Referrals</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">{t("settings.referrals")}</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Tell another church about FlockInsight and earn wallet credit when
           they subscribe.

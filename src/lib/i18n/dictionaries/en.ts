@@ -258,6 +258,9 @@ export const en = {
    * Attendance
    * ========================================================== */
   attendance: {
+    noAttendanceYet: "No attendance yet",
+    recordAttendance: "Record Attendance",
+    editAttendance: "Edit attendance",
     male: "Male",
     female: "Female",
     attendanceDeleted: "Attendance deleted",
@@ -298,6 +301,8 @@ export const en = {
    * Members
    * ========================================================== */
   members: {
+    fulfilled: "Fulfilled",
+    cancelled: "Cancelled",
     day: "Day",
     month: "Month",
     year: "Year",
@@ -483,6 +488,10 @@ export const en = {
    * Giving
    * ========================================================== */
   giving: {
+    projectsPledges: "Projects & pledges",
+    exportCsv: "Export CSV",
+    outstandingPledges: "Outstanding pledges",
+    received: "Received",
     settingsGiving: "Settings → Giving",
     amount: "Amount",
     category: "Category",
@@ -706,6 +715,7 @@ export const en = {
    * Training
    * ========================================================== */
   training: {
+    membersCertified: "Members certified",
     enrolPeople: "Enrol people",
     addAnInstructor: "Add an instructor",
     member: "Member",
@@ -786,6 +796,12 @@ export const en = {
    * Meetings — the list, and the room itself
    * ========================================================== */
   meetings: {
+    name: "Name",
+    joined: "Joined",
+    left: "Left",
+    for: "For",
+    inMediaLibrary: "In media library",
+    shareThisMeeting: "Share this meeting",
     john316: "John 3:16",
     pasteOrTypeThePassage: "Paste or type the passage…",
     announcement: "Announcement",
@@ -1014,6 +1030,20 @@ export const en = {
    * Communication
    * ========================================================== */
   communication: {
+    exportCsv: "Export CSV",
+    newMessage: "New message",
+    nothingHereYet: "Nothing here yet",
+    sendAMessage: "Send a message",
+    deliveryOverTime: "Delivery over time",
+    byChannel: "By channel",
+    newestFirst: "Newest first",
+    messageHistory: "Message history",
+    messagesSent: "Messages sent",
+    smsSpend: "SMS spend",
+    noPerPersonDetailFor: "No per-person detail for this send",
+    problemsFirst: "Problems first",
+    awaitingReport: "Awaiting report",
+    notDelivered: "Not delivered",
     sendTo: "Send to",
     add: "Add",
     template: "Template",
@@ -1103,6 +1133,7 @@ export const en = {
     none: "Nothing written yet.",
   },
   forms: {
+    memberSelfRegistration: "Member self-registration",
     share: "Share",
     publicLink: "Public link",
     status: "Status",
@@ -1250,6 +1281,16 @@ export const en = {
     pdf: "PDF",
   },
   analytics: {
+    recordAttendance: "Record attendance",
+    weeklyBreakdown: "Weekly breakdown",
+    demographics: "Demographics",
+    totalSplitLast12Weeks: "Total split · last 12 weeks",
+    averageByService: "Average by service",
+    meanAttendancePerService: "Mean attendance per service",
+    analytics: "Analytics",
+    weeklyAverage: "Weekly average",
+    firstTimers: "First-timers",
+    newConverts: "New converts",
     title: "Analytics",
     subtitle: "Trends, breakdowns and growth.",
     growth: "Growth",
@@ -1284,6 +1325,8 @@ export const en = {
     enablePush: "Turn on push notifications",
   },
   help: {
+    tip: "Tip:",
+    stillNeedHelp: "Still need help?",
     searchGuidesEGSms: "Search guides… (e.g. SMS, reminders, members)",
     sendUsAMessage: "Send us a message",
     subject: "Subject",
@@ -1310,6 +1353,10 @@ export const en = {
    * Settings
    * ========================================================== */
   settings: {
+    whoYouCount: "Who you count",
+    accounts: "Accounts",
+    for: "for",
+    settings: "Settings",
     pageLink: "Page link",
     listInPublicDirectory: "List in public directory",
     branding: "Branding",
@@ -1651,6 +1698,12 @@ export const en = {
   },
 
   livestreams: {
+    noLivestreamsYet: "No livestreams yet",
+    open: "Open",
+    livestreams: "Livestreams",
+    goingLive: "Going live",
+    watchPage: "Watch page",
+    streamingFrom: "Streaming from",
     livestream: "Livestream",
     deleteThisLivestream: "Delete this livestream",
     delete: "Delete",

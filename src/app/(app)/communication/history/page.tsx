@@ -37,6 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Message history" };
 
@@ -51,6 +52,7 @@ export default async function CommunicationHistoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getT();
   const { church: c } = await requireChurch();
   await requireCan("communication.view");
 
@@ -73,20 +75,20 @@ export default async function CommunicationHistoryPage({
   return (
     <PageContainer>
       <PageHeader
-        title="Message history"
+        title={t("communication.messageHistory")}
         description={`Everything you've sent · ${rangeLabel.toLowerCase()}`}
         action={
           <>
             <Button asChild variant="outline">
               <a href={`/communication/history/export${historyQuery(filters, { page: 1 })}`}>
                 <Download className="size-4" />
-                <span className="hidden sm:inline">Export CSV</span>
+                <span className="hidden sm:inline">{t("communication.exportCsv")}</span>
               </a>
             </Button>
             <Button asChild>
               <Link href="/communication">
                 <Send className="size-4" />
-                <span className="hidden sm:inline">New message</span>
+                <span className="hidden sm:inline">{t("communication.newMessage")}</span>
               </Link>
             </Button>
           </>
@@ -102,26 +104,26 @@ export default async function CommunicationHistoryPage({
       {/* KPIs */}
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard
-          label="Messages sent"
+          label={t("communication.messagesSent")}
           value={total.messages.toLocaleString()}
           sub={`${total.recipients.toLocaleString()} recipient${total.recipients === 1 ? "" : "s"}`}
           icon={Send}
           accent
         />
         <StatCard
-          label="Delivered"
+          label={t("communication.delivered")}
           value={total.sent.toLocaleString()}
           sub={deliveryRate === null ? "No sends yet" : `${deliveryRate}% of recipients`}
           icon={Inbox}
         />
         <StatCard
-          label="Failed"
+          label={t("communication.failed")}
           value={total.failed.toLocaleString()}
           sub={total.failed ? "Check numbers & addresses" : "Nothing failed"}
           icon={TriangleAlert}
         />
         <StatCard
-          label="SMS spend"
+          label={t("communication.smsSpend")}
           value={formatMoney(total.cost, "NGN")}
           sub={`${total.units.toLocaleString()} unit${total.units === 1 ? "" : "s"}`}
           icon={MessageSquare}
@@ -135,7 +137,7 @@ export default async function CommunicationHistoryPage({
               <Send className="size-8" />
             </div>
             <div>
-              <p className="text-lg font-semibold">Nothing here yet</p>
+              <p className="text-lg font-semibold">{t("communication.nothingHereYet")}</p>
               <p className="text-muted-foreground text-sm">
                 {filters.q || filters.channel !== "all"
                   ? "No messages match these filters — try widening them."
@@ -143,7 +145,7 @@ export default async function CommunicationHistoryPage({
               </p>
             </div>
             <Button asChild size="lg">
-              <Link href="/communication">Send a message</Link>
+              <Link href="/communication">{t("communication.sendAMessage")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -152,7 +154,7 @@ export default async function CommunicationHistoryPage({
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-lg">Delivery over time</CardTitle>
+                <CardTitle className="text-lg">{t("communication.deliveryOverTime")}</CardTitle>
                 <CardDescription>
                   Delivered vs failed, by{" "}
                   {activity.unit === "day"
@@ -169,7 +171,7 @@ export default async function CommunicationHistoryPage({
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">By channel</CardTitle>
+                <CardTitle className="text-lg">{t("communication.byChannel")}</CardTitle>
                 <CardDescription>{rangeLabel}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -219,7 +221,7 @@ export default async function CommunicationHistoryPage({
                 {matches.toLocaleString()} message
                 {matches === 1 ? "" : "s"}
               </CardTitle>
-              <CardDescription>Newest first</CardDescription>
+              <CardDescription>{t("communication.newestFirst")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {rows.map((r) => {

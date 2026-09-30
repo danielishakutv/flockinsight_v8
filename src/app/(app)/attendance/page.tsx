@@ -78,7 +78,7 @@ export default async function AttendancePage() {
             <ClipboardList className="size-8" />
           </div>
           <div>
-            <p className="text-lg font-semibold">No attendance yet</p>
+            <p className="text-lg font-semibold">{t("attendance.noAttendanceYet")}</p>
             <p className="text-muted-foreground text-sm">
               Record your first service to see it here.
             </p>

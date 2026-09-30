@@ -141,7 +141,11 @@ function looksLikeCode(t) {
 function bindsTElsewhere(src) {
   if (/\(\s*t\s*[,):]/.test(src)) return true; // (t) => , (t, i) => , (t: X)
   if (/\bt\s*=>/.test(src)) return true; // t => ...
-  if (/\b(?:const|let|var)\s+t\s*[=:](?!\s*use\w*T\(\))/.test(src)) return true;
+  // ...unless it is a translator already: a hook, or a server component's await.
+  if (
+    /\b(?:const|let|var)\s+t\s*[=:](?!\s*(?:use\w*T\(\)|await getT\(\)))/.test(src)
+  )
+    return true;
   return false;
 }
 
@@ -207,6 +211,60 @@ function addHooks(src, hook) {
 }
 
 /** Insert an import after the LAST line of the import block. */
+/**
+ * `const t = await getT();` in an async server component.
+ *
+ * Narrower than the client version on purpose. It only touches a function
+ * declared `async`, and only the ONE that uses t(), because `await` in a
+ * synchronous function is a syntax error rather than a bug found later — and a
+ * page's strings are usually all in its default export. A file whose strings
+ * live in a second, synchronous helper is handed back to a person.
+ */
+function addServerHooks(src) {
+  const lines = src.split("\n");
+  const out = [];
+  let placed = 0;
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i]);
+    const sig = lines[i].match(
+      /^(\s*)(?:export\s+(?:default\s+)?)?async\s+function\s+\w*\s*\(/,
+    );
+    if (!sig) continue;
+
+    // The body opens at `) {`, never at the brace of a destructured parameter.
+    let open = i;
+    while (open < lines.length && !/\)\s*(?::[^{]*)?\{\s*$/.test(lines[open])) {
+      open++;
+      if (open - i > 60) break;
+    }
+    if (open >= lines.length || open - i > 60) continue;
+    for (let k = i + 1; k <= open; k++) out.push(lines[k]);
+
+    let depth = 1;
+    let uses = false;
+    let hasOwn = false;
+    for (let k = open + 1; k < lines.length && depth > 0; k++) {
+      depth += (lines[k].match(/\{/g) || []).length;
+      depth -= (lines[k].match(/\}/g) || []).length;
+      if (/\bt\(["'`]/.test(lines[k])) uses = true;
+      if (/const t = await getT\(\)/.test(lines[k])) hasOwn = true;
+    }
+    if (uses && !hasOwn) {
+      out.push(`${sig[1]}  const t = await getT();`);
+      placed++;
+    }
+    /*
+     * A function that ALREADY has one is as satisfied as one just given it.
+     * Counting only additions reported "strings outside an async function"
+     * for eight pages whose strings sat inside the async page all along,
+     * beside the `const t = await getT()` an earlier run had put there.
+     */
+    if (uses && hasOwn) placed++;
+    i = open;
+  }
+  return { src: out.join("\n"), placed };
+}
+
 function addImport(src, line) {
   const lines = src.split("\n");
   let last = -1;
@@ -300,13 +358,49 @@ for (const file of files) {
 
   if (src === before) continue;
 
-  if (!isClient) {
-    skipped.push(`${rel}: server component — needs getT() by hand`);
+  if (bindsTElsewhere(src)) {
+    skipped.push(`${rel}: already uses \`t\` for something else — by hand`);
     continue;
   }
 
-  if (bindsTElsewhere(src)) {
-    skipped.push(`${rel}: already uses \`t\` for something else — by hand`);
+  if (!isClient) {
+    /*
+     * A server component asks the dictionary directly. No provider, no hook —
+     * `getT()` reads the same cookie the provider does, so the page and the
+     * client components inside it always agree on the language.
+     */
+    if (!/from "@\/lib\/i18n\/server"/.test(src)) {
+      const withImport = addImport(
+        src,
+        'import { getT } from "@/lib/i18n/server";',
+      );
+      if (!withImport) {
+        skipped.push(`${rel}: no import block`);
+        continue;
+      }
+      src = withImport;
+    } else if (!/\bgetT\b/.test(src.match(/import \{[^}]*\} from "@\/lib\/i18n\/server";/)?.[0] ?? "")) {
+      src = src.replace(
+        /import \{([^}]*)\} from "@\/lib\/i18n\/server";/,
+        (m, names) => m.replace(names, ` getT,${names.replace(/^ /, " ")}`),
+      );
+    }
+
+    const server = addServerHooks(src);
+    if (/\bt\(["'`]/.test(server.src) && server.placed === 0) {
+      // Its strings are not in an async function. Awaiting there is a syntax
+      // error, so this one is a person's job.
+      skipped.push(`${rel}: strings outside an async function — by hand`);
+      continue;
+    }
+    src = server.src;
+    if (write) writeFileSync(file, src, "utf8");
+    else console.log(`would rewrite  ${rel}  (${used.size} strings, server)`);
+    rewritten++;
+    for (const [k, v] of used) {
+      if (!newKeys.has(section)) newKeys.set(section, new Map());
+      newKeys.get(section).set(k, v);
+    }
     continue;
   }
 

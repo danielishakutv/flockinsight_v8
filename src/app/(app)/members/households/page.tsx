@@ -7,10 +7,12 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NewHouseholdButton } from "@/components/members/new-household-button";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Households" };
 
 export default async function HouseholdsPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("members.view");
   const canManage = await can("members.manage");
@@ -26,7 +28,7 @@ export default async function HouseholdsPage() {
         </Link>
       </Button>
       <PageHeader
-        title="Households"
+        title={t("members.households")}
         description={`${households.length} household${households.length === 1 ? "" : "s"} — group family members together.`}
         action={canManage ? <NewHouseholdButton /> : undefined}
       />

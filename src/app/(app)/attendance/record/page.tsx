@@ -6,10 +6,12 @@ import { requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecordForm } from "@/components/attendance/record-form";
 import { recordingBands } from "@/lib/attendance-bands";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Record Attendance" };
 
 export default async function RecordPage() {
+  const t = await getT();
   const { church } = await requireChurch();
   await requireCan("attendance.manage");
 
@@ -22,7 +24,7 @@ export default async function RecordPage() {
   return (
     <PageContainer className="max-w-2xl">
       <PageHeader
-        title="Record Attendance"
+        title={t("attendance.recordAttendance")}
         description="Pick a service, then tap to count. The total updates live."
       />
       <RecordForm services={services} bands={recordingBands(church.attendanceBands)} />
