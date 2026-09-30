@@ -5,6 +5,7 @@ import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import { DemoRequestForm } from "@/components/public/demo-request-form";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata = {
   title: "Book a free walkthrough",
@@ -30,7 +31,10 @@ const POINTS = [
   },
 ];
 
-export default function DemoPage() {
+// async so it can read the visitor's language. A server component may be
+// async; there is nothing else to change.
+export default async function DemoPage() {
+  const t = await getT();
   return (
     <>
       <div className="min-h-dvh">
@@ -41,10 +45,10 @@ export default function DemoPage() {
           <div className="flex items-center gap-2">
             <PublicLanguageMenu />
             <Button asChild variant="ghost" size="sm">
-              <Link href="/pricing">Pricing</Link>
+              <Link href="/pricing">{t("common.pricing")}</Link>
             </Button>
             <Button asChild size="sm">
-              <Link href="/signup">Start free</Link>
+              <Link href="/signup">{t("common.startFree")}</Link>
             </Button>
           </div>
         </header>

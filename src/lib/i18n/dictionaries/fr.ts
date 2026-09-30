@@ -11,6 +11,11 @@ import type { PartialDictionary } from "./en";
  */
 export const fr: PartialDictionary = {
   common: {
+    login: "Connexion",
+    getStarted: "Commencer",
+    pricing: "Tarifs",
+    startFree: "Commencer gratuitement",
+    thisPageDidntLoad: "Cette page n'a pas pu se charger",
     save: "Enregistrer",
     saveChanges: "Enregistrer les modifications",
     cancel: "Annuler",

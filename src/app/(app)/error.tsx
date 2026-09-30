@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { AlertOctagon, ArrowLeft, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useOptionalT } from "@/components/i18n-provider";
 
 /**
  * Error boundary for the whole church-facing app.
@@ -19,6 +20,16 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  /*
+   * useOptionalT, and this is the clearest case for it in the app.
+   *
+   * This renders when something below has already failed. If the failure took
+   * the provider with it, `useT()` would throw inside the error boundary and
+   * the person would get Next's unstyled default instead of a page with a way
+   * back — the exact thing this file exists to prevent.
+   */
+  const t = useOptionalT();
+
   useEffect(() => {
     console.error("[app]", error);
   }, [error]);
@@ -28,7 +39,7 @@ export default function AppError({
       <div className="bg-destructive/10 text-destructive mx-auto grid size-12 place-items-center rounded-full">
         <AlertOctagon className="size-6" />
       </div>
-      <h2 className="mt-4 text-xl font-extrabold">This page didn&apos;t load</h2>
+      <h2 className="mt-4 text-xl font-extrabold">{t("common.thisPageDidntLoad")}</h2>
       <p className="text-muted-foreground mt-1 text-sm">
         Nothing has been lost — whatever you had saved is still there. Try
         again, and if it keeps happening, let us know what you were doing.

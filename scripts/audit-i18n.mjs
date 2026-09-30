@@ -67,7 +67,20 @@ const TEXT_PROPS = [
  * that always says zero, which is the failure mode of every linter nobody
  * trusts.
  */
+/*
+ * Halves of the wordmark, and messages thrown at developers.
+ *
+ * `Flock<span>Insight</span>` is branding split for its two colours — a name,
+ * not prose. A "must be used within <Provider>" is an error only a developer
+ * can cause and only a developer will read.
+ */
+const NEVER_TRANSLATED = [
+  /^(Flock|Insight|FlockInsight|Toko)$/,
+  /must be used within/,
+];
+
 function isNotProse(s) {
+  if (NEVER_TRANSLATED.some((re) => re.test(s.trim()))) return true;
   const t = s.trim();
   if (t.length < 2) return true;
   if (!/[a-z]/i.test(t)) return true; // symbols, numbers, punctuation
@@ -113,8 +126,17 @@ function findings(file) {
   const hits = [];
 
   lines.forEach((line, i) => {
-    // JSX text between tags: >Some words<
-    for (const m of line.matchAll(/>([^<>{}\n]{2,120})</g)) {
+    /*
+     * JSX text between tags: >Some words<
+     *
+     * The `>` must not follow `=`, `!`, `-`, `<` or `>` — otherwise `>=` in
+     * `xhr.status >= 200 && xhr.status < 300` reads as the end of a tag and
+     * the comparison is counted as a string somebody should translate. The
+     * `<` after the text must begin a tag, `</` or `<Identifier`.
+     */
+    for (const m of line.matchAll(
+      /(?<![=!<>\-])>([^<>{}\n]{2,120})<(?=\/|[A-Za-z])/g,
+    )) {
       const text = m[1].trim();
       if (!isNotProse(text)) hits.push({ line: i + 1, kind: "text", text });
     }

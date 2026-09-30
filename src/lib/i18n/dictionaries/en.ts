@@ -23,6 +23,11 @@ export const en = {
    * Everywhere
    * ========================================================== */
   common: {
+    login: "Login",
+    getStarted: "Get Started",
+    pricing: "Pricing",
+    startFree: "Start free",
+    thisPageDidntLoad: "This page didn't load",
     save: "Save",
     saveChanges: "Save changes",
     cancel: "Cancel",
