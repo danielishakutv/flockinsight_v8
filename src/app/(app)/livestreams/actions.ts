@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { livestream, livestreamOutput } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -372,11 +372,14 @@ export async function removeLivestreamOutput(id: string): Promise<ActionResult> 
   return { ok: true };
 }
 
-/** Everything a church has streamed, newest first. */
-export async function listLivestreams(churchId: string) {
-  return db
-    .select()
-    .from(livestream)
-    .where(eq(livestream.churchId, churchId))
-    .orderBy(desc(livestream.createdAt));
-}
+/*
+ * `listLivestreams(churchId)` was removed here.
+ *
+ * Every export of a "use server" module is a dispatchable endpoint, and this
+ * one had no session check and no permission check: it took the church id from
+ * whoever called it and returned that church's rows. Nothing in the app called
+ * it, so there was nothing to guard — only something to remove.
+ *
+ * If a listing is needed again, read it in the page's own server component
+ * against the church from `requireChurch()`, never from an argument.
+ */
