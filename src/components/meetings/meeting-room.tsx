@@ -90,6 +90,7 @@ import { ShortcutsSheet } from "@/components/meetings/shortcuts-sheet";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import type { TFunction } from "@/lib/i18n/translate";
+import { playMedia } from "@/lib/media-errors";
 
 type Phase = "join" | "lobby" | "live" | "ended";
 type Panel = "chat" | "people" | "share" | null;
@@ -1819,7 +1820,7 @@ function AudioSink({ stream }: { stream: MediaStream }) {
     const el = ref.current;
     if (!el) return;
     if (el.srcObject !== stream) el.srcObject = stream;
-    void el.play().catch(() => {});
+    playMedia(el, "meeting audio");
   }, [stream]);
   return <audio ref={ref} autoPlay playsInline className="hidden" />;
 }

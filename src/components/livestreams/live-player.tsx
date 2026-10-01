@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Radio } from "lucide-react";
 import { useT } from "@/components/i18n-provider";
+import { playMedia } from "@/lib/media-errors";
 
 /**
  * The player on the public watch page.
@@ -212,7 +213,7 @@ function WebRtcPlayer({
             type="button"
             onClick={() => {
               setMuted(false);
-              void ref.current?.play().catch(() => {});
+              playMedia(ref.current, "livestream player (unmute)");
             }}
             className="absolute inset-x-0 bottom-0 bg-indigo-600/90 py-3 text-sm font-semibold"
           >

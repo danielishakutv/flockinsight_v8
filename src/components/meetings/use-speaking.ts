@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { closeAudioContext } from "@/lib/media-errors";
 
 /**
  * Who is talking.
@@ -138,7 +139,7 @@ export function useSpeaking(
         }
       }
       nodes.clear();
-      void ctxRef.current?.close().catch(() => {});
+      closeAudioContext(ctxRef.current, "speaking detector");
       ctxRef.current = null;
     };
   }, []);

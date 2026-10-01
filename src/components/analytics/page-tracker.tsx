@@ -37,10 +37,17 @@ export function PageTracker() {
           body,
           keepalive: true,
           headers: { "Content-Type": "application/json" },
-        }).catch(() => {});
+        }).catch((e: unknown) => {
+          // One lost page view. Recorded at debug rather than as an error: this
+          // fails routinely offline or on a flaky connection, and a page view is
+          // not worth shouting about — but a systematic failure should still be
+          // findable rather than invisible.
+          console.debug("analytics: page view not recorded", e);
+        });
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      // Blob or sendBeacon unavailable. Nothing to retry, but not nothing to say.
+      console.debug("analytics: could not queue the page view", e);
     }
   }, [pathname]);
 

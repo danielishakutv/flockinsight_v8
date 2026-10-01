@@ -16,6 +16,7 @@
  */
 
 import { formatDuration, initialsOf, type Stage } from "@/lib/meetings-shared";
+import { closeAudioContext, playMedia } from "@/lib/media-errors";
 
 export type RecorderMode = "video" | "audio";
 
@@ -270,7 +271,7 @@ export class MeetingRecorder {
       }
     }
     this.wired.clear();
-    void this.audioCtx?.close().catch(() => {});
+    closeAudioContext(this.audioCtx, "meeting recorder");
     this.audioCtx = null;
     this.mixDest = null;
     this.canvas = null;
@@ -331,7 +332,7 @@ export class MeetingRecorder {
     // decoding, and then every frame we paint from it is the same frame.
     el.style.cssText = "position:fixed;left:-10000px;top:0;width:2px;height:2px;";
     document.body.appendChild(el);
-    void el.play().catch(() => {});
+    playMedia(el, "recorder off-screen source");
     this.videos.set(stream.id, el);
     return el;
   }

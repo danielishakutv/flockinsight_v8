@@ -7,6 +7,7 @@ import type { Stage } from "@/lib/meetings-shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
+import { playMedia } from "@/lib/media-errors";
 
 /**
  * The shared screen — a verse, a slide, a note, or somebody's desktop.
@@ -40,7 +41,7 @@ export function StageView({
     const el = videoRef.current;
     if (!el) return;
     if (el.srcObject !== screenStream) el.srcObject = screenStream;
-    if (screenStream) void el.play().catch(() => {});
+    if (screenStream) playMedia(el, "shared screen");
   }, [screenStream]);
 
   // A shared screen always wins: somebody is actively pointing at something.

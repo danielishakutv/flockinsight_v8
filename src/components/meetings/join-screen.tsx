@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { mediaFault, type MediaFault } from "@/lib/meeting-client";
 import { pointerKind } from "@/lib/meetings-shared";
 import type { TKey } from "@/lib/i18n/translate";
+import { playMedia } from "@/lib/media-errors";
 
 export type JoinValues = {
   name: string;
@@ -188,7 +189,7 @@ export function JoinScreen({
 
     if (wanted && stream) {
       el.srcObject = stream;
-      void el.play().catch(() => {});
+      playMedia(el, "join screen self-preview");
     } else {
       el.srcObject = null;
     }

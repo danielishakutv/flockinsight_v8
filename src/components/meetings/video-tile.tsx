@@ -5,6 +5,7 @@ import { Hand, MicOff, Pin, Signal, SignalLow, SignalMedium, Star } from "lucide
 import { initialsOf, type MeetingQuality } from "@/lib/meetings-shared";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
+import { playMedia } from "@/lib/media-errors";
 
 export type TileProps = {
   name: string;
@@ -119,7 +120,10 @@ export function VideoTile({
     setBlocked(false);
 
     const onGesture = () => {
-      if (!cancelled) void el.play().catch(() => {});
+      // The retry after a tap. If this one is refused too, the tap was not the
+      // problem and the tile will stay blank — so say so rather than leaving
+      // the `blocked` banner as the only clue.
+      if (!cancelled) playMedia(el, "meeting tile (after tap)");
     };
 
     void el.play().catch(() => {
