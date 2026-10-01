@@ -13,6 +13,7 @@ import { sendEmailWithId } from "@/lib/mailer";
 import { sendSms, normalizePhone } from "@/lib/sms";
 import { smsPages } from "@/lib/sms-pages";
 import { logLeadActivity } from "@/lib/leads";
+import { escapeHtml } from "@/lib/html-escape";
 import {
   OPEN_STATUSES,
   renderTemplate,
@@ -229,10 +230,6 @@ export async function audienceReach(
 /* ============================================================
  * Sending
  * ========================================================== */
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 /** Marketing wrapper: branded, with a plain-English opt-out line. */
 function marketingHtml(opts: {

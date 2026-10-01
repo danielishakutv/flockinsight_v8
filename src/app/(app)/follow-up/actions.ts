@@ -12,16 +12,9 @@ import { notifyUser } from "@/lib/notifications";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 import { audit } from "@/lib/audit";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 const INTERACTION_TYPES = [
   "visit",

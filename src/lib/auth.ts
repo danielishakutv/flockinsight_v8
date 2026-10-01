@@ -6,6 +6,7 @@ import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { sendEmail, emailLayout } from "./mailer";
 import { db } from "@/db";
+import { escapeHtml } from "@/lib/html-escape";
 import {
   user,
   session,
@@ -15,15 +16,6 @@ import {
   staff,
   invitation,
 } from "@/db/schema";
-
-// Minimal HTML escaping for values interpolated into invitation emails.
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 // Trust localhost + every local LAN IPv4 of this machine (so you can log in
 // from a phone on the same Wi-Fi). Auto-adapts when you switch networks.

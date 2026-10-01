@@ -15,6 +15,7 @@ import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 import { auditSystem } from "@/lib/audit";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type SubmitResult =
   | { ok: true; message: string }
@@ -246,10 +247,3 @@ async function notifyManagers(
   }
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

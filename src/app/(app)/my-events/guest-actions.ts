@@ -11,6 +11,7 @@ import { sendChurchSmsBatch } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -106,9 +107,6 @@ function fill(text: string, name: string, eventTitle: string, churchName: string
     .replace(/\{name\}/g, name || "there")
     .replace(/\{event\}/g, eventTitle)
     .replace(/\{church\}/g, churchName);
-}
-function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** Email or SMS an event's guests (all, or a chosen subset). Sends immediately. */

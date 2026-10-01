@@ -6,6 +6,7 @@ import { church, devotional, member, subscriber } from "@/db/schema";
 import { sendEmail, isEmailConfigured } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { siteUrl } from "@/lib/site";
+import { escapeHtml } from "@/lib/html-escape";
 
 const SECRET =
   process.env.BETTER_AUTH_SECRET || process.env.CRON_SECRET || "flockinsight-dev";
@@ -142,14 +143,6 @@ function renderEmail(opts: {
 
   const text = `${opts.churchName}\n\n${opts.title}\n\n${opts.body}${opts.unsubUrl ? `\n\nUnsubscribe: ${opts.unsubUrl}` : ""}`;
   return { html, text };
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /* ----- Sending ----- */

@@ -8,6 +8,7 @@ import { sendEmail, emailLayout } from "@/lib/mailer";
 import { smsPages } from "@/lib/sms";
 import { recordUsage } from "@/lib/usage";
 import { formatMoney } from "@/lib/money";
+import { escapeHtml } from "@/lib/html-escape";
 
 /* ============================================================
  * Giving receipts — an optional acknowledgement + blessing sent to a giver
@@ -56,9 +57,6 @@ export async function getGivingReceiptSetting(
 
 function fill(tpl: string, v: Record<string, string>): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? "");
-}
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 const METHOD_LABEL: Record<string, string> = {

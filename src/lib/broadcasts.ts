@@ -14,12 +14,9 @@ import { sendPushToUsers } from "@/lib/push";
 import { sendEmailWithId, emailLayout } from "@/lib/mailer";
 import { richTextToEmailHtml, richTextToPlain } from "@/lib/rich-text";
 import { isFullHtmlDocument } from "@/lib/rich-text-shared";
+import { escapeHtml } from "@/lib/html-escape";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 /** Replace the {name} tag with a recipient's first name (or a neutral word). */
 function fillName(text: string, name?: string | null): string {

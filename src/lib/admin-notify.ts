@@ -5,6 +5,7 @@ import { church } from "@/db/schema";
 import { emailLayout } from "@/lib/mailer";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { siteUrl } from "@/lib/site";
+import { escapeHtml } from "@/lib/html-escape";
 
 /**
  * Telling a church when the FlockInsight team changes something on its account.
@@ -40,14 +41,6 @@ export type AdminNotice = {
   /** Label for the email's button. Defaults to "Open FlockInsight". */
   ctaLabel?: string;
 };
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function detailsTable(details: { label: string; value: string }[]): string {
   if (!details.length) return "";

@@ -1,12 +1,9 @@
 import "server-only";
 import { formatMoney } from "@/lib/money";
 import { rangeLabel, type BranchStat, type RangeKey } from "@/lib/branches-shared";
+import { escapeHtml } from "@/lib/html-escape";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 type Totals = {
   branches: number;

@@ -6,6 +6,7 @@ import { APP_VERSION } from "@/lib/version";
 import { releases, type Release } from "@/lib/changelog";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import { escapeHtml } from "@/lib/html-escape";
 
 /**
  * When a new version goes live, write the announcement — but do not send it.
@@ -262,10 +263,3 @@ async function emailAdminPreview(
   return sent;
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

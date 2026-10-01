@@ -10,6 +10,7 @@ import { audit } from "@/lib/audit";
 import { requireCan } from "@/lib/permissions";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { churchTeamEmails } from "@/lib/branches";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -119,10 +120,6 @@ export async function inviteBranch(
 
   revalidatePath("/branches");
   return { ok: true };
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /* ============================================================

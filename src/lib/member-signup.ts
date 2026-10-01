@@ -19,6 +19,7 @@ import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { sendChurchSms } from "@/lib/church-sms";
 import { recordUsage } from "@/lib/usage";
 import { issueOtp } from "@/lib/otp";
+import { escapeHtml } from "@/lib/html-escape";
 
 export const SIGNUP_OTP_PURPOSE = "member_self_update";
 
@@ -587,10 +588,6 @@ function fillTemplate(text: string, name: string, churchName: string): string {
   return text
     .replace(/\{name\}/g, name || "there")
     .replace(/\{church\}/g, churchName);
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**

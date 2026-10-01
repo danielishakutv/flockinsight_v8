@@ -27,6 +27,7 @@ import { recordUsage } from "@/lib/usage";
 import { recordAction } from "@/lib/analytics";
 import { sendPushToUsers } from "@/lib/push";
 import { audit } from "@/lib/audit";
+import { escapeHtml } from "@/lib/html-escape";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -38,9 +39,6 @@ function fill(text: string, name: string, churchName: string) {
   return text
     .replace(/\{name\}/g, name || "there")
     .replace(/\{church\}/g, churchName);
-}
-function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 type Recipient = {

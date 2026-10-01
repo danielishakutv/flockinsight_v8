@@ -7,6 +7,7 @@ import { church, subscriber } from "@/db/schema";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { unsubscribeUrl } from "@/lib/devotionals";
+import { escapeHtml } from "@/lib/html-escape";
 
 export type SubscribeResult = { ok: true } | { ok: false; error: string };
 
@@ -83,10 +84,3 @@ export async function subscribeNewsletter(input: {
   return { ok: true };
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

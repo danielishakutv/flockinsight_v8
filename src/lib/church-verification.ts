@@ -6,6 +6,7 @@ import { issueOtp, peekOtp, verifyOtp } from "@/lib/otp";
 import { emailLayout, isEmailConfigured, sendEmail } from "@/lib/mailer";
 import { isSmsConfigured, normalizePhone, sendSms } from "@/lib/sms";
 import { maskEmail, maskPhone } from "@/lib/verification-shared";
+import { escapeHtml } from "@/lib/html-escape";
 
 /**
  * Church account verification — proving a church owns the email address and
@@ -267,10 +268,3 @@ export async function announceIfNowVerified(churchId: string): Promise<boolean> 
   return true;
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
