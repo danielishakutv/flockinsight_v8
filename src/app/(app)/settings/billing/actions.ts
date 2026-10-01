@@ -173,7 +173,11 @@ export async function requestTrialExtension(): Promise<ExtendResult> {
     message: body,
     contactName: user.name,
     contactEmail: user.email,
-  }).catch(() => {});
+  }).catch((e: unknown) => {
+    // The ticket is already saved; only the staff ping failed. Record it so a
+    // request that nobody was told about is traceable rather than invisible.
+    console.error("notifySupport failed for trial-extension ticket", e);
+  });
 
   revalidatePath("/help/support");
   return { ok: true };

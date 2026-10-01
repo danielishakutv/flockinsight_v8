@@ -30,16 +30,25 @@ const BACKUP_MAX_AGE_HOURS = 48;
 const TICKET_MAX_AGE_HOURS = 24;
 const TERMII_FAILURES_BEFORE_ALERT = 3;
 
-async function backupIsStale(): Promise<boolean> {
-  try {
-    const backups = await listBackups();
-    if (backups.length === 0) return true;
-    const newest = Math.max(...backups.map((b) => b.mtime));
-    return Date.now() - newest > BACKUP_MAX_AGE_HOURS * 3_600_000;
-  } catch {
-    // Can't read the backup directory (e.g. running locally) — not an alert.
-    return false;
-  }
+/**
+ * Three outcomes, deliberately not two.
+ *
+ * This used to be a boolean fed by a `listBackups()` that returned `[]` for
+ * every failure, so "backups have stopped" and "we cannot read the backup
+ * directory" raised the identical alert — and the one that means the
+ * monitoring is broken is the more urgent of the two. The old `catch` here
+ * could never run, because the swallow happened a layer below it.
+ */
+type BackupState = "fresh" | "stale" | "unreadable";
+
+async function backupState(): Promise<BackupState> {
+  const listing = await listBackups();
+  if (!listing.ok) return "unreadable";
+  if (listing.files.length === 0) return "stale";
+  const newest = Math.max(...listing.files.map((b) => b.mtime));
+  return Date.now() - newest > BACKUP_MAX_AGE_HOURS * 3_600_000
+    ? "stale"
+    : "fresh";
 }
 
 async function staleTicketCount(): Promise<number> {
@@ -64,9 +73,9 @@ export async function evaluateConditions(
   float?: FloatOverview,
 ): Promise<EvaluatedAlert[]> {
   const f = float ?? (await getFloatOverviewFresh());
-  const [crons, backupStale, staleTickets, pendingSenders] = await Promise.all([
+  const [crons, backups, staleTickets, pendingSenders] = await Promise.all([
     getCronLiveness(),
-    backupIsStale(),
+    backupState(),
     staleTicketCount(),
     pendingSenderIdCount(),
   ]);
@@ -144,11 +153,22 @@ export async function evaluateConditions(
     }
   }
 
-  if (backupStale) {
+  if (backups === "stale") {
     alerts.push({
       key: "backup.stale",
       severity: "critical",
       message: `No database backup in the last ${BACKUP_MAX_AGE_HOURS} hours.`,
+      href: "/superadmin/backups",
+    });
+  } else if (backups === "unreadable") {
+    // Separate key, so it does not recover-and-refire against the stale one,
+    // and separate wording: the backups may be fine and the watcher blind.
+    alerts.push({
+      key: "backup.unreadable",
+      severity: "critical",
+      message:
+        "The backup directory can't be read, so backups are unmonitored. " +
+        "This is not the same as backups being missing — check the path and permissions.",
       href: "/superadmin/backups",
     });
   }

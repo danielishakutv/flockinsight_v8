@@ -203,10 +203,20 @@ export function MeetingsList({
         onOpenChange={setDialogOpen}
         initial={editing}
         onSaved={({ code }) => {
+          // Clipboard access is refused on an insecure origin, and some
+          // browsers refuse it outside a direct user gesture. Saying nothing
+          // leaves the organiser believing they have the link on their
+          // clipboard, so show the link itself when the copy fails.
+          const link = meetingLink(origin, code);
           void navigator.clipboard
-            .writeText(meetingLink(origin, code))
+            .writeText(link)
             .then(() => toast.success(t("meetings.linkCopiedShareItWith")))
-            .catch(() => {});
+            .catch((e: unknown) => {
+              console.error("clipboard write failed", e);
+              toast.message(t("meetings.couldnTCopySelectThe"), {
+                description: link,
+              });
+            });
         }}
       />
     </>

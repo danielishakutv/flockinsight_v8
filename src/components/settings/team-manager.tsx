@@ -149,8 +149,15 @@ export function TeamManager({
 
   function copyInviteLink(id: string) {
     const url = `${window.location.origin}/accept-invitation/${id}`;
-    navigator.clipboard.writeText(url);
-    toast.success(t("settings.inviteLinkCopied"));
+    // Only claim it copied once it has. A refused clipboard otherwise left
+    // the person believing they had the invite link.
+    navigator.clipboard.writeText(url).then(
+      () => toast.success(t("settings.inviteLinkCopied")),
+      (e: unknown) => {
+        console.error("clipboard write failed", e);
+        toast.message(t("settings.couldnTCopySelectThe"), { description: url });
+      },
+    );
   }
 
   return (

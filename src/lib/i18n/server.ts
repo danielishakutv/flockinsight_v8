@@ -102,7 +102,20 @@ async function accountLocale(): Promise<LocaleCode | null> {
     if (c?.locale && isLocale(c.locale)) return c.locale;
 
     return null;
-  } catch {
+  } catch (err) {
+    /*
+     * Same reason as in getLocale, and easy to miss here because this helper
+     * only looks like a database lookup: `getSession()` reads `headers()`,
+     * which bails out of a static render by throwing. Swallowing that here
+     * would hand back `null` as though the account simply had no locale set.
+     * Today getLocale's own `headers()` call rethrows it a moment later, so
+     * nothing is visibly broken — but that is luck, not design, and it would
+     * vanish the day these calls are reordered.
+     */
+    unstable_rethrow(err);
+    // A real lookup failure. The page renders in English rather than failing
+    // because a locale lookup did.
+    console.error("i18n: could not read the account locale", err);
     return null;
   }
 }

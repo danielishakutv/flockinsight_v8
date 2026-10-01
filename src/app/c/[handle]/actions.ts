@@ -60,7 +60,9 @@ export async function subscribeNewsletter(input: {
       title: "New newsletter subscriber",
       body: `${name || d.email} just subscribed to your mailing list.`,
       linkUrl: "/devotionals",
-    }).catch(() => {});
+    }).catch((e: unknown) => {
+      console.error(`newsletter: manager notify failed for church ${c.id}`, e);
+    });
 
     // Welcome/acknowledgement email to the subscriber.
     if (isEmailConfigured()) {

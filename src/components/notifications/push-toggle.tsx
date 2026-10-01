@@ -45,7 +45,13 @@ export function PushToggle() {
       .then((sub) => {
         if (!cancelled) setSubscribed(!!sub);
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        // Leaving this silent meant the switch read "off" both when this
+        // device really had no subscription and when we simply could not ask
+        // the service worker — and turning it "on" again from that second
+        // state re-subscribes over a working one.
+        console.error("push: could not read the existing subscription", e);
+      });
     return () => {
       cancelled = true;
     };

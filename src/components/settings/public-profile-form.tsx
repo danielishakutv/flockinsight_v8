@@ -76,10 +76,16 @@ export function PublicProfileForm({
   const url = `${baseUrl}/c/${f.handle}`;
 
   function copy() {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      (e: unknown) => {
+        console.error("clipboard write failed", e);
+        toast.message(t("settings.couldnTCopySelectThe"), { description: url });
+      },
+    );
   }
 
   async function share() {

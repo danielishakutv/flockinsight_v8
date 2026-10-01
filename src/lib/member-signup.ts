@@ -723,7 +723,12 @@ export async function notifySignupManagers(opts: {
       title: opts.isNew ? "New member self-registered" : "Member updated their details",
       body: `${opts.personName} ${verb} via your public sign-up link.`,
       linkUrl: `/members/${opts.memberId}`,
-    }).catch(() => {});
+    }).catch((e: unknown) => {
+      console.error(
+        `member-signup: manager notify failed for church ${opts.churchId}`,
+        e,
+      );
+    });
   }
   if (opts.signup.notifyEmail && isEmailConfigured()) {
     try {

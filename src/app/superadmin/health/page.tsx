@@ -150,7 +150,7 @@ function isStale(newestMtime: number | null): boolean {
 }
 
 async function DataAndBackups() {
-  const [sizeRow, counts, backups] = await Promise.all([
+  const [sizeRow, counts, listing] = await Promise.all([
     db.execute(sql`select pg_size_pretty(pg_database_size(current_database())) as size`),
     db.execute(sql`
       select
@@ -158,7 +158,7 @@ async function DataAndBackups() {
         (select count(*) from member) as members,
         (select count(*) from analytics_event) as events
     `),
-    listBackups().catch(() => []),
+    listBackups(),
   ]);
 
   const size = (sizeRow.rows[0] as { size?: string } | undefined)?.size ?? "—";
@@ -167,8 +167,12 @@ async function DataAndBackups() {
     members?: string;
     events?: string;
   };
-  const newest = backups.length > 0 ? Math.max(...backups.map((b) => b.mtime)) : null;
-  const backupIsStale = isStale(newest);
+  // "Can't read the directory" is its own answer here. Showing it as "None"
+  // would report a healthy backup set as a missing one, and vice versa.
+  const files = listing.ok ? listing.files : null;
+  const newest =
+    files && files.length > 0 ? Math.max(...files.map((b) => b.mtime)) : null;
+  const backupIsStale = files !== null && isStale(newest);
 
   const storage = await db
     .select({
@@ -198,16 +202,25 @@ async function DataAndBackups() {
         />
         <Row
           label="Backups on disk"
-          value={backups.length === 0 ? "None" : String(backups.length)}
+          value={
+            files === null
+              ? "Can't read directory"
+              : files.length === 0
+                ? "None"
+                : String(files.length)
+          }
+          tone={files === null ? "bad" : undefined}
         />
         <Row
           label="Newest backup"
           value={
-            newest
-              ? formatDistanceToNowStrict(new Date(newest), { addSuffix: true })
-              : "None found"
+            files === null
+              ? "Unknown — directory unreadable"
+              : newest
+                ? formatDistanceToNowStrict(new Date(newest), { addSuffix: true })
+                : "None found"
           }
-          tone={backupIsStale ? "bad" : undefined}
+          tone={backupIsStale || files === null ? "bad" : undefined}
         />
       </CardContent>
     </Card>

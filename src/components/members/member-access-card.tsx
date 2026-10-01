@@ -80,10 +80,17 @@ export function MemberAccessCard({
   }
 
   function copyLink(invitationId: string) {
-    navigator.clipboard.writeText(
-      `${window.location.origin}/accept-invitation/${invitationId}`,
+    const url = `${window.location.origin}/accept-invitation/${invitationId}`;
+    // The success toast used to fire whether or not the write resolved, so a
+    // refused clipboard told the person the invite link was copied and they
+    // pasted nothing. Report what actually happened.
+    navigator.clipboard.writeText(url).then(
+      () => toast.success(t("members.inviteLinkCopied")),
+      (e: unknown) => {
+        console.error("clipboard write failed", e);
+        toast.message(t("members.couldnTCopyLongPress"), { description: url });
+      },
     );
-    toast.success(t("members.inviteLinkCopied"));
   }
 
   return (

@@ -12,11 +12,17 @@ export function InviteCard({ url, churchName }: { url: string; churchName: strin
   const [copied, setCopied] = useState(false);
 
   function copy() {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      toast.success(t("dashboard.inviteLinkCopied"));
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopied(true);
+        toast.success(t("dashboard.inviteLinkCopied"));
+        setTimeout(() => setCopied(false), 1500);
+      },
+      (e: unknown) => {
+        console.error("clipboard write failed", e);
+        toast.message(t("dashboard.couldnTCopyLongPress"), { description: url });
+      },
+    );
   }
 
   async function share() {

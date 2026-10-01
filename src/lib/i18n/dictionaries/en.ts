@@ -298,6 +298,7 @@ export const en = {
     inactiveMembers: "Inactive",
     invitePeople: "Invite people",
     inviteLinkCopied: "Invite link copied",
+    couldnTCopyLongPress: "Couldn't copy — long-press the link to copy it.",
     acrossYourChurch: "Across your church",
     tapAnyNumber: "Tap any number to open that module",
     unlimitedOnPlan: "Unlimited on your plan.",

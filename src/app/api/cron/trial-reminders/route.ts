@@ -62,7 +62,9 @@ export async function GET(request: Request) {
       title: `Free trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
       body,
       linkUrl: link,
-    }).catch(() => {});
+    }).catch((e: unknown) => {
+      console.error(`trial-reminders: in-app notify failed for church ${c.id}`, e);
+    });
 
     if (isEmailConfigured()) {
       const managers = await db

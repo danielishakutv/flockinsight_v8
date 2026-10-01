@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { Database, Download, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Database, Download, ShieldCheck } from "lucide-react";
 import { listBackups, formatBytes, BACKUP_DIR } from "@/lib/backups";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ export const metadata = { title: "Backups · Admin" };
 
 export default async function BackupsPage() {
   await requirePlatform("platform.backups.manage");
-  const backups = await listBackups();
+  const listing = await listBackups();
+  const backups = listing.ok ? listing.files : [];
 
   return (
     <div className="space-y-6">
@@ -36,7 +37,27 @@ export default async function BackupsPage() {
         </div>
       </div>
 
-      {backups.length === 0 ? (
+      {!listing.ok ? (
+        /*
+         * Not the same as "no backups". The dumps may be sitting there
+         * perfectly safe while this box cannot read the directory, so say
+         * which it is rather than showing an empty list that looks like
+         * backups have stopped.
+         */
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <div className="bg-destructive/10 text-destructive grid size-14 place-items-center rounded-2xl">
+              <AlertTriangle className="size-7" />
+            </div>
+            <p className="font-semibold">Can&apos;t read the backup directory</p>
+            <p className="text-muted-foreground text-sm">{listing.error}</p>
+            <p className="text-muted-foreground text-sm">
+              This is not the same as having no backups — check the directory
+              exists and that this process can read it.
+            </p>
+          </CardContent>
+        </Card>
+      ) : backups.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <div className="bg-muted text-muted-foreground grid size-14 place-items-center rounded-2xl">

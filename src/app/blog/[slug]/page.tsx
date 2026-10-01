@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { sql } from "drizzle-orm";
@@ -55,11 +56,23 @@ export default async function BlogPostPage({
   const post = await getPublishedPost(slug);
   if (!post) notFound();
 
-  // Best-effort view counter — never blocks the render.
-  db.update(blogPost)
-    .set({ views: sql`${blogPost.views} + 1` })
-    .where(sql`${blogPost.id} = ${post.id}`)
-    .catch(() => {});
+  /*
+   * View counter. Handed to `after()` rather than left as a floating promise:
+   * an un-awaited query during render has no owner, so the runtime is free to
+   * tear the request down before it lands and the count quietly stops moving.
+   * `after()` runs it once the response is sent, which is the same "never
+   * blocks the render" intent with somebody actually holding it.
+   */
+  after(async () => {
+    try {
+      await db
+        .update(blogPost)
+        .set({ views: sql`${blogPost.views} + 1` })
+        .where(sql`${blogPost.id} = ${post.id}`);
+    } catch (e) {
+      console.error(`blog: view count failed for ${post.slug}`, e);
+    }
+  });
 
   const url = `${siteUrl()}/blog/${post.slug}`;
   const jsonLd = {

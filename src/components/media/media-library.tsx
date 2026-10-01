@@ -513,7 +513,13 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
               size="sm"
               onClick={() => {
                 const abs = new URL(`/media/${item.id}`, window.location.origin).toString();
-                navigator.clipboard.writeText(abs).then(() => toast.success(t("media.linkCopied")));
+                navigator.clipboard.writeText(abs).then(
+                  () => toast.success(t("media.linkCopied")),
+                  (e: unknown) => {
+                    console.error("clipboard write failed", e);
+                    toast.message(t("media.couldnTCopyLink"), { description: abs });
+                  },
+                );
               }}
             >
               <Link2 className="size-4" /> Copy link
