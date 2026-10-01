@@ -155,8 +155,16 @@ export function UsersAdmin({ users }: { users: UserRow[] }) {
               size="sm"
               variant="outline"
               onClick={() => {
-                navigator.clipboard.writeText(tempPw);
-                toast.success("Copied");
+                // A temporary password. Only claim it copied once it has —
+                // otherwise whoever is sending it pastes the clipboard's
+                // previous contents. It is on screen beside this button.
+                navigator.clipboard.writeText(tempPw).then(
+                  () => toast.success("Copied"),
+                  (e: unknown) => {
+                    console.error("clipboard write failed", e);
+                    toast.error("Couldn't copy — select it and copy by hand.");
+                  },
+                );
               }}
             >
               <Copy className="size-4" /> Copy

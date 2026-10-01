@@ -45,7 +45,9 @@ export function SetupNotices({ notices = [] }: { notices?: Notice[] }) {
   // the service worker can answer, and only asynchronously.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    // `void`: deliberately not awaited, and safe to leave — isPushSubscribed
+    // catches its own errors and resolves false, so this cannot reject.
+    void (async () => {
       const offer = pushSupported() && !(await isPushSubscribed());
       if (cancelled) return;
       setShowPush(offer);

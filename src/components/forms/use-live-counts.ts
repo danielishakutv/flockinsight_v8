@@ -34,7 +34,7 @@ export function useLiveCounts(
 
     const timer = setInterval(poll, intervalMs);
     const onVisible = () => {
-      if (!document.hidden) poll();
+      if (!document.hidden) void poll();
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);

@@ -295,8 +295,20 @@ function Field({
         size="icon"
         aria-label={`Copy ${label.toLowerCase()}`}
         onClick={() => {
-          navigator.clipboard?.writeText(value);
-          toast.success(`${label} copied`);
+          // `?.` guards a missing clipboard API, but said nothing about a
+          // present one that refuses — and the toast fired either way.
+          const write = navigator.clipboard?.writeText(value);
+          if (!write) {
+            toast.error(`Couldn't copy ${label.toLowerCase()} — copy it by hand.`);
+            return;
+          }
+          write.then(
+            () => toast.success(`${label} copied`),
+            (e: unknown) => {
+              console.error("clipboard write failed", e);
+              toast.error(`Couldn't copy ${label.toLowerCase()} — copy it by hand.`);
+            },
+          );
         }}
       >
         <Copy className="size-4" />

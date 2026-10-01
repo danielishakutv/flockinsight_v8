@@ -268,8 +268,18 @@ export function UserDetail({
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  navigator.clipboard.writeText(tempPw);
-                  toast.success("Copied");
+                  // This is a temporary password being handed to somebody. The
+                  // toast used to fire whether or not the write resolved, so a
+                  // refused clipboard meant sending them whatever was on the
+                  // clipboard before. The password is on screen beside this
+                  // button, so the fallback is to say "copy it by hand".
+                  navigator.clipboard.writeText(tempPw).then(
+                    () => toast.success("Copied"),
+                    (e: unknown) => {
+                      console.error("clipboard write failed", e);
+                      toast.error("Couldn't copy — select it and copy by hand.");
+                    },
+                  );
                 }}
               >
                 <Copy className="size-4" /> Copy

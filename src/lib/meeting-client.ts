@@ -684,13 +684,14 @@ export class MeetingClient {
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
-      if (s === "failed") this.restartIce(peerId, p);
+      if (s === "failed") void this.restartIce(peerId, p);
       if (s === "disconnected") {
         // Give it a few seconds: "disconnected" is frequently a phone changing
         // masts and recovers by itself. Restarting immediately would throw
         // away a connection that was about to come back.
         setTimeout(() => {
-          if (pc.iceConnectionState === "disconnected") this.restartIce(peerId, p);
+          if (pc.iceConnectionState === "disconnected")
+            void this.restartIce(peerId, p);
         }, 4000);
       }
     };

@@ -55,10 +55,10 @@ export function LiveNotificationBell({
       }
     }
     const id = setInterval(poll, 20_000);
-    const onFocus = () => poll();
+    const onFocus = () => void poll();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
-    poll();
+    void poll();
     return () => {
       active = false;
       clearInterval(id);
@@ -97,7 +97,9 @@ export function LiveNotificationBell({
   return (
     <DropdownMenu
       onOpenChange={(o) => {
-        if (o) load();
+        // `void`: load() handles its own failure (empty list, loading cleared
+        // in `finally`), so there is nothing here left to wait for.
+        if (o) void load();
       }}
     >
       <DropdownMenuTrigger asChild>
