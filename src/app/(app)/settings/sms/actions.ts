@@ -42,10 +42,10 @@ export async function startSmsTopup(amount: number): Promise<TopupResult> {
     return { ok: false, error: "Online payment isn't set up yet. Contact us." };
 
   const reference = `SMS-${c.id.slice(0, 8)}-${Date.now()}`;
-  await db
-    .insert(smsTopup)
-    .values({ churchId: c.id, amount, reference, createdBy: user.id });
 
+  // Paystack first, then the row — see the same note in settings/wallet/actions.ts.
+  // An insert before the call left a `pending` top-up behind whenever Paystack
+  // could not be reached, for money nobody was ever asked for.
   const init = await paystackInit({
     email: user.email,
     amountNaira: amount,
@@ -54,6 +54,21 @@ export async function startSmsTopup(amount: number): Promise<TopupResult> {
     metadata: { kind: "sms_topup", churchId: c.id, amount },
   });
   if (!init.ok) return init;
+
+  // If this write fails, do not hand back the checkout url: the callback finds
+  // the payment by looking this reference up, so a checkout with no row would
+  // take the money and fail to credit the balance.
+  try {
+    await db
+      .insert(smsTopup)
+      .values({ churchId: c.id, amount, reference, createdBy: user.id });
+  } catch (e) {
+    console.error(`sms topup: could not record ${reference}`, e);
+    return {
+      ok: false,
+      error: "We couldn't start that top-up. Nothing was charged — please try again.",
+    };
+  }
 
   await audit({
     churchId: c.id,
