@@ -21,7 +21,7 @@
 #
 # Schedule (daily, after the database dump):
 #   crontab -e
-#   30 3 * * * /home/flockinsight/app/current/deploy/backup-media.sh >> /var/log/flockinsight-media-backup.log 2>&1
+#   30 3 * * * RCLONE_REMOTE="gdrive:flockinsight-backups" /home/flockinsight/app/current/deploy/backup-media.sh >> /var/log/flockinsight-media-backup.log 2>&1
 #
 # Restore: copy a snapshot back over MEDIA_ROOT. The directory layout IS the
 # storage key, so nothing needs rewriting:
@@ -94,6 +94,32 @@ if [ "$count" -gt "$KEEP" ]; then
         mv "$old" "$BACKUP_ROOT/.trash/"
       done
   log "NOTE: $BACKUP_ROOT/.trash holds rotated snapshots. Empty it yourself when you are sure."
+fi
+
+#
+# Off-site. A local snapshot protects against a mistake; it does nothing about
+# losing the machine, and recordings that exist only on one VPS are one incident
+# away from gone. The database backup already goes to the same remote.
+#
+# `copy`, never `sync`: sync would mirror deletions upward, so a local mistake
+# would propagate to the one copy that was supposed to survive it. Copy only
+# ever adds.
+#
+if [ -n "${RCLONE_REMOTE:-}" ]; then
+  if command -v rclone >/dev/null; then
+    log "copying off-site to $RCLONE_REMOTE/media/$stamp"
+    if rclone copy "$dest" "$RCLONE_REMOTE/media/$stamp"          --transfers 2 --checkers 4 --retries 3 --low-level-retries 10          --stats-one-line --stats 60s; then
+      log "off-site copy complete"
+    else
+      # Not fatal: the local snapshot is already safely on disk, and failing the
+      # whole job would make a working backup look broken.
+      log "WARNING: off-site copy failed — the local snapshot is still good"
+    fi
+  else
+    log "WARNING: RCLONE_REMOTE is set but rclone is not installed"
+  fi
+else
+  log "no RCLONE_REMOTE set — local snapshot only"
 fi
 
 # A plain, greppable line for the watchdog to look for.
