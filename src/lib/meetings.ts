@@ -1362,6 +1362,56 @@ export async function startRecordingRow(opts: {
   return row.id;
 }
 
+/**
+ * Recordings that claim to still be uploading, long after anything could be.
+ *
+ * The client reports its own failures now, but there is one case where it never
+ * can: the browser is gone. The laptop lid closes mid-upload, the tab is killed,
+ * the phone drops the connection for good. The row it created at the start of
+ * the recording then sits at "uploading" for ever — which is precisely the state
+ * that made eleven production recordings look fine and be nothing.
+ *
+ * So the server decides for itself. A recording that has been "uploading" for
+ * longer than any real upload takes is not uploading; it is lost, and saying so
+ * is the whole point. Thirty minutes is deliberately generous — an hour of video
+ * on a weak Nigerian connection is a genuinely long upload, and marking a live
+ * one as failed would be its own kind of lie.
+ *
+ * The file is not touched. It is still in the host's browser vault, and the
+ * Unsaved recordings panel still offers it back; this only corrects the claim.
+ */
+export async function failStalledRecordings(
+  olderThanMinutes = 30,
+  now: Date = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - olderThanMinutes * 60_000);
+
+  const rows = await db
+    .update(meetingRecording)
+    .set({
+      status: "failed",
+      error:
+        "The upload never finished — the browser was closed or lost its connection. Your copy may still be on the device that recorded it.",
+    })
+    .where(
+      and(
+        eq(meetingRecording.status, "uploading"),
+        lt(meetingRecording.createdAt, cutoff),
+      ),
+    )
+    .returning({ id: meetingRecording.id, churchId: meetingRecording.churchId });
+
+  if (rows.length > 0) {
+    // One line per sweep, not per row: this is a number somebody should watch,
+    // and a run that suddenly marks twenty is a different story from one that
+    // marks one.
+    console.error(
+      `[meetings] marked ${rows.length} stalled recording(s) as failed (stuck "uploading" for over ${olderThanMinutes}m)`,
+    );
+  }
+  return rows.length;
+}
+
 export async function completeRecording(opts: {
   id: string;
   churchId: string;

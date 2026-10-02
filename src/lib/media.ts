@@ -32,6 +32,32 @@ export const MEDIA_KINDS: MediaKind[] = [
   "file",
 ];
 
+/**
+ * Which permission a given upload kind needs. Owners always pass.
+ *
+ * Lives here rather than in the upload route because there are now two ways a
+ * file reaches the library — the simple POST through our origin, and the
+ * chunked direct upload that large files take to get past Cloudflare's 100 MB
+ * body cap. Two copies of this rule is one copy that will be wrong.
+ */
+export function permForKind(kind: MediaKind): string {
+  switch (kind) {
+    case "logo":
+    case "cover":
+    case "photo":
+    case "event":
+      return "settings.manage";
+    case "member":
+      return "members.manage";
+    case "devotional":
+      return "devotionals.manage";
+    case "receipt":
+      return "contributions.manage";
+    default:
+      return "media.manage"; // sermon, file
+  }
+}
+
 /** Map a mime type to a Cloudinary resource type (audio rides on "video"). */
 export function classifyMime(mime: string): {
   resourceType: ResourceType;

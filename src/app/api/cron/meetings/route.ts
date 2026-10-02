@@ -1,6 +1,7 @@
 import {
   endAbandonedMeetings,
   expireMissedMeetings,
+  failStalledRecordings,
   pruneSignals,
 } from "@/lib/meetings";
 import { warmScriptureCache } from "@/lib/scripture";
@@ -43,6 +44,12 @@ export async function GET(request: Request) {
     const ended = await endAbandonedMeetings();
     const expired = await expireMissedMeetings();
     const swept = await pruneSignals(10);
+    /*
+     * The backstop for a browser that never came back. A recording stuck at
+     * "uploading" is the one state that lets a host believe they have something
+     * they do not, so the server stops believing it after half an hour.
+     */
+    const stalledRecordings = await failStalledRecordings(30);
 
     // Once a day is plenty, and it is somebody else's free service — so this
     // only runs on the first tick of the hour before most Sunday services.
@@ -52,7 +59,7 @@ export async function GET(request: Request) {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, ended, expired, swept, warmed }),
+      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings }),
       { headers: { "Content-Type": "application/json" } },
     );
   });

@@ -1013,6 +1013,45 @@ export function MeetingRoom(props: {
    * network, the laptop lid — the recording is still on this device and the
    * Unsaved recordings panel will offer it back.
    */
+  /**
+   * Tell the server a recording did not save.
+   *
+   * Every failing path calls this. Before it existed the browser handled its own
+   * errors well — a toast, a note in the local vault — and the row it had created
+   * when recording started stayed "uploading" for ever. Eleven production
+   * recordings sat like that: zero bytes, no error, and a host who believed they
+   * had a recording.
+   *
+   * Best-effort and never allowed to throw: this runs inside a catch, and a
+   * failure to report a failure must not replace the real error with its own.
+   * The server's stalled-recording sweep is the backstop for when even this
+   * cannot get through.
+   */
+  const reportRecordingFailure = useCallback(
+    async (recordingId: string | null, stage: string, reason: string) => {
+      if (!recordingId || !me) return;
+      try {
+        await fetch(`/api/meet/${props.code}/recording/failed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            peer: me.peerId,
+            secret: me.secret,
+            recordingId,
+            stage,
+            reason,
+          }),
+          // The host often closes the tab the moment they see it failed; this
+          // lets the browser deliver it anyway.
+          keepalive: true,
+        });
+      } catch (e) {
+        console.error("[meetings] could not report the recording failure", e);
+      }
+    },
+    [me, props.code],
+  );
+
   const saveRecording = useCallback(
     async (file: PendingSave) => {
       if (!me) return;
@@ -1075,10 +1114,20 @@ export function MeetingRoom(props: {
       } catch (e) {
         if (e instanceof UploadCancelled) {
           setSaveProblem(t("meetings.uploadCancelled"));
+          // A cancel is still a recording that is not in the library, and the
+          // row must not keep claiming otherwise.
+          await reportRecordingFailure(
+            file.recordingId,
+            "cancelled",
+            "The host cancelled the upload.",
+          );
         } else {
           const message = e instanceof Error ? e.message : t("meetings.recordingUploadFailed");
           setSaveProblem(message);
           await noteFailure(file.vaultId, message);
+          // The same sentence the host is looking at goes onto the record, so
+          // the activity log and the host agree about what happened.
+          await reportRecordingFailure(file.recordingId, "upload", message);
         }
         void refreshUnsaved();
       } finally {
@@ -1086,12 +1135,27 @@ export function MeetingRoom(props: {
         setSavingRecording(false);
       }
     },
-    [me, props.code, t, refreshUnsaved],
+    [me, props.code, t, refreshUnsaved, reportRecordingFailure],
   );
 
   const stopRecording = useCallback(async () => {
     const recorder = recorderRef.current;
-    if (!recorder) return;
+    /*
+     * No recorder, but the server may still think one is running — if this
+     * returned silently the row stayed "uploading" for ever. Say so instead.
+     */
+    if (!recorder) {
+      if (recording?.id) {
+        await runAction("recording.stop").catch(() => {});
+        await reportRecordingFailure(
+          recording.id,
+          "capture",
+          "The recorder was already gone when the host stopped it, so nothing was captured.",
+        );
+      }
+      setRecording(null);
+      return;
+    }
     const result = await recorder.stop();
     recorderRef.current = null;
     await runAction("recording.stop");
@@ -1135,9 +1199,29 @@ export function MeetingRoom(props: {
       // to keep it, and a button between the two is how a recording of a
       // service is lost to a closed tab.
       void saveRecording(pending);
+    } else {
+      /*
+       * `stop()` returned nothing — the recorder produced an empty file, or it
+       * had already gone. This branch used to do nothing at all, which is how a
+       * host could stop a recording, see no error, and leave a row saying
+       * "uploading" with zero bytes. It is the exact shape of the eleven stuck
+       * recordings found in production.
+       */
+      const message = t("meetings.recordingEmpty");
+      setSaveProblem(message);
+      await reportRecordingFailure(recording?.id ?? null, "empty", message);
     }
     setRecording(null);
-  }, [runAction, recording, saveRecording, props.code, props.title, refreshUnsaved]);
+  }, [
+    runAction,
+    recording,
+    saveRecording,
+    props.code,
+    props.title,
+    refreshUnsaved,
+    reportRecordingFailure,
+    t,
+  ]);
 
 
   /* ============================================================

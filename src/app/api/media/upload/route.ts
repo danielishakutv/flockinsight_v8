@@ -1,7 +1,7 @@
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
-import { storeMedia, type MediaKind, MEDIA_KINDS } from "@/lib/media";
+import { permForKind, storeMedia, type MediaKind, MEDIA_KINDS } from "@/lib/media";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 
@@ -34,23 +34,6 @@ function isAllowedMime(mime: string): boolean {
     mime.startsWith("audio/") ||
     DOC_MIME.has(mime)
   );
-}
-
-// Which permission a given upload kind needs (owners always pass).
-function permForKind(kind: MediaKind): string {
-  switch (kind) {
-    case "logo":
-    case "cover":
-    case "photo":
-    case "event":
-      return "settings.manage";
-    case "member":
-      return "members.manage";
-    case "devotional":
-      return "devotionals.manage";
-    default:
-      return "media.manage"; // sermon, file
-  }
 }
 
 function json(data: unknown, status = 200) {

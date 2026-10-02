@@ -1337,6 +1337,8 @@ export const en = {
     diagCameraOff: "your camera is off",
     diagTheySaveData: "they are in Data Saver",
     savingToLibrary: "Saving to your media library…",
+    recordingEmpty:
+      "The recording came out empty, so there was nothing to save. Nothing was stored.",
     recordingUploadFailed: "The upload did not finish.",
     uploadCancelled: "Upload stopped. The recording is still on this device.",
     downloadOrLoseIt: "It is safe on this device — it will still be here if you close the tab, and you can save it to the library later.",

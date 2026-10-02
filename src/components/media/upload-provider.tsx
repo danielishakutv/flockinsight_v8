@@ -9,6 +9,11 @@ import {
 } from "react";
 import { CheckCircle2, ChevronDown, Loader2, Upload, X } from "lucide-react";
 import { compress } from "@/components/settings/image-upload";
+import {
+  uploadDirect,
+  UploadCancelled,
+  type UploadProgress,
+} from "@/lib/direct-upload";
 import { formatBytes } from "@/lib/storage-bytes";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
@@ -58,6 +63,26 @@ let counter = 0;
 const tempId = () => `u${(counter += 1)}_${Math.random().toString(36).slice(2, 7)}`;
 
 /**
+ * Big files go straight to Cloudinary; small ones keep the simple road.
+ *
+ * Posting a file through our own API means posting it through Cloudflare,
+ * which rejects any request body over 100 MB with a 413 before our server
+ * hears about it — so the upload fails at the edge, nothing reaches our logs,
+ * and the person is told "Upload failed" with no way to find out why. It is
+ * exactly the wall meeting recordings hit, and it is why somebody who
+ * downloaded a recording and tried to add it by hand could not.
+ *
+ * Above this size the browser uploads to Cloudinary directly, in chunks, the
+ * same way recordings already do. The threshold is far below Cloudflare's
+ * limit on purpose: the point is never to go near it, not to go up to it.
+ *
+ * Small files stay on the original path because it demonstrably works and is
+ * one round trip rather than three — and because the way to be sure a fix
+ * helps is not to rewrite the case that was never broken.
+ */
+const DIRECT_UPLOAD_OVER = 8 * 1024 * 1024;
+
+/**
  * App-wide upload manager. Because it lives in the app layout, uploads keep
  * running (and the progress widget stays visible) while the user navigates
  * around the app — they can leave the Media page and come back to see the
@@ -78,6 +103,59 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...p } : u)));
   }, []);
 
+
+  const uploadDirectToCloudinary = useCallback(
+    async (entryId: string, file: File, blob: Blob, filename: string, kind: string) => {
+      const signRes = await fetch("/api/media/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, bytes: blob.size, mime: file.type }),
+      });
+      const signData = await signRes.json();
+      if (!signData?.ok) {
+        patch(entryId, {
+          status: "error",
+          // The server knows why — quota, permission, storage not set up — and
+          // its sentence is more use than anything generic this end could write.
+          error: signData?.error ?? "Could not start the upload.",
+        });
+        return;
+      }
+
+      const uploaded = await uploadDirect(
+        blob,
+        filename,
+        signData.ticket,
+        (p: UploadProgress) => patch(entryId, { progress: Math.min(95, p.percent) }),
+      );
+
+      const doneRes = await fetch("/api/media/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicId: uploaded.publicId,
+          resourceType: signData.resourceType,
+          kind,
+          originalName: file.name,
+          mime: file.type,
+        }),
+      });
+      const doneData = await doneRes.json();
+      if (!doneData?.ok) {
+        patch(entryId, {
+          status: "error",
+          error: doneData?.error ?? "The upload finished but could not be saved.",
+        });
+        return;
+      }
+
+      const result: UploadResult = { ...(doneData as UploadResult), originalName: file.name };
+      patch(entryId, { progress: 100, status: "done", result });
+      listeners.current.forEach((l) => l(result));
+    },
+    [patch],
+  );
+
   const uploadOne = useCallback(
     async (entryId: string, file: File, kind: string) => {
       let blob: Blob = file;
@@ -90,6 +168,28 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           /* fall back to the original file */
         }
       }
+
+      if (blob.size > DIRECT_UPLOAD_OVER) {
+        try {
+          await uploadDirectToCloudinary(entryId, file, blob, filename, kind);
+        } catch (e) {
+          /*
+           * Named, never swallowed. A dropped connection part-way through a
+           * large upload is the likeliest outcome on a weak link, and "nothing
+           * happened" is the worst thing to show for it.
+           */
+          const message =
+            e instanceof UploadCancelled
+              ? "Upload cancelled."
+              : e instanceof Error
+                ? e.message
+                : "The upload did not finish.";
+          console.error("[media] direct upload failed", e);
+          patch(entryId, { status: "error", error: message });
+        }
+        return;
+      }
+
       const fd = new FormData();
       fd.append("file", blob, filename);
       fd.append("kind", kind);
@@ -127,7 +227,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         xhr.send(fd);
       });
     },
-    [patch],
+    [patch, uploadDirectToCloudinary],
   );
 
   const enqueue = useCallback(
