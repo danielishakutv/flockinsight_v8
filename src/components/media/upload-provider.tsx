@@ -183,14 +183,46 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       try {
         for (let offset = 0; offset < file.size; offset += size) {
           const slice = file.slice(offset, Math.min(offset + size, file.size));
-          const res = await fetch(
-            `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}`,
-            { method: "POST", body: slice },
-          );
-          const data = await res.json().catch(() => null);
-          if (!res.ok || !data?.ok) {
-            throw new Error(data?.error ?? "A piece of the upload was refused.");
+
+          /*
+           * Each chunk is retried on its own rather than restarting the file.
+           *
+           * On the connections this serves, one dropped request part-way
+           * through a 266 MB recording should cost a few seconds, not the whole
+           * upload. A transient edge error also shows up here as a 502 with no
+           * JSON body — which is indistinguishable from a real refusal unless
+           * it is tried again.
+           */
+          let lastError: string | null = null;
+          let sent = false;
+          for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
+            try {
+              const res = await fetch(
+                `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}`,
+                { method: "POST", body: slice },
+              );
+              const data = await res.json().catch(() => null);
+              if (res.ok && data?.ok) {
+                sent = true;
+                break;
+              }
+              /*
+               * A refusal the server explained is final — quota, permission, a
+               * vanished upload. Retrying it would just fail three times more
+               * slowly and bury the sentence that says what to do.
+               */
+              if (data?.error) throw new Error(data.error);
+              lastError = `The connection failed part-way through (${res.status}).`;
+            } catch (err) {
+              if (err instanceof Error && err.message && !/fetch|network|load failed/i.test(err.message)) {
+                throw err;
+              }
+              lastError = "The connection dropped during the upload.";
+            }
+            if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 1500));
           }
+          if (!sent) throw new Error(lastError ?? "A piece of the upload was refused.");
+
           // 95% at most until the server confirms the row: the last 5% is the
           // difference between "sent" and "saved", and they are not the same.
           patch(entryId, {
