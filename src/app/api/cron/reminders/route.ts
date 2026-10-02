@@ -223,6 +223,27 @@ export async function GET(request: Request) {
     console.error("[cron/reminders] pledge reminders failed", e);
   }
 
+  // Nudge a group's managers when a collection's deadline is close or past, and
+  // give back the storage held by receipts on collections settled over a year
+  // ago. Folded in here rather than given their own route: a cron route that
+  // exists in the code but not in the server's crontab is a job that silently
+  // never runs, and nothing would be expecting it to.
+  let contributions: Awaited<
+    ReturnType<typeof import("@/lib/contribution-reminders").runContributionReminders>
+  > | null = null;
+  let contributionProofs: Awaited<
+    ReturnType<typeof import("@/lib/contribution-reminders").purgeSettledProofs>
+  > | null = null;
+  try {
+    const { runContributionReminders, purgeSettledProofs } = await import(
+      "@/lib/contribution-reminders"
+    );
+    contributions = await runContributionReminders();
+    contributionProofs = await purgeSettledProofs();
+  } catch (e) {
+    console.error("[cron/reminders] contribution housekeeping failed", e);
+  }
+
   return new Response(
     JSON.stringify({
       ok: true,
@@ -234,6 +255,8 @@ export async function GET(request: Request) {
       firstTimers,
       senderIds,
       pledges,
+      contributions,
+      contributionProofs,
     }),
     { headers: { "Content-Type": "application/json" } },
   );

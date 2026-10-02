@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -18,7 +18,7 @@ export default async function MediaPage() {
   const access = await getAccess();
   const canManage = access.isOwner || access.perms.has("media.manage");
 
-  const [rows, storage] = await Promise.all([
+  const [rows, storage, receipts] = await Promise.all([
     db
       .select({
         id: media.id,
@@ -36,10 +36,29 @@ export default async function MediaPage() {
         createdAt: media.createdAt,
       })
       .from(media)
-      .where(eq(media.churchId, church.id))
+      /*
+       * Receipts are excluded, not hidden by a filter chip.
+       *
+       * A contribution receipt is evidence attached to a payment somebody may
+       * be disputing. Listing it here would put a Delete button on it for
+       * anyone with media rights, and a deleted proof leaves the payment
+       * reading as though none was ever attached — the proof row is set null
+       * and nothing records that it used to exist. They are managed from the
+       * contribution instead, where releasing one is recorded as a release.
+       */
+      .where(and(eq(media.churchId, church.id), ne(media.kind, "receipt")))
       .orderBy(desc(media.createdAt))
       .limit(500),
     getStorageInfo(church.id, church.storageExtraBytes),
+    // Still counted in the quota, so the bar and the list are reconciled by a
+    // line of text rather than left to disagree.
+    db
+      .select({
+        bytes: sql<string>`coalesce(sum(${media.bytes}), 0)`,
+        count: sql<string>`count(*)`,
+      })
+      .from(media)
+      .where(and(eq(media.churchId, church.id), eq(media.kind, "receipt"))),
   ]);
 
   return (
@@ -52,6 +71,10 @@ export default async function MediaPage() {
         configured={isCloudinaryConfigured()}
         canManage={canManage}
         storage={storage}
+        heldElsewhere={{
+          bytes: Number(receipts[0]?.bytes ?? 0),
+          count: Number(receipts[0]?.count ?? 0),
+        }}
         items={rows.map((r) => ({
           id: r.id,
           kind: r.kind,

@@ -16,8 +16,13 @@
  *
  * Usage:
  *   BETTER_AUTH_URL=http://127.0.0.1:3100 pnpm start -- -p 3100
+ *   pnpm tsx scripts/seed-contribution-smoke.ts --church demo
  *   node scripts/audit-mobile.mjs            # human-readable
  *   node scripts/audit-mobile.mjs --json     # machine-readable
+ *
+ * The seed line matters: /p/<slug> is in the public list below, and an empty
+ * collection renders none of the layouts that overflow. Without it that page is
+ * scanned as a 404 and reported as a page that could not be read.
  */
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:3100";
@@ -44,6 +49,8 @@ const APP_PAGES = [
   "/giving",
   "/giving/projects",
   "/giving/projects/report",
+  "/contributions",
+  "/contributions/people",
   "/finance",
   "/finance/accounts",
   "/finance/categories",
@@ -82,6 +89,11 @@ const APP_PAGES = [
 
 const PUBLIC_PAGES = [
   "/",
+  // A collection's public link is the most-opened page in the product on a
+  // phone — it arrives in a WhatsApp group and is tapped from the chat's own
+  // in-app browser. The slug is the one seeded by the smoke fixtures; a 404
+  // here is reported as a page that could not be scanned, not as a clean pass.
+  "/p/zz-smoke-choir-levy",
   "/login",
   "/signup",
   "/forgot-password",

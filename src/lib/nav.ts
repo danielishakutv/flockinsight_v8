@@ -10,6 +10,7 @@ import {
   FolderOpen,
   GraduationCap,
   HandCoins,
+  Handshake,
   HeartHandshake,
   LayoutDashboard,
   LifeBuoy,
@@ -64,6 +65,7 @@ const REPORT_PERMS = [
   "members.view",
   "attendance.view",
   "giving.view",
+  "contributions.view",
   "finance.view",
   "groups.view",
   "training.view",
@@ -99,6 +101,12 @@ export const mainNav: NavItem[] = [
   { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view" },
   { labelKey: "nav.livestreams", href: "/livestreams", icon: Radio, perm: "meetings.view" },
   { labelKey: "nav.giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
+  {
+    labelKey: "nav.contributions",
+    href: "/contributions",
+    icon: Handshake,
+    perm: "contributions.view",
+  },
   { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view" },
   {
     labelKey: "nav.followUp",
@@ -198,6 +206,14 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         descriptionKey: "nav.givingDesc",
         tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         perm: "giving.view",
+      },
+      {
+        labelKey: "nav.contributions",
+        href: "/contributions",
+        icon: Handshake,
+        descriptionKey: "nav.contributionsDesc",
+        tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+        perm: "contributions.view",
       },
       {
         labelKey: "nav.finance",

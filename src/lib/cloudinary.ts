@@ -64,6 +64,43 @@ function incomingTransformation(rt: ResourceType): string | undefined {
 const AUDIO_TRANSFORM = "q_auto";
 
 /**
+ * A receipt, which is a different thing from a photo.
+ *
+ * Nobody looks at a bank teller or a transfer screenshot for its beauty — it has
+ * to be *readable*, and that is all. 1400px on the long edge keeps the account
+ * number and the amount legible on a phone and on paper, `q_auto:eco` leans
+ * harder on compression than the library's `q_auto:good`, and `f_auto` hands
+ * back WebP to anything that can take it.
+ *
+ * The numbers matter because receipts are the one thing in the contributions
+ * module that bills a church every month it exists. A 6 MB phone photo stored
+ * raw, times forty people, times a few collections a year, is the difference
+ * between a Starter church fitting in 200 MB and being told to upgrade for
+ * keeping its own paperwork. Through this it lands around 120-200 KB — the same
+ * receipt, a thirtieth of the quota.
+ */
+const RECEIPT_TRANSFORM = "c_limit,w_1400,h_1400,q_auto:eco,f_auto";
+
+/**
+ * The incoming transformation for one upload, in one place.
+ *
+ * Both the server-side upload and the signed browser ticket read it, because a
+ * signature is computed over the transformation: if the two disagreed by a
+ * character, Cloudinary would reject every direct upload with a signature error
+ * and the cause would be invisible from either side.
+ */
+function transformationFor(opts: {
+  resourceType: ResourceType;
+  audio?: boolean;
+  purpose?: "receipt";
+}): string | undefined {
+  if (opts.audio) return AUDIO_TRANSFORM;
+  if (opts.purpose === "receipt")
+    return opts.resourceType === "image" ? RECEIPT_TRANSFORM : undefined;
+  return incomingTransformation(opts.resourceType);
+}
+
+/**
  * Upload bytes to Cloudinary. `resourceType` decides the endpoint and the
  * default optimisation. Pass `audio: true` for audio files (uploaded under the
  * "video" resource type but optimised as audio).
@@ -75,15 +112,19 @@ export async function uploadToCloudinary(
     folder: string;
     filename?: string;
     audio?: boolean;
+    /**
+     * What the file is FOR, when that should change how hard it is squeezed.
+     * Only "receipt" so far — see RECEIPT_TRANSFORM. Ignored for a raw file
+     * (a PDF), which is stored exactly as it arrived.
+     */
+    purpose?: "receipt";
   },
 ): Promise<CloudinaryAsset> {
   if (!isCloudinaryConfigured())
     throw new Error("Cloudinary isn't configured.");
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const transformation = opts.audio
-    ? AUDIO_TRANSFORM
-    : incomingTransformation(opts.resourceType);
+  const transformation = transformationFor(opts);
 
   const signed: Record<string, string | number | undefined> = {
     timestamp,
@@ -225,14 +266,13 @@ export function signDirectUpload(opts: {
   folder: string;
   resourceType: ResourceType;
   audio?: boolean;
+  purpose?: "receipt";
   uniqueUploadId: string;
 }): DirectUploadTicket | null {
   if (!isCloudinaryConfigured()) return null;
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const transformation = opts.audio
-    ? AUDIO_TRANSFORM
-    : incomingTransformation(opts.resourceType);
+  const transformation = transformationFor(opts);
 
   const signature = sign({ timestamp, folder: opts.folder, transformation });
 

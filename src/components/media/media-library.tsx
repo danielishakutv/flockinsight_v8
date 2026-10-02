@@ -90,11 +90,22 @@ export function MediaLibrary({
   configured,
   canManage,
   storage,
+  heldElsewhere,
   items: initial,
 }: {
   configured: boolean;
   canManage: boolean;
   storage: StorageInfo;
+  /**
+   * Space used by files this library deliberately does not list — at present,
+   * contribution receipts, which belong to the collection that holds them and
+   * must not be deletable from here (removing one would leave a disputed
+   * payment reading as though a receipt had never been attached).
+   *
+   * Named here all the same, because a bar saying 180 MB used above a list of
+   * 40 MB of files is a mystery the church cannot resolve.
+   */
+  heldElsewhere?: { bytes: number; count: number };
   items: Item[];
 }) {
   const t = useT();
@@ -195,6 +206,17 @@ export function MediaLibrary({
         {nearFull && (
           <p className="text-destructive mt-2 text-sm">
             You&apos;re running low on storage. Delete files or upgrade to keep uploading.
+          </p>
+        )}
+        {heldElsewhere && heldElsewhere.count > 0 && (
+          <p className="text-muted-foreground mt-2 text-sm">
+            Includes {formatBytes(heldElsewhere.bytes)} in{" "}
+            {heldElsewhere.count === 1 ? "1 receipt" : `${heldElsewhere.count} receipts`}{" "}
+            attached to{" "}
+            <Link href="/contributions" className="text-primary hover:underline">
+              group contributions
+            </Link>
+            , kept with their payment rather than listed here.
           </p>
         )}
       </div>

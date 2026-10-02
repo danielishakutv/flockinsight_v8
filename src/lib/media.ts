@@ -17,6 +17,7 @@ export type MediaKind =
   | "event"
   | "devotional"
   | "sermon"
+  | "receipt"
   | "file";
 
 export const MEDIA_KINDS: MediaKind[] = [
@@ -27,6 +28,7 @@ export const MEDIA_KINDS: MediaKind[] = [
   "event",
   "devotional",
   "sermon",
+  "receipt",
   "file",
 ];
 
@@ -72,6 +74,9 @@ export async function storeMedia(opts: {
   const asset = await uploadToCloudinary(opts.buffer, {
     resourceType,
     audio,
+    // A receipt is squeezed harder than a photo. The kind carries that, so no
+    // caller has to remember to ask for it.
+    purpose: opts.kind === "receipt" ? "receipt" : undefined,
     folder: `flockinsight/${opts.churchId}`,
     filename: opts.originalName,
   });

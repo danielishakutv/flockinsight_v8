@@ -30,6 +30,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "contributions",
+    label: "Group contributions",
+    description:
+      "Money a group puts together for one purpose — levies, goals and gifts, with the public link that shows every naira.",
+    perms: [
+      { key: "contributions.view", label: "View" },
+      { key: "contributions.manage", label: "Create & record" },
+    ],
+  },
+  {
     key: "finance",
     label: "Finance",
     description:

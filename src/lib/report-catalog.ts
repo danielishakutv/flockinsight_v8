@@ -17,6 +17,7 @@ export type CategoryKey =
   | "people"
   | "attendance"
   | "giving"
+  | "contributions"
   | "finance"
   | "groups"
   | "engagement"
@@ -44,6 +45,12 @@ export const CATEGORIES: Category[] = [
     key: "giving",
     label: "Giving",
     description: "Every entry, plus categories, projects and pledges.",
+  },
+  {
+    key: "contributions",
+    label: "Group contributions",
+    description:
+      "What each group collected together, who put in what, and where the money went.",
   },
   {
     key: "finance",
@@ -244,6 +251,44 @@ export const DATASETS: Dataset[] = [
       { column: "project_id", target: "projects.project_id" },
       { column: "member_id", target: "members.member_id" },
     ],
+  },
+
+  /* -------------------------- Contributions --------------------------- */
+  {
+    id: "contributions",
+    label: "Group contributions",
+    description:
+      "Every collection a group has run, with the goal, what was confirmed, what is still awaiting confirmation, what went out and what is still held.",
+    category: "contributions",
+    perm: "contributions.view",
+    grain: "One row per collection",
+    dateColumn: "created_at",
+    joins: [{ column: "group_id", target: "groups.group_id" }],
+  },
+  {
+    id: "contribution-payments",
+    label: "Contribution payments in",
+    description:
+      "Every payment recorded toward a collection, who it came from, who confirmed it, and whether it counts.",
+    category: "contributions",
+    perm: "contributions.view",
+    grain: "One row per payment",
+    dateColumn: "paid_on",
+    joins: [
+      { column: "contribution_id", target: "contributions.contribution_id" },
+      { column: "member_id", target: "members.member_id" },
+    ],
+  },
+  {
+    id: "contribution-payouts",
+    label: "Contribution payments out",
+    description:
+      "Every naira that left a collection — handed to the church, spent, withdrawn or refunded — with who approved it.",
+    category: "contributions",
+    perm: "contributions.view",
+    grain: "One row per payment out",
+    dateColumn: "paid_on",
+    joins: [{ column: "contribution_id", target: "contributions.contribution_id" }],
   },
 
   /* ------------------------------ Groups ------------------------------ */

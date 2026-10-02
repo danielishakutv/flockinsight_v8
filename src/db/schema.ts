@@ -15,6 +15,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  check,
   customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -3826,3 +3827,416 @@ export type MeetingMessage = typeof meetingMessage.$inferSelect;
 export type MeetingRecording = typeof meetingRecording.$inferSelect;
 export type ScriptureVerse = typeof scriptureVerse.$inferSelect;
 export type AuditLog = typeof auditLog.$inferSelect;
+
+/* ============================================================
+ * FlockInsight domain — group contributions
+ *
+ * The thing a department, choir or ministry does constantly and no church
+ * software helps with: twenty people putting money together for one purpose —
+ * a levy of 2,000 each, an open collection toward a goal, or a gift to bless
+ * somebody on their birthday — held and accounted for OUTSIDE the church's own
+ * books until it is handed over or spent.
+ *
+ * Three decisions shape every table below.
+ *
+ * 1. A contributor is NOT a member. The group leader typing names into a phone
+ *    on a Sunday has emails for nobody and phone numbers for half. So a
+ *    contributor is a name, with an optional member behind it, and the register
+ *    catches up later (see lib/contribution-merge.ts). Requiring a member
+ *    record first is how every other tool makes this unusable.
+ *
+ * 2. Nothing is denormalised. Raised, outstanding and balance are always SUMs
+ *    of rows, exactly as projects and pledges work — a stored total is a total
+ *    that will one day disagree with the entries under it, and in a module
+ *    whose entire purpose is trust that is the one bug that cannot be shrugged
+ *    off.
+ *
+ * 3. A pot is not the church's money. It is not in Finance, and giving records
+ *    are not written for it, until somebody records a hand-over. Until then
+ *    the department holds it, and the ledger here says so.
+ * ========================================================== */
+
+/**
+ * The preset a pot was created from. It decides which fields the form shows and
+ * how the public page reads — not what is allowed, so a gift can still carry a
+ * per-person amount and an equal-share levy can still take an odd amount from
+ * somebody who could only manage half.
+ */
+export const contributionKindEnum = pgEnum("contribution_kind", [
+  "equal", // everyone gives the same amount (a levy / assessment)
+  "open", // any amount, toward a goal
+  "gift", // to bless a person — a birthday, a wedding, a bereavement
+]);
+
+export const contributionStatusEnum = pgEnum("contribution_status", [
+  "draft", // being set up; no public link yet
+  "open", // collecting
+  "closed", // no longer collecting, money not yet accounted for
+  "settled", // every naira accounted for — handed over, spent or refunded
+]);
+
+/**
+ * How much the public link gives away.
+ *
+ * `detailed` is the default because the whole point of sharing the link in a
+ * WhatsApp group is that everybody can see everybody — that is what stops the
+ * arguments. `summary` exists for a pot where the amounts are nobody else's
+ * business (a bereavement collection), and `private` turns the link off.
+ */
+export const contributionVisibilityEnum = pgEnum("contribution_visibility", [
+  "private",
+  "summary",
+  "detailed",
+]);
+
+/**
+ * An entry's standing, DERIVED from its approval rows and then stored.
+ *
+ * Stored because the public page, the totals and the exports all read it, and
+ * recomputing a vote count per row per view is how a transparency page becomes
+ * slow enough that people stop opening it. Recomputed inside the transaction
+ * that changes a vote, so it cannot drift — see `deriveEntryStatus` in
+ * lib/contributions-shared.ts for the rule, which is unit-tested.
+ */
+export const contributionEntryStatusEnum = pgEnum("contribution_entry_status", [
+  "pending", // recorded, waiting for the confirmations the pot requires
+  "confirmed", // counted toward the total
+  "disputed", // somebody says the amount or the payment is wrong
+  "rejected", // settled as not a real payment; kept, never counted
+]);
+
+/** Who put the entry in — a leader recording it, or the giver themselves. */
+export const contributionEntrySourceEnum = pgEnum("contribution_entry_source", [
+  "recorded", // a manager entered it
+  "self", // the giver filled in the public form
+]);
+
+/**
+ * Money leaving the pot.
+ *
+ * `handover` is the only kind that may touch the church's books, because it is
+ * the only kind where the money actually arrives there.
+ */
+export const contributionPayoutKindEnum = pgEnum("contribution_payout_kind", [
+  "handover", // given to the church (may post to Finance as income)
+  "expense", // spent on the thing the pot was for
+  "withdrawal", // taken out of the account, held by a person
+  "refund", // returned to contributors
+]);
+
+export const contributionPayoutStatusEnum = pgEnum("contribution_payout_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const contributionApprovalDecisionEnum = pgEnum(
+  "contribution_approval_decision",
+  ["confirm", "dispute"],
+);
+
+export const contribution = pgTable(
+  "contribution",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * The group collecting, when there is one. Optional: plenty of these are
+     * raised by a handful of people who are not a formal department. Set null
+     * on group delete so the money record outlives the reorganisation.
+     */
+    groupId: uuid().references(() => group.id, { onDelete: "set null" }),
+    title: text().notNull(),
+    purpose: text(),
+    kind: contributionKindEnum().notNull().default("open"),
+    status: contributionStatusEnum().notNull().default("draft"),
+    /** The "link half name": /p/<slug>. Globally unique so links are stable. */
+    slug: text().notNull().unique(),
+
+    // ----- The money shape -----
+    /** The goal. Null for a pot that just collects whatever comes. */
+    targetAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** What each person is expected to give. Overridden per contributor. */
+    perPersonAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** Where to pay — account name/number, or "see the treasurer". Shown publicly. */
+    payInstructions: text(),
+
+    // ----- Who it is for (a gift) -----
+    honoureeMemberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    honoureeName: text(),
+
+    startDate: date(),
+    /** The deadline. Drives the countdown and the reminder. */
+    dueDate: date(),
+
+    // ----- The public link -----
+    visibility: contributionVisibilityEnum().notNull().default("detailed"),
+    /**
+     * Show who has NOT given yet. Off by default, and the default matters: a
+     * public list of defaulters is a pastoral problem, not a feature. A group
+     * that wants it (a committee levy among six adults) can turn it on.
+     */
+    showOutstanding: boolean().notNull().default(false),
+    /** Show where the money went. On by default — it is the point. */
+    showPayouts: boolean().notNull().default(true),
+    /** Show the one-line notes people leave with a gift. */
+    showNotes: boolean().notNull().default(true),
+    /** Let anyone with the link record their own payment, pending confirmation. */
+    allowSelfReport: boolean().notNull().default(true),
+    /** Ask self-reporters for a receipt. Never blocks them if they have none. */
+    askForProof: boolean().notNull().default(true),
+
+    // ----- Control -----
+    /**
+     * Distinct people who must confirm an entry before it counts.
+     *
+     * 1 means a leader's own record stands on its own. 2 is the dual-control
+     * setting a committee should use, and the number M-Changa learned to force
+     * on withdrawals: the person who writes the figure down is not the person
+     * who checks it.
+     */
+    confirmationsRequired: integer().notNull().default(1),
+    /** The same, for money going out. Higher by default, deliberately. */
+    payoutApprovalsRequired: integer().notNull().default(2),
+    /**
+     * Keep receipt files beyond the automatic release date. Off by default so a
+     * church's storage quota is not quietly consumed by three-year-old tellers;
+     * on for a pot whose paperwork has to be kept.
+     */
+    keepProofs: boolean().notNull().default(false),
+
+    closedAt: timestamp({ withTimezone: true }),
+    settledAt: timestamp({ withTimezone: true }),
+    /** When the goal was first reached, so the page can celebrate it once. */
+    goalReachedAt: timestamp({ withTimezone: true }),
+
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("contribution_church_idx").on(t.churchId),
+    index("contribution_group_idx").on(t.groupId),
+    index("contribution_church_status_idx").on(t.churchId, t.status),
+  ],
+);
+
+/**
+ * One person in one pot — the roster entry AND the payer identity.
+ *
+ * `name` is always kept even once `memberId` is set, because it is what was
+ * actually written down, and a leader looking for "Sister Bisi" should still
+ * find the row after it was linked to "Abisola Adeyemi".
+ */
+export const contributionContributor = pgTable(
+  "contribution_contributor",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    contributionId: uuid()
+      .notNull()
+      .references(() => contribution.id, { onDelete: "cascade" }),
+    /** Denormalised so the church-wide "people to match" sweep is one index hit. */
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    name: text().notNull(),
+    phone: text(),
+    email: text(),
+    /** What this person is expected to give. Null = the pot's per-person amount. */
+    expectedAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** Show as "Anonymous" on the public page. Always named inside the church. */
+    isAnonymous: boolean().notNull().default(false),
+    note: text(),
+    /**
+     * "These are different people." Set when somebody rejects a suggested
+     * match, so the same wrong suggestion is not offered every week — the
+     * single reason a match-suggestion screen gets ignored.
+     */
+    matchDismissed: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("contribution_contributor_pot_idx").on(t.contributionId),
+    index("contribution_contributor_church_idx").on(t.churchId),
+    index("contribution_contributor_member_idx").on(t.memberId),
+    /*
+     * One row per member per pot. Partial, because the whole design allows many
+     * unlinked people who happen to share a name — "Mama Grace" is not a key.
+     */
+    uniqueIndex("contribution_contributor_member_unique")
+      .on(t.contributionId, t.memberId)
+      .where(sql`${t.memberId} is not null`),
+  ],
+);
+
+/** One payment somebody made toward a pot. */
+export const contributionEntry = pgTable(
+  "contribution_entry",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    contributionId: uuid()
+      .notNull()
+      .references(() => contribution.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    contributorId: uuid()
+      .notNull()
+      .references(() => contributionContributor.id, { onDelete: "cascade" }),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    method: givingMethodEnum(),
+    paidOn: date().notNull(),
+    /** Teller number, transfer reference, "handed to the treasurer". */
+    reference: text(),
+    /** A line the giver wanted said. Shown on the public wall when allowed. */
+    note: text(),
+    status: contributionEntryStatusEnum().notNull().default("pending"),
+    source: contributionEntrySourceEnum().notNull().default("recorded"),
+    /** Optional receipt. A media row, so it counts against the church's quota. */
+    proofMediaId: uuid().references(() => media.id, { onDelete: "set null" }),
+    /**
+     * When a receipt was released to reclaim storage.
+     *
+     * Kept rather than left null, because "there was never a receipt" and "the
+     * receipt was held for a year and then released" are different facts and a
+     * blank tells you neither.
+     */
+    proofReleasedAt: timestamp({ withTimezone: true }),
+    /** Set when the confirmations the pot requires were reached. */
+    confirmedAt: timestamp({ withTimezone: true }),
+    /** Why it was rejected, or what is being disputed. Never a bare status. */
+    resolutionNote: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    /** What the public form was told, when there is no account behind the row. */
+    recordedByName: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("contribution_entry_pot_idx").on(t.contributionId),
+    index("contribution_entry_church_idx").on(t.churchId),
+    index("contribution_entry_contributor_idx").on(t.contributorId),
+    index("contribution_entry_pot_status_idx").on(t.contributionId, t.status),
+    index("contribution_entry_paid_idx").on(t.paidOn),
+  ],
+);
+
+/** Money out of the pot. */
+export const contributionPayout = pgTable(
+  "contribution_payout",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    contributionId: uuid()
+      .notNull()
+      .references(() => contribution.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    kind: contributionPayoutKindEnum().notNull().default("expense"),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    paidOn: date().notNull(),
+    /** Who received it. */
+    payee: text(),
+    purpose: text(),
+    method: givingMethodEnum(),
+    reference: text(),
+    status: contributionPayoutStatusEnum().notNull().default("pending"),
+    proofMediaId: uuid().references(() => media.id, { onDelete: "set null" }),
+    proofReleasedAt: timestamp({ withTimezone: true }),
+    /**
+     * The income row in the church's books, for a hand-over that was posted.
+     *
+     * Set null rather than cascade: if somebody deletes the ledger row, the
+     * hand-over still happened and the pot must still show the money gone.
+     * The reverse direction is handled in code — removing the hand-over
+     * removes its ledger row, because money nobody handed over must not sit in
+     * the church's income.
+     */
+    financeTransactionId: uuid().references(() => financeTransaction.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp({ withTimezone: true }),
+    resolutionNote: text(),
+    recordedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("contribution_payout_pot_idx").on(t.contributionId),
+    index("contribution_payout_church_idx").on(t.churchId),
+    index("contribution_payout_pot_status_idx").on(t.contributionId, t.status),
+  ],
+);
+
+/**
+ * One person's vote on one entry or one payout.
+ *
+ * Both in one table because the rule is the same rule — count the distinct
+ * people who agree — and two tables would be two implementations of it, which
+ * is two chances to get a disputed figure wrong. Exactly one of `entryId` and
+ * `payoutId` is set; the check constraint says so rather than trusting callers.
+ */
+export const contributionApproval = pgTable(
+  "contribution_approval",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    entryId: uuid().references(() => contributionEntry.id, {
+      onDelete: "cascade",
+    }),
+    payoutId: uuid().references(() => contributionPayout.id, {
+      onDelete: "cascade",
+    }),
+    decision: contributionApprovalDecisionEnum().notNull(),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** The name as it stood when they voted, so the log survives a leaver. */
+    actorName: text().notNull(),
+    note: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("contribution_approval_entry_idx").on(t.entryId),
+    index("contribution_approval_payout_idx").on(t.payoutId),
+    /*
+     * One vote per person per thing — changing your mind updates your row
+     * rather than adding a second. Without this, one determined person could
+     * clear a two-signature requirement by clicking twice, which would make
+     * the whole control decorative.
+     */
+    uniqueIndex("contribution_approval_entry_user_unique")
+      .on(t.entryId, t.userId)
+      .where(sql`${t.entryId} is not null and ${t.userId} is not null`),
+    uniqueIndex("contribution_approval_payout_user_unique")
+      .on(t.payoutId, t.userId)
+      .where(sql`${t.payoutId} is not null and ${t.userId} is not null`),
+    check(
+      "contribution_approval_one_target",
+      sql`(${t.entryId} is null) <> (${t.payoutId} is null)`,
+    ),
+  ],
+);
+
+export type Contribution = typeof contribution.$inferSelect;
+export type NewContribution = typeof contribution.$inferInsert;
+export type ContributionContributor = typeof contributionContributor.$inferSelect;
+export type ContributionEntry = typeof contributionEntry.$inferSelect;
+export type ContributionPayout = typeof contributionPayout.$inferSelect;
+export type ContributionApproval = typeof contributionApproval.$inferSelect;

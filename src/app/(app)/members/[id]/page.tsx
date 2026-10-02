@@ -8,6 +8,7 @@ import {
   ChevronRight,
   GraduationCap,
   HandCoins,
+  Handshake,
   Home,
   UsersRound,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { householdOptions } from "@/lib/households";
 import { getMemberPledges, cadenceLabel } from "@/lib/projects";
+import { contributionsForMember } from "@/lib/contributions";
 import { formatMoney } from "@/lib/money";
 import { siteUrl } from "@/lib/site";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
@@ -112,6 +114,7 @@ export default async function MemberDetailPage({
     householdSiblings,
     memberPledges,
     training,
+    memberContributions,
   ] = await Promise.all([
       // Groups / ministries this member belongs to.
       db
@@ -184,6 +187,9 @@ export default async function MemberDetailPage({
       getMemberPledges(church.id, id),
         // Classes and training this member has taken.
     memberTraining(church.id, id),
+    // Group collections this person is on the list for, and what they have put
+    // in. Their own record, in the one place somebody looks a person up.
+    contributionsForMember(church.id, id),
   ]);
 
   const name = [m.firstName, m.middleName, m.lastName]
@@ -512,6 +518,45 @@ export default async function MemberDetailPage({
                     {pl.outstanding > 0 && pl.status === "active"
                       ? ` · ${formatMoney(pl.outstanding, church.currency)} outstanding`
                       : ""}
+                  </p>
+                </div>
+                <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {memberContributions.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Handshake className="text-primary size-5" />
+              {t("contributions.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {memberContributions.map((c) => (
+              <Link
+                key={c.potId}
+                href={`/contributions/${c.potId}`}
+                className="hover:bg-accent flex items-center gap-3 rounded-xl border p-3 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-semibold">{c.title}</span>
+                    {c.outstanding > 0 ? (
+                      <Badge variant="warning">
+                        {formatMoney(c.outstanding, church.currency)}{" "}
+                        {t("contributions.outstanding").toLowerCase()}
+                      </Badge>
+                    ) : c.paid > 0 ? (
+                      <Badge variant="success">{t("contributions.paidUp")}</Badge>
+                    ) : null}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {formatMoney(c.paid, church.currency)}{" "}
+                    {t("contributions.paid").toLowerCase()}
                   </p>
                 </div>
                 <ChevronRight className="text-muted-foreground size-4 shrink-0" />

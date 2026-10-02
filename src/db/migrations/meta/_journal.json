@@ -575,6 +575,13 @@
       "when": 1790798479483,
       "tag": "0081_staff_lookup_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1790925129162,
+      "tag": "0082_contributions",
+      "breakpoints": true
     }
   ]
 }

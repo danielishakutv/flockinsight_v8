@@ -2,13 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight, Handshake } from "lucide-react";
 import { db } from "@/db";
 import { group, groupMembership, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
+import { listContributions } from "@/lib/contributions";
+import { formatMoney } from "@/lib/money";
+import { getT } from "@/lib/i18n/server";
 import { PageContainer } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  PotMeter,
+  PotStatusBadge,
+} from "@/components/contributions/pieces";
 import {
   GroupDetail,
   type GroupMemberRow,
@@ -25,8 +33,16 @@ export default async function GroupDetailPage({
   if (!z.string().uuid().safeParse(id).success) notFound();
 
   const { church } = await requireChurch();
+  const t = await getT();
   await requireCan("groups.view");
   const canManage = await can("groups.manage");
+  /*
+   * A collection is money, so it is shown here only to somebody allowed to see
+   * money. A group leader without `contributions.view` still runs their own
+   * collections from /contributions — this is the group page, not a side door
+   * around the permission.
+   */
+  const canSeeContributions = await can("contributions.view");
 
   const [g] = await db
     .select()
@@ -82,6 +98,11 @@ export default async function GroupDetailPage({
     name: [m.firstName, m.lastName].filter(Boolean).join(" "),
   }));
 
+  // What this group is collecting, if the viewer may see it.
+  const pots = canSeeContributions
+    ? await listContributions(church.id, { groupIds: [id] })
+    : [];
+
   return (
     <PageContainer className="max-w-3xl">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
@@ -105,6 +126,52 @@ export default async function GroupDetailPage({
         candidates={candidates}
         canManage={canManage}
       />
+
+      {pots.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Handshake className="text-primary size-5" />
+              {t("contributions.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pots.map((c) => (
+              <Link
+                key={c.id}
+                href={`/contributions/${c.id}`}
+                className="hover:bg-accent block rounded-xl border p-3 transition-colors"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-semibold">{c.title}</span>
+                      <PotStatusBadge status={c.status} />
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {formatMoney(c.raised, church.currency)}
+                      {c.target
+                        ? ` ${t("contributions.ofTarget", {
+                            amount: formatMoney(c.target, church.currency),
+                          })}`
+                        : ""}{" "}
+                      · {t("common.people", { count: c.givers })}
+                    </p>
+                  </div>
+                  <ChevronRight className="text-muted-foreground mt-1 size-4 shrink-0" />
+                </div>
+                <PotMeter
+                  raised={c.raised}
+                  pending={c.pending}
+                  target={c.target}
+                  currency={church.currency}
+                  className="mt-2"
+                />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </PageContainer>
   );
 }

@@ -29,6 +29,11 @@ export const AUDIT_MODULES: AuditModule[] = [
   { key: "attendance", label: "Attendance", perm: "attendance.view" },
   { key: "groups", label: "Groups", perm: "groups.view" },
   { key: "giving", label: "Giving", perm: "giving.view" },
+  {
+    key: "contributions",
+    label: "Group contributions",
+    perm: "contributions.view",
+  },
   { key: "finance", label: "Finance", perm: "finance.view" },
   { key: "followup", label: "Follow-up", perm: "followup.view" },
   { key: "training", label: "Training", perm: "training.view" },

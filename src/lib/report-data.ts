@@ -7,6 +7,11 @@ import {
   attendanceSession,
   church,
   communicationLog,
+  contribution,
+  contributionApproval,
+  contributionContributor,
+  contributionEntry,
+  contributionPayout,
   communicationRecipient,
   devotional,
   event,
@@ -969,6 +974,428 @@ const BUILDERS: Record<string, Builder> = {
           ts(p.createdAt),
         ];
       }),
+    };
+  },
+
+  /* -------------------------- Contributions --------------------------- */
+
+  /*
+   * Three datasets rather than one wide join, for the reason a treasurer cares
+   * about: a collection, the payments in and the payments out have different
+   * grains, and flattening them multiplies rows until the totals in a
+   * spreadsheet are wrong. The ids carried in each file join them back up.
+   *
+   * Every figure here is recomputed from rows, not read from a stored total —
+   * the same rule the screens follow. And every aggregate is a GROUPED query
+   * joined in JS, because a correlated subquery in a raw `sql` template loses
+   * its table qualifier and silently returns zero (see src/lib/sql-safety.test.ts).
+   */
+
+  contributions: async (churchId, range) => {
+    const rows = await db
+      .select({
+        id: contribution.id,
+        title: contribution.title,
+        slug: contribution.slug,
+        kind: contribution.kind,
+        status: contribution.status,
+        visibility: contribution.visibility,
+        groupId: contribution.groupId,
+        groupName: group.name,
+        honoureeName: contribution.honoureeName,
+        purpose: contribution.purpose,
+        target: contribution.targetAmount,
+        perPerson: contribution.perPersonAmount,
+        startDate: contribution.startDate,
+        dueDate: contribution.dueDate,
+        confirmationsRequired: contribution.confirmationsRequired,
+        payoutApprovalsRequired: contribution.payoutApprovalsRequired,
+        closedAt: contribution.closedAt,
+        settledAt: contribution.settledAt,
+        goalReachedAt: contribution.goalReachedAt,
+        createdAt: contribution.createdAt,
+      })
+      .from(contribution)
+      .leftJoin(group, eq(group.id, contribution.groupId))
+      .where(
+        and(
+          eq(contribution.churchId, churchId),
+          ...rangeWhere(contribution.createdAt, range, "timestamp"),
+        ),
+      )
+      .orderBy(desc(contribution.createdAt));
+
+    const [inRows, outRows, rosterRows, giverRows] = await Promise.all([
+      db
+        .select({
+          potId: contributionEntry.contributionId,
+          status: contributionEntry.status,
+          total: sql<string>`sum(${contributionEntry.amount})`,
+        })
+        .from(contributionEntry)
+        .where(eq(contributionEntry.churchId, churchId))
+        .groupBy(contributionEntry.contributionId, contributionEntry.status),
+      db
+        .select({
+          potId: contributionPayout.contributionId,
+          status: contributionPayout.status,
+          total: sql<string>`sum(${contributionPayout.amount})`,
+        })
+        .from(contributionPayout)
+        .where(eq(contributionPayout.churchId, churchId))
+        .groupBy(contributionPayout.contributionId, contributionPayout.status),
+      db
+        .select({
+          potId: contributionContributor.contributionId,
+          people: sql<string>`count(*)`,
+          expectedSet: sql<string>`coalesce(sum(${contributionContributor.expectedAmount}), 0)`,
+          withExpected: sql<string>`count(${contributionContributor.expectedAmount})`,
+        })
+        .from(contributionContributor)
+        .where(eq(contributionContributor.churchId, churchId))
+        .groupBy(contributionContributor.contributionId),
+      db
+        .select({
+          potId: contributionEntry.contributionId,
+          givers: sql<string>`count(distinct ${contributionEntry.contributorId})`,
+        })
+        .from(contributionEntry)
+        .where(
+          and(
+            eq(contributionEntry.churchId, churchId),
+            eq(contributionEntry.status, "confirmed"),
+          ),
+        )
+        .groupBy(contributionEntry.contributionId),
+    ]);
+
+    const moneyIn = new Map<string, Record<string, number>>();
+    for (const r of inRows) {
+      const bucket = moneyIn.get(r.potId) ?? {};
+      bucket[r.status] = Number(r.total) || 0;
+      moneyIn.set(r.potId, bucket);
+    }
+    const moneyOut = new Map<string, Record<string, number>>();
+    for (const r of outRows) {
+      const bucket = moneyOut.get(r.potId) ?? {};
+      bucket[r.status] = Number(r.total) || 0;
+      moneyOut.set(r.potId, bucket);
+    }
+    const roster = new Map(
+      rosterRows.map((r) => [
+        r.potId,
+        {
+          people: Number(r.people) || 0,
+          expectedSet: Number(r.expectedSet) || 0,
+          withExpected: Number(r.withExpected) || 0,
+        },
+      ]),
+    );
+    const givers = new Map(giverRows.map((r) => [r.potId, Number(r.givers) || 0]));
+
+    return {
+      columns: [
+        "contribution_id",
+        "title",
+        "public_link",
+        "kind",
+        "status",
+        "visibility",
+        "group_id",
+        "group_name",
+        "for_whom",
+        "purpose",
+        "goal_amount",
+        "amount_per_person",
+        "people_on_the_list",
+        "people_who_have_given",
+        "confirmed_in",
+        "awaiting_confirmation",
+        "disputed",
+        "rejected",
+        "approved_out",
+        "awaiting_approval_out",
+        "still_held",
+        "confirmations_required",
+        "payout_approvals_required",
+        "start_date",
+        "due_date",
+        "goal_reached_at",
+        "closed_at",
+        "settled_at",
+        "created_at",
+      ],
+      rows: rows.map((c) => {
+        const inB = moneyIn.get(c.id) ?? {};
+        const outB = moneyOut.get(c.id) ?? {};
+        const r = roster.get(c.id) ?? { people: 0, expectedSet: 0, withExpected: 0 };
+        const unset = Math.max(0, r.people - r.withExpected);
+        const expectedTotal =
+          r.expectedSet + unset * (c.perPerson == null ? 0 : Number(c.perPerson));
+        const goal =
+          c.target != null && Number(c.target) > 0
+            ? Number(c.target)
+            : expectedTotal > 0
+              ? expectedTotal
+              : null;
+        const confirmed = inB.confirmed ?? 0;
+        const approvedOut = outB.approved ?? 0;
+        return [
+          c.id,
+          c.title,
+          `/p/${c.slug}`,
+          c.kind,
+          c.status,
+          c.visibility,
+          c.groupId,
+          c.groupName,
+          c.honoureeName,
+          c.purpose,
+          goal,
+          c.perPerson == null ? null : Number(c.perPerson),
+          r.people,
+          givers.get(c.id) ?? 0,
+          confirmed,
+          inB.pending ?? 0,
+          inB.disputed ?? 0,
+          inB.rejected ?? 0,
+          approvedOut,
+          outB.pending ?? 0,
+          +(confirmed - approvedOut).toFixed(2),
+          c.confirmationsRequired,
+          c.payoutApprovalsRequired,
+          c.startDate,
+          c.dueDate,
+          ts(c.goalReachedAt),
+          ts(c.closedAt),
+          ts(c.settledAt),
+          ts(c.createdAt),
+        ];
+      }),
+    };
+  },
+
+  "contribution-payments": async (churchId, range) => {
+    const rows = await db
+      .select({
+        id: contributionEntry.id,
+        potId: contributionEntry.contributionId,
+        potTitle: contribution.title,
+        contributorId: contributionEntry.contributorId,
+        contributorName: contributionContributor.name,
+        memberId: contributionContributor.memberId,
+        first: member.firstName,
+        middle: member.middleName,
+        last: member.lastName,
+        isAnonymous: contributionContributor.isAnonymous,
+        expected: contributionContributor.expectedAmount,
+        amount: contributionEntry.amount,
+        method: contributionEntry.method,
+        paidOn: contributionEntry.paidOn,
+        reference: contributionEntry.reference,
+        note: contributionEntry.note,
+        status: contributionEntry.status,
+        source: contributionEntry.source,
+        proofMediaId: contributionEntry.proofMediaId,
+        proofReleasedAt: contributionEntry.proofReleasedAt,
+        confirmedAt: contributionEntry.confirmedAt,
+        resolutionNote: contributionEntry.resolutionNote,
+        recordedByName: contributionEntry.recordedByName,
+        createdAt: contributionEntry.createdAt,
+      })
+      .from(contributionEntry)
+      .innerJoin(
+        contribution,
+        eq(contribution.id, contributionEntry.contributionId),
+      )
+      .innerJoin(
+        contributionContributor,
+        eq(contributionContributor.id, contributionEntry.contributorId),
+      )
+      .leftJoin(member, eq(member.id, contributionContributor.memberId))
+      .where(
+        and(
+          eq(contributionEntry.churchId, churchId),
+          ...rangeWhere(contributionEntry.paidOn, range, "date"),
+        ),
+      )
+      .orderBy(desc(contributionEntry.paidOn), desc(contributionEntry.createdAt));
+
+    // Who voted, per payment. The question a committee actually asks about a
+    // figure somebody is arguing over.
+    const votes = await db
+      .select({
+        entryId: contributionApproval.entryId,
+        decision: contributionApproval.decision,
+        actorName: contributionApproval.actorName,
+      })
+      .from(contributionApproval)
+      .where(eq(contributionApproval.churchId, churchId));
+    const confirmedBy = new Map<string, string[]>();
+    const disputedBy = new Map<string, string[]>();
+    for (const v of votes) {
+      if (!v.entryId) continue;
+      const target = v.decision === "confirm" ? confirmedBy : disputedBy;
+      target.set(v.entryId, [...(target.get(v.entryId) ?? []), v.actorName]);
+    }
+
+    return {
+      columns: [
+        "payment_id",
+        "contribution_id",
+        "contribution_title",
+        "contributor_id",
+        "contributor_name_as_recorded",
+        "member_id",
+        "member_name",
+        "on_the_members_register",
+        "shown_as_anonymous_publicly",
+        "expected_from_them",
+        "amount",
+        "counts_toward_total",
+        "status",
+        "method",
+        "paid_on",
+        "reference",
+        "note",
+        "recorded_by",
+        "reported_by_the_giver",
+        "confirmed_by",
+        "disputed_by",
+        "confirmed_at",
+        "resolution_note",
+        "receipt_attached",
+        "receipt_released_at",
+        "created_at",
+      ],
+      rows: rows.map((e) => [
+        e.id,
+        e.potId,
+        e.potTitle,
+        e.contributorId,
+        e.contributorName,
+        e.memberId,
+        e.memberId ? fullName(e.first, e.middle, e.last) : null,
+        bool(!!e.memberId),
+        bool(e.isAnonymous),
+        e.expected == null ? null : Number(e.expected),
+        Number(e.amount),
+        bool(e.status === "confirmed"),
+        e.status,
+        e.method,
+        e.paidOn,
+        e.reference,
+        e.note,
+        e.recordedByName,
+        bool(e.source === "self"),
+        (confirmedBy.get(e.id) ?? []).join("; "),
+        (disputedBy.get(e.id) ?? []).join("; "),
+        ts(e.confirmedAt),
+        e.resolutionNote,
+        bool(!!e.proofMediaId),
+        ts(e.proofReleasedAt),
+        ts(e.createdAt),
+      ]),
+    };
+  },
+
+  "contribution-payouts": async (churchId, range) => {
+    const rows = await db
+      .select({
+        id: contributionPayout.id,
+        potId: contributionPayout.contributionId,
+        potTitle: contribution.title,
+        kind: contributionPayout.kind,
+        amount: contributionPayout.amount,
+        paidOn: contributionPayout.paidOn,
+        payee: contributionPayout.payee,
+        purpose: contributionPayout.purpose,
+        method: contributionPayout.method,
+        reference: contributionPayout.reference,
+        status: contributionPayout.status,
+        proofMediaId: contributionPayout.proofMediaId,
+        proofReleasedAt: contributionPayout.proofReleasedAt,
+        financeTransactionId: contributionPayout.financeTransactionId,
+        approvedAt: contributionPayout.approvedAt,
+        resolutionNote: contributionPayout.resolutionNote,
+        createdAt: contributionPayout.createdAt,
+      })
+      .from(contributionPayout)
+      .innerJoin(
+        contribution,
+        eq(contribution.id, contributionPayout.contributionId),
+      )
+      .where(
+        and(
+          eq(contributionPayout.churchId, churchId),
+          ...rangeWhere(contributionPayout.paidOn, range, "date"),
+        ),
+      )
+      .orderBy(desc(contributionPayout.paidOn), desc(contributionPayout.createdAt));
+
+    const votes = await db
+      .select({
+        payoutId: contributionApproval.payoutId,
+        decision: contributionApproval.decision,
+        actorName: contributionApproval.actorName,
+      })
+      .from(contributionApproval)
+      .where(eq(contributionApproval.churchId, churchId));
+    const approvedBy = new Map<string, string[]>();
+    const objectedBy = new Map<string, string[]>();
+    for (const v of votes) {
+      if (!v.payoutId) continue;
+      const target = v.decision === "confirm" ? approvedBy : objectedBy;
+      target.set(v.payoutId, [...(target.get(v.payoutId) ?? []), v.actorName]);
+    }
+
+    return {
+      columns: [
+        "payout_id",
+        "contribution_id",
+        "contribution_title",
+        "what_happened_to_it",
+        "amount",
+        "counts_as_paid_out",
+        "status",
+        "paid_on",
+        "payee",
+        "purpose",
+        "method",
+        "reference",
+        "approved_by",
+        "objections_from",
+        "approved_at",
+        "posted_to_finance",
+        "finance_transaction_id",
+        "resolution_note",
+        "receipt_attached",
+        "receipt_released_at",
+        "created_at",
+      ],
+      rows: rows.map((p) => [
+        p.id,
+        p.potId,
+        p.potTitle,
+        p.kind,
+        Number(p.amount),
+        bool(p.status === "approved"),
+        p.status,
+        p.paidOn,
+        p.payee,
+        p.purpose,
+        p.method,
+        p.reference,
+        (approvedBy.get(p.id) ?? []).join("; "),
+        (objectedBy.get(p.id) ?? []).join("; "),
+        ts(p.approvedAt),
+        bool(!!p.financeTransactionId),
+        p.financeTransactionId,
+        p.resolutionNote,
+        bool(!!p.proofMediaId),
+        ts(p.proofReleasedAt),
+        ts(p.createdAt),
+      ]),
     };
   },
 
