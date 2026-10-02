@@ -156,6 +156,74 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     [patch],
   );
 
+  /**
+   * Send one file to our own server, a slice at a time.
+   *
+   * Sequential rather than parallel: the chunks are appended to a single file in
+   * order, and the server re-checks the church's quota on every one, so letting
+   * them race would both corrupt the file and defeat the check. On the
+   * connections this serves, one stream at a time is also the faster option.
+   */
+  const uploadToServerInChunks = useCallback(
+    async (entryId: string, file: File, kind: string) => {
+      const startRes = await fetch("/api/media/chunk?action=start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, mime: file.type, bytes: file.size, name: file.name }),
+      });
+      const start = await startRes.json();
+      if (!start?.ok) {
+        patch(entryId, { status: "error", error: start?.error ?? "Could not start the upload." });
+        return;
+      }
+
+      const { uploadId, chunkSize } = start as { uploadId: string; chunkSize: number };
+      const size = chunkSize || 8 * 1024 * 1024;
+
+      try {
+        for (let offset = 0; offset < file.size; offset += size) {
+          const slice = file.slice(offset, Math.min(offset + size, file.size));
+          const res = await fetch(
+            `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}`,
+            { method: "POST", body: slice },
+          );
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data?.ok) {
+            throw new Error(data?.error ?? "A piece of the upload was refused.");
+          }
+          // 95% at most until the server confirms the row: the last 5% is the
+          // difference between "sent" and "saved", and they are not the same.
+          patch(entryId, {
+            progress: Math.min(95, Math.round(((offset + slice.size) / file.size) * 95)),
+          });
+        }
+      } catch (e) {
+        // Leave nothing half-written on the server's disk.
+        await fetch(
+          `/api/media/chunk?action=abandon&uploadId=${encodeURIComponent(uploadId)}`,
+          { method: "POST" },
+        ).catch(() => {});
+        throw e;
+      }
+
+      const finishRes = await fetch("/api/media/chunk?action=finish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId, kind, mime: file.type, name: file.name }),
+      });
+      const done = await finishRes.json();
+      if (!done?.ok) {
+        patch(entryId, { status: "error", error: done?.error ?? "The upload could not be saved." });
+        return;
+      }
+
+      const result: UploadResult = { ...(done as UploadResult), originalName: file.name };
+      patch(entryId, { progress: 100, status: "done", result });
+      listeners.current.forEach((l) => l(result));
+    },
+    [patch],
+  );
+
   const uploadOne = useCallback(
     async (entryId: string, file: File, kind: string) => {
       let blob: Blob = file;
@@ -167,6 +235,27 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         } catch {
           /* fall back to the original file */
         }
+      }
+
+      /*
+       * Video and audio go to our own server, in small chunks.
+       *
+       * They are the files that break everything else: Cloudinary will not store
+       * a single asset over 100 MB, and an hour of a service is several times
+       * that. Chunking keeps every individual request far below Cloudflare's
+       * 100 MB body limit, so a 266 MB recording arrives as thirty-odd ordinary
+       * requests instead of one that is refused at the edge.
+       */
+      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+        try {
+          await uploadToServerInChunks(entryId, file, kind);
+        } catch (e) {
+          const message =
+            e instanceof Error ? e.message : "The upload did not finish.";
+          console.error("[media] chunked upload failed", e);
+          patch(entryId, { status: "error", error: message });
+        }
+        return;
       }
 
       if (blob.size > DIRECT_UPLOAD_OVER) {
@@ -227,7 +316,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         xhr.send(fd);
       });
     },
-    [patch, uploadDirectToCloudinary],
+    [patch, uploadDirectToCloudinary, uploadToServerInChunks],
   );
 
   const enqueue = useCallback(

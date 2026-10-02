@@ -51,6 +51,22 @@ export async function GET(request: Request) {
      */
     const stalledRecordings = await failStalledRecordings(30);
 
+    /*
+     * Convert whatever is still waiting. Normally a transcode starts the moment
+     * an upload finishes; this catches the ones whose worker was restarted
+     * mid-job, and is the only thing that ever retries them. One at a time, and
+     * only if no other worker holds the lock.
+     */
+    let transcoded: Awaited<
+      ReturnType<typeof import("@/lib/media-transcode").runTranscodeQueue>
+    > | null = null;
+    try {
+      const { runTranscodeQueue } = await import("@/lib/media-transcode");
+      transcoded = await runTranscodeQueue(2);
+    } catch (e) {
+      console.error("[cron/meetings] transcode queue failed", e);
+    }
+
     // Once a day is plenty, and it is somebody else's free service — so this
     // only runs on the first tick of the hour before most Sunday services.
     let warmed = 0;
@@ -59,7 +75,7 @@ export async function GET(request: Request) {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings }),
+      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings, transcoded }),
       { headers: { "Content-Type": "application/json" } },
     );
   });

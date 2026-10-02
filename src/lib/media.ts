@@ -152,6 +152,18 @@ export async function deleteMedia(
       (row.resourceType as ResourceType) || "image",
     );
   }
+
+  /*
+   * Local files are removed from disk too, or deleting a sermon frees nothing
+   * and the church keeps paying quota for bytes nobody can reach. The file goes
+   * BEFORE the row: an orphaned file is a tidy-up job, an orphaned row is a
+   * broken page.
+   */
+  if (row.provider === "local" && row.storageKey) {
+    const { removeFile } = await import("@/lib/media-store");
+    await removeFile(row.storageKey);
+  }
+
   await db.delete(media).where(eq(media.id, id));
   return true;
 }

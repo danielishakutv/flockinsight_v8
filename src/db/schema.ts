@@ -444,7 +444,29 @@ export const media = pgTable(
     bytes: bigint({ mode: "number" }).notNull().default(0),
     data: bytea(), // null for Cloudinary-backed rows
     // ----- Cloudinary backend -----
-    provider: text().notNull().default("db"), // db | cloudinary
+    provider: text().notNull().default("db"), // db | cloudinary | local
+    /**
+     * Where the bytes live when `provider` is "local": a path relative to
+     * MEDIA_ROOT, e.g. "<churchId>/<uuid>.mp4".
+     *
+     * Stored rather than derived from the id and format, because the format
+     * changes under it: a recording arrives as .webm and becomes .mp4 once it
+     * has been transcoded, and a file whose location is a guess is a file that
+     * goes missing the moment the guess stops being true.
+     */
+    storageKey: text(),
+    /**
+     * "pending" | "running" | "done" | "failed" | "skipped" — the state of the
+     * ffmpeg pass that turns an upload into something every phone can play.
+     *
+     * Null for anything not stored locally. The original is kept and served
+     * until this says "done": a file is playable from the moment it lands, and
+     * optimisation is an improvement to it rather than a condition of having it.
+     */
+    transcodeStatus: text(),
+    transcodeError: text(),
+    /** What it weighed before transcoding, so the saving can be shown honestly. */
+    originalBytes: bigint({ mode: "number" }),
     publicId: text(), // Cloudinary public_id (for delete/transform)
     resourceType: text(), // image | video | raw
     url: text(), // Cloudinary secure_url
