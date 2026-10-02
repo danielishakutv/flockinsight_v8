@@ -1,6 +1,6 @@
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { isCloudinaryConfigured } from "@/lib/cloudinary";
+import { isCloudinaryConfigured, MAX_ASSET_BYTES } from "@/lib/cloudinary";
 import { permForKind, storeMedia, type MediaKind, MEDIA_KINDS } from "@/lib/media";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
@@ -8,9 +8,16 @@ import { formatBytes } from "@/lib/storage-bytes";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Hard ceiling per file (the church quota is the real limit; this just guards
-// against absurd single uploads / request bodies).
-const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+/*
+ * Hard ceiling per file.
+ *
+ * Two different limits happen to meet near the same number and both are real:
+ * Cloudflare rejects a request body over 100 MB before this route is reached at
+ * all, and Cloudinary will not store an asset above MAX_ASSET_BYTES. Anything
+ * large should be going through /api/media/sign and straight to Cloudinary
+ * instead (see upload-provider.tsx); this path is for small files.
+ */
+const MAX_BYTES = Math.min(MAX_ASSET_BYTES, 100 * 1024 * 1024);
 
 const DOC_MIME = new Set([
   "application/pdf",

@@ -1,7 +1,11 @@
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { randomUUID } from "crypto";
-import { isCloudinaryConfigured, signDirectUpload } from "@/lib/cloudinary";
+import {
+  isCloudinaryConfigured,
+  signDirectUpload,
+  MAX_ASSET_BYTES,
+} from "@/lib/cloudinary";
 import { classifyMime, permForKind, MEDIA_KINDS, type MediaKind } from "@/lib/media";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
@@ -58,6 +62,25 @@ export async function POST(request: Request) {
 
   if (church.status === "suspended")
     return json({ ok: false, error: "This church's account is paused." }, 403);
+
+  /*
+   * The per-file ceiling, checked before a single byte moves.
+   *
+   * Cloudinary refuses an oversized asset on the LAST chunk — so without this a
+   * 266 MB video uploads for ten minutes and is then thrown away, which is the
+   * most dispiriting way software can waste somebody's evening. One second and
+   * a sentence that names the real number is better than ten minutes and a
+   * shrug.
+   */
+  if (bytes > MAX_ASSET_BYTES)
+    return json(
+      {
+        ok: false,
+        error: `This file is ${formatBytes(bytes)}, and the largest single file we can store is ${formatBytes(MAX_ASSET_BYTES)}. Nothing was uploaded. Split it, shorten it, or compress it first.`,
+        limit: MAX_ASSET_BYTES,
+      },
+      413,
+    );
 
   const info = await getStorageInfo(church.id, church.storageExtraBytes);
   if (bytes > 0 && info.used + bytes > info.limit)

@@ -4,7 +4,11 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { getMeetingByCode, authenticatePeer } from "@/lib/meetings";
 import { isHostRole } from "@/lib/meetings-shared";
-import { isCloudinaryConfigured, signDirectUpload } from "@/lib/cloudinary";
+import {
+  isCloudinaryConfigured,
+  signDirectUpload,
+  MAX_ASSET_BYTES,
+} from "@/lib/cloudinary";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 import { fail, json } from "@/lib/meeting-api";
@@ -65,6 +69,19 @@ export async function POST(
     .from(church)
     .where(eq(church.id, m.churchId))
     .limit(1);
+
+  /*
+   * Too big to store at all, whatever the quota says. Refused here, before the
+   * host waits out an upload that Cloudinary will reject on the final chunk —
+   * and `keepLocal` so the recording stays in their browser's vault rather than
+   * being treated as dealt with.
+   */
+  if (bytes > MAX_ASSET_BYTES)
+    return fail(
+      `This recording is ${formatBytes(bytes)} and the largest file we can store is ${formatBytes(MAX_ASSET_BYTES)}. It stays on your device — download it from the Unsaved recordings panel, and record in audio-only mode for long meetings.`,
+      413,
+      { keepLocal: true, limit: MAX_ASSET_BYTES },
+    );
 
   const info = await getStorageInfo(m.churchId, c?.storageExtraBytes ?? 0);
   if (bytes > 0 && info.used + bytes > info.limit)

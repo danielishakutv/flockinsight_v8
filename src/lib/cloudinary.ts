@@ -56,12 +56,66 @@ function sign(params: Record<string, string | number | undefined>): string {
  */
 function incomingTransformation(rt: ResourceType): string | undefined {
   if (rt === "image") return "c_limit,w_1920,h_1920,q_auto:good";
-  if (rt === "video") return "c_limit,w_1280,h_720,q_auto";
-  return undefined; // raw files are stored as-is
+  /*
+   * Video and audio are stored exactly as they arrive. NOT an oversight — this
+   * line is the fix for the bug that made large uploads impossible.
+   *
+   * An *incoming* transformation makes Cloudinary transcode before it stores,
+   * and it does that synchronously. Above roughly 40 MB it simply refuses:
+   *
+   *   "Video is too large to process synchronously, please use an eager
+   *    transformation with eager_async=true to resolve"
+   *
+   * That 400 lands on the LAST chunk, after every byte has been sent. The
+   * browser has no public_id to report, so the upload dies with "Cloudinary
+   * accepted the file but did not confirm it" — minutes in, on the client,
+   * where no server log can see it. Measured against the live account: a
+   * 67 MB audio file and a 92 MB video both failed with this transformation and
+   * both uploaded perfectly without it.
+   *
+   * So every meeting recording long enough to be worth keeping failed, and the
+   * only ones that ever worked were the few-megabyte ones. The optimisation
+   * meant to protect the storage quota was costing the entire feature.
+   *
+   * `eager_async` was the other option and is worse here: Cloudinary would keep
+   * the original AND a derived copy, which uses MORE quota, and the playable
+   * version would not exist for a while after the host was told it was saved.
+   * Recordings are already encoded modestly at source (700 kbps video, 64 kbps
+   * audio — see lib/meeting-recorder.ts), so there is little left to squeeze.
+   *
+   * Images keep theirs: they are small, synchronous processing never refuses
+   * them, and a 6 MB phone photo really does need resizing.
+   */
+  return undefined;
 }
 
-/** Whether a transformation is an audio re-encode (passed for audio mimetypes). */
-const AUDIO_TRANSFORM = "q_auto";
+/**
+ * The largest single file this Cloudinary account will store.
+ *
+ * Read from the account's own `media_limits` (the Admin API `usage` endpoint
+ * reports `video_max_size_bytes`), which on the Free plan is 100 MB. It is a
+ * hard ceiling: chunking lets a browser SEND more, but the assembled asset is
+ * still refused, with "File size too large. Got …. Maximum is 104857600."
+ *
+ * An environment variable rather than a constant alone, so upgrading the
+ * Cloudinary plan is a config change and not a deploy.
+ */
+export const MAX_ASSET_BYTES = (() => {
+  const raw = Number(process.env.CLOUDINARY_MAX_ASSET_BYTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 100 * 1024 * 1024;
+})();
+
+/**
+ * Audio used to be re-encoded with `q_auto` on the way in. It no longer is, for
+ * exactly the reason video is not — see `incomingTransformation`.
+ *
+ * This is the case that actually bit: a 63 MB audio recording of a meeting sent
+ * every chunk successfully and then died on the last one, because `q_auto` made
+ * Cloudinary try to transcode it synchronously. Audio rides on the video
+ * resource type, so it hits the identical limit. Kept as a named constant
+ * rather than deleted so the next person to reach for it reads why first.
+ */
+const AUDIO_TRANSFORM: string | undefined = undefined;
 
 /**
  * A receipt, which is a different thing from a photo.
