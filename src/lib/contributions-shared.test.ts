@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   bestReason,
+  contributionPath,
+  contributionUrl,
   daysUntil,
   deriveEntryStatus,
   derivePayoutStatus,
@@ -8,6 +10,7 @@ import {
   effectiveTarget,
   emailKey,
   expectedFor,
+  isShareableUrl,
   matchReasons,
   nameKey,
   outstandingFor,
@@ -436,6 +439,58 @@ describe("proof files", () => {
 
   it("turns away an image beyond the hard ceiling", () => {
     expect(proofRejection({ type: "image/jpeg", size: 9_000_000 })).toMatch(/8 MB/);
+  });
+});
+
+describe("the link that gets shared", () => {
+  /*
+   * This shipped broken once and is the single most damaging bug this module
+   * can have: the message goes to forty people, and half a link is a link
+   * nobody can follow.
+   *
+   * The public page derived its URL from `window.location.origin`, which is
+   * undefined during the server render — so the WhatsApp button was built with
+   * a bare "/p/slug" and baked into the HTML. Anybody who tapped Share before
+   * React hydrated sent "record yours: /p/anchor-monthly-contributions-nzahe".
+   */
+  it("is absolute, always", () => {
+    const url = contributionUrl("choir-levy-ab12c", "https://flockinsight.com");
+    expect(url).toBe("https://flockinsight.com/p/choir-levy-ab12c");
+    expect(isShareableUrl(url)).toBe(true);
+  });
+
+  it("does not double the slash when the base carries one", () => {
+    expect(contributionUrl("x", "https://flockinsight.com/")).toBe(
+      "https://flockinsight.com/p/x",
+    );
+  });
+
+  it("works for a local base too, so a dev link is still a whole link", () => {
+    expect(contributionUrl("x", "http://127.0.0.1:3000")).toBe(
+      "http://127.0.0.1:3000/p/x",
+    );
+  });
+
+  it("rejects the bare path that caused the bug", () => {
+    // The exact value the broken build put into people's messages.
+    expect(isShareableUrl("/p/anchor-monthly-contributions-nzahe")).toBe(false);
+    expect(isShareableUrl(contributionPath("choir-levy"))).toBe(false);
+    expect(isShareableUrl("")).toBe(false);
+    expect(isShareableUrl("flockinsight.com/p/x")).toBe(false);
+    // A bare origin with nothing after it is not a link to a collection.
+    expect(isShareableUrl("https://flockinsight.com/")).toBe(false);
+  });
+
+  it("never puts a bare path into a shared message", () => {
+    const msg = shareMessage({
+      title: "Choir levy",
+      raised: "₦1",
+      target: null,
+      contributors: 1,
+      url: contributionUrl("choir-levy-ab12c", "https://flockinsight.com"),
+    });
+    const shared = msg.split(/\s+/).find((w) => w.includes("/p/"))!;
+    expect(isShareableUrl(shared)).toBe(true);
   });
 });
 

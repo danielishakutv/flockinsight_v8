@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import type { PublicContribution } from "@/lib/contributions";
 import {
-  contributionPath,
   dueLabel,
   METHOD_LABEL,
   nameKey,
@@ -68,19 +67,25 @@ import { useT } from "@/components/i18n-provider";
  */
 export function PublicContributionPage({
   initial,
+  /**
+   * The absolute link to this page, resolved on the server.
+   *
+   * A required prop, and deliberately not derived from `window.location` here:
+   * during the server render there is no window, so that version produced a
+   * bare "/p/slug", baked it into the WhatsApp button, and anybody who tapped
+   * Share before hydration sent a link that went nowhere. The server always
+   * knows the real base; the browser only knows it late.
+   */
+  url,
 }: {
   initial: PublicContribution;
+  url: string;
 }) {
   const t = useT();
   const pot = useLiveContribution(initial);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const url =
-    typeof window !== "undefined"
-      ? window.location.origin + contributionPath(pot.slug)
-      : contributionPath(pot.slug);
 
   const due = dueLabel(pot.dueDate, new Date().toISOString().slice(0, 10));
   const overdue =

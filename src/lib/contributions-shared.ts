@@ -600,6 +600,27 @@ export function contributionPath(slug: string): string {
   return `/p/${slug}`;
 }
 
+/**
+ * The full, absolute link — the only thing that may ever be shared.
+ *
+ * This exists because the path alone once got out. The public page derived its
+ * URL from `window.location.origin`, which is undefined during the server
+ * render, so the WhatsApp button was built with a bare "/p/slug" and baked into
+ * the HTML that way. Tap it before React hydrates and you send half a link: the
+ * recipient sees "record yours: /p/choir-levy-ab12c" and has nowhere to go.
+ *
+ * The base therefore comes from the server, which always knows it, and never
+ * from the browser. Anything that shares a link goes through here.
+ */
+export function contributionUrl(slug: string, baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}${contributionPath(slug)}`;
+}
+
+/** Is this safe to put in a message? A bare path is not. */
+export function isShareableUrl(url: string): boolean {
+  return /^https?:\/\/[^/]+\/.+/.test(url);
+}
+
 /* ============================================================
  * Validation shared by the admin form and the public form
  * ========================================================== */

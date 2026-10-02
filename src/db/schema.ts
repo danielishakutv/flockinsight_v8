@@ -4234,6 +4234,79 @@ export const contributionApproval = pgTable(
   ],
 );
 
+
+/**
+ * Who runs a collection.
+ *
+ * Until now this was implied — the creator, plus anybody leading the group, plus
+ * anybody holding the module permission. That is fine until the person who
+ * started it leaves the choir, goes on leave, or hands the levy to somebody
+ * else, at which point there is no way to say so and the collection is stuck
+ * with an owner who is no longer involved. A church's reality is that the job
+ * moves; the record has to be able to move with it.
+ *
+ * One owner, any number of co-admins. The owner is the person answerable for
+ * the money — they can hand it over, add and remove co-admins, and change the
+ * collection's settings. A co-admin does the daily work: record payments,
+ * confirm them, record what goes out. A co-admin deliberately CANNOT appoint
+ * another co-admin or remove the owner, because a control that anybody admitted
+ * to it can widen is not a control.
+ *
+ * These are user accounts, not members, and that is not an oversight: somebody
+ * who cannot sign in cannot administer anything, and offering their name here
+ * would promise something the software cannot deliver.
+ */
+export const contributionManagerRoleEnum = pgEnum("contribution_manager_role", [
+  "owner",
+  "coadmin",
+]);
+
+export const contributionManager = pgTable(
+  "contribution_manager",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    contributionId: uuid()
+      .notNull()
+      .references(() => contribution.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * Cascade on user delete rather than set null: a row naming nobody is not a
+     * manager, it is a hole that still passes a permission check. Losing the
+     * row is the honest outcome — the collection then shows that nobody runs it
+     * and asks somebody to take it, which is a problem a person can see and fix.
+     */
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: contributionManagerRoleEnum().notNull().default("coadmin"),
+    addedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("contribution_manager_pot_idx").on(t.contributionId),
+    index("contribution_manager_user_idx").on(t.userId),
+    /* One row per person per collection — you are either the owner or a
+     * co-admin, never both, and never listed twice. */
+    uniqueIndex("contribution_manager_unique").on(t.contributionId, t.userId),
+    /*
+     * Exactly one owner, enforced by the database rather than by whichever
+     * action happened to run last.
+     *
+     * Handing over ownership is a delete and an insert, and two people doing it
+     * at the same moment is precisely the case where application-level checks
+     * produce two owners and nobody notices until they disagree. A partial
+     * unique index makes the second one fail instead.
+     */
+    uniqueIndex("contribution_manager_one_owner")
+      .on(t.contributionId)
+      .where(sql`${t.role} = 'owner'`),
+  ],
+);
+
+export type ContributionManager = typeof contributionManager.$inferSelect;
+
 export type Contribution = typeof contribution.$inferSelect;
 export type NewContribution = typeof contribution.$inferInsert;
 export type ContributionContributor = typeof contributionContributor.$inferSelect;

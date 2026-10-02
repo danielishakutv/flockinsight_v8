@@ -7,7 +7,6 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
 import { useT } from "@/components/i18n-provider";
-import { LanguageMenu } from "@/components/app/language-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -100,9 +99,6 @@ export function UserMenu({
         <DropdownMenuItem onClick={() => setTheme("system")}>
           <Laptop /> {t("nav.themeSystem")}
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuSeparator />
-        <LanguageMenu />
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
           <LogOut /> {t("nav.signOut")}

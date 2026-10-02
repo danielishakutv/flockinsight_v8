@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { DateTime } from "@/components/app/date-time";
+import { LanguageMenu } from "@/components/app/language-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { LiveNotificationBell } from "@/components/notifications/live-notification-bell";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export function DesktopTopbar({
       <DateTime />
       <div className="flex items-center gap-1.5">
         <LiveNotificationBell initial={unread} />
+        <LanguageMenu />
         <ThemeToggle />
         {canRecord && (
           <Button asChild className="ml-1">

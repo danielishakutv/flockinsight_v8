@@ -8,6 +8,7 @@ import {
   church as churchTable,
   contribution,
   contributionApproval,
+  contributionManager,
   contributionContributor,
   contributionEntry,
   contributionPayout,
@@ -17,11 +18,14 @@ import {
   group,
   media,
   member,
+  staff,
+  user as userTable,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, getAccess } from "@/lib/permissions";
 import {
   canManageContribution,
+  canManageManagers,
   groupsLedBy,
   uniqueContributionSlug,
 } from "@/lib/contributions";
@@ -41,7 +45,7 @@ import {
   type EntryStatus,
 } from "@/lib/contributions-shared";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
-import { notifyChurchManagers } from "@/lib/notifications";
+import { notifyChurchManagers, notifyUser } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { destroyFromCloudinary, type ResourceType } from "@/lib/cloudinary";
@@ -290,6 +294,22 @@ export async function saveContribution(
     .returning({ id: contribution.id, slug: contribution.slug });
   if (!created) return fail("Could not create the collection.");
 
+  /*
+   * Whoever starts it, runs it — until they say otherwise.
+   *
+   * Recorded explicitly rather than inferred from `createdBy`, because the whole
+   * point of the owner row is that it can move: the person who starts the choir
+   * levy may hand it over next month, and "creator" is a fact about the past
+   * that must not keep granting access.
+   */
+  await db.insert(contributionManager).values({
+    contributionId: created.id,
+    churchId: church.id,
+    userId: user.id,
+    role: "owner",
+    addedBy: user.id,
+  });
+
   await audit({
     churchId: church.id,
     action: "contributions.contribution.create",
@@ -427,6 +447,281 @@ export async function deleteContribution(id: string): Promise<ActionResult> {
   refresh();
   refreshPublic(pot.slug);
   return ok({ id });
+}
+
+/* ============================================================
+ * Who runs a collection
+ * ========================================================== */
+
+/** The candidate must be on this church's team, and able to sign in. */
+async function isChurchStaff(churchId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(
+      and(
+        eq(staff.organizationId, churchId),
+        eq(staff.userId, userId),
+        eq(staff.temp, false),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+async function guardManagers(potId: string) {
+  const { church, user } = await requireChurch();
+  const access = await getAccess();
+  const allowed = await canManageManagers({
+    churchId: church.id,
+    userId: user.id,
+    potId,
+    hasModulePermission: access.isOwner || access.perms.has("contributions.manage"),
+  });
+  if (!allowed) return null;
+  return { church, user };
+}
+
+async function nameOf(userId: string): Promise<string> {
+  const [u] = await db
+    .select({ name: userTable.name, email: userTable.email })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .limit(1);
+  return u?.name || u?.email || "somebody";
+}
+
+/**
+ * Hand a collection over to somebody else.
+ *
+ * The outgoing owner stays on as a co-admin rather than being dropped. Handing
+ * over a levy usually means "you run it now", not "I am no longer involved" —
+ * and silently removing the person doing the handover is the kind of surprise
+ * that gets noticed on a Sunday, when they can no longer confirm a payment they
+ * just took. They can remove themselves afterwards if they really are done.
+ */
+export async function setContributionOwner(opts: {
+  potId: string;
+  userId: string;
+}): Promise<ActionResult> {
+  const guard = await guardManagers(opts.potId);
+  if (!guard)
+    return fail("Only the collection's owner, or an administrator, can change this.");
+
+  const pot = await loadPot(guard.church.id, opts.potId);
+  if (!pot) return fail("That collection no longer exists.");
+  if (!(await isChurchStaff(guard.church.id, opts.userId)))
+    return fail(
+      "That person isn't on your team. Invite them under Settings \u2192 Team first, so they can sign in.",
+    );
+
+  await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ userId: contributionManager.userId })
+      .from(contributionManager)
+      .where(
+        and(
+          eq(contributionManager.contributionId, opts.potId),
+          eq(contributionManager.role, "owner"),
+        ),
+      )
+      .limit(1);
+
+    if (current?.userId === opts.userId) return;
+
+    /*
+     * The old owner comes out before the new one goes in. The database allows
+     * exactly one owner per collection (a partial unique index), so doing this
+     * in the other order fails — and doing it outside a transaction could leave
+     * a collection with none at all.
+     */
+    if (current) {
+      await tx
+        .update(contributionManager)
+        .set({ role: "coadmin" })
+        .where(
+          and(
+            eq(contributionManager.contributionId, opts.potId),
+            eq(contributionManager.userId, current.userId),
+          ),
+        );
+    }
+
+    // They may already be a co-admin, in which case they are promoted.
+    const [existing] = await tx
+      .select({ id: contributionManager.id })
+      .from(contributionManager)
+      .where(
+        and(
+          eq(contributionManager.contributionId, opts.potId),
+          eq(contributionManager.userId, opts.userId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(contributionManager)
+        .set({ role: "owner" })
+        .where(eq(contributionManager.id, existing.id));
+    } else {
+      await tx.insert(contributionManager).values({
+        contributionId: opts.potId,
+        churchId: guard.church.id,
+        userId: opts.userId,
+        role: "owner",
+        addedBy: guard.user.id,
+      });
+    }
+  });
+
+  const name = await nameOf(opts.userId);
+  await audit({
+    churchId: guard.church.id,
+    action: "contributions.manager.transfer",
+    summary: `Handed "${pot.title}" over to ${name}`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { userId: opts.userId },
+    severity: "notice",
+  });
+
+  // The new owner is told, because being handed responsibility for other
+  // people's money is not something to discover by accident.
+  await notifyUser({
+    userId: opts.userId,
+    title: `You now run "${pot.title}"`,
+    body: `${guard.user.name || "Someone"} handed the collection over to you. You can record payments, confirm them, and say where the money goes.`,
+    linkUrl: `/contributions/${pot.id}`,
+  }).catch((e) => console.error("[contributions] owner notify failed", e));
+
+  refresh(pot.id);
+  return ok({ id: pot.id });
+}
+
+/** Add somebody who can record and confirm, but not change who runs it. */
+export async function addContributionCoAdmin(opts: {
+  potId: string;
+  userId: string;
+}): Promise<ActionResult> {
+  const guard = await guardManagers(opts.potId);
+  if (!guard)
+    return fail("Only the collection's owner, or an administrator, can add people.");
+
+  const pot = await loadPot(guard.church.id, opts.potId);
+  if (!pot) return fail("That collection no longer exists.");
+  if (!(await isChurchStaff(guard.church.id, opts.userId)))
+    return fail(
+      "That person isn't on your team. Invite them under Settings \u2192 Team first, so they can sign in.",
+    );
+
+  const [existing] = await db
+    .select({ role: contributionManager.role })
+    .from(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.userId, opts.userId),
+      ),
+    )
+    .limit(1);
+  if (existing)
+    return fail(
+      existing.role === "owner"
+        ? "They already run this collection."
+        : "They are already a co-admin here.",
+    );
+
+  await db.insert(contributionManager).values({
+    contributionId: opts.potId,
+    churchId: guard.church.id,
+    userId: opts.userId,
+    role: "coadmin",
+    addedBy: guard.user.id,
+  });
+
+  const name = await nameOf(opts.userId);
+  await audit({
+    churchId: guard.church.id,
+    action: "contributions.manager.add",
+    summary: `Added ${name} as a co-admin on "${pot.title}"`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { userId: opts.userId },
+    severity: "notice",
+  });
+
+  await notifyUser({
+    userId: opts.userId,
+    title: `You can now help run "${pot.title}"`,
+    body: `${guard.user.name || "Someone"} added you as a co-admin. You can record payments and confirm them.`,
+    linkUrl: `/contributions/${pot.id}`,
+  }).catch((e) => console.error("[contributions] co-admin notify failed", e));
+
+  refresh(pot.id);
+  return ok({ id: pot.id });
+}
+
+/**
+ * Take somebody off a collection.
+ *
+ * The owner cannot be removed, only replaced — a collection holding other
+ * people's money with nobody answerable for it is a worse state than any this
+ * screen could otherwise reach, and "remove the owner" is one tap away from it.
+ * Hand it over instead, which is the same action said truthfully.
+ */
+export async function removeContributionManager(opts: {
+  potId: string;
+  userId: string;
+}): Promise<ActionResult> {
+  const guard = await guardManagers(opts.potId);
+  if (!guard)
+    return fail("Only the collection's owner, or an administrator, can do that.");
+
+  const pot = await loadPot(guard.church.id, opts.potId);
+  if (!pot) return fail("That collection no longer exists.");
+
+  const [row] = await db
+    .select({ role: contributionManager.role })
+    .from(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.userId, opts.userId),
+      ),
+    )
+    .limit(1);
+  if (!row) return fail("They are not on this collection.");
+  if (row.role === "owner")
+    return fail(
+      "Somebody has to be answerable for this collection. Hand it over to another person instead of removing the owner.",
+    );
+
+  await db
+    .delete(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.userId, opts.userId),
+      ),
+    );
+
+  const name = await nameOf(opts.userId);
+  await audit({
+    churchId: guard.church.id,
+    action: "contributions.manager.remove",
+    summary: `Removed ${name} from "${pot.title}"`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { userId: opts.userId },
+    severity: "warning",
+  });
+
+  refresh(pot.id);
+  return ok({ id: pot.id });
 }
 
 /* ============================================================

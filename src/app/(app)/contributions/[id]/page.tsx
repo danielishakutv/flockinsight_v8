@@ -6,9 +6,11 @@ import { requireChurch } from "@/lib/session";
 import { can, getAccess, requireCanAny } from "@/lib/permissions";
 import {
   canManageContribution,
+  canManageManagers,
   getContribution,
   groupOptions,
   memberOptions,
+  staffCandidates,
 } from "@/lib/contributions";
 import { siteUrl } from "@/lib/site";
 import { PageContainer } from "@/components/app/page-header";
@@ -53,7 +55,19 @@ export default async function ContributionPage({
 
   const canPostToFinance = await can("finance.manage");
 
-  const [members, groups, accounts] = await Promise.all([
+  /*
+   * Changing who runs a collection is a narrower right than running it: the
+   * owner, or somebody with the module permission. A co-admin can record and
+   * confirm money all day and still not be able to appoint another co-admin.
+   */
+  const mayManageManagers = await canManageManagers({
+    churchId: church.id,
+    userId: user.id,
+    potId: id,
+    hasModulePermission,
+  });
+
+  const [members, groups, accounts, staff] = await Promise.all([
     canManage ? memberOptions(church.id) : Promise.resolve([]),
     canManage ? groupOptions(church.id) : Promise.resolve([]),
     canPostToFinance
@@ -68,6 +82,7 @@ export default async function ContributionPage({
           )
           .orderBy(asc(financeAccount.name))
       : Promise.resolve([]),
+    canManage ? staffCandidates(church.id) : Promise.resolve([]),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -84,6 +99,8 @@ export default async function ContributionPage({
         members={members}
         groups={groups}
         financeAccounts={accounts}
+        staff={staff}
+        canManageManagers={mayManageManagers}
         currentUserId={user.id}
       />
     </PageContainer>

@@ -925,6 +925,41 @@ export const en = {
     selfSubmit: "Submit",
     selfSubmitting: "Sending…",
 
+    tabWhoRuns: "Who runs it",
+    theOwner: "The owner",
+    ownerBlurb:
+      "The person answerable for this money. They can hand it over, add and remove co-admins, and change the collection’s settings.",
+    coAdmins: "Co-admins",
+    coAdminBlurb:
+      "They do the daily work — record payments, confirm them, record what goes out.",
+    roleOwner: "Owner",
+    roleCoAdmin: "Co-admin",
+    noCoAdmins: "Nobody else yet. The owner is running this on their own.",
+    addCoAdmin: "Add a co-admin",
+    addCoAdminBlurb:
+      "They will be able to record and confirm payments, and record money going out. They cannot add other people or change who owns it.",
+    coAdminAdded: "Co-admin added",
+    handOver: "Hand it over",
+    handOverTitle: "Hand over “{title}”",
+    handOverBlurb:
+      "They become answerable for this collection. You stay on as a co-admin, so you can still record and confirm — remove yourself afterwards if you are done with it.",
+    handedOver: "Handed over",
+    chooseOwner: "Choose an owner",
+    noOwner: "Nobody runs this collection",
+    noOwnerBlurb:
+      "Its owner’s account was removed, or it was created before owners were recorded. Choose somebody to be answerable for it.",
+    pickPerson: "Who?",
+    inviteFirst:
+      "Everybody on your team is already on this collection. Invite more people under Settings → Team.",
+    everyoneAlreadyOn: "Everybody on your team is already on this collection.",
+    removeFromCollection: "Remove {name} from this collection",
+    removed: "Removed",
+    you: "you",
+    whoCanDoWhat: "What each of them can do",
+    bothCan:
+      "Owner and co-admins both: record payments, confirm them, add people, and record money going out.",
+    onlyOwnerCan:
+      "Only the owner: hand the collection over, add or remove co-admins, and change its settings.",
     moreActions: "More actions",
     colWho: "Who",
     colWhen: "When",

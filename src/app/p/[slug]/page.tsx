@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPublicContribution } from "@/lib/contributions";
+import { contributionUrl } from "@/lib/contributions-shared";
+import { siteUrl } from "@/lib/site";
 import { formatMoney } from "@/lib/money";
 import { PublicContributionPage } from "@/components/contributions/public-contribution";
 
@@ -68,5 +70,10 @@ export default async function PublicPotPage({
   // Every string on the page comes from the dictionary, through `useT()` in
   // the component — the provider lives in the root layout, so somebody opening
   // this link reads it in their own language without the page passing labels in.
-  return <PublicContributionPage initial={pot} />;
+  return (
+    <PublicContributionPage
+      initial={pot}
+      url={contributionUrl(pot.slug, siteUrl())}
+    />
+  );
 }

@@ -5,6 +5,7 @@ import {
   church,
   contribution,
   contributionApproval,
+  contributionManager,
   contributionContributor,
   contributionEntry,
   contributionPayout,
@@ -12,6 +13,7 @@ import {
   groupMembership,
   media,
   member,
+  staff,
   user,
 } from "@/db/schema";
 import { randomSuffix, slugify } from "@/lib/slug";
@@ -102,6 +104,26 @@ export async function canManageContribution(opts: {
     )
     .limit(1);
   if (!row) return false;
+
+  // Named on the collection, as its owner or a co-admin.
+  const [manager] = await db
+    .select({ role: contributionManager.role })
+    .from(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.userId, opts.userId),
+      ),
+    )
+    .limit(1);
+  if (manager) return true;
+
+  /*
+   * The creator, still — for collections that predate the owner table and for
+   * any whose owner row was lost with a deleted account. Dropping this would
+   * silently lock somebody out of their own live collection on the day this
+   * shipped, which is the sort of upgrade nobody forgives.
+   */
   if (row.createdBy && row.createdBy === opts.userId) return true;
   if (!row.groupId) return false;
 
@@ -138,6 +160,120 @@ export async function groupsLedBy(
       ),
     );
   return rows.map((r) => r.groupId);
+}
+
+/* ============================================================
+ * Who runs a collection
+ * ========================================================== */
+
+export type ManagerRow = {
+  userId: string;
+  name: string;
+  email: string;
+  role: "owner" | "coadmin";
+  addedAt: string;
+};
+
+/** The owner and co-admins of one collection, owner first. */
+export async function listManagers(potId: string): Promise<ManagerRow[]> {
+  const rows = await db
+    .select({
+      userId: contributionManager.userId,
+      role: contributionManager.role,
+      createdAt: contributionManager.createdAt,
+      name: user.name,
+      email: user.email,
+    })
+    .from(contributionManager)
+    .innerJoin(user, eq(user.id, contributionManager.userId))
+    .where(eq(contributionManager.contributionId, potId))
+    .orderBy(asc(contributionManager.createdAt));
+
+  return rows
+    .map((r) => ({
+      userId: r.userId,
+      name: r.name,
+      email: r.email,
+      role: r.role as "owner" | "coadmin",
+      addedAt: r.createdAt.toISOString(),
+    }))
+    .sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1));
+}
+
+/**
+ * Changing who runs a collection is the owner's decision, or an administrator's.
+ *
+ * Deliberately NOT something a co-admin can do. A co-admin records and confirms
+ * money; letting them appoint further co-admins, or remove the owner who
+ * appointed them, would mean anybody admitted to the collection could widen
+ * their own access — which makes the whole arrangement decorative.
+ */
+export async function canManageManagers(opts: {
+  churchId: string;
+  userId: string;
+  potId: string;
+  hasModulePermission: boolean;
+}): Promise<boolean> {
+  if (opts.hasModulePermission) return true;
+  const [row] = await db
+    .select({ role: contributionManager.role })
+    .from(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.userId, opts.userId),
+      ),
+    )
+    .limit(1);
+  if (row?.role === "owner") return true;
+
+  // A collection with no owner row at all (created before this existed, or its
+  // owner's account was deleted) falls back to whoever started it, so it can
+  // always be rescued by somebody rather than becoming unadministrable.
+  const [pot] = await db
+    .select({ createdBy: contribution.createdBy })
+    .from(contribution)
+    .where(
+      and(eq(contribution.id, opts.potId), eq(contribution.churchId, opts.churchId)),
+    )
+    .limit(1);
+  if (!pot?.createdBy || pot.createdBy !== opts.userId) return false;
+  const [anyOwner] = await db
+    .select({ id: contributionManager.id })
+    .from(contributionManager)
+    .where(
+      and(
+        eq(contributionManager.contributionId, opts.potId),
+        eq(contributionManager.role, "owner"),
+      ),
+    )
+    .limit(1);
+  return !anyOwner;
+}
+
+/**
+ * The people who could be given a collection to run: this church's team.
+ *
+ * Staff accounts, not members — somebody who cannot sign in cannot administer
+ * anything, and offering their name would promise something that does not work.
+ * Temporary memberships (created while a platform admin is acting as the
+ * church) are excluded, so a support visit never appears as a candidate owner.
+ */
+export async function staffCandidates(
+  churchId: string,
+): Promise<{ userId: string; name: string; email: string; role: string }[]> {
+  const rows = await db
+    .select({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      role: staff.role,
+    })
+    .from(staff)
+    .innerJoin(user, eq(user.id, staff.userId))
+    .where(and(eq(staff.organizationId, churchId), eq(staff.temp, false)))
+    .orderBy(asc(user.name));
+  return rows;
 }
 
 /* ============================================================
@@ -472,6 +608,9 @@ export type ContributionDetail = {
   createdByName: string | null;
   createdAt: string;
 
+  /** Who runs it — owner first. */
+  managers: ManagerRow[];
+
   contributors: ContributorRow[];
   entries: EntryRow[];
   payouts: PayoutRow[];
@@ -509,7 +648,8 @@ export async function getContribution(
 
   const p = pot.row;
 
-  const [contributors, entries, payouts] = await Promise.all([
+  const [managers, contributors, entries, payouts] = await Promise.all([
+    listManagers(id),
     db
       .select({
         row: contributionContributor,
@@ -746,6 +886,8 @@ export async function getContribution(
     goalReachedAt: p.goalReachedAt?.toISOString() ?? null,
     createdByName: pot.createdByName,
     createdAt: p.createdAt.toISOString(),
+
+    managers,
 
     contributors: contributorRows,
     entries: entryRows,

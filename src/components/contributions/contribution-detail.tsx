@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Share2,
+  ShieldCheck,
   Target,
   Trash2,
   Undo2,
@@ -45,7 +46,7 @@ import type {
   PayoutRow,
 } from "@/lib/contributions";
 import {
-  contributionPath,
+  contributionUrl,
   dueLabel,
   METHOD_LABEL,
   PAYOUT_KIND_LABEL,
@@ -89,9 +90,13 @@ import {
 } from "@/components/contributions/people-dialogs";
 import { PotFormDialog, type PotFormValues } from "@/components/contributions/pot-form-dialog";
 import { SharePanel } from "@/components/contributions/share-panel";
+import {
+  ManagersPanel,
+  type StaffOption,
+} from "@/components/contributions/managers-panel";
 import { useT } from "@/components/i18n-provider";
 
-type Tab = "ledger" | "people" | "out" | "share";
+type Tab = "ledger" | "people" | "out" | "share" | "who";
 
 export function ContributionDetail({
   pot,
@@ -103,6 +108,8 @@ export function ContributionDetail({
   members,
   groups,
   financeAccounts,
+  staff,
+  canManageManagers,
   currentUserId,
 }: {
   pot: Detail;
@@ -114,6 +121,9 @@ export function ContributionDetail({
   members: { id: string; name: string }[];
   groups: { id: string; name: string; type: string }[];
   financeAccounts: { id: string; name: string }[];
+  staff: StaffOption[];
+  /** Owner or administrator — the only people who may change who runs it. */
+  canManageManagers: boolean;
   currentUserId: string;
 }) {
   const t = useT();
@@ -133,13 +143,19 @@ export function ContributionDetail({
   const overdue = !!pot.dueDate && pot.dueDate < today && pot.status === "open";
   const remaining = pot.target ? Math.max(0, pot.target - pot.raised) : 0;
   const moreNeeded = peopleStillNeeded(remaining, pot.perPersonAmount);
-  const publicUrl = `${siteUrl}${contributionPath(pot.slug)}`;
+  const publicUrl = contributionUrl(pot.slug, siteUrl);
 
   const tabs: { id: Tab; label: string; icon: typeof Users; count?: number }[] = [
     { id: "ledger", label: t("contributions.tabLedger"), icon: ArrowDownToLine, count: pot.entries.length },
     { id: "people", label: t("contributions.tabPeople"), icon: Users, count: pot.contributors.length },
     { id: "out", label: t("contributions.tabMoneyOut"), icon: Target, count: pot.payouts.length },
     { id: "share", label: t("contributions.tabShare"), icon: Share2 },
+    {
+      id: "who",
+      label: t("contributions.tabWhoRuns"),
+      icon: ShieldCheck,
+      count: pot.managers.length,
+    },
   ];
 
   const awaiting = pot.entries.filter(
@@ -373,6 +389,17 @@ export function ContributionDetail({
           }}
           financeAccounts={financeAccounts}
           canPostToFinance={canPostToFinance}
+        />
+      )}
+
+      {tab === "who" && (
+        <ManagersPanel
+          potId={pot.id}
+          potTitle={pot.title}
+          managers={pot.managers}
+          staff={staff}
+          canManage={canManageManagers}
+          currentUserId={currentUserId}
         />
       )}
 

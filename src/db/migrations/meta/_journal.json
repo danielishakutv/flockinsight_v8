@@ -582,6 +582,13 @@
       "when": 1790925129162,
       "tag": "0082_contributions",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1790947135762,
+      "tag": "0083_contribution_managers",
+      "breakpoints": true
     }
   ]
 }

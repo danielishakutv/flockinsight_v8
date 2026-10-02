@@ -1,4 +1,5 @@
 import { Wordmark } from "@/components/brand";
+import { LanguageMenu } from "@/components/app/language-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { UserMenu } from "@/components/app/user-menu";
 import { LiveNotificationBell } from "@/components/notifications/live-notification-bell";
@@ -19,6 +20,7 @@ export function AppTopbar({
       <Wordmark logoClassName="size-8" className="text-lg" />
       <div className="flex items-center gap-1">
         <LiveNotificationBell initial={unread} />
+        <LanguageMenu />
         <ThemeToggle />
         <UserMenu
           name={userName}

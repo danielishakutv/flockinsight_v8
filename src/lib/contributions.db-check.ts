@@ -28,13 +28,20 @@ import {
   contributionApproval,
   contributionContributor,
   contributionEntry,
+  contributionManager,
   contributionPayout,
   member,
+  staff,
+  user,
 } from "@/db/schema";
 import {
+  canManageContribution,
+  canManageManagers,
   getContribution,
   getPublicContribution,
   listContributions,
+  listManagers,
+  staffCandidates,
   uniqueContributionSlug,
   unlinkedContributorCount,
 } from "@/lib/contributions";
@@ -582,6 +589,167 @@ describe("slugs", () => {
   it("still produces one for a title with nothing sluggable in it", async () => {
     const slug = await uniqueContributionSlug("₦₦₦");
     expect(slug.startsWith("contribution-")).toBe(true);
+  });
+});
+
+describe("who runs a collection", () => {
+  /*
+   * These are permission boundaries, which is the one place a bug is silent and
+   * expensive: nobody reports being able to do something they should not.
+   */
+  let ownerId = "";
+  let coAdminId = "";
+
+  beforeAll(async () => {
+    const team = await staffCandidates(churchId);
+    ownerId = team[0]?.userId ?? "";
+    coAdminId = team[1]?.userId ?? ownerId;
+
+    await db
+      .delete(contributionManager)
+      .where(eq(contributionManager.contributionId, potId));
+    if (ownerId) {
+      await db.insert(contributionManager).values({
+        contributionId: potId,
+        churchId,
+        userId: ownerId,
+        role: "owner",
+      });
+    }
+    if (coAdminId && coAdminId !== ownerId) {
+      await db.insert(contributionManager).values({
+        contributionId: potId,
+        churchId,
+        userId: coAdminId,
+        role: "coadmin",
+      });
+    }
+  });
+
+  it("only ever has one owner, enforced by the database", async () => {
+    if (!ownerId || coAdminId === ownerId) return;
+    // Promoting a second person without demoting the first must fail, because
+    // two owners is a collection nobody is answerable for.
+    await expect(
+      db.insert(contributionManager).values({
+        contributionId: potId,
+        churchId,
+        userId: coAdminId,
+        role: "owner",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("lists the owner first", async () => {
+    if (!ownerId) return;
+    const rows = await listManagers(potId);
+    expect(rows[0].role).toBe("owner");
+    expect(rows[0].userId).toBe(ownerId);
+  });
+
+  it("lets the owner and co-admins run it, without the module permission", async () => {
+    if (!ownerId) return;
+    for (const uid of [ownerId, coAdminId]) {
+      expect(
+        await canManageContribution({
+          churchId,
+          userId: uid,
+          potId,
+          hasModulePermission: false,
+        }),
+        uid,
+      ).toBe(true);
+    }
+  });
+
+  it("keeps a stranger out", async () => {
+    expect(
+      await canManageContribution({
+        churchId,
+        userId: "no-such-user-at-all",
+        potId,
+        hasModulePermission: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("lets the owner change who runs it, but not a co-admin", async () => {
+    if (!ownerId || coAdminId === ownerId) return;
+    expect(
+      await canManageManagers({
+        churchId,
+        userId: ownerId,
+        potId,
+        hasModulePermission: false,
+      }),
+    ).toBe(true);
+    /*
+     * The important one. A co-admin records and confirms money; if they could
+     * also appoint co-admins or remove the owner, anybody admitted to the
+     * collection could widen their own access and the control would be
+     * decorative.
+     */
+    expect(
+      await canManageManagers({
+        churchId,
+        userId: coAdminId,
+        potId,
+        hasModulePermission: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not leak across churches", async () => {
+    if (!ownerId) return;
+    expect(
+      await canManageContribution({
+        churchId: "no-such-church",
+        userId: ownerId,
+        potId,
+        hasModulePermission: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("offers only real, non-temporary team members as candidates", async () => {
+    const team = await staffCandidates(churchId);
+    expect(team.length).toBeGreaterThan(0);
+    const temps = await db
+      .select({ userId: staff.userId })
+      .from(staff)
+      .where(and(eq(staff.organizationId, churchId), eq(staff.temp, true)));
+    const tempIds = new Set(temps.map((t) => t.userId));
+    for (const c of team) expect(tempIds.has(c.userId)).toBe(false);
+    for (const c of team) expect(c.email).toContain("@");
+  });
+
+  it("drops the row when the account goes, rather than leaving a hole", async () => {
+    // A manager row naming a deleted user would still pass a permission check
+    // while naming nobody. The FK cascades instead; the collection then shows
+    // that nobody runs it, which is a problem a person can see and fix.
+    const [ghost] = await db
+      .insert(user)
+      .values({
+        id: `zz-ghost-${stamp}`,
+        name: "ZZ Ghost",
+        email: `zz-ghost-${stamp}@example.com`,
+        emailVerified: false,
+      })
+      .returning({ id: user.id });
+    await db.insert(contributionManager).values({
+      contributionId: potId,
+      churchId,
+      userId: ghost.id,
+      role: "coadmin",
+    });
+    expect(
+      (await listManagers(potId)).some((m) => m.userId === ghost.id),
+    ).toBe(true);
+
+    await db.delete(user).where(eq(user.id, ghost.id));
+    expect(
+      (await listManagers(potId)).some((m) => m.userId === ghost.id),
+    ).toBe(false);
   });
 });
 
