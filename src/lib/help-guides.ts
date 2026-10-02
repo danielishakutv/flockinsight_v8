@@ -16,6 +16,7 @@ import { TRAINING_GUIDES } from "./help/training";
 import { MEETING_GUIDES } from "./help/meetings";
 import { SERVICE_GUIDES } from "./help/services";
 import { MONEY_GUIDES } from "./help/money";
+import { CONTRIBUTION_GUIDES } from "./help/contributions";
 import { COMMS_GUIDES } from "./help/comms";
 import { CONTENT_GUIDES } from "./help/content";
 import { PUBLIC_GUIDES } from "./help/publicpage";
@@ -49,6 +50,7 @@ const ALL: Omit<Guide, "minutes">[] = [
   ...MEETING_GUIDES,
   ...SERVICE_GUIDES,
   ...MONEY_GUIDES,
+  ...CONTRIBUTION_GUIDES,
   ...COMMS_GUIDES,
   ...CONTENT_GUIDES,
   ...PUBLIC_GUIDES,
