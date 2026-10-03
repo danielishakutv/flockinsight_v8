@@ -57,6 +57,9 @@ export default async function MeetingsPage() {
       allowScreenShare: meeting.allowScreenShare,
       allowRecording: meeting.allowRecording,
       lowDataDefault: meeting.lowDataDefault,
+      repeat: meeting.repeat,
+      repeatUntil: meeting.repeatUntil,
+      occurrence: meeting.occurrence,
       totalJoins: meeting.totalJoins,
       peakParticipants: meeting.peakParticipants,
       hostName: user.name,
@@ -103,6 +106,7 @@ export default async function MeetingsPage() {
     scheduledFor: r.scheduledFor?.toISOString() ?? null,
     startedAt: r.startedAt?.toISOString() ?? null,
     endedAt: r.endedAt?.toISOString() ?? null,
+    repeatUntil: r.repeatUntil?.toISOString() ?? null,
     // Nobody but a host needs a passcode, and the list is rendered for anyone
     // who can view meetings.
     passcode: canManage ? r.passcode : null,

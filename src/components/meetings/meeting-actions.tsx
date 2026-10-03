@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Copy, KeyRound, Loader2, PhoneOff, XCircle } from "lucide-react";
+import { ClipboardCheck, Copy, KeyRound, Loader2, PhoneOff, Repeat, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   recordAttendanceFromMeeting,
   reopenMeeting,
   rotatePasscode,
+  stopRepeating,
 } from "@/app/(app)/meetings/actions";
 import { useT } from "@/components/i18n-provider";
 
@@ -25,12 +26,15 @@ export function MeetingActions({
   id,
   status,
   access,
+  repeat,
   hasParticipants,
   canRecordAttendance,
 }: {
   id: string;
   status: string;
   access: string;
+  /** The recurrence rule, or "none". Decides whether there is a series to stop. */
+  repeat: string;
   hasParticipants: boolean;
   canRecordAttendance: boolean;
 }) {
@@ -105,6 +109,23 @@ export function MeetingActions({
           </Button>
         )}
 
+        {repeat !== "none" && (
+          /*
+            Kept apart from Cancel, and worded as the opposite half of the same
+            decision. Cancel calls off this one and keeps the series; this keeps
+            this one and ends the series. A host who wanted one and got the other
+            has either lost a week or lost a meeting.
+          */
+          <Button
+            variant="secondary"
+            className="w-full justify-start"
+            disabled={pending}
+            onClick={() => run(() => stopRepeating(id), t("meetings.stoppedRepeating"))}
+          >
+            <Repeat /> {t("meetings.stopRepeating")}
+          </Button>
+        )}
+
         {status === "scheduled" && (
           <Button
             variant="ghost"
@@ -112,7 +133,8 @@ export function MeetingActions({
             disabled={pending}
             onClick={() => run(() => cancelMeeting(id), "Meeting cancelled.")}
           >
-            <XCircle /> Cancel this meeting
+            <XCircle />{" "}
+            {repeat !== "none" ? t("meetings.cancelThisOne") : "Cancel this meeting"}
           </Button>
         )}
 

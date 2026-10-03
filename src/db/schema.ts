@@ -3243,6 +3243,60 @@ export const meeting = pgTable(
     startedAt: timestamp({ withTimezone: true }),
     endedAt: timestamp({ withTimezone: true }),
 
+    /* ---------------------------------------------------- repeating
+     *
+     * A repeating meeting is a CHAIN of ordinary meetings, not a special kind of
+     * one. Each occurrence is its own row with its own participants, recordings
+     * and attendance — which is the whole point, because "who came to Wednesday
+     * prayer" is a question about one Wednesday. When an occurrence finishes,
+     * the next one is created from it.
+     *
+     * Exactly one future occurrence exists at a time. Generating a year of them
+     * would fill the upcoming list with rows nobody asked for and make calling
+     * off a series a fifty-two-row job.
+     */
+
+    /** "none" | "daily" | "weekly" | "fortnightly" | "monthly" | "monthly-weekday". */
+    repeat: text().notNull().default("none"),
+    /** The series stops after this instant. Null = until somebody stops it. */
+    repeatUntil: timestamp({ withTimezone: true }),
+    /**
+     * The date the rule is anchored to — what "the 31st" or "the first Sunday"
+     * was read off.
+     *
+     * Carried unchanged from occurrence to occurrence, because the current one
+     * is not reliable: a series on the 31st passes through February as the 28th,
+     * and a "last Sunday" lands on the 4th Sunday in a month with only four.
+     * Reading the rule off either would walk the series backwards through the
+     * calendar a month at a time.
+     *
+     * Re-set when somebody moves a repeating meeting to a different date, which
+     * is them saying the series happens then now.
+     */
+    repeatAnchor: timestamp({ withTimezone: true }),
+    /**
+     * The first occurrence of the series — the one the rule is anchored to.
+     *
+     * Null on a meeting that does not repeat, and on the first occurrence
+     * itself, so "is this part of a series" is `seriesId != null OR repeat !=
+     * none` and the first row needs no second write to point at itself.
+     *
+     * No foreign key, deliberately. Deleting the first occurrence must not take
+     * the rest of the series with it, and a dangling id here costs nothing: the
+     * anchor falls back to this occurrence's own date.
+     */
+    seriesId: uuid(),
+    /** 1 for the first, 2 for the next. Only ever read by a person. */
+    occurrence: integer().notNull().default(1),
+    /**
+     * How many occurrences in a row nobody opened.
+     *
+     * Reset to zero the moment one is actually held. A series that reaches
+     * MAX_MISSED_RUNS stops repeating itself rather than generating a row a week
+     * for ever for a church that set one up and moved on.
+     */
+    missedRuns: integer().notNull().default(0),
+
     hostUserId: text().references(() => user.id, { onDelete: "set null" }),
 
     access: meetingAccessEnum().notNull().default("open"),
@@ -3351,6 +3405,12 @@ export const meeting = pgTable(
     index("meeting_church_idx").on(t.churchId),
     index("meeting_church_status_idx").on(t.churchId, t.status),
     index("meeting_church_scheduled_idx").on(t.churchId, t.scheduledFor),
+    /*
+     * "Is there already a next occurrence of this series?" — the question the
+     * roll-forward asks before creating one, and the only thing that makes it
+     * safe to call from three places at once.
+     */
+    index("meeting_series_idx").on(t.seriesId, t.status),
   ],
 );
 

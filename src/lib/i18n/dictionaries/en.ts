@@ -1394,6 +1394,30 @@ export const en = {
     cancelled: "Cancelled",
     lowData: "Data Saver",
     runAgain: "Run it again",
+
+    /* --- repeating meetings --- */
+    repeats: "Repeats",
+    repeatNone: "Does not repeat",
+    repeatDaily: "Every day",
+    repeatWeekly: "Every week",
+    repeatFortnightly: "Every 2 weeks",
+    repeatMonthly: "Every month, on the same date",
+    repeatMonthlyWeekday: "Every month, on the same weekday",
+    repeatNeedsADate:
+      "Pick a date and time above first — a repeat starts from it.",
+    repeatHowItWorks:
+      "The next one goes on the calendar as soon as this one finishes, with its own register and recordings. The link, the passcode and your host link keep working every time.",
+    repeatUntil: "Last one on (optional)",
+    repeatsUntil: "Repeats until {date}",
+    occurrenceNumber: "No. {n} in the series",
+    stopRepeating: "Stop repeating",
+    cancelThisOne: "Cancel just this one",
+    stoppedRepeating: "It won't repeat again.",
+    seriesEnded: "This series has finished.",
+    partOfASeries: "Part of a repeating meeting",
+    nextOne: "Next one",
+    earlierOnes: "Earlier ones",
+
     endNow: "End it now",
     endForEveryone: "End for everyone",
     cancelMeeting: "Cancel this meeting",

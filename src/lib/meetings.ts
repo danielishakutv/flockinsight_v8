@@ -1,8 +1,9 @@
 import "server-only";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  church,
   meeting,
   meetingMessage,
   meetingParticipant,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/permissions-catalog";
 import {
   generateMeetingCode,
+  generatePasscode,
   parseStage,
   type MeetingRole,
   type RosterEntry,
@@ -27,6 +29,12 @@ import {
   type SignalType,
   type Stage,
 } from "@/lib/meetings-shared";
+import {
+  isMeetingRepeat,
+  MAX_MISSED_RUNS,
+  nextOccurrence,
+} from "@/lib/meeting-recurrence";
+import { auditSystem } from "@/lib/audit";
 
 /* ============================================================
  * Presence
@@ -896,6 +904,329 @@ export async function listMessages(meetingId: string, limit = 300) {
   return rows;
 }
 
+/* ============================================================
+ * Repeating meetings
+ *
+ * A series is a CHAIN of ordinary meetings, one row per occurrence, and exactly
+ * one of them is in the future at a time. When an occurrence finishes, the next
+ * is created from it.
+ *
+ * It is a chain rather than one row reused because every question worth asking
+ * about a meeting is about one occurrence of it: who came to Wednesday prayer,
+ * what was recorded, how long it ran. One row rolled forward for ever would pile
+ * fifty-two weeks of attendance into a single register and count the same person
+ * fifty-two times.
+ *
+ * The join link survives anyway. Each occurrence gets its own code, but the
+ * passcode and the host key are inherited, and `resolveMeetingByCode` follows an
+ * old code forward to the occurrence that is current — so the link in somebody's
+ * WhatsApp from March still opens Wednesday prayer in November.
+ * ========================================================== */
+
+/** Everything an occurrence hands to the one after it. */
+const SERIES_FIELDS = [
+  "title",
+  "description",
+  "kind",
+  "durationMin",
+  "access",
+  "lobby",
+  "maxParticipants",
+  "muteOnEntry",
+  "cameraOffOnEntry",
+  "allowChat",
+  "allowReactions",
+  "allowScreenShare",
+  "allowRecording",
+  "lowDataDefault",
+  "recordAttendance",
+  "transport",
+  "repeat",
+  "repeatUntil",
+  "repeatAnchor",
+] as const;
+
+/** Stop a series repeating, without touching the occurrence itself. */
+async function stopSeries(meetingId: string): Promise<void> {
+  await db.update(meeting).set({ repeat: "none" }).where(eq(meeting.id, meetingId));
+}
+
+/**
+ * Create the next occurrence of a repeating meeting, if there should be one.
+ *
+ * Idempotent by condition rather than by lock: it refuses to act while any
+ * occurrence of the series is still scheduled or live. That is what makes it
+ * safe to call from the moment a meeting ends AND from a cron sweep AND from a
+ * host cancelling one week, which between them is how a series survives a
+ * missed cron, a crashed worker and a laptop lid.
+ *
+ * `held` says whether the occurrence we are rolling forward from actually
+ * happened. A series nobody opens stops itself after MAX_MISSED_RUNS, so a
+ * church that set one up and moved on does not have a meeting generated for it
+ * every week for ever.
+ *
+ * Returns the new meeting's id, or null when nothing was created — which is the
+ * ordinary case and never an error.
+ */
+export async function rollSeriesForward(
+  meetingId: string,
+  opts: { held: boolean },
+): Promise<string | null> {
+  const [m] = await db.select().from(meeting).where(eq(meeting.id, meetingId)).limit(1);
+  if (!m) return null;
+  if (!isMeetingRepeat(m.repeat) || m.repeat === "none") return null;
+
+  const seriesId = m.seriesId ?? m.id;
+
+  /*
+   * Somebody else already did it, or this occurrence has not finished. Checked
+   * against the whole series rather than this row, because the next occurrence
+   * is a different row and that is exactly the duplicate to avoid.
+   */
+  const pending = await db
+    .select({ id: meeting.id })
+    .from(meeting)
+    .where(
+      and(
+        or(eq(meeting.seriesId, seriesId), eq(meeting.id, seriesId)),
+        inArray(meeting.status, ["scheduled", "live"]),
+      ),
+    )
+    .limit(1);
+  if (pending.length > 0) return null;
+
+  const missedRuns = opts.held ? 0 : m.missedRuns + 1;
+  if (missedRuns >= MAX_MISSED_RUNS) {
+    /*
+     * Six in a row nobody opened. The series stops itself and says so in the
+     * log — the row stays on the list, so a church that comes back to it can
+     * put it on again rather than wondering where it went.
+     */
+    await stopSeries(m.id);
+    await auditSystem({
+      churchId: m.churchId,
+      action: "meetings.meeting.update",
+      summary: `Stopped repeating "${m.title}" — the last ${MAX_MISSED_RUNS} were never opened`,
+      targetType: "meeting",
+      targetId: m.id,
+      targetLabel: m.title,
+      severity: "notice",
+      meta: { missedRuns },
+    });
+    return null;
+  }
+
+  const [c] = await db
+    .select({ timezone: church.timezone })
+    .from(church)
+    .where(eq(church.id, m.churchId))
+    .limit(1);
+  // The church's own clock, because "every Wednesday at 6pm" is a promise about
+  // a wall clock and not about an offset from UTC.
+  const timezone = c?.timezone ?? "Africa/Lagos";
+
+  /*
+   * A meeting with no scheduled time repeats from when it was actually held —
+   * somebody who started an unscheduled meeting and ticked "every week" meant
+   * "again next week at about this time", which is the only reading available.
+   */
+  const from = m.scheduledFor ?? m.startedAt ?? m.endedAt;
+  if (!from) return null;
+
+  const next = nextOccurrence({
+    from,
+    // What the rule was written against — see the column's comment. Falls back
+    // to this occurrence for a series that predates the anchor being recorded.
+    anchor: m.repeatAnchor ?? from,
+    repeat: m.repeat,
+    timezone,
+    until: m.repeatUntil,
+  });
+
+  if (!next) {
+    // Past its end date, or a rule that cannot produce another date. Either way
+    // the series is over, and the card should stop saying that it repeats.
+    await stopSeries(m.id);
+    return null;
+  }
+
+  const code = await allocateMeetingCode();
+  const carried = Object.fromEntries(
+    SERIES_FIELDS.map((k) => [k, m[k]]),
+  ) as Pick<Meeting, (typeof SERIES_FIELDS)[number]>;
+
+  const [row] = await db
+    .insert(meeting)
+    .values({
+      ...carried,
+      churchId: m.churchId,
+      code,
+      scheduledFor: next,
+      status: "scheduled",
+      seriesId,
+      occurrence: m.occurrence + 1,
+      missedRuns,
+      repeatAnchor: m.repeatAnchor ?? from,
+      /*
+       * The passcode and the host key are inherited on purpose. They are what a
+       * saved link carries, and the point of a repeating meeting is that nobody
+       * has to be sent a new one. Rotating either is a deliberate act and
+       * affects the occurrence it is done on.
+       */
+      passcode: m.access === "passcode" ? (m.passcode ?? generatePasscode()) : m.passcode,
+      hostKey: m.hostKey ?? generateHostKey(),
+      hostUserId: m.hostUserId,
+      createdBy: m.createdBy,
+      serviceId: m.serviceId,
+      groupId: m.groupId,
+      // Deliberately NOT carried: the stage, the slide deck, the spotlight and
+      // every statistic. Each occurrence starts on a clear screen with its own
+      // register.
+    })
+    .returning({ id: meeting.id });
+
+  await auditSystem({
+    churchId: m.churchId,
+    action: "meetings.meeting.create",
+    summary: `Scheduled the next "${m.title}" for ${next.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: timezone })}`,
+    targetType: "meeting",
+    targetId: row.id,
+    targetLabel: m.title,
+    meta: { seriesId, occurrence: m.occurrence + 1, repeat: m.repeat, from: meetingId },
+  });
+
+  return row.id;
+}
+
+/**
+ * The backstop: every series that has finished an occurrence and has no next
+ * one. Run from the housekeeping cron.
+ *
+ * `rollSeriesForward` is called the moment a meeting ends, so this almost never
+ * finds anything. It exists for the cases that are not an ending — a cancelled
+ * week, a worker restarted mid-insert, a database that was briefly unreachable —
+ * because a repeating meeting that quietly stopped repeating is the one failure
+ * nobody would notice until the Wednesday it was needed.
+ */
+export async function continueDueSeries(limit = 100): Promise<number> {
+  const candidates = await db
+    .select({ id: meeting.id, startedAt: meeting.startedAt })
+    .from(meeting)
+    .where(
+      and(
+        inArray(meeting.status, ["ended", "cancelled"]),
+        ne(meeting.repeat, "none"),
+      ),
+    )
+    .orderBy(desc(meeting.updatedAt))
+    .limit(limit);
+
+  let created = 0;
+  for (const row of candidates) {
+    try {
+      /*
+       * Whether it was held is READ, not assumed: a row with a `startedAt`
+       * happened, and one without it did not. Inferring it from which caller we
+       * are would get it wrong exactly when this matters — this sweep only ever
+       * sees an occurrence whose own roll-forward did not happen, and quietly
+       * forgiving every one of those would disarm the missed-run count that
+       * stops an abandoned series.
+       *
+       * A week somebody deliberately cancelled is already rolled forward by
+       * `cancelMeeting` the moment they press it, so it never reaches here.
+       */
+      const id = await rollSeriesForward(row.id, { held: row.startedAt !== null });
+      if (id) created++;
+    } catch (e) {
+      // One broken series must not stop the sweep for the rest.
+      console.error("[meetings] could not continue the series after", row.id, e);
+    }
+  }
+  return created;
+}
+
+/**
+ * Every occurrence of the series this meeting belongs to, newest first.
+ *
+ * Returns an empty list for a meeting that is not part of one, so the caller can
+ * treat "no series" and "a series of one" the same way — there is nothing to show
+ * in either case.
+ */
+export async function listSeriesOccurrences(
+  m: Pick<Meeting, "id" | "churchId" | "seriesId" | "repeat">,
+  limit = 25,
+): Promise<
+  {
+    id: string;
+    occurrence: number;
+    status: string;
+    scheduledFor: Date | null;
+    startedAt: Date | null;
+  }[]
+> {
+  if (m.seriesId === null && m.repeat === "none") return [];
+  const seriesId = m.seriesId ?? m.id;
+
+  const rows = await db
+    .select({
+      id: meeting.id,
+      occurrence: meeting.occurrence,
+      status: meeting.status,
+      scheduledFor: meeting.scheduledFor,
+      startedAt: meeting.startedAt,
+    })
+    .from(meeting)
+    .where(
+      and(
+        // Scoped to the church as well as the series: a series id arriving from
+        // anywhere must never be able to read another tenant's calendar.
+        eq(meeting.churchId, m.churchId),
+        or(eq(meeting.seriesId, seriesId), eq(meeting.id, seriesId)),
+      ),
+    )
+    .orderBy(desc(meeting.occurrence))
+    .limit(limit);
+
+  return rows.length > 1 ? rows : [];
+}
+
+/**
+ * Follow a join code forward to the occurrence that is current.
+ *
+ * The link in somebody's WhatsApp is from whichever week it was sent, and each
+ * occurrence has its own code. So a code belonging to a finished occurrence
+ * resolves to the live or next one in the same series, and the public page
+ * redirects there — which is why a church can print one link in a bulletin and
+ * have it keep working.
+ *
+ * It only ever moves FORWARD, and only within one series. A code for a meeting
+ * that simply ended, with no repeat, resolves to itself and the page says the
+ * meeting has ended, exactly as before.
+ */
+export async function resolveMeetingByCode(code: string): Promise<Meeting | null> {
+  const m = await getMeetingByCode(code);
+  if (!m) return null;
+  if (m.status !== "ended" && m.status !== "cancelled") return m;
+
+  const seriesId = m.seriesId ?? m.id;
+  // Only worth a second query for a row that is actually part of a series.
+  if (m.seriesId === null && m.repeat === "none") return m;
+
+  const [current] = await db
+    .select()
+    .from(meeting)
+    .where(
+      and(
+        or(eq(meeting.seriesId, seriesId), eq(meeting.id, seriesId)),
+        inArray(meeting.status, ["live", "scheduled"]),
+      ),
+    )
+    .orderBy(asc(meeting.occurrence))
+    .limit(1);
+
+  return current ?? m;
+}
+
 /**
  * Close a meeting: everyone marked out, the room marked ended.
  *
@@ -911,12 +1242,39 @@ export async function endMeeting(meetingId: string): Promise<void> {
     })
     .where(and(eq(meetingParticipant.meetingId, meetingId), isNull(meetingParticipant.leftAt)));
 
-  await db
+  /*
+   * Status-scoped, and it reports back whether THIS call was the one that ended
+   * the meeting. Two people can press End within the same moment — a host in the
+   * room and an admin on the detail page — and only one of them changes a row.
+   */
+  const closed = await db
     .update(meeting)
     .set({ status: "ended", endedAt: sql`coalesce(${meeting.endedAt}, now())` })
-    .where(and(eq(meeting.id, meetingId), inArray(meeting.status, ["scheduled", "live"])));
+    .where(and(eq(meeting.id, meetingId), inArray(meeting.status, ["scheduled", "live"])))
+    .returning({ id: meeting.id });
 
   notifyRoom(meetingId);
+
+  /*
+   * And put the next one on the calendar, for a meeting that repeats.
+   *
+   * Only for the caller that actually closed the room. `rollSeriesForward`
+   * refuses to act while any occurrence of the series is still scheduled, which
+   * covers the ordinary cases, but that check is two statements rather than one
+   * — so two simultaneous endings could each pass it and each create a next
+   * week. Two links to Wednesday prayer is half the congregation in each.
+   *
+   * Last, and inside a catch, because this runs on the path that ends a live
+   * call. Whatever goes wrong with next Wednesday must not stop this Wednesday
+   * finishing — and `continueDueSeries` in the housekeeping cron picks up
+   * anything that failed here within ten minutes.
+   */
+  if (closed.length === 0) return;
+  try {
+    await rollSeriesForward(meetingId, { held: true });
+  } catch (e) {
+    console.error("[meetings] could not schedule the next occurrence of", meetingId, e);
+  }
 }
 
 /**
@@ -1047,7 +1405,22 @@ export async function expireMissedMeetings(): Promise<number> {
         lt(meeting.scheduledFor, new Date(Date.now() - 12 * 60 * 60_000)),
       ),
     )
-    .returning({ id: meeting.id });
+    .returning({ id: meeting.id, repeat: meeting.repeat });
+
+  /*
+   * A repeating meeting that nobody opened still moves on to next week — a
+   * church that misses one Wednesday has not cancelled Wednesdays. It counts as
+   * a missed run, though, which is what eventually stops a series nobody is
+   * looking after.
+   */
+  for (const row of rows) {
+    if (row.repeat === "none") continue;
+    try {
+      await rollSeriesForward(row.id, { held: false });
+    } catch (e) {
+      console.error("[meetings] could not continue the series after a missed", row.id, e);
+    }
+  }
   return rows.length;
 }
 

@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { CalendarClock, Video } from "lucide-react";
 import { db } from "@/db";
 import { church } from "@/db/schema";
-import { getMeetingByCode, standingInChurch } from "@/lib/meetings";
+import {
+  getMeetingByCode,
+  resolveMeetingByCode,
+  standingInChurch,
+} from "@/lib/meetings";
 import { getSession } from "@/lib/session";
 import { MeetingRoom } from "@/components/meetings/meeting-room";
 import { I18nProvider } from "@/components/i18n-provider";
@@ -48,6 +53,32 @@ export default async function MeetPage({
   // joins — the server decides whether it is real, never the page.
   const hostKey = typeof sp.h === "string" ? sp.h : null;
   const m = await getMeetingByCode(code);
+
+  /*
+   * A link to a finished occurrence of a repeating meeting opens the current
+   * one.
+   *
+   * Each occurrence has its own code, and the link in somebody's WhatsApp is
+   * from whichever week it was sent — so without this, "every Wednesday" would
+   * mean a new link to send out every Wednesday, which is most of the reason for
+   * not bothering with a repeating meeting at all.
+   *
+   * A REDIRECT rather than quietly serving the other room under this URL: the
+   * room's own API calls are addressed by code, so the browser has to be on the
+   * current one's address for anything to work. The query string travels with
+   * it, which is what keeps a saved host link working.
+   */
+  if (m && (m.status === "ended" || m.status === "cancelled")) {
+    const current = await resolveMeetingByCode(code);
+    if (current && current.code !== code) {
+      const query = new URLSearchParams();
+      for (const [k, v] of Object.entries(sp)) {
+        if (typeof v === "string") query.set(k, v);
+      }
+      const suffix = query.size > 0 ? `?${query.toString()}` : "";
+      redirect(`/meet/${current.code}${suffix}`);
+    }
+  }
 
   if (!m) {
     return (

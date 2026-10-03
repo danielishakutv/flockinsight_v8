@@ -32,7 +32,13 @@ import {
   type MeetingAccess,
   type MeetingKind,
 } from "@/lib/meetings-shared";
+import {
+  describeRepeat,
+  MEETING_REPEATS,
+  type MeetingRepeat,
+} from "@/lib/meeting-recurrence";
 import { useT } from "@/components/i18n-provider";
+import type { TKey } from "@/lib/i18n/translate";
 
 export type MeetingFormValues = {
   id?: string;
@@ -51,6 +57,9 @@ export type MeetingFormValues = {
   allowScreenShare: boolean;
   allowRecording: boolean;
   lowDataDefault: boolean;
+  repeat: MeetingRepeat;
+  /** A local date, "2027-03-31", or blank for a series with no end. */
+  repeatUntil: string;
 };
 
 export const BLANK_MEETING: MeetingFormValues = {
@@ -69,6 +78,18 @@ export const BLANK_MEETING: MeetingFormValues = {
   allowScreenShare: true,
   allowRecording: true,
   lowDataDefault: false,
+  repeat: "none",
+  repeatUntil: "",
+};
+
+/** What each rule is called in the picker. */
+const REPEAT_LABEL: Record<MeetingRepeat, TKey> = {
+  none: "meetings.repeatNone",
+  daily: "meetings.repeatDaily",
+  weekly: "meetings.repeatWeekly",
+  fortnightly: "meetings.repeatFortnightly",
+  monthly: "meetings.repeatMonthly",
+  "monthly-weekday": "meetings.repeatMonthlyWeekday",
 };
 
 /**
@@ -105,6 +126,30 @@ export function MeetingDialog({
 
   const set = <K extends keyof MeetingFormValues>(key: K, v: MeetingFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: v }));
+
+  /*
+   * "Every Wednesday", from the date that was typed.
+   *
+   * Shown back rather than left for the person to work out, because the rule is
+   * derived from the date and a picker that says "Every week" cannot tell you
+   * that you picked a Tuesday by mistake.
+   *
+   * The datetime-local value is a wall clock with no zone, which is exactly what
+   * the church's clock means by it — so it is read as such rather than parsed as
+   * the browser's local time.
+   */
+  const repeatSummary = (() => {
+    if (values.repeat === "none" || !values.scheduledFor) return null;
+    const [date, time] = values.scheduledFor.split("T");
+    const [year, month, day] = date.split("-").map(Number);
+    const [hour, minute] = (time ?? "00:00").split(":").map(Number);
+    if (!year || !month || !day) return null;
+    return describeRepeat(
+      values.repeat,
+      new Date(Date.UTC(year, month - 1, day, hour || 0, minute || 0)),
+      "UTC",
+    );
+  })();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,8 +231,76 @@ export function MeetingDialog({
               id="m-when"
               type="datetime-local"
               value={values.scheduledFor}
-              onChange={(e) => set("scheduledFor", e.target.value)}
+              onChange={(e) => {
+                const when = e.target.value;
+                setValues((prev) => ({
+                  ...prev,
+                  scheduledFor: when,
+                  // A repeat is read off this date, so clearing the date clears
+                  // the rule rather than leaving "Every week" showing in a
+                  // disabled picker over nothing to repeat from.
+                  repeat: when ? prev.repeat : "none",
+                  repeatUntil: when ? prev.repeatUntil : "",
+                }));
+              }}
             />
+          </div>
+
+          {/*
+            Repeating. Below "When" because it is read off it, and it says so
+            rather than being quietly ignored when there is no date — a rule
+            with nothing to repeat from is the one way this could silently do
+            nothing.
+          */}
+          <div>
+            <Label className="mb-1.5 block" htmlFor="m-repeat">
+              {t("meetings.repeats")}
+            </Label>
+            <Select
+              value={values.repeat}
+              onValueChange={(v) => set("repeat", v as MeetingRepeat)}
+              disabled={!values.scheduledFor}
+            >
+              <SelectTrigger id="m-repeat" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEETING_REPEATS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {t(REPEAT_LABEL[r])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {!values.scheduledFor ? (
+              <p className="text-muted-foreground mt-1 text-xs">
+                {t("meetings.repeatNeedsADate")}
+              </p>
+            ) : (
+              values.repeat !== "none" && (
+                <div className="mt-2 space-y-2 rounded-xl border p-3">
+                  <p className="text-sm font-medium">
+                    {repeatSummary ?? t(REPEAT_LABEL[values.repeat])}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {t("meetings.repeatHowItWorks")}
+                  </p>
+                  <div>
+                    <Label htmlFor="m-repeat-until" className="mb-1.5 block text-xs">
+                      {t("meetings.repeatUntil")}
+                    </Label>
+                    <Input
+                      id="m-repeat-until"
+                      type="date"
+                      value={values.repeatUntil}
+                      min={values.scheduledFor.slice(0, 10)}
+                      onChange={(e) => set("repeatUntil", e.target.value)}
+                    />
+                  </div>
+                </div>
+              )
+            )}
           </div>
 
           <div>

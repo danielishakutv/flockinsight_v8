@@ -11,6 +11,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Repeat,
   Users,
   Video,
   XCircle,
@@ -35,7 +36,9 @@ import {
   cancelMeeting,
   duplicateMeeting,
   reopenMeeting,
+  stopRepeating,
 } from "@/app/(app)/meetings/actions";
+import { describeRepeat, type MeetingRepeat } from "@/lib/meeting-recurrence";
 import {
   formatDuration,
   MEETING_KIND_LABEL,
@@ -73,6 +76,11 @@ export type MeetingRow = {
   allowScreenShare: boolean;
   allowRecording: boolean;
   lowDataDefault: boolean;
+  repeat: string;
+  /** ISO, or null for a series with no end. */
+  repeatUntil: string | null;
+  /** Which one of the series this is. 1 unless it repeats. */
+  occurrence: number;
 };
 
 export function MeetingsList({
@@ -121,6 +129,9 @@ export function MeetingsList({
       allowScreenShare: m.allowScreenShare,
       allowRecording: m.allowRecording,
       lowDataDefault: m.lowDataDefault,
+      repeat: (m.repeat as MeetingRepeat) ?? "none",
+      // The date input wants "2027-03-31" and nothing else.
+      repeatUntil: m.repeatUntil ? toLocalInput(new Date(m.repeatUntil)).slice(0, 10) : "",
     });
     setDialogOpen(true);
   };
@@ -290,6 +301,22 @@ function MeetingCard({
       })
     : null;
 
+  /*
+   * "Every Wednesday", in the reader's own timezone.
+   *
+   * Deliberately the browser's clock rather than the church's: everything else
+   * on this card is rendered in it, and the one thing this chip must never do is
+   * disagree with the date printed next to it.
+   */
+  const repeats =
+    m.repeat && m.repeat !== "none" && m.scheduledFor
+      ? describeRepeat(
+          m.repeat as MeetingRepeat,
+          new Date(m.scheduledFor),
+          Intl.DateTimeFormat().resolvedOptions().timeZone,
+        )
+      : null;
+
   const ran =
     m.startedAt && m.endedAt
       ? formatDuration(
@@ -333,6 +360,30 @@ function MeetingCard({
                 Cancelled
               </span>
             )}
+            {repeats && (
+              /*
+                Worked out in the reader's own clock, on purpose — the same one
+                the date beside it is rendered in. A chip saying "Every
+                Wednesday" next to a date that reads Tuesday is worse than no
+                chip at all.
+              */
+              <span
+                className="flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 dark:text-violet-400"
+                title={
+                  m.repeatUntil
+                    ? t("meetings.repeatsUntil", {
+                        date: new Date(m.repeatUntil).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        }),
+                      })
+                    : undefined
+                }
+              >
+                <Repeat className="size-3" /> {repeats}
+              </span>
+            )}
             {m.lowDataDefault && (
               <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-sky-700 dark:text-sky-400">
                 Low data
@@ -358,6 +409,11 @@ function MeetingCard({
                 <Film className="size-3.5" /> {m.recordings} recording
                 {m.recordings === 1 ? "" : "s"}
               </span>
+            )}
+            {m.occurrence > 1 && (
+              // Which week of the series this is, so a list of identically named
+              // meetings is readable at a glance.
+              <span>{t("meetings.occurrenceNumber", { n: String(m.occurrence) })}</span>
             )}
             {m.hostName && <span>Host: {m.hostName}</span>}
           </p>
@@ -407,6 +463,23 @@ function MeetingCard({
                 >
                   <Copy className="size-4" /> Run it again
                 </DropdownMenuItem>
+                {m.repeat !== "none" && (
+                  /*
+                    The counterpart to Cancel, and a separate item because they
+                    are opposite halves of the same decision: Cancel calls off
+                    this one and keeps the series, this keeps this one and ends
+                    the series. One button doing "the obvious thing" would do the
+                    wrong one half the time.
+                  */
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onClick={() =>
+                      run(() => stopRepeating(m.id), t("meetings.stoppedRepeating"))
+                    }
+                  >
+                    <Repeat className="size-4" /> {t("meetings.stopRepeating")}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 {m.status === "cancelled" ? (
                   <DropdownMenuItem

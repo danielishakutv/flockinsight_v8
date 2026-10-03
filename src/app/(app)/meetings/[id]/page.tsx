@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { ArrowLeft, Film, KeyRound, Users, Video } from "lucide-react";
+import { ArrowLeft, Film, KeyRound, Repeat, Users, Video } from "lucide-react";
 import { db } from "@/db";
 import { service, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -13,7 +13,9 @@ import {
   getMeeting,
   listMessages,
   listRecordings,
+  listSeriesOccurrences,
 } from "@/lib/meetings";
+import { describeRepeat, type MeetingRepeat } from "@/lib/meeting-recurrence";
 import {
   formatDuration,
   MEETING_ACCESS_LABEL,
@@ -48,7 +50,7 @@ export default async function MeetingDetailPage({
   const m = await getMeeting(id, church.id);
   if (!m) notFound();
 
-  const [register, recordings, transcript, host, linkedService] = await Promise.all([
+  const [register, recordings, transcript, host, linkedService, series] = await Promise.all([
     attendanceLog(m.id),
     listRecordings(m.id),
     m.allowChat ? listMessages(m.id, 500) : Promise.resolve([]),
@@ -58,10 +60,25 @@ export default async function MeetingDetailPage({
     m.serviceId
       ? db.select({ name: service.name }).from(service).where(eq(service.id, m.serviceId)).limit(1)
       : Promise.resolve([]),
+    listSeriesOccurrences(m),
   ]);
 
   const url = meetingLink(siteUrl(), m.code);
   const isOver = m.status === "ended" || m.status === "cancelled";
+
+  /*
+   * How the series reads, in the church's own clock.
+   *
+   * This page is a server component, so there is no browser timezone to fall
+   * back on — and the church's is the right answer anyway: it is the clock the
+   * meeting was scheduled against.
+   */
+  const repeats = describeRepeat(
+    (m.repeat as MeetingRepeat) ?? "none",
+    m.repeatAnchor ?? m.scheduledFor,
+    church.timezone,
+  );
+  const inSeries = series.length > 1;
   const when = m.scheduledFor
     ? m.scheduledFor.toLocaleString("en-GB", {
         weekday: "long",
@@ -94,6 +111,11 @@ export default async function MeetingDetailPage({
           <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <span>{MEETING_KIND_LABEL[m.kind as MeetingKind] ?? m.kind}</span>
             {when && <span>· {when}</span>}
+            {repeats && (
+              <span className="flex items-center gap-1 text-violet-700 dark:text-violet-400">
+                · <Repeat className="size-3.5" /> {repeats}
+              </span>
+            )}
             {ran && <span>· ran for {ran}</span>}
             {host[0]?.name && <span>· host {host[0].name}</span>}
             {linkedService[0]?.name && <span>· {linkedService[0].name}</span>}
@@ -308,11 +330,74 @@ export default async function MeetingDetailPage({
             </CardContent>
           </Card>
 
+          {inSeries && (
+            /*
+              The series, laid out as what it is: a row per occurrence, each with
+              its own register and recordings. This is the view that makes the
+              design legible — somebody looking for "who came on the 14th" can
+              see that there IS a 14th to look at.
+            */
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Repeat className="size-4" /> {t("meetings.partOfASeries")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-1.5 text-sm">
+                  {series.map((o) => {
+                    const date = o.scheduledFor ?? o.startedAt;
+                    const isThis = o.id === m.id;
+                    return (
+                      <li key={o.id}>
+                        <Link
+                          href={`/meetings/${o.id}`}
+                          aria-current={isThis ? "page" : undefined}
+                          className={
+                            isThis
+                              ? "bg-muted flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 font-semibold"
+                              : "hover:bg-muted/60 flex items-center justify-between gap-3 rounded-lg px-2 py-1.5"
+                          }
+                        >
+                          <span className="truncate">
+                            {date
+                              ? date.toLocaleDateString("en-GB", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                  timeZone: church.timezone,
+                                })
+                              : `No. ${o.occurrence}`}
+                          </span>
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            {o.status === "scheduled"
+                              ? t("meetings.upcoming")
+                              : o.status === "live"
+                                ? t("meetings.live")
+                                : o.status === "cancelled"
+                                  ? t("meetings.cancelled")
+                                  : t("meetings.held")}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ol>
+                {m.repeat === "none" && (
+                  <p className="text-muted-foreground mt-3 text-xs">
+                    {t("meetings.seriesEnded")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {canManage && (
             <MeetingActions
               id={m.id}
               status={m.status}
               access={m.access}
+              repeat={m.repeat}
               hasParticipants={register.length > 0}
               canRecordAttendance={canAttendance}
             />

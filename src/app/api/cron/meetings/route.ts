@@ -1,4 +1,5 @@
 import {
+  continueDueSeries,
   endAbandonedMeetings,
   expireMissedMeetings,
   failStalledRecordings,
@@ -21,7 +22,10 @@ export const runtime = "nodejs";
  *     on the list, and count towards the church's live total.
  *  2. Cancel meetings that were scheduled and never opened, well after the
  *     fact, so the upcoming list is things that are actually coming up.
- *  3. Sweep consumed signalling rows. That table is a transport buffer — its
+ *  3. Put the next occurrence of every repeating meeting on the calendar, for
+ *     any series that finished one without getting one — the backstop for the
+ *     roll-forward that normally happens the moment a meeting ends.
+ *  4. Sweep consumed signalling rows. That table is a transport buffer — its
  *     rows are read within a second or two and are meaningless a minute later.
  *     The sweep is always age-scoped, and it is the ONLY table this touches:
  *     the record of what happened in a meeting lives in meeting_participant,
@@ -50,6 +54,19 @@ export async function GET(request: Request) {
      * they do not, so the server stops believing it after half an hour.
      */
     const stalledRecordings = await failStalledRecordings(30);
+
+    /*
+     * Every repeating meeting that has finished an occurrence and has no next
+     * one. Almost always nothing: the next occurrence is created the moment one
+     * ends. This is the backstop for what is not an ending — a cancelled week, a
+     * worker restarted mid-insert, a database briefly out of reach — because a
+     * repeating meeting that quietly stopped repeating is the one failure nobody
+     * notices until the Wednesday it was needed.
+     *
+     * Runs AFTER expireMissedMeetings, so a meeting that has just been given up
+     * on is rolled forward in the same tick rather than ten minutes later.
+     */
+    const seriesScheduled = await continueDueSeries();
 
     /*
      * Convert whatever is still waiting. Normally a transcode starts the moment
@@ -85,7 +102,7 @@ export async function GET(request: Request) {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings, transcoded, staleUploads }),
+      JSON.stringify({ ok: true, ended, expired, seriesScheduled, swept, warmed, stalledRecordings, transcoded, staleUploads }),
       { headers: { "Content-Type": "application/json" } },
     );
   });

@@ -19,7 +19,13 @@ import {
   endMeeting as endMeetingRoom,
   generateHostKey,
   getMeeting,
+  rollSeriesForward,
 } from "@/lib/meetings";
+import {
+  describeRepeat,
+  MEETING_REPEATS,
+  type MeetingRepeat,
+} from "@/lib/meeting-recurrence";
 import {
   chooseTransport,
   generatePasscode,
@@ -78,6 +84,18 @@ const meetingSchema = z.object({
   allowScreenShare: z.boolean().default(true),
   allowRecording: z.boolean().default(true),
   lowDataDefault: z.boolean().default(false),
+  /** "none" | "daily" | "weekly" | "fortnightly" | "monthly" | "monthly-weekday". */
+  repeat: z
+    .enum(MEETING_REPEATS as unknown as [MeetingRepeat, ...MeetingRepeat[]])
+    .default("none"),
+  /** A local date from the browser, e.g. "2027-03-31". Blank = no end. */
+  repeatUntil: z.preprocess(
+    emptyToNull,
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a real date for the last one")
+      .nullable(),
+  ),
 });
 
 export type MeetingInput = z.input<typeof meetingSchema>;
@@ -109,6 +127,29 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     return { ok: false, error: "Pick a real date and time." };
 
   /*
+   * A repeat needs something to repeat from.
+   *
+   * "Every Wednesday" is read off the date it starts, so a repeating meeting
+   * with no date is a rule with no anchor — it would silently become "every week
+   * from whenever this was created", which is not what anybody meant by leaving
+   * the box blank.
+   */
+  const repeat: MeetingRepeat = scheduledFor ? v.repeat : "none";
+  if (v.repeat !== "none" && !scheduledFor)
+    return { ok: false, error: "Pick a date and time first — a repeat starts from it." };
+
+  /*
+   * The end date is the END of that day, not its first second. Somebody typing
+   * the 31st means "including the 31st", and a 6pm meeting on the 31st is after
+   * midnight on the 31st.
+   */
+  const repeatUntil = v.repeatUntil ? new Date(`${v.repeatUntil}T23:59:59`) : null;
+  if (repeatUntil && Number.isNaN(repeatUntil.getTime()))
+    return { ok: false, error: "Pick a real date for the last one." };
+  if (repeatUntil && scheduledFor && repeatUntil.getTime() < scheduledFor.getTime())
+    return { ok: false, error: "The last one cannot be before the first one." };
+
+  /*
    * The plan's ceiling for one room. Checked here rather than trusted from the
    * form, because relayed media costs real money per gigabyte and the number
    * in the form came from a browser.
@@ -137,6 +178,8 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     allowScreenShare: v.allowScreenShare,
     allowRecording: v.allowRecording,
     lowDataDefault: v.lowDataDefault,
+    repeat,
+    repeatUntil,
     /*
      * Decided here, once, and never while people are in the room — everyone in
      * a meeting must use the same transport, because a mesh peer and an SFU
@@ -162,9 +205,28 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     const passcode =
       v.access === "passcode" ? (existing.passcode ?? generatePasscode()) : existing.passcode;
 
+    /*
+     * Re-anchor the rule when the date has actually moved, or when the repeat is
+     * being switched on for the first time.
+     *
+     * The anchor is what "the 31st" and "the first Sunday" are read off. Moving
+     * a repeating meeting to a Thursday is somebody saying the series happens on
+     * Thursdays now, so the rule has to follow the date rather than stay pinned
+     * to whatever it was first set up as. Left alone when nothing moved, so an
+     * edit to the title cannot quietly re-anchor a monthly series.
+     */
+    const dateMoved =
+      (existing.scheduledFor?.getTime() ?? null) !== (scheduledFor?.getTime() ?? null);
+    const repeatAnchor =
+      repeat === "none"
+        ? existing.repeatAnchor
+        : dateMoved || existing.repeat === "none"
+          ? scheduledFor
+          : (existing.repeatAnchor ?? scheduledFor);
+
     await db
       .update(meeting)
-      .set({ ...values, passcode })
+      .set({ ...values, passcode, repeatAnchor })
       .where(and(eq(meeting.id, v.id), eq(meeting.churchId, g.churchId)));
 
     const changed = diffFields(
@@ -199,14 +261,17 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
       hostUserId: g.userId,
       createdBy: g.userId,
       status: "scheduled",
+      // The first occurrence IS the anchor, and carries the rule forward.
+      repeatAnchor: repeat === "none" ? null : scheduledFor,
     })
     .returning({ id: meeting.id, code: meeting.code });
 
+  const repeats = describeRepeat(repeat, scheduledFor, g.timezone);
   await audit({
     churchId: g.churchId,
     action: "meetings.meeting.create",
     summary: scheduledFor
-      ? `Scheduled the meeting "${v.title}" for ${scheduledFor.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`
+      ? `Scheduled the meeting "${v.title}" for ${scheduledFor.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: g.timezone })}${repeats ? ` — ${repeats.toLowerCase()}` : ""}`
       : `Created the meeting "${v.title}"`,
     targetType: "meeting",
     targetId: row.id,
@@ -240,6 +305,58 @@ export async function cancelMeeting(id: string): Promise<ActionResult> {
     targetId: id,
     targetLabel: m.title,
     severity: "notice",
+  });
+
+  /*
+   * Calling off one week is not calling off the series. A church that cancels
+   * Wednesday because of a funeral still has Wednesday prayer next week, so the
+   * next occurrence goes straight on the calendar — and `held: true`, because
+   * somebody deliberately cancelling is the opposite of a series nobody is
+   * looking after, and must not count towards it giving up.
+   *
+   * To stop the whole series there is "Stop repeating", which says so.
+   */
+  if (m.repeat !== "none") {
+    try {
+      await rollSeriesForward(id, { held: true });
+    } catch (e) {
+      console.error("[meetings] could not continue the series after cancelling", id, e);
+    }
+  }
+
+  refresh(id);
+  return { ok: true };
+}
+
+/**
+ * Stop a series repeating, leaving this occurrence alone.
+ *
+ * The counterpart to Cancel: Cancel calls off one week and keeps the series,
+ * this keeps the week and ends the series. Both are needed, and a single button
+ * that did one of them would silently do the wrong one half the time.
+ */
+export async function stopRepeating(id: string): Promise<ActionResult> {
+  const g = await guard();
+  if (!g) return DENIED;
+
+  const m = await getMeeting(id, g.churchId);
+  if (!m) return { ok: false, error: "We couldn't find that meeting." };
+  if (m.repeat === "none") return { ok: false, error: "That meeting doesn't repeat." };
+
+  await db
+    .update(meeting)
+    .set({ repeat: "none", repeatUntil: null })
+    .where(and(eq(meeting.id, id), eq(meeting.churchId, g.churchId)));
+
+  await audit({
+    churchId: g.churchId,
+    action: "meetings.meeting.update",
+    summary: `Stopped "${m.title}" repeating`,
+    targetType: "meeting",
+    targetId: id,
+    targetLabel: m.title,
+    severity: "notice",
+    meta: { was: m.repeat },
   });
 
   refresh(id);

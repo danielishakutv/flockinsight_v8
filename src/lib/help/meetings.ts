@@ -62,6 +62,60 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
         ],
       },
       {
+        title: "A meeting that repeats",
+        blocks: [
+          {
+            kind: "text",
+            text: "Most church meetings are the same meeting every week. Set the date and time, then set Repeats, and you never have to create it again: as soon as one finishes, the next is on the calendar with the same settings.",
+          },
+          {
+            kind: "table",
+            headers: ["Repeats", "What you get"],
+            rows: [
+              ["Every day", "The same time, every day."],
+              ["Every week", "The same weekday and time — Wednesday prayer at 6pm, for ever."],
+              ["Every 2 weeks", "Every other week, keeping the week it started on."],
+              [
+                "Every month, on the same date",
+                "The 5th of each month. A month too short for the date you picked uses its last day rather than slipping into the next month.",
+              ],
+              [
+                "Every month, on the same weekday",
+                "The first Sunday, the last Friday. Right for communion services and monthly vigils.",
+              ],
+            ],
+          },
+          {
+            kind: "bullets",
+            items: [
+              "The link, the passcode and your host link stay the same every time. Print one link in a bulletin and it keeps working.",
+              "Each week is kept separately: its own register, its own recordings, its own chat. 'Who came on the 14th' is a question you can still answer in December.",
+              "Only the next one is on the calendar at a time, so the upcoming list stays short and honest.",
+              "Edit any occurrence and the ones after it inherit the change. Moving it to a Thursday moves the series to Thursdays.",
+              "Last one on sets an end date, if the series is a six-week course rather than something open-ended.",
+            ],
+          },
+          {
+            kind: "example",
+            title: "Grace Chapel, midweek prayer",
+            lines: [
+              "Pastor Ada creates 'Midweek prayer', Wednesday 6:00pm, Repeats: every week, Data Saver on by default.",
+              "She sends the link once, to the church WhatsApp group.",
+              "Every Wednesday she opens that same link. The meeting for the following Wednesday appears the moment she ends it.",
+              "In March somebody asks how many came in January. Each Wednesday is its own row on the Meetings page, with its own register.",
+            ],
+          },
+          {
+            kind: "note",
+            text: "Cancel and Stop repeating are different on purpose. Cancel calls off one week and leaves the series running — a funeral on a Wednesday. Stop repeating keeps that week and ends the series.",
+          },
+          {
+            kind: "warning",
+            text: "A series nobody opens stops itself after six missed occurrences, so an abandoned meeting does not keep generating rows for ever. The last one stays on your list and you can put it back on at any time.",
+          },
+        ],
+      },
+      {
         title: "Low data mode — read this one",
         blocks: [
           {
@@ -193,6 +247,14 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
     ],
     faq: [
       {
+        q: "Can I set up a meeting that happens every week?",
+        a: "Yes. Pick the date and time of the first one, then set Repeats to Every week. The next occurrence goes on the calendar as soon as one finishes, and the link you shared keeps working every week — there is nothing to send out again.",
+      },
+      {
+        q: "Does a repeating meeting give everyone a new link each week?",
+        a: "No. The link, the passcode and your host link stay the same for the whole series. If somebody opens an older link it takes them to the current meeting.",
+      },
+      {
         q: "Do people need an account?",
         a: "No. Anyone with the link types a name and joins. Set the meeting to 'Signed-in members only' if you would rather they did need one.",
       },
@@ -222,7 +284,7 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
       { label: "Media library", href: "/media" },
       { label: "Attendance", href: "/attendance" },
     ],
-    tip: "Set your weekly prayer meeting to low data by default and pin the link in the WhatsApp group. Same link every week, no reminder to send.",
+    tip: "Set your weekly prayer meeting to repeat every week, with Data Saver on by default, and pin the link in the WhatsApp group. Same link every week, nothing to create and no reminder to send.",
     related: ["attendance", "media"],
     keywords: [
       "meeting",
@@ -235,6 +297,11 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
       "bible study online",
       "webinar",
       "low data",
+      "recurring meeting",
+      "repeat",
+      "every week",
+      "weekly meeting",
+      "schedule",
     ],
   },
 ];
