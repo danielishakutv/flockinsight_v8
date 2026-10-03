@@ -43,6 +43,21 @@ export const getActAsChurchId = cache(async (): Promise<string | null> => {
 });
 
 /**
+ * The church this person is operating in, or null.
+ *
+ * Unlike `requireChurch()` this redirects nowhere and demands nothing — it is
+ * for code that works with or without a church, such as writing an audit row
+ * for somebody editing their own account.
+ */
+export const getActiveChurchId = cache(async (): Promise<string | null> => {
+  const actAsId = await getActAsChurchId();
+  if (actAsId) return actAsId;
+  const data = await getSession();
+  const id = data?.session?.activeOrganizationId;
+  return typeof id === "string" && id ? id : null;
+});
+
+/**
  * Does this person hold a genuine seat in this church?
  *
  * "Genuine" excludes the `temp` row a superadmin's impersonation creates —

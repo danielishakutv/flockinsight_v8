@@ -19,6 +19,7 @@ export function Sidebar({
   churchName,
   userName,
   userEmail,
+  userImage,
   isSuperAdmin = false,
   perms = [],
   isOwner = false,
@@ -27,6 +28,7 @@ export function Sidebar({
   churchName: string;
   userName: string;
   userEmail: string;
+  userImage?: string | null;
   isSuperAdmin?: boolean;
   perms?: string[];
   isOwner?: boolean;
@@ -116,6 +118,7 @@ export function Sidebar({
         <UserMenu
           name={userName}
           email={userEmail}
+          image={userImage}
           isSuperAdmin={isSuperAdmin}
           className="w-full"
         />

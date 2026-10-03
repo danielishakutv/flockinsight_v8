@@ -14,6 +14,14 @@ export type MediaKind =
   | "cover"
   | "photo"
   | "member"
+  /**
+   * Somebody's own profile picture.
+   *
+   * Deliberately its own kind rather than "photo" (which needs
+   * settings.manage) or "member" (members.manage): a person changing their own
+   * face does not need permission over the church. See AVATAR_KIND below.
+   */
+  | "avatar"
   | "event"
   | "devotional"
   | "sermon"
@@ -25,12 +33,22 @@ export const MEDIA_KINDS: MediaKind[] = [
   "cover",
   "photo",
   "member",
+  "avatar",
   "event",
   "devotional",
   "sermon",
   "receipt",
   "file",
 ];
+
+/**
+ * The one kind of upload that needs no permission over the church.
+ *
+ * Both upload paths check this BEFORE asking permForKind, so the rule lives in
+ * one place. It is still bounded by everything else: signed in, a real church,
+ * the mime whitelist, the size cap and the church's storage quota.
+ */
+export const AVATAR_KIND: MediaKind = "avatar";
 
 /**
  * Which permission a given upload kind needs. Owners always pass.
@@ -46,6 +64,11 @@ export function permForKind(kind: MediaKind): string {
     case "cover":
     case "photo":
     case "event":
+      return "settings.manage";
+    // Never reached through the routes (they allow an avatar before asking),
+    // but a caller that forgets gets the strictest answer rather than an open
+    // door.
+    case "avatar":
       return "settings.manage";
     case "member":
       return "members.manage";

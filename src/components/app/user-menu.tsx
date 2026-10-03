@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Settings, Moon, Sun, Laptop, Shield } from "lucide-react";
+import { LogOut, Settings, Moon, Sun, Laptop, Shield, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
 import { useT } from "@/components/i18n-provider";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,11 +30,14 @@ function initials(name: string) {
 export function UserMenu({
   name,
   email,
+  image,
   className,
   isSuperAdmin = false,
 }: {
   name: string;
   email: string;
+  /** Their own photo, set on /profile. Initials until there is one. */
+  image?: string | null;
   className?: string;
   isSuperAdmin?: boolean;
 }) {
@@ -55,6 +58,7 @@ export function UserMenu({
         className={`flex items-center gap-3 rounded-xl p-1.5 text-left outline-none hover:bg-sidebar-accent focus-visible:ring-ring focus-visible:ring-2 ${className ?? ""}`}
       >
         <Avatar className="size-9">
+          {image && <AvatarImage src={image} alt="" />}
           <AvatarFallback className="bg-primary/15 text-primary font-bold">
             {initials(name)}
           </AvatarFallback>
@@ -72,6 +76,15 @@ export function UserMenu({
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* First, and above the church's own settings: this one belongs to
+            the person, and for a member with a staff login it is the only
+            settings page they can open at all. */}
+        <DropdownMenuItem asChild>
+          <Link href="/profile">
+            <UserRound />
+            {t("nav.yourProfile")}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings />

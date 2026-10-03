@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowUpRight, Shield } from "lucide-react";
+import { ArrowUpRight, Shield, UserRound } from "lucide-react";
 import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
 import { platformAccess } from "@/lib/platform-access";
 import { Logo } from "@/components/brand";
@@ -56,6 +56,15 @@ export default async function SuperadminLayout({
           <div className="flex shrink-0 items-center gap-1.5">
             <CommandPaletteHint />
             <ThemeToggle />
+            {/* Not in the sidebar: that is built from the permission
+                catalogue, and everybody has a profile regardless of what
+                their admin role may open. */}
+            <Link
+              href="/superadmin/profile"
+              className="text-muted-foreground hover:text-foreground hidden items-center gap-1 text-[13px] font-medium sm:inline-flex"
+            >
+              <UserRound className="size-3.5" /> Your profile
+            </Link>
             <Link
               href="/dashboard"
               className="text-muted-foreground hover:text-foreground hidden items-center gap-1 text-[13px] font-medium sm:inline-flex"

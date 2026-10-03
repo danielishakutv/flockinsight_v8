@@ -2,7 +2,13 @@ import { requireChurch } from "@/lib/session";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { isCloudinaryConfigured, MAX_ASSET_BYTES } from "@/lib/cloudinary";
-import { permForKind, storeMedia, type MediaKind, MEDIA_KINDS } from "@/lib/media";
+import {
+  AVATAR_KIND,
+  permForKind,
+  storeMedia,
+  type MediaKind,
+  MEDIA_KINDS,
+} from "@/lib/media";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 
@@ -79,7 +85,15 @@ export async function POST(request: Request) {
 
   if (!file) return json({ ok: false, error: "No file uploaded." }, 400);
 
-  if (!(await can(permForKind(kind))))
+  /*
+   * Your own face needs no permission over the church.
+   *
+   * Everything else here still applies — signed in, a real church, the mime
+   * whitelist, the size cap, the storage quota — but requiring
+   * settings.manage to change a profile picture would mean the people most
+   * likely to have one (a member given a staff login) are the ones who cannot.
+   */
+  if (kind !== AVATAR_KIND && !(await can(permForKind(kind))))
     return json({ ok: false, error: "You can't upload this." }, 403);
 
   /*

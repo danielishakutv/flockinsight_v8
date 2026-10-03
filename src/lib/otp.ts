@@ -159,6 +159,13 @@ export async function peekOtp(id: string) {
       channel: otpCode.channel,
       destination: otpCode.destination,
       consumedAt: otpCode.consumedAt,
+      /*
+       * The payload too, so a caller can answer "is this code yours?" before
+       * spending it. A personal change is not scoped by church — a code that
+       * moves somebody's own login email belongs to a user id, and that id
+       * only exists in here.
+       */
+      payload: otpCode.payload,
     })
     .from(otpCode)
     .where(eq(otpCode.id, id))

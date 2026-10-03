@@ -7,11 +7,13 @@ import { LiveNotificationBell } from "@/components/notifications/live-notificati
 export function AppTopbar({
   userName,
   userEmail,
+  userImage,
   isSuperAdmin = false,
   unread = 0,
 }: {
   userName: string;
   userEmail: string;
+  userImage?: string | null;
   isSuperAdmin?: boolean;
   unread?: number;
 }) {
@@ -25,6 +27,7 @@ export function AppTopbar({
         <UserMenu
           name={userName}
           email={userEmail}
+          image={userImage}
           isSuperAdmin={isSuperAdmin}
         />
       </div>

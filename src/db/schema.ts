@@ -127,6 +127,20 @@ export const user = pgTable("user", {
   // Set when support resets a password — forces a new password on next login.
   mustChangePassword: boolean().notNull().default(false),
   /**
+   * This person's own mobile number, and when they proved they hold it.
+   *
+   * Separate from `member.phone` (the congregation's numbers) and from
+   * `church.contactPhone` (how we reach the church about its account): this is
+   * how we reach the PERSON — the one who gets the code when something about
+   * their own login changes.
+   *
+   * The value and its stamp move together, exactly as the church's pair does:
+   * a number is only ever written at the moment a code sent to it is confirmed,
+   * so a verified stamp always refers to the number printed beside it.
+   */
+  phone: text(),
+  phoneVerifiedAt: timestamp({ withTimezone: true }),
+  /**
    * The language this person reads the app in.
    *
    * On the account rather than only in a cookie, so the choice follows somebody

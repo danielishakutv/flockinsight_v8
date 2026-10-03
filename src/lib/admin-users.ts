@@ -34,6 +34,28 @@ export async function setUserPassword(
 }
 
 /**
+ * Does `password` match this account's current one?
+ *
+ * Returns null when there is no credential account at all — "no password" and
+ * "wrong password" need different words in front of a person, and collapsing
+ * them into false would tell somebody who signs in another way that they typed
+ * their own password incorrectly.
+ */
+export async function verifyUserPassword(
+  userId: string,
+  password: string,
+): Promise<boolean | null> {
+  const [row] = await db
+    .select({ password: account.password })
+    .from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, "credential")))
+    .limit(1);
+  if (!row?.password) return null;
+  const ctx = await auth.$context;
+  return ctx.password.verify({ password, hash: row.password });
+}
+
+/**
  * Admin reset: set a generated temp password, force a change on next login,
  * and ensure the account can sign in (verified). Returns the temp password.
  */

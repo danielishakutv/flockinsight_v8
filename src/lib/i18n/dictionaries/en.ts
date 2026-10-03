@@ -228,6 +228,7 @@ export const en = {
     sectionRecords: "Records",
     sectionPeople: "People",
     sectionAccount: "Account",
+    yourProfile: "Your profile",
     platformAdmin: "Platform Admin",
     signOut: "Sign out",
     signedOut: "Signed out",
@@ -2179,6 +2180,65 @@ export const en = {
   /* ============================================================
    * The activity log
    * ========================================================== */
+  /* ============================================================
+   * A person's own account (/profile) — not the church's settings
+   * ========================================================== */
+  profile: {
+    title: "Your profile",
+    subtitle:
+      "Your own account — your name, how you sign in, and your password. Nothing here is visible to your congregation.",
+
+    detailsTitle: "Your details",
+    detailsHint: "Your name is what your team sees beside anything you record.",
+    photo: "Your photo",
+    fullName: "Full name",
+    signedInAs: "Signed in as",
+    joinedOn: "Joined {date}. To use a different address, change it below.",
+    saveChanges: "Save changes",
+    saved: "Your profile is saved.",
+
+    contactTitle: "How you sign in & how we reach you",
+    contactHint:
+      "Changing either one sends a 6-digit code to the new address or number. It only takes effect once you enter that code — so nobody can move your account while your phone is unlocked on a desk.",
+    emailLabel: "Sign-in email",
+    emailHint:
+      "This is the address you sign in with, and where password resets go.",
+    phoneLabel: "Mobile number",
+    phoneHint:
+      "Used for urgent messages about your account. Your congregation never sees it.",
+    verified: "Verified",
+    verifiedOn: "Verified on {date}",
+    notSetYet: "Not set yet",
+    change: "Change",
+    addAndVerify: "Add & verify",
+    newEmail: "New email address",
+    newPhone: "New phone number",
+    newEmailHint:
+      "We'll send a 6-digit code to this address. Your current address keeps working until you enter it.",
+    newPhoneHint:
+      "We'll send a 6-digit code to this number by SMS. Nothing changes until you enter it.",
+    sendCode: "Send code",
+    cancel: "Cancel",
+    startAgain: "Start again",
+    confirm: "Confirm",
+    codeSentEmail: "Code sent to {masked}. Check your inbox (and spam).",
+    codeSentSms: "Code sent by SMS to {masked}.",
+    enterCode: "Enter the code we sent to {masked}",
+    codeExpires: "The code expires in 10 minutes.",
+    emailChanged: "That's your sign-in email from now on ✅",
+    phoneVerified: "Phone number verified ✅",
+    smsNotConfigured:
+      "SMS isn't configured on the server yet, so we can't send a code to a number.",
+
+    passwordTitle: "Password",
+    passwordHint: "At least 8 characters. You stay signed in on this device.",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    repeatPassword: "Repeat new password",
+    changePassword: "Change password",
+    passwordChanged: "Your password is changed.",
+  },
+
   activity: {
     title: "Activity log",
     subtitle:

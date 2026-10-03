@@ -98,6 +98,7 @@ export default async function AppLayout({
           churchName={church.name}
           userName={user.name}
           userEmail={user.email}
+          userImage={user.image}
           isSuperAdmin={isSuperAdmin}
           perms={perms}
           isOwner={access.isOwner}
@@ -108,6 +109,7 @@ export default async function AppLayout({
           <AppTopbar
             userName={user.name}
             userEmail={user.email}
+            userImage={user.image}
             isSuperAdmin={isSuperAdmin}
             unread={unread}
           />
