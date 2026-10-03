@@ -74,11 +74,34 @@ export async function ensureDirs(): Promise<void> {
   await mkdir(MEDIA_TMP, { recursive: true });
 }
 
-/** An upload in progress: a temp file the chunks are appended to. */
-export function tmpPathFor(uploadId: string): string {
+/** Is this an upload id we are willing to touch the filesystem with? */
+export function validUploadId(id: string): boolean {
+  return /^[a-zA-Z0-9-]{8,64}$/.test(id);
+}
+
+/**
+ * An upload in progress: a temp file the chunks are appended to.
+ *
+ * NAMESPACED BY CHURCH, and that is a security boundary rather than tidiness.
+ *
+ * Upload ids may be supplied by the caller, so that a recording waiting in a
+ * device's vault since yesterday resumes the same file rather than starting a
+ * second one. In one shared namespace that is a cross-tenant hole: church B
+ * could name church A's in-progress upload and call `finish`, and walk away
+ * with a media row in their own library pointing at church A's recording. Two
+ * churches could also collide on an id by accident and corrupt each other's
+ * file.
+ *
+ * With the church in the path, the same id from a different church simply
+ * resolves to a different file. There is nothing to guess and nothing to share.
+ *
+ * The id is also stripped of anything but letters, digits and hyphens, so no
+ * input here can climb out of MEDIA_TMP.
+ */
+export function tmpPathFor(churchId: string, uploadId: string): string {
   const clean = uploadId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64);
   if (!clean) throw new Error("Bad upload id.");
-  return path.join(MEDIA_TMP, `${clean}.part`);
+  return path.join(MEDIA_TMP, `${safeChurch(churchId)}--${clean}.part`);
 }
 
 /** Move a finished temp file into place under its final key. */
@@ -127,10 +150,13 @@ export async function removeFile(key: string | null | undefined): Promise<void> 
   }
 }
 
-/** Abandon a partial upload. */
-export async function discardUpload(uploadId: string): Promise<void> {
+/** Abandon a partial upload. Scoped to the church that owns it. */
+export async function discardUpload(
+  churchId: string,
+  uploadId: string,
+): Promise<void> {
   try {
-    await rm(tmpPathFor(uploadId), { force: true });
+    await rm(tmpPathFor(churchId, uploadId), { force: true });
   } catch {
     /* nothing to discard */
   }

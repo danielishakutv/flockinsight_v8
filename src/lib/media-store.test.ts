@@ -4,6 +4,8 @@ import {
   makeStorageKey,
   parseRange,
   resolveKey,
+  tmpPathFor,
+  validUploadId,
   MEDIA_ROOT,
 } from "@/lib/media-store";
 import { planFor } from "@/lib/media-transcode";
@@ -174,5 +176,47 @@ describe("what gets re-encoded", () => {
     const plan = planFor("video/webm", "webm", 700_000)!;
     const vf = plan.args[plan.args.indexOf("-vf") + 1];
     expect(vf).toContain("min(1280,iw)");
+  });
+});
+
+describe("in-progress uploads are scoped to one church", () => {
+  /*
+   * A security boundary, not tidiness. Upload ids may be supplied by the caller
+   * so a recording can resume days later — and in one shared namespace that is
+   * a cross-tenant hole: church B names church A's in-progress upload, calls
+   * finish, and ends up with a media row in their own library pointing at
+   * church A's recording. Caught by review before it reached anyone.
+   */
+  it("gives two churches different files for the same upload id", () => {
+    const a = tmpPathFor("church-a", "shared-upload-id");
+    const b = tmpPathFor("church-b", "shared-upload-id");
+    expect(a).not.toBe(b);
+  });
+
+  it("is stable for the same church, so a resume finds its own file", () => {
+    expect(tmpPathFor("church-a", "my-upload-id")).toBe(
+      tmpPathFor("church-a", "my-upload-id"),
+    );
+  });
+
+  it("cannot be made to climb out of the temp directory", () => {
+    const p = tmpPathFor("church-a", "../../../etc/passwd");
+    expect(p).not.toContain("..");
+    expect(p.startsWith(MEDIA_ROOT) || p.includes("media")).toBe(true);
+    // A church id that tried the same thing is sanitised, not obeyed.
+    expect(tmpPathFor("../../root", "abcdefgh")).not.toContain("..");
+  });
+
+  it("refuses an id short enough to collide with somebody else's by guesswork", () => {
+    expect(validUploadId("abc")).toBe(false);
+    expect(validUploadId("")).toBe(false);
+    expect(validUploadId("../../etc/passwd")).toBe(false);
+    expect(validUploadId("has spaces in it")).toBe(false);
+    expect(validUploadId("a".repeat(65))).toBe(false);
+  });
+
+  it("accepts an ordinary uuid and a reasonable custom id", () => {
+    expect(validUploadId("3f6b1a2c-9d4e-4f8a-bc12-0a1b2c3d4e5f")).toBe(true);
+    expect(validUploadId("recording-2026-10-03-abc")).toBe(true);
   });
 });

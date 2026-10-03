@@ -13,6 +13,7 @@ import {
   isLocallyStored,
   makeStorageKey,
   tmpPathFor,
+  validUploadId,
 } from "@/lib/media-store";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
@@ -106,11 +107,11 @@ export async function POST(request: Request) {
      * than starting a second one beside it.
      */
     const asked = String(body.uploadId ?? "").trim();
-    const uploadId = /^[a-zA-Z0-9-]{8,64}$/.test(asked) ? asked : randomUUID();
+    const uploadId = validUploadId(asked) ? asked : randomUUID();
 
     let received = 0;
     try {
-      received = (await stat(tmpPathFor(uploadId))).size;
+      received = (await stat(tmpPathFor(church.id, uploadId))).size;
     } catch {
       received = 0;
     }
@@ -129,10 +130,11 @@ export async function POST(request: Request) {
    */
   if (action === "status") {
     const uploadId = url.searchParams.get("uploadId") ?? "";
-    if (!uploadId) return json({ ok: false, error: "No upload id." }, 400);
+    if (!validUploadId(uploadId))
+      return json({ ok: false, error: "Invalid upload id." }, 400);
     let received = 0;
     try {
-      received = (await stat(tmpPathFor(uploadId))).size;
+      received = (await stat(tmpPathFor(church.id, uploadId))).size;
     } catch {
       // Nothing yet, or it was swept. Either way: start from zero.
       received = 0;
@@ -143,11 +145,14 @@ export async function POST(request: Request) {
   /* --------------------------------------------------------- append ---- */
   if (action === "append") {
     const uploadId = url.searchParams.get("uploadId") ?? "";
-    if (!uploadId) return json({ ok: false, error: "No upload id." }, 400);
+    if (!validUploadId(uploadId))
+      return json({ ok: false, error: "Invalid upload id." }, 400);
 
     let tmp: string;
     try {
-      tmp = tmpPathFor(uploadId);
+      // Scoped to this church: the same id from another church is a different
+      // file, so one tenant can never append to — or finish — another's upload.
+      tmp = tmpPathFor(church.id, uploadId);
     } catch {
       return json({ ok: false, error: "Bad upload id." }, 400);
     }
@@ -175,7 +180,7 @@ export async function POST(request: Request) {
 
     const info = await getStorageInfo(church.id, church.storageExtraBytes);
     if (info.used + soFar + buf.length > info.limit) {
-      await discardUpload(uploadId);
+      await discardUpload(church.id, uploadId);
       return json(
         {
           ok: false,
@@ -208,7 +213,8 @@ export async function POST(request: Request) {
     }
 
     const uploadId = String(body.uploadId ?? "");
-    if (!uploadId) return json({ ok: false, error: "No upload id." }, 400);
+    if (!validUploadId(uploadId))
+      return json({ ok: false, error: "Invalid upload id." }, 400);
 
     const kind: MediaKind = MEDIA_KINDS.includes(body.kind as MediaKind)
       ? (body.kind as MediaKind)
@@ -223,7 +229,7 @@ export async function POST(request: Request) {
     let tmp: string;
     let size: number;
     try {
-      tmp = tmpPathFor(uploadId);
+      tmp = tmpPathFor(church.id, uploadId);
       size = (await stat(tmp)).size;
     } catch {
       return json(
@@ -232,7 +238,7 @@ export async function POST(request: Request) {
       );
     }
     if (size === 0) {
-      await discardUpload(uploadId);
+      await discardUpload(church.id, uploadId);
       return json({ ok: false, error: "Nothing was uploaded." }, 400);
     }
 
@@ -323,7 +329,7 @@ export async function POST(request: Request) {
   /* --------------------------------------------------------- abandon --- */
   if (action === "abandon") {
     const uploadId = url.searchParams.get("uploadId") ?? "";
-    if (uploadId) await discardUpload(uploadId);
+    if (validUploadId(uploadId)) await discardUpload(church.id, uploadId);
     return json({ ok: true });
   }
 
