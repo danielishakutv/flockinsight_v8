@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { NewLivestream } from "@/components/livestreams/new-livestream";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Livestreams" };
 export const dynamic = "force-dynamic";
@@ -51,6 +52,8 @@ export default async function LivestreamsPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="livestreams" />
+
       <PageHeader
         title={t("livestreams.livestreams")}
         description={t("livestreams.broadcastAServiceToAnyone")}

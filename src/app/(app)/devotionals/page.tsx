@@ -6,6 +6,7 @@ import { requireCan, getAccess } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { DevotionalsClient } from "@/components/devotionals/devotionals-client";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Devotionals & Newsletters" };
 
@@ -54,6 +55,8 @@ export default async function DevotionalsPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="devotionals" />
+
       <PageHeader
         title={t("devotionals.title")}
         description={t("devotionals.subtitle")}

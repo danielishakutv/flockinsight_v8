@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { getChurchBrand } from "@/lib/pdf-brand";
 import { getAccess } from "@/lib/permissions";
 import { canDownload, getDataset } from "@/lib/report-catalog";
@@ -20,6 +21,13 @@ export async function GET(
 ) {
   const { dataset: id } = await params;
   const { church } = await requireChurch();
+  /*
+   * The reports centre is sold from Pro, and THIS is where the data actually
+   * leaves — a gate on the page would be decoration while the download URL
+   * still worked for anybody who had it.
+   */
+  const gate = await refuseWithoutFeature("reports");
+  if (gate) return new Response(gate.error, { status: 403 });
 
   const dataset = getDataset(id);
   if (!dataset) return new Response("Unknown report.", { status: 404 });

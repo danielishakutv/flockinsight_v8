@@ -6,6 +6,7 @@ import { can, requireCan } from "@/lib/permissions";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FollowUpList, type FollowUpPerson } from "@/components/follow-up/follow-up-list";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Follow-up" };
 
@@ -80,6 +81,8 @@ export default async function FollowUpPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="followUp" />
+
       <PageHeader
         title={t("followUp.title")}
         description={t("common.people", { count: rows.length })}

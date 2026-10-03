@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { livestream, livestreamOutput } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import {
@@ -86,6 +87,11 @@ const createSchema = z.object({
  * press "go live" in front of a congregation.
  */
 export async function createLivestream(input: unknown): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("livestreams");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -173,6 +179,11 @@ export async function setLivestreamStatus(
   id: string,
   status: "live" | "ended" | "idle",
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("livestreams");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -220,6 +231,11 @@ export async function setLivestreamStatus(
  * recording of a service outlives the Sunday it happened on.
  */
 export async function deleteLivestream(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("livestreams");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -275,6 +291,11 @@ const outputSchema = z.object({
  * channel, and a key we do not hold is a key we cannot leak.
  */
 export async function addLivestreamOutput(input: unknown): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("livestreams");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -330,6 +351,11 @@ export async function addLivestreamOutput(input: unknown): Promise<ActionResult>
 }
 
 export async function removeLivestreamOutput(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("livestreams");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 

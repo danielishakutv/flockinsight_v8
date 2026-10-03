@@ -8,6 +8,8 @@ import { db } from "@/db";
 import { invitation, member, role, staff, staffInvite, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireChurch } from "@/lib/session";
+import { teamLimitStatus } from "@/lib/entitlements-server";
+import { planName } from "@/lib/plans";
 import { can } from "@/lib/permissions";
 import { betterAuthRoleFor } from "@/lib/staff-access";
 
@@ -82,6 +84,21 @@ export async function inviteMemberAsStaff(input: {
 }): Promise<AccessResult> {
   const { ctx, error } = await guard();
   if (error) return { ok: false, error };
+
+  /*
+   * The plan's team size, which was advertised from the beginning and enforced
+   * nowhere — hence one church on Starter with twelve administrators.
+   *
+   * Nobody already on the team is touched. This stops the NEXT invitation, the
+   * same way the member limit stops the next member (lib/plan-limits.ts).
+   */
+  const team = await teamLimitStatus(ctx.church.id);
+  if (team.atLimit) {
+    return {
+      ok: false,
+      error: `Your ${planName(team.plan)} plan covers ${team.limit} team ${team.limit === 1 ? "member" : "members"}, and you have ${team.used}. Upgrade to give more people their own login.`,
+    };
+  }
 
   const [m] = await db
     .select({
@@ -206,6 +223,25 @@ export async function inviteMembersAsStaff(input: {
   if (error) return { ok: false, error };
   if (input.memberIds.length === 0) {
     return { ok: false, error: "Select at least one member." };
+  }
+
+  /*
+   * The whole batch is checked against the remaining room, before any of it is
+   * sent. Letting a batch of ten through on a plan with two places left and
+   * failing eight of them silently is how a limit becomes a mystery.
+   */
+  const team = await teamLimitStatus(ctx.church.id);
+  if (team.limit !== null) {
+    const room = Math.max(0, team.limit - team.used);
+    if (input.memberIds.length > room) {
+      return {
+        ok: false,
+        error:
+          room === 0
+            ? `Your ${planName(team.plan)} plan covers ${team.limit} team ${team.limit === 1 ? "member" : "members"}, and you have ${team.used}. Upgrade to give more people their own login.`
+            : `Your ${planName(team.plan)} plan has room for ${room} more team ${room === 1 ? "member" : "members"}. Select ${room} or fewer, or upgrade.`,
+      };
+    }
   }
 
   // Validate the role once instead of per member.

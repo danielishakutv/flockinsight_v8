@@ -11,6 +11,7 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FormsList } from "@/components/forms/forms-list";
 import { MemberSignupLink } from "@/components/members/member-signup-link";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Forms" };
 
@@ -43,6 +44,8 @@ export default async function FormsPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="forms" />
+
       <PageHeader
         title={t("forms.title")}
         description={t("forms.subtitle")}

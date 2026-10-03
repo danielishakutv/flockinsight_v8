@@ -12,6 +12,7 @@ import {
   trainingInstructor,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { BADGE_COLOR_KEYS, TRAINING_BADGE_ICONS } from "@/lib/training-shared";
 import { audit } from "@/lib/audit";
@@ -114,6 +115,11 @@ const courseSchema = z.object({
 export type CourseInput = z.input<typeof courseSchema>;
 
 export async function saveCourse(input: CourseInput): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -190,6 +196,11 @@ export async function saveCourse(input: CourseInput): Promise<ActionResult> {
 }
 
 export async function deleteCourse(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   if (!(await courseInChurch(id, g.churchId))) return { ok: true };
@@ -257,6 +268,11 @@ const cohortSchema = z.object({
 export type CohortInput = z.input<typeof cohortSchema>;
 
 export async function saveCohort(input: CohortInput): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -326,6 +342,11 @@ export async function saveCohort(input: CohortInput): Promise<ActionResult> {
 }
 
 export async function deleteCohort(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   const found = await cohortInChurch(id, g.churchId);
@@ -380,6 +401,11 @@ const instructorSchema = z.object({
 export async function addInstructor(
   input: z.input<typeof instructorSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -429,6 +455,11 @@ export async function removeInstructor(
   id: string,
   cohortId: string,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   const cohort = await cohortInChurch(cohortId, g.churchId);
@@ -464,6 +495,11 @@ export async function enrolMembers(
   cohortId: string,
   memberIds: string[],
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -562,6 +598,11 @@ export type ResultInput = z.input<typeof resultSchema>;
  * clears it, so a date never outlives the completion it refers to.
  */
 export async function saveResult(input: ResultInput): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -617,6 +658,11 @@ export async function saveResult(input: ResultInput): Promise<ActionResult> {
 
 /** Mark a whole register complete in one go — the end-of-class action. */
 export async function completeAll(cohortId: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   const cohort = await cohortInChurch(cohortId, g.churchId);
@@ -655,6 +701,11 @@ export async function removeEnrollment(
   id: string,
   cohortId: string,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("training");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   const cohort = await cohortInChurch(cohortId, g.churchId);

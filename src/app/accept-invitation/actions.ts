@@ -13,6 +13,7 @@ import {
   user,
 } from "@/db/schema";
 import { getSession } from "@/lib/session";
+import { teamLimitStatus } from "@/lib/entitlements-server";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { ensureMemberForUser } from "@/lib/member-link";
 
@@ -59,6 +60,14 @@ async function isMember(organizationId: string, userId: string) {
   return !!m;
 }
 
+/**
+ * What somebody sees when the church they were invited to has no room left on
+ * its plan. Addressed to the invitee, who can do nothing about it themselves —
+ * so it tells them who can.
+ */
+const TEAM_FULL_MESSAGE =
+  "This church has used all the team places on its plan. Ask whoever invited you to upgrade, then open this link again.";
+
 async function joinChurch(inv: LoadedInvitation, userId: string) {
   // Set when this invitation was raised against a specific congregation member
   // with a chosen church role (see lib/staff-access.ts and the members access
@@ -71,6 +80,21 @@ async function joinChurch(inv: LoadedInvitation, userId: string) {
 
   const wasMember = await isMember(inv.organizationId, userId);
   if (!wasMember) {
+    /*
+     * The real gate, not the polite one.
+     *
+     * The invite side already refuses to send past the plan's team size, but an
+     * invitation can be raised before the limit is reached and accepted after —
+     * so this is the one place a person actually becomes staff, and therefore the
+     * only place the ceiling can be guaranteed. Throwing rather than returning:
+     * the caller's contract has no "the church is full" case, and a silent
+     * no-op here would leave somebody staring at a church they appear to have
+     * joined and cannot use.
+     */
+    const team = await teamLimitStatus(inv.organizationId);
+    if (team.atLimit) {
+      throw new Error("TEAM_FULL");
+    }
     await db.insert(staff).values({
       id: crypto.randomUUID(),
       organizationId: inv.organizationId,
@@ -158,7 +182,14 @@ export async function acceptInvite(invitationId: string): Promise<AcceptResult> 
     if (isExpired(inv)) {
       return { ok: false, error: "This invitation has expired." };
     }
-    await joinChurch(inv, data.user.id);
+    try {
+      await joinChurch(inv, data.user.id);
+    } catch (e) {
+      if (e instanceof Error && e.message === "TEAM_FULL") {
+        return { ok: false, error: TEAM_FULL_MESSAGE };
+      }
+      throw e;
+    }
   }
 
   return { ok: true, organizationId: inv.organizationId };
@@ -238,6 +269,11 @@ export async function joinAsNewUser(
       .where(eq(user.id, userId));
     await joinChurch(inv, userId);
   } catch (e) {
+    // A full team is not a failure to report as one: it is a thing the church
+    // can fix, and the sentence has to say so rather than "could not finish".
+    if (e instanceof Error && e.message === "TEAM_FULL") {
+      return { ok: false, error: TEAM_FULL_MESSAGE };
+    }
     console.error("joinAsNewUser join failed", e);
     return { ok: false, error: "Could not finish joining the church." };
   }

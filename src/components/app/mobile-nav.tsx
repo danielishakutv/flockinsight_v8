@@ -7,6 +7,7 @@ import { ChevronRight, LayoutGrid, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import { BetaBadge } from "@/components/beta-badge";
+import { PlanChip } from "@/components/app/plan-chip";
 import {
   mobileMenuSections,
   mobileNavLeft,
@@ -40,9 +41,12 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 export function MobileNav({
   perms = [],
   isOwner = false,
+  plan = "starter",
 }: {
   perms?: string[];
   isOwner?: boolean;
+  /** The church's plan, so the sheet can say which tier a module needs. */
+  plan?: string;
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -195,6 +199,9 @@ export function MobileNav({
                             >
                               <span className="truncate">{t(item.labelKey)}</span>
                               {item.beta && <BetaBadge />}
+                              {item.feature && (
+                                <PlanChip feature={item.feature} plan={plan} />
+                              )}
                             </p>
                             <p className="text-muted-foreground truncate text-xs">
                               {t(item.descriptionKey)}

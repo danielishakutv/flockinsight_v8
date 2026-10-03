@@ -6,6 +6,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { event, form } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { slugify, randomSuffix } from "@/lib/slug";
@@ -108,6 +109,10 @@ async function uniqueSlug(base: string, excludeId?: string): Promise<string> {
  * event (registration/sign-up) — the form then appears in Events and Forms.
  */
 export async function createForm(eventId?: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("forms");
+  if (gate) return gate;
   const { church, user } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to create forms." };
@@ -159,6 +164,10 @@ export async function setFormEvent(
   formId: string,
   eventId: string | null,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("forms");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -198,6 +207,10 @@ export async function setFormEvent(
 
 /** Save all of a form's content + settings. */
 export async function updateForm(input: FormUpdateInput): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("forms");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to edit forms." };
@@ -288,6 +301,10 @@ export async function setFormStatus(
   id: string,
   status: "draft" | "open" | "closed",
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("forms");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -322,6 +339,10 @@ export async function setFormStatus(
 }
 
 export async function deleteForm(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("forms");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("forms.manage")))
     return { ok: false, error: "You don't have permission to do that." };

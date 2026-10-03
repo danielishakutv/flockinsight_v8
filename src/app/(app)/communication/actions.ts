@@ -14,6 +14,7 @@ import {
   user,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
 import {
@@ -185,6 +186,19 @@ export async function sendCommunication(
   const { church: c, user: u } = await requireChurch();
   if (!(await can("communication.manage")))
     return { ok: false, error: "You don't have permission to send messages." };
+
+  /*
+   * Email is on every plan; SMS is not.
+   *
+   * Checked on the channel rather than on the module, because the price list
+   * sells them separately: "300 emails a month" to a Starter church, "Bulk SMS
+   * with your church's own sender ID" only from Pro. Gating the whole page would
+   * take away email that every plan pays for.
+   */
+  if (d.channel === "sms") {
+    const gate = await refuseWithoutFeature("sms");
+    if (gate) return gate;
+  }
 
   let recipients: Recipient[];
   if (d.audience === "contacts") {

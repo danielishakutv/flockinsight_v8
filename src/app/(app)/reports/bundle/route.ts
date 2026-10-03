@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { getAccess } from "@/lib/permissions";
 import { allowedDatasets } from "@/lib/report-catalog";
 import { buildDataset, buildDictionary } from "@/lib/report-data";
@@ -18,6 +19,13 @@ import { createZip, type ZipEntry } from "@/lib/zip";
  */
 export async function GET(request: Request) {
   const { church } = await requireChurch();
+  /*
+   * The reports centre is sold from Pro, and THIS is where the data actually
+   * leaves — a gate on the page would be decoration while the download URL
+   * still worked for anybody who had it.
+   */
+  const gate = await refuseWithoutFeature("reports");
+  if (gate) return new Response(gate.error, { status: 403 });
   const access = await getAccess();
   const datasets = allowedDatasets([...access.perms], access.isOwner);
 

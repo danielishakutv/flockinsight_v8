@@ -6,6 +6,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { branchRequest, church, hqReportSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { audit } from "@/lib/audit";
 import { requireCan } from "@/lib/permissions";
 import { sendEmail, emailLayout } from "@/lib/mailer";
@@ -35,6 +36,10 @@ const inviteSchema = z.object({
 export async function inviteBranch(
   input: z.input<typeof inviteSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: hq, user } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -134,6 +139,10 @@ const respondSchema = z.object({
 export async function respondToBranchRequest(
   input: z.input<typeof respondSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: mine } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -190,6 +199,10 @@ export async function respondToBranchRequest(
 
 /** Withdraw an invitation that hasn't been answered. */
 export async function cancelBranchRequest(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: hq } = await requireChurch();
   await requireCan("settings.manage");
   if (!z.string().uuid().safeParse(id).success)
@@ -231,6 +244,10 @@ const zoneSchema = z.object({
 export async function setBranchZone(
   input: z.input<typeof zoneSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: hq } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -274,6 +291,10 @@ const bulkZoneSchema = z.object({
 export async function setBranchZones(
   input: z.input<typeof bulkZoneSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: hq } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -308,6 +329,10 @@ export async function setBranchZones(
  * link — a branch is never trapped in someone else's network.
  */
 export async function removeBranch(churchId: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: mine } = await requireChurch();
   await requireCan("settings.manage");
 
@@ -360,6 +385,10 @@ const settingSchema = z.object({
 export async function saveReportSetting(
   input: z.input<typeof settingSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
   const { church: hq } = await requireChurch();
   await requireCan("settings.manage");
 

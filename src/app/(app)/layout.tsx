@@ -101,6 +101,7 @@ export default async function AppLayout({
           isSuperAdmin={isSuperAdmin}
           perms={perms}
           isOwner={access.isOwner}
+          plan={church.plan}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -126,7 +127,7 @@ export default async function AppLayout({
           </main>
         </div>
 
-        <MobileNav perms={perms} isOwner={access.isOwner} />
+        <MobileNav perms={perms} isOwner={access.isOwner} plan={church.plan} />
       </div>
       <Toaster />
       <SplashScreen />

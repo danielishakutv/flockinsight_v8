@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { isCloudinaryConfigured, MAX_ASSET_BYTES } from "@/lib/cloudinary";
 import { permForKind, storeMedia, type MediaKind, MEDIA_KINDS } from "@/lib/media";
@@ -80,6 +81,20 @@ export async function POST(request: Request) {
 
   if (!(await can(permForKind(kind))))
     return json({ ok: false, error: "You can't upload this." }, 403);
+
+  /*
+   * The sermon library is the Pro part of media, not media itself.
+   *
+   * Every plan buys storage ("100 MB of storage for photos, documents and
+   * media"), and gating uploads wholesale would break a logo, a cover image, a
+   * member photo and a devotional picture for every church below Pro — which is
+   * most of what is actually in there. What Pro sells is keeping SERMONS: audio,
+   * video and slides with their own watch pages. So the gate is on that kind.
+   */
+  if (kind === "sermon") {
+    const gate = await refuseWithoutFeature("mediaLibrary");
+    if (gate) return json(gate, 403);
+  }
 
   if (!isAllowedMime(file.type))
     return json({ ok: false, error: "That file type isn't supported." }, 400);

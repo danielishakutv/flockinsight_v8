@@ -14,6 +14,7 @@ import { readFinanceFilters } from "@/lib/finance-shared";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FinanceClient } from "@/components/finance/finance-client";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Finance" };
 
@@ -58,6 +59,8 @@ export default async function FinancePage({
 
   return (
     <PageContainer>
+      <PlanGate feature="finance" />
+
       <PageHeader
         title={t("finance.title")}
         description={t("finance.subtitle")}

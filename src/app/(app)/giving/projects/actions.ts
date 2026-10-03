@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { member, pledge, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
@@ -49,6 +50,10 @@ const projectSchema = z.object({
 export type ProjectInput = z.input<typeof projectSchema>;
 
 export async function saveProject(input: ProjectInput): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("projects");
+  if (gate) return gate;
+
   const { church, user } = await requireChurch();
   if (!(await can("giving.manage"))) return NO_PERM;
   const parsed = projectSchema.safeParse(input);
@@ -125,6 +130,10 @@ export async function saveProject(input: ProjectInput): Promise<ActionResult> {
 
 /** Delete a project. Pledges are removed; recorded gifts are kept (unlinked). */
 export async function deleteProject(id: string): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("projects");
+  if (gate) return gate;
+
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id." };
   const { church } = await requireChurch();
@@ -178,6 +187,10 @@ const pledgeSchema = z.object({
 export type PledgeInput = z.input<typeof pledgeSchema>;
 
 export async function savePledge(input: PledgeInput): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("projects");
+  if (gate) return gate;
+
   const { church, user } = await requireChurch();
   if (!(await can("giving.manage"))) return NO_PERM;
   const parsed = pledgeSchema.safeParse(input);
@@ -275,6 +288,10 @@ export async function setPledgeStatus(
   id: string,
   status: "active" | "completed" | "cancelled",
 ): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("projects");
+  if (gate) return gate;
+
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id." };
   const { church } = await requireChurch();
@@ -302,6 +319,10 @@ export async function setPledgeStatus(
 
 /** Delete a pledge. Any payments already recorded against it are kept. */
 export async function deletePledge(id: string): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("projects");
+  if (gate) return gate;
+
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id." };
   const { church } = await requireChurch();

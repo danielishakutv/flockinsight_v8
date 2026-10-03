@@ -1,4 +1,5 @@
 import "server-only";
+import { planIncludes } from "@/lib/entitlements";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
@@ -48,6 +49,14 @@ export type BrandSource = {
   state?: string | null;
   publicPhone?: string | null;
   publicEmail?: string | null;
+  /**
+   * The church's plan, when the caller has it.
+   *
+   * "Branded PDFs carrying your logo & colours" is sold from Pro. Undefined means
+   * the caller did not say — and an unsaid plan is treated as the smallest, so a
+   * call site that forgets cannot hand out the paid version by accident.
+   */
+  plan?: string | null;
 };
 
 /**
@@ -227,10 +236,20 @@ function contactLine(c: BrandSource): string | null {
 export async function getChurchBrand(
   church: BrandSource,
 ): Promise<ChurchBrand> {
-  const theme = getTheme(church.theme);
+  /*
+   * The one place a PDF becomes this church's document, so the one place the
+   * plan decides whether it does.
+   *
+   * A church below Pro still gets a complete, readable PDF — it carries the
+   * FlockInsight mark and the default colours instead of theirs. Refusing the
+   * document outright would be taking away the data, which is not what is being
+   * sold; what is being sold is the document looking like theirs.
+   */
+  const branded = planIncludes(church.plan, "brandedPdf");
+  const theme = getTheme(branded ? church.theme : null);
 
   let logo: Buffer | null = null;
-  const raw = church.logo?.trim();
+  const raw = branded ? church.logo?.trim() : null;
   if (raw) {
     logo = raw.startsWith("http")
       ? await fetchRemoteLogo(raw)

@@ -12,6 +12,7 @@ import {
   givingCategory,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
@@ -45,6 +46,18 @@ async function guard(): Promise<
   if (!(await can("finance.manage"))) {
     return { ok: false, error: "You don't have permission to do that." };
   }
+  /*
+   * And the plan, which is a different question from the permission.
+   *
+   * In the guard rather than in each of the thirteen actions below, because
+   * every one of them already returns whatever this returns — so there is no way
+   * to add a fourteenth write that forgets to ask. Reading the finance pages is
+   * untouched: a church that recorded transactions on a plan that did not include
+   * them keeps its books, it just cannot add to them.
+   */
+  const gate = await refuseWithoutFeature("finance");
+  if (gate) return gate;
+
   return {
     ok: true,
     churchId: church.id,

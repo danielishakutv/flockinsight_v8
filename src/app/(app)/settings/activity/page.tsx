@@ -11,6 +11,7 @@ import { AUDIT_MODULE_LABEL, type AuditSeverity } from "@/lib/audit-catalog";
 import { ActivityLog, type ActivityEntry } from "@/components/settings/activity-log";
 import { Card, CardContent } from "@/components/ui/card";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Activity log · Settings" };
 export const dynamic = "force-dynamic";
@@ -89,6 +90,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Sea
 
   return (
     <div className="space-y-5">
+      <PlanGate feature="activityLog" />
       <div>
         <h2 className="text-lg font-bold">{t("settings.activityLog")}</h2>
         <p className="text-muted-foreground mt-1 text-sm">

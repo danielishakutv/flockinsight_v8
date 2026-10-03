@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { parseCsv } from "@/lib/csv";
@@ -35,6 +36,11 @@ export async function POST(request: Request) {
   const { church, user } = await requireChurch();
   if (!(await can("members.manage")))
     return json({ ok: false, error: "You don't have permission to import members." }, 403);
+
+  // "CSV import / export" is sold from Growth. Typing members in one at a time
+  // is on every plan, so nothing a Starter church can already do is taken away.
+  const gate = await refuseWithoutFeature("dataExport");
+  if (gate) return json(gate, 403);
 
   let file: File | null = null;
   try {

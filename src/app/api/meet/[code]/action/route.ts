@@ -22,6 +22,8 @@ import { isHostRole, type Stage } from "@/lib/meetings-shared";
 import { lookupVerse } from "@/lib/scripture";
 import { DEFAULT_TRANSLATION } from "@/lib/scripture-shared";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
+import { planIncludes, upgradeMessage } from "@/lib/entitlements";
+import { churchPlanOf } from "@/lib/entitlements-server";
 import { audit, auditGuest } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -387,6 +389,15 @@ export async function POST(
       if (!host) return deny();
       if (!m.allowRecording)
         return fail("Recording is turned off for this meeting.", 403);
+      /*
+       * Recording is a Pro feature, and this room is reached by a link rather
+       * than by a signed-in session — so the plan is read from the MEETING's
+       * church, not from whoever is asking. A guest host holding the host link
+       * is still operating that church's plan.
+       */
+      if (!planIncludes(await churchPlanOf(m.churchId), "meetings.record")) {
+        return fail(upgradeMessage("meetings.record"), 403, { code: "upgrade" });
+      }
       const mode = str(body?.mode, 10) === "audio" ? "audio" : "video";
       const id = await startRecordingRow({
         meetingId: m.id,

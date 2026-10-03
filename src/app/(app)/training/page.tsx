@@ -11,6 +11,7 @@ import {
 } from "@/components/training/courses-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Training & Classes" };
 
@@ -63,6 +64,8 @@ export default async function TrainingPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="training" />
+
       <PageHeader
         title={t("training.title")}
         description={t("training.subtitle")}

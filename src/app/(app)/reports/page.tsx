@@ -6,6 +6,7 @@ import { getDatasetCounts } from "@/lib/report-data";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { ReportsBrowser } from "@/components/reports/reports-browser";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Reports & data" };
 
@@ -23,6 +24,8 @@ export default async function ReportsPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="reports" />
+
       <PageHeader
         title={t("reports.title")}
         description={t("reports.subtitle")}

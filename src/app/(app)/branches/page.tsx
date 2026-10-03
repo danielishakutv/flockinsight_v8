@@ -11,6 +11,7 @@ import {
 import { parseBranchFilters } from "@/lib/branches-shared";
 import { BranchDashboard } from "@/components/branches/branch-dashboard";
 import { BranchInvitations } from "@/components/branches/branch-invitations";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Branches" };
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function BranchesPage({
 
   return (
     <div className="space-y-6">
+      <PlanGate feature="branches" />
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight lg:text-3xl">
           <Network className="text-primary size-6" />

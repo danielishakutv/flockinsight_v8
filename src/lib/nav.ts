@@ -1,4 +1,5 @@
 import type { TKey } from "@/lib/i18n/translate";
+import type { FeatureKey } from "@/lib/entitlements";
 import {
   BarChart3,
   Bell,
@@ -47,6 +48,15 @@ export type NavItem = {
    * between the sidebar and the mobile sheet.
    */
   beta?: boolean;
+  /**
+   * The entitlement this module needs, when it needs one.
+   *
+   * The menu shows it either way, with the plan's name on it when the church is
+   * not on that plan — hiding it would mean a church never discovering what the
+   * next tier buys, and clicking through lands on the module with its banner and
+   * its records intact rather than on a dead end.
+   */
+  feature?: FeatureKey;
 };
 
 /** Is a nav item visible given the user's permissions? */
@@ -94,18 +104,19 @@ export const mainNav: NavItem[] = [
     icon: ClipboardCheck,
     perm: "attendance.view",
   },
-  { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view" },
+  { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view", feature: "analytics" },
   { labelKey: "nav.members", href: "/members", icon: Users, perm: "members.view" },
   { labelKey: "nav.groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
   { labelKey: "nav.celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
   {
     labelKey: "nav.training",
+    feature: "training",
     href: "/training",
     icon: GraduationCap,
     perm: "training.view",
   },
-  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view", beta: true },
-  { labelKey: "nav.livestreams", href: "/livestreams", icon: Radio, perm: "meetings.view" },
+  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view", beta: true, feature: "meetings" },
+  { labelKey: "nav.livestreams", href: "/livestreams", icon: Radio, perm: "meetings.view", feature: "livestreams" },
   { labelKey: "nav.giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
   {
     labelKey: "nav.contributions",
@@ -113,28 +124,31 @@ export const mainNav: NavItem[] = [
     icon: Handshake,
     perm: "contributions.view",
   },
-  { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view" },
+  { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view", feature: "finance" },
   {
     labelKey: "nav.followUp",
+    feature: "followUp",
     href: "/follow-up",
     icon: HeartHandshake,
     perm: "followup.view",
   },
   { labelKey: "nav.media", href: "/media", icon: FolderOpen, perm: "media.view" },
-  { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view" },
+  { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view", feature: "forms" },
   {
     labelKey: "nav.devotionals",
+    feature: "devotionals",
     href: "/devotionals",
     icon: BookOpen,
     perm: "devotionals.view",
   },
   {
     labelKey: "nav.branches",
+    feature: "branches",
     href: "/branches",
     icon: Network,
     perm: ["settings.manage", "analytics.view"],
   },
-  { labelKey: "nav.reports", href: "/reports", icon: Database, perm: REPORT_PERMS },
+  { labelKey: "nav.reports", href: "/reports", icon: Database, perm: REPORT_PERMS, feature: "reports" },
   { labelKey: "nav.settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
 ];
 
@@ -179,6 +193,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.analytics",
+        feature: "analytics",
         href: "/analytics",
         icon: BarChart3,
         descriptionKey: "nav.analyticsDesc",
@@ -186,6 +201,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.reports",
+        feature: "reports",
         href: "/reports",
         icon: Database,
         descriptionKey: "nav.reportsDesc",
@@ -223,6 +239,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.finance",
+        feature: "finance",
         href: "/finance",
         icon: Wallet,
         descriptionKey: "nav.financeDesc",
@@ -247,6 +264,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.forms",
+        feature: "forms",
         href: "/forms",
         icon: FileText,
         descriptionKey: "nav.formsDesc",
@@ -255,6 +273,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.devotionals",
+        feature: "devotionals",
         href: "/devotionals",
         icon: BookOpen,
         descriptionKey: "nav.devotionalsDesc",
@@ -292,6 +311,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.training",
+        feature: "training",
         href: "/training",
         icon: GraduationCap,
         descriptionKey: "nav.trainingDesc",
@@ -300,6 +320,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.meetings",
+        feature: "meetings",
         href: "/meetings",
         icon: Video,
         descriptionKey: "nav.meetingsDesc",
@@ -309,6 +330,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.followUp",
+        feature: "followUp",
         href: "/follow-up",
         icon: HeartHandshake,
         descriptionKey: "nav.followUpDesc",
@@ -337,6 +359,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
       },
       {
         labelKey: "nav.branches",
+        feature: "branches",
         href: "/branches",
         icon: Network,
         descriptionKey: "nav.branchesDesc",

@@ -26,6 +26,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getT } from "@/lib/i18n/server";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Analytics" };
 
@@ -76,6 +77,8 @@ export default async function AnalyticsPage() {
   if (raw.length === 0) {
     return (
       <PageContainer>
+      <PlanGate feature="analytics" />
+
         <PageHeader title={t("analytics.title")} description={t("analytics.subtitle")} />
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">

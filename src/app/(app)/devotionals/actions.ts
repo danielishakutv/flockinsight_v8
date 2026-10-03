@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { devotional, subscriber } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { sendDevotional } from "@/lib/devotionals";
 import { audit } from "@/lib/audit";
@@ -32,6 +33,10 @@ export type DevotionalInput = z.input<typeof saveSchema>;
 export async function createDevotional(
   type: "devotional" | "newsletter",
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("devotionals");
+  if (gate) return gate;
   const { church, user } = await requireChurch();
   if (!(await can("devotionals.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -68,6 +73,10 @@ export async function saveDevotional(
   mode: "draft" | "schedule" | "send",
   scheduledAt?: string,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("devotionals");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("devotionals.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -151,6 +160,10 @@ export async function saveDevotional(
 }
 
 export async function deleteDevotional(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("devotionals");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("devotionals.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -188,6 +201,10 @@ export async function addSubscriber(
   name: string,
   email: string,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("devotionals");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("devotionals.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -219,6 +236,10 @@ export async function addSubscriber(
 }
 
 export async function removeSubscriber(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("devotionals");
+  if (gate) return gate;
   const { church } = await requireChurch();
   if (!(await can("devotionals.manage")))
     return { ok: false, error: "You don't have permission to do that." };

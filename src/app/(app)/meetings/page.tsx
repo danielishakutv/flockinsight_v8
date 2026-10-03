@@ -11,6 +11,7 @@ import { MeetingsList, type MeetingRow } from "@/components/meetings/meetings-li
 import { canRepeatMeetings } from "@/lib/meetings-shared";
 import { getT } from "@/lib/i18n/server";
 import { BetaBadge } from "@/components/beta-badge";
+import { PlanGate } from "@/components/app/plan-gate";
 
 export const metadata = { title: "Meetings" };
 
@@ -122,6 +123,8 @@ export default async function MeetingsPage() {
 
   return (
     <PageContainer>
+      <PlanGate feature="meetings" />
+
       <PageHeader
         title={t("meetings.title")}
         description={t("meetings.subtitle")}

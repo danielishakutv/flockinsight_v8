@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { reminderSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { sendEmail, emailLayout } from "@/lib/mailer";
@@ -29,6 +30,10 @@ const schema = z.object({
 export type ReminderInput = z.input<typeof schema>;
 
 export async function saveReminders(input: ReminderInput): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("reminders");
+  if (gate) return gate;
+
   const { church } = await requireChurch();
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to do that." };
@@ -60,6 +65,10 @@ export async function saveReminders(input: ReminderInput): Promise<ActionResult>
 export async function sendTestReminder(
   input: ReminderInput,
 ): Promise<ActionResult> {
+  // Sold from the plan that includes it — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("reminders");
+  if (gate) return gate;
+
   const { church, user } = await requireChurch();
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to do that." };

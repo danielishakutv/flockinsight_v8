@@ -11,6 +11,7 @@ import {
   meetingParticipant,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { isSfuConfigured } from "@/lib/sfu";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
@@ -115,6 +116,11 @@ function refresh(id?: string) {
  * stale name.
  */
 export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -301,6 +307,11 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
 
 /** Call off a meeting. The row stays — the history of it is the point. */
 export async function cancelMeeting(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -352,6 +363,11 @@ export async function cancelMeeting(id: string): Promise<ActionResult> {
  * that did one of them would silently do the wrong one half the time.
  */
 export async function stopRepeating(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -381,6 +397,11 @@ export async function stopRepeating(id: string): Promise<ActionResult> {
 
 /** Put a cancelled meeting back on the calendar. */
 export async function reopenMeeting(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -407,6 +428,11 @@ export async function reopenMeeting(id: string): Promise<ActionResult> {
 
 /** End a meeting from outside the room — when the host's laptop has gone. */
 export async function endMeetingNow(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -433,6 +459,11 @@ export async function endMeetingNow(id: string): Promise<ActionResult> {
  * whole point — it is what you do when a link has gone somewhere it shouldn't.
  */
 export async function rotatePasscode(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -468,6 +499,11 @@ export async function rotatePasscode(id: string): Promise<ActionResult> {
 export async function rotateHostKey(
   id: string,
 ): Promise<ActionResult & { hostKey?: string }> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -504,6 +540,11 @@ export async function rotateHostKey(
  * twice must not double the church's attendance for that Sunday.
  */
 export async function recordAttendanceFromMeeting(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   if (!(await can("attendance.manage")))
@@ -599,6 +640,11 @@ export async function recordAttendanceFromMeeting(id: string): Promise<ActionRes
  * prayer meeting is the same meeting every week apart from its link.
  */
 export async function duplicateMeeting(id: string): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -657,6 +703,11 @@ export async function setMeetingService(
   id: string,
   serviceId: string | null,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
 
@@ -692,6 +743,11 @@ export async function liveMeetingIds(): Promise<string[]> {
 
 /** Used by the list page to bulk-cancel a run of stale scheduled meetings. */
 export async function cancelMany(ids: string[]): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("meetings");
+  if (gate) return gate;
+
   const g = await guard();
   if (!g) return DENIED;
   if (ids.length === 0) return { ok: false, error: "Nothing selected." };

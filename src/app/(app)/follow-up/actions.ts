@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { followUpInteraction, member, staff, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { sendChurchSms } from "@/lib/church-sms";
 import { notifyUser } from "@/lib/notifications";
@@ -57,6 +58,10 @@ const logSchema = z.object({
 export async function logInteraction(
   input: z.input<typeof logSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return gate;
   const parsed = logSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid data" };
@@ -120,6 +125,10 @@ const smsSchema = z.object({
 export async function sendSmsToMember(
   input: z.input<typeof smsSchema>,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return gate;
   const parsed = smsSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid data" };
@@ -188,6 +197,10 @@ export async function setFollowUpStatus(
   memberId: string,
   status: (typeof STATUSES)[number],
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return gate;
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
   if (!STATUSES.includes(status))
@@ -219,6 +232,10 @@ export async function assignFollowUp(
   memberId: string,
   userId: string | null,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return gate;
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
   const { church, user: me } = await requireChurch();
@@ -315,6 +332,10 @@ export async function setInFollowUp(
   memberId: string,
   inFollowUp: boolean,
 ): Promise<ActionResult> {
+  // Every write in this module needs the plan that includes it. Reading
+  // what is already here does not — see lib/entitlements.ts.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return gate;
   if (!z.string().uuid().safeParse(memberId).success)
     return { ok: false, error: "Invalid id" };
   const { church } = await requireChurch();

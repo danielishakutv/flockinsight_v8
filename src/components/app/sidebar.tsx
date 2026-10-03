@@ -9,6 +9,7 @@ import { Wordmark } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
 import { useT } from "@/components/i18n-provider";
 import { BetaBadge } from "@/components/beta-badge";
+import { PlanChip } from "@/components/app/plan-chip";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -21,6 +22,7 @@ export function Sidebar({
   isSuperAdmin = false,
   perms = [],
   isOwner = false,
+  plan = "starter",
 }: {
   churchName: string;
   userName: string;
@@ -28,6 +30,11 @@ export function Sidebar({
   isSuperAdmin?: boolean;
   perms?: string[];
   isOwner?: boolean;
+  /**
+   * The church's plan, so the menu can say which tier a module needs. Defaults
+   * to the smallest, like every other allowance in the app.
+   */
+  plan?: string;
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -91,6 +98,7 @@ export function Sidebar({
                       >
                         <span className="truncate">{t(item.labelKey)}</span>
                         {item.beta && <BetaBadge />}
+                        {item.feature && <PlanChip feature={item.feature} plan={plan} />}
                       </p>
                       <p className="text-sidebar-foreground/50 truncate text-[11px] leading-tight">
                         {t(item.descriptionKey)}
