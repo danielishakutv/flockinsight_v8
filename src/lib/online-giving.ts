@@ -55,6 +55,25 @@ export type GatewayRow = {
   extraKeys: string[];
 };
 
+/**
+ * An https URL, or null.
+ *
+ * Checked again here, on the way OUT, even though saving one checks it on the
+ * way in. This value is handed to a member of a congregation who is about to
+ * type their card number on the other side of it, and a row could predate the
+ * check, be edited in the database, or arrive from a restored backup. The cost
+ * of asking twice is one `new URL`.
+ */
+function safeHttpsUrl(raw: string | null | undefined): string | null {
+  const url = (raw || "").trim();
+  if (!url) return null;
+  try {
+    return new URL(url).protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Open the sealed columns into something an adapter can use. */
 function credsFrom(row: {
   publicKey: string | null;
@@ -121,7 +140,9 @@ export async function getActiveGateway(
   const spec = PROVIDER_SPECS[provider];
   if (!spec) return null;
   if (spec.id === "link") {
-    if (!creds.linkUrl) return null;
+    // An unusable link is not a configured gateway. The public page then says
+    // the church has not finished setting up, which is true and actionable.
+    if (!safeHttpsUrl(creds.linkUrl)) return null;
   } else if (!creds.secret) {
     return null;
   }
@@ -224,6 +245,30 @@ export async function saveGateway(opts: {
   if (!adapter) return { ok: false, error: "We don't support that provider." };
   const checked = await adapter.check(creds);
 
+  /*
+   * A credential that does not work is NOT stored.
+   *
+   * The first version of this wrote the new values either way and only
+   * withheld activation. That is fail-open: a church already collecting
+   * through a working gateway could paste something broken — or, for a plain
+   * link, an http:// address the check exists to refuse — and the row would
+   * stay ACTIVE with the new value on it, handing real givers a page we had
+   * just rejected.
+   *
+   * So on a failed check nothing changes except the error we show. Whatever
+   * was working keeps working, and the church sees why the new value was not
+   * taken.
+   */
+  if (!checked.ok) {
+    if (existing) {
+      await db
+        .update(churchGateway)
+        .set({ lastError: checked.error })
+        .where(eq(churchGateway.id, existing.id));
+    }
+    return { ok: false, error: checked.error };
+  }
+
   let secretSealed = existing?.secretSealed ?? null;
   if (secretPlain) {
     const sealed = sealSecret(secretPlain);
@@ -237,7 +282,7 @@ export async function saveGateway(opts: {
     extraSealed = sealed.sealed;
   }
 
-  const makeActive = opts.activate && checked.ok;
+  const makeActive = opts.activate;
 
   await db.transaction(async (tx) => {
     if (makeActive) {
@@ -256,8 +301,8 @@ export async function saveGateway(opts: {
       extraSealed,
       linkUrl,
       isActive: makeActive ? true : (existing?.isActive ?? false),
-      verifiedAt: checked.ok ? new Date() : (existing?.verifiedAt ?? null),
-      lastError: checked.ok ? null : checked.error,
+      verifiedAt: new Date(),
+      lastError: null,
       createdBy: opts.userId ?? null,
     };
     if (existing) {
@@ -270,7 +315,6 @@ export async function saveGateway(opts: {
     }
   });
 
-  if (!checked.ok) return { ok: false, error: checked.error };
   return { ok: true, verified: true, detail: checked.detail };
 }
 
@@ -496,7 +540,19 @@ export async function listGivingLinks(churchId: string): Promise<LinkRow[]> {
         createdAt: givingLink.createdAt,
       })
       .from(givingLink)
-      .leftJoin(givingCategory, eq(givingCategory.id, givingLink.categoryId))
+      /*
+       * Joined on the church as well as the id. The actions refuse a category
+       * from another church, but a row written before that check existed — or
+       * by anything else that forgets — must not be able to put another
+       * church's category name on this page.
+       */
+      .leftJoin(
+        givingCategory,
+        and(
+          eq(givingCategory.id, givingLink.categoryId),
+          eq(givingCategory.churchId, churchId),
+        ),
+      )
       .where(eq(givingLink.churchId, churchId))
       .orderBy(desc(givingLink.isActive), desc(givingLink.createdAt)),
     db
@@ -632,7 +688,8 @@ export async function getPublicGivingLink(slug: string): Promise<PublicLink | nu
     churchHandle: row.churchHandle,
     currency: row.currency,
     provider: gateway?.provider ?? null,
-    externalUrl: gateway?.provider === "link" ? (gateway.creds.linkUrl ?? null) : null,
+    externalUrl:
+      gateway?.provider === "link" ? safeHttpsUrl(gateway.creds.linkUrl) : null,
     raised: Number(totals?.raised ?? 0),
     givers: Number(totals?.givers ?? 0),
   };
@@ -948,7 +1005,14 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
       ? await db
           .select({ name: givingCategory.name })
           .from(givingCategory)
-          .where(eq(givingCategory.id, row.categoryId))
+          .where(
+            and(
+              eq(givingCategory.id, row.categoryId),
+              // Scoped, so a stray id can never put another church's category
+              // name on this church's receipt.
+              eq(givingCategory.churchId, p.churchId),
+            ),
+          )
           .limit(1)
       : [];
     await sendGivingReceipt({

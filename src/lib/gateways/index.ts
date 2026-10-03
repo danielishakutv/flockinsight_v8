@@ -40,6 +40,20 @@ const linkAdapter: GatewayAdapter = {
   async start(creds) {
     const url = (creds.linkUrl || "").trim();
     if (!url) return { ok: false, error: "This church hasn't set a payment link." };
+    /*
+     * Re-checked here, not only when it was saved.
+     *
+     * This is the last line before a giver is sent somewhere to type a card
+     * number. A stored row can predate the check, be edited in the database or
+     * come back from a backup, and "we validated it once" is not a property of
+     * the value in front of us.
+     */
+    try {
+      if (new URL(url).protocol !== "https:")
+        return { ok: false, error: "This church's payment link isn't secure." };
+    } catch {
+      return { ok: false, error: "This church's payment link isn't usable." };
+    }
     // Straight there. No reference, because there is nothing to reconcile it
     // against — see the `reportsBack: false` on the spec.
     return { ok: true, checkoutUrl: url, gatewayRef: null };

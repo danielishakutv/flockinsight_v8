@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { givingLink } from "@/db/schema";
+import { givingCategory, givingLink } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
@@ -131,6 +131,30 @@ export async function stopOnlineGivingAction(): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Is this giving category actually this church's?
+ *
+ * A uuid from a form is a request, not a fact. Without this, a church could
+ * point its giving link at another church's category id — and every online
+ * gift through that link would then be written against a category belonging to
+ * somebody else, where it would show up in their category name and nowhere in
+ * the giving church's own breakdown.
+ */
+async function ownCategory(
+  churchId: string,
+  categoryId: string | null | undefined,
+): Promise<boolean> {
+  if (!categoryId) return true; // "no category" is always allowed
+  const [row] = await db
+    .select({ id: givingCategory.id })
+    .from(givingCategory)
+    .where(
+      and(eq(givingCategory.id, categoryId), eq(givingCategory.churchId, churchId)),
+    )
+    .limit(1);
+  return !!row;
+}
+
 const amountMode = z.enum(["open", "fixed", "preset"]);
 
 const linkSchema = z.object({
@@ -161,6 +185,9 @@ export async function createGivingLinkAction(
   const parsed = linkSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  if (!(await ownCategory(ctx.church.id, parsed.data.categoryId)))
+    return { ok: false, error: "That giving category doesn't exist." };
 
   const res = await createGivingLink({
     churchId: ctx.church.id,
@@ -205,6 +232,9 @@ export async function updateGivingLinkAction(
   const parsed = linkSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  if (!(await ownCategory(ctx.church.id, parsed.data.categoryId)))
+    return { ok: false, error: "That giving category doesn't exist." };
 
   const res = await updateGivingLink({
     churchId: ctx.church.id,
