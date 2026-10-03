@@ -36,7 +36,20 @@ export async function GET(request: Request) {
     .where(
       and(
         isNotNull(church.trialEndsAt),
-        eq(church.paymentWaived, false),
+        /*
+         * Not comped RIGHT NOW — which is not the same as "not comped".
+         *
+         * A waiver can carry a deadline, and a church whose comp has run out is
+         * exactly the one that needs to hear from us. Checking only the flag
+         * would leave it silently un-nudged for ever after the comp lapsed.
+         */
+        or(
+          eq(church.paymentWaived, false),
+          and(
+            isNotNull(church.paymentWaivedUntil),
+            sql`${church.paymentWaivedUntil} < now()`,
+          ),
+        ),
         gt(church.trialEndsAt, now),
         or(isNull(church.planRenewsAt), sql`${church.planRenewsAt} < now()`),
       ),
@@ -99,8 +112,91 @@ export async function GET(request: Request) {
     sent++;
   }
 
-  return new Response(JSON.stringify({ ok: true, reminded: sent }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  /*
+   * Second pass: comps that are about to run out.
+   *
+   * A waiver with a deadline ends in silence otherwise — the church simply
+   * finds itself asked to pay one morning, having been told months ago that
+   * FlockInsight was free for them. Same ladder as the trial (14/7/3 days),
+   * same idempotence, its own stage column.
+   */
+  const waiverDue = await db
+    .select({
+      id: church.id,
+      name: church.name,
+      until: church.paymentWaivedUntil,
+      stage: church.waiverReminderStage,
+    })
+    .from(church)
+    .where(
+      and(
+        eq(church.paymentWaived, true),
+        isNotNull(church.paymentWaivedUntil),
+        gt(church.paymentWaivedUntil, now),
+      ),
+    )
+    .limit(500);
+
+  let waiverReminded = 0;
+  for (const c of waiverDue) {
+    if (!c.until) continue;
+    const daysLeft = Math.max(
+      0,
+      Math.ceil((new Date(c.until).getTime() - now.getTime()) / 86_400_000),
+    );
+    const target = daysLeft <= 3 ? 3 : daysLeft <= 7 ? 2 : daysLeft <= 14 ? 1 : 0;
+    if (target === 0 || c.stage >= target) continue;
+
+    const dayWord = `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+    const link = "/settings/billing";
+
+    await notifyChurchManagers({
+      churchId: c.id,
+      title: `Your complimentary access ends in ${dayWord}`,
+      body: `FlockInsight has been free for ${c.name} as our gift. That ends in ${dayWord} — choose a plan now and nothing will be interrupted.`,
+      linkUrl: link,
+    }).catch((e: unknown) => {
+      console.error(`trial-reminders: waiver notify failed for church ${c.id}`, e);
+    });
+
+    if (isEmailConfigured()) {
+      const managers = await db
+        .selectDistinct({ email: user.email, name: user.name })
+        .from(staff)
+        .innerJoin(user, eq(user.id, staff.userId))
+        .where(
+          and(
+            eq(staff.organizationId, c.id),
+            sql`${staff.role} in ('owner','admin')`,
+            eq(staff.temp, false),
+          ),
+        );
+      const html = emailLayout(
+        `Your complimentary access ends in ${dayWord}`,
+        `<p>Hi,</p><p>FlockInsight has been on us for <strong>${c.name}</strong>. That complimentary period ends in <strong>${dayWord}</strong>.</p><p>Choose a plan before then and nothing changes — your attendance, members, giving and everything else carry straight on. If you'd like us to extend it, just reply to this email.</p>`,
+        { label: "Choose a plan", url: `${siteUrl()}${link}` },
+      );
+      await Promise.all(
+        managers.map((m) =>
+          sendEmail({
+            to: m.email,
+            subject: "Your FlockInsight complimentary access ends soon",
+            html,
+          }).catch(() => false),
+        ),
+      );
+    }
+
+    await db
+      .update(church)
+      .set({ waiverReminderStage: target })
+      .where(eq(church.id, c.id));
+    waiverReminded++;
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, reminded: sent, waiverReminded }),
+    { headers: { "Content-Type": "application/json" } },
+  );
   });
 }

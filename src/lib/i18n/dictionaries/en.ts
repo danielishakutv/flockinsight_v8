@@ -2028,6 +2028,8 @@ export const en = {
     paymentFailedOrWasCancelled: "Payment failed or was cancelled.",
     somethingWentWrongWithThat: "Something went wrong with that payment.",
     planUpdated: "Plan updated.",
+    // Shown when a superadmin has comped the church, with or without a deadline.
+    compedTitle: "FlockInsight is on us 🎁",
     sendPledgeReminders: "Send pledge reminders",
     pledgeReminderSettingsSaved: "Pledge reminder settings saved",
     stateRegion: "State / Region",

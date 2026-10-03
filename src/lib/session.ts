@@ -2,11 +2,11 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "./auth";
 import { readActAsCookie } from "./impersonation";
 import { db } from "@/db";
-import { church, user } from "@/db/schema";
+import { church, staff, user } from "@/db/schema";
 
 /**
  * Returns the current Better Auth session (user + session) or null.
@@ -43,6 +43,58 @@ export const getActAsChurchId = cache(async (): Promise<string | null> => {
 });
 
 /**
+ * Does this person hold a genuine seat in this church?
+ *
+ * "Genuine" excludes the `temp` row a superadmin's impersonation creates —
+ * that one exists so the org plugin can operate, and treating it as membership
+ * would make every church a superadmin has ever visited look like their own.
+ */
+async function hasRealMembership(
+  userId: string,
+  churchId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(
+      and(
+        eq(staff.userId, userId),
+        eq(staff.organizationId, churchId),
+        eq(staff.temp, false),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+/**
+ * The churches this person is actually a member of, newest membership last.
+ *
+ * One query, cached per request: the church switcher, the login chooser and
+ * the superadmin exception above all need the same answer.
+ */
+export const getMyChurches = cache(
+  async (): Promise<
+    { id: string; name: string; slug: string; logo: string | null; role: string }[]
+  > => {
+    const data = await getSession();
+    if (!data?.user) return [];
+    return db
+      .select({
+        id: church.id,
+        name: church.name,
+        slug: church.slug,
+        logo: church.logo,
+        role: staff.role,
+      })
+      .from(staff)
+      .innerJoin(church, eq(church.id, staff.organizationId))
+      .where(and(eq(staff.userId, data.user.id), eq(staff.temp, false)))
+      .orderBy(staff.createdAt);
+  },
+);
+
+/**
  * Require an authenticated user AND an active church (tenant).
  * Redirects to /login if not signed in, or /onboarding if the user
  * has no active church selected yet.
@@ -55,11 +107,25 @@ export const requireChurch = cache(async () => {
 
   // A superadmin "acting as" a church overrides their own active tenant.
   const actAsId = await getActAsChurchId();
-  // Superadmins operate from /superadmin, never a church — unless they're
-  // explicitly acting as one. This keeps the platform operator out of any
-  // single church's context (and stops actions leaking to a default church).
-  if (!actAsId && (await getIsSuperAdmin())) redirect("/superadmin");
   const activeChurchId = actAsId ?? data.session.activeOrganizationId;
+
+  /*
+   * Superadmins operate from /superadmin, never a church — with one exception,
+   * and it matters: a platform operator who is also a pastor somewhere.
+   *
+   * The original rule bounced EVERY superadmin to /superadmin, so the operator
+   * of this platform could not open their own church's settings without
+   * impersonating themselves. The exception is narrow and checked against the
+   * database, not inferred: they must hold a real, non-`temp` staff row in the
+   * church they are opening. A `temp` row is the one impersonation creates, so
+   * including it would re-open the very leak this rule exists to prevent.
+   */
+  if (!actAsId && (await getIsSuperAdmin())) {
+    const ownChurch =
+      activeChurchId && (await hasRealMembership(data.user.id, activeChurchId));
+    if (!ownChurch) redirect("/superadmin");
+  }
+
   if (!activeChurchId) redirect("/onboarding");
 
   const [activeChurch] = await db

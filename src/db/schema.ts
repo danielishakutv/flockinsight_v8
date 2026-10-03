@@ -266,8 +266,25 @@ export const church = pgTable("church", {
   trialEndsAt: timestamp({ withTimezone: true }),
   // Superadmin comp: when true, the church never needs to pay to keep using the app.
   paymentWaived: boolean().notNull().default(false),
+  /**
+   * When the comp runs out. Null alongside `paymentWaived` means indefinite —
+   * which is what every existing waiver is, so the column arrives empty and
+   * nothing already comped changes.
+   *
+   * The flag stays the switch and this is only its deadline: a lapsed date
+   * drops the church back onto the ordinary trial/billing rules rather than
+   * clearing the flag, so the record still says "this church was comped until
+   * March" instead of looking like it never was. See computeStanding().
+   */
+  paymentWaivedUntil: timestamp({ withTimezone: true }),
   // Which trial-ending reminders have been sent (0=none,1=14d,2=7d,3=3d) — idempotent cron.
   trialReminderStage: integer().notNull().default(0),
+  /**
+   * The same ladder, for a comp that is about to run out (0=none,1=14d,2=7d,
+   * 3=3d). Reset to 0 whenever a waiver is granted or changed, so a renewed
+   * comp warns again next time rather than staying silent for ever.
+   */
+  waiverReminderStage: integer().notNull().default(0),
   /**
    * How far through the activation sequence this church has been taken.
    * Mirrors trialReminderStage: the ladder only ever moves forward, so a

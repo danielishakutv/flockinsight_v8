@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import {
   CalendarDays,
   ChevronRight,
+  Shield,
   HandCoins,
   Plus,
   TrendingUp,
@@ -23,7 +24,7 @@ import {
   staff,
   todo,
 } from "@/db/schema";
-import { requireChurch } from "@/lib/session";
+import { getIsSuperAdmin, requireChurch } from "@/lib/session";
 import { getT } from "@/lib/i18n/server";
 import { getAccess } from "@/lib/permissions";
 import {
@@ -108,7 +109,10 @@ export default async function DashboardPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthLabel = format(now, "MMMM");
 
-  const access = await getAccess();
+  const [access, isSuperAdmin] = await Promise.all([
+    getAccess(),
+    getIsSuperAdmin(),
+  ]);
   const perms = [...access.perms];
   const canSettings = access.isOwner || access.perms.has("settings.manage");
   const canTeam = access.isOwner || access.perms.has("team.manage");
@@ -236,6 +240,20 @@ export default async function DashboardPage() {
           Here&apos;s how {church.name} is doing.
         </p>
         <DateTime className="text-muted-foreground mt-2" />
+        {/*
+          Only a platform operator who is also a member of this church sees
+          this. It is the one door back: everything past sign-in belongs to the
+          church, so the operator's other job gets a single button here rather
+          than a presence in the shell.
+        */}
+        {isSuperAdmin && (
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/superadmin">
+              <Shield />
+              Superadmin dashboard
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid min-w-0 gap-4 lg:gap-6 xl:grid-cols-3">

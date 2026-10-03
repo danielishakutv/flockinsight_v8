@@ -85,7 +85,12 @@ export default async function BillingPage({
       discount={row.discount}
       prices={prices}
       basePrices={basePrices}
-      trial={{ state: standing.state, daysLeft: standing.daysLeft }}
+      trial={{
+        state: standing.state,
+        daysLeft: standing.daysLeft,
+        waiverEndsAt: standing.waiverEndsAt,
+        waiverDaysLeft: standing.waiverDaysLeft,
+      }}
       payments={payments.map((p) => ({
         id: p.id,
         plan: p.plan,

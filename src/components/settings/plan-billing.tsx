@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Check, CreditCard, Loader2, Sparkles } from "lucide-react";
+import { Check, CreditCard, Gift, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { startCheckout } from "@/app/(app)/settings/billing/actions";
 import { PLANS, planName, type PlanId } from "@/lib/plans";
@@ -49,7 +49,13 @@ export function PlanBilling({
   basePrices: Record<PlanId, number | null>;
   payments: PaymentRow[];
   status: string | null;
-  trial?: { state: string; daysLeft: number | null } | null;
+  trial?: {
+    state: string;
+    daysLeft: number | null;
+    /** Set while the church is comped with an end date. */
+    waiverEndsAt?: string | null;
+    waiverDaysLeft?: number | null;
+  } | null;
   /**
    * Set only for a church outside Nigeria. Everything is computed on the
    * server — this component never converts a currency, so the figure on the
@@ -69,6 +75,7 @@ export function PlanBilling({
   const t = useT();
   const onTrial = trial?.state === "trialing";
   const trialExpired = trial?.state === "expired";
+  const comped = trial?.state === "waived";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
@@ -106,6 +113,30 @@ export function PlanBilling({
 
   return (
     <div className="space-y-5">
+      {/*
+        Comped — and for how long.
+        A church told "FlockInsight is on us" has no other way to find out that
+        the gift has a date on it, and the first sign would otherwise be being
+        asked to pay.
+      */}
+      {comped && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-4 text-white">
+          <Gift className="size-6 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">{t("settings.compedTitle")}</p>
+            <p className="text-sm text-white/85">
+              {trial?.waiverEndsAt
+                ? `Your plan is complimentary until ${new Date(trial.waiverEndsAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}${
+                    trial.waiverDaysLeft != null
+                      ? ` — ${trial.waiverDaysLeft} day${trial.waiverDaysLeft === 1 ? "" : "s"} left`
+                      : ""
+                  }. We'll remind you before it ends.`
+                : "Your plan is complimentary, with no end date. Nothing to pay."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Promo / trial banner */}
       {(onTrial || trialExpired) && (
         <div

@@ -9,6 +9,7 @@ import { church } from "@/db/schema";
 import { resetChurch, restoreChurchAsNew, type ChurchBackup } from "@/lib/church-data";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
+import { waiverEndDate } from "@/lib/trial";
 
 import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -94,12 +95,24 @@ export async function restoreChurchAction(
   return res;
 }
 
-/** Comp a church: waive payment so it never needs to pay to use the app. */
+/**
+ * Comp a church: waive payment so it doesn't need to pay to use the app.
+ *
+ * `months` is how long the comp lasts — 0 (or omitted) means no end date,
+ * which is what every waiver granted before this existed is. The deadline is
+ * stored and honoured on read (see computeStanding), so nothing has to run on
+ * the day it expires for it to expire.
+ */
 export async function setPaymentWaived(
   id: string,
   waived: boolean,
+  months: number = 0,
 ): Promise<ActionResult> {
   const admin = await requirePlatform("platform.churches.manage");
+  const parsedMonths = z.number().int().min(0).max(120).safeParse(months);
+  if (!parsedMonths.success)
+    return { ok: false, error: "Choose how long the comp should last." };
+
   const [c] = await db
     .select({ name: church.name })
     .from(church)
@@ -107,7 +120,22 @@ export async function setPaymentWaived(
     .limit(1);
   if (!c) return { ok: false, error: "Church not found." };
 
-  await db.update(church).set({ paymentWaived: waived }).where(eq(church.id, id));
+  const until = waived ? waiverEndDate(parsedMonths.data) : null;
+
+  await db
+    .update(church)
+    .set({
+      paymentWaived: waived,
+      paymentWaivedUntil: until,
+      // Back to the start of the ladder, so a renewed or extended comp warns
+      // the church again before THIS one ends.
+      waiverReminderStage: 0,
+    })
+    .where(eq(church.id, id));
+
+  const untilWords = until
+    ? ` This runs until ${until.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}, and we'll let you know before it ends.`
+    : "";
 
   await notifyChurchOfAdminAction({
     churchId: id,
@@ -116,7 +144,7 @@ export async function setPaymentWaived(
       ? "FlockInsight is free for your church"
       : "A change to your FlockInsight billing",
     body: waived
-      ? "The FlockInsight team has waived payment for your church. You have full access to your plan at no cost, and you won't be asked to pay or be blocked when a trial ends."
+      ? `The FlockInsight team has waived payment for your church. You have full access to your plan at no cost, and you won't be asked to pay or be blocked when a trial ends.${untilWords}`
       : "The payment waiver on your church has been removed, so your account now follows the normal plan and billing rules again.",
     linkUrl: "/settings/billing",
     ctaLabel: "View billing",
@@ -126,7 +154,9 @@ export async function setPaymentWaived(
     actorUserId: admin.id,
     actorName: admin.name,
     action: "waive_payment",
-    summary: `${waived ? "Waived" : "Un-waived"} payment for "${c.name}"`,
+    summary: waived
+      ? `Waived payment for "${c.name}"${until ? ` until ${until.toISOString().slice(0, 10)}` : " with no end date"}`
+      : `Un-waived payment for "${c.name}"`,
     targetType: "church",
     targetId: id,
   });

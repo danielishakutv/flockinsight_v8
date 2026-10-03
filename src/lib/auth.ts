@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { sendEmail, emailLayout } from "./mailer";
 import { db } from "@/db";
 import { escapeHtml } from "@/lib/html-escape";
@@ -151,10 +151,22 @@ export const auth = betterAuth({
         // When a session is created (login), auto-select the user's first
         // church as the active tenant so they don't land without context.
         before: async (newSession) => {
+          /*
+           * `temp: false` — the row a superadmin's impersonation leaves behind
+           * is not a membership, and letting one become somebody's active
+           * church on their next login would drop them into a church they do
+           * not belong to.
+           *
+           * Someone in more than one church still gets their first one here, so
+           * nobody ever lands without context; the chooser at /select-church
+           * then lets them pick, which is only possible because this is a
+           * sensible default rather than a decision.
+           */
           const [firstStaff] = await db
             .select({ orgId: staff.organizationId })
             .from(staff)
-            .where(eq(staff.userId, newSession.userId))
+            .where(and(eq(staff.userId, newSession.userId), eq(staff.temp, false)))
+            .orderBy(staff.createdAt)
             .limit(1);
           return {
             data: {

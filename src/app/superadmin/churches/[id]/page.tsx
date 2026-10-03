@@ -36,7 +36,7 @@ import { formatMoney } from "@/lib/money";
 import { planName } from "@/lib/plans";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
-import { computeStanding } from "@/lib/trial";
+import { computeStanding, waiverActive } from "@/lib/trial";
 import { denominationOptions } from "@/lib/denominations";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
 import { ChurchDenomination } from "@/components/superadmin/church-denomination";
@@ -205,7 +205,9 @@ export default async function SuperadminChurchPage({
   const standing = computeStanding(c);
   const standingLabel =
     standing.state === "waived"
-      ? "Comped (payment waived)"
+      ? standing.waiverEndsAt
+        ? `Comped until ${standing.waiverEndsAt.slice(0, 10)}`
+        : "Comped (payment waived, no end date)"
       : standing.state === "paid"
         ? "Active paid plan"
         : standing.state === "trialing"
@@ -475,6 +477,10 @@ export default async function SuperadminChurchPage({
       <ChurchTrialControls
         churchId={c.id}
         paymentWaived={c.paymentWaived}
+        waiverEndsAt={
+          c.paymentWaivedUntil ? c.paymentWaivedUntil.toISOString() : null
+        }
+        waiverLapsed={c.paymentWaived && !waiverActive(c)}
         trialEndsAt={c.trialEndsAt ? c.trialEndsAt.toISOString() : null}
         standingLabel={standingLabel}
       />
