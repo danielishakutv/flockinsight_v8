@@ -90,7 +90,16 @@ export async function queueChurchSms(opts: {
 export type QueuedSms = {
   id: string;
   audience: string;
-  body: string;
+  /**
+   * The wording — or null when it must not be shown.
+   *
+   * Only a message the church composed itself is readable here. An automatic
+   * one can carry a credential: a member's self-update link is a bearer token
+   * in a URL, and printing it in a shared list would let anyone who can open
+   * this page edit that member's details. The audience and the time still
+   * show, which is everything needed to recognise or cancel it.
+   */
+  body: string | null;
   recipients: number;
   origin: string;
   sendAfter: string;
@@ -133,6 +142,15 @@ export async function listQueuedSms(
 
   return rows.map((r) => ({
     ...r,
+    /*
+     * Redacted by default, revealed only for the composer.
+     *
+     * Deliberately a whitelist: a sender added later that happens to put a
+     * token in a message is then private without anybody remembering to say
+     * so. The alternative — listing the senders to hide — is a list that is
+     * one forgotten line away from leaking a link.
+     */
+    body: r.origin === "communication" ? r.body : null,
     recipients: Number(r.recipients),
     sendAfter: r.sendAfter.toISOString(),
     createdAt: r.createdAt.toISOString(),

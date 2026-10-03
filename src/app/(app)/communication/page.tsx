@@ -114,7 +114,12 @@ export default async function CommunicationPage() {
          * phone happens to be looking at it.
          */
         timezone={c.timezone}
-        queued={queued}
+        /*
+         * Only for somebody who could have sent it in the first place.
+         * communication.view is read access to the history; what has not gone
+         * out yet — and can still be cancelled — answers to manage.
+         */
+        queued={canManage ? queued : []}
         recent={recent.map((r) => ({
           id: r.id,
           channel: r.channel,

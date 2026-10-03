@@ -14,7 +14,8 @@ import { useT } from "@/components/i18n-provider";
 export type QueuedSms = {
   id: string;
   audience: string;
-  body: string;
+  /** Null for an automatic message, whose wording may contain a private link. */
+  body: string | null;
   recipients: number;
   origin: string;
   sendAfter: string;
@@ -97,7 +98,12 @@ export function QueuedSmsList({
                   )}
                 </div>
                 <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                  {q.body}
+                  {q.body ?? (
+                    <span className="italic">
+                      Sent automatically — the wording is hidden because these
+                      messages can contain a personal link.
+                    </span>
+                  )}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   {failed ? (
