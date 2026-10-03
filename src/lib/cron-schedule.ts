@@ -42,6 +42,15 @@ export const CRON_JOBS = {
 
   // The float check.
   "platform-health": { label: "Platform health & float", intervalMinutes: 30 },
+
+  /*
+   * The demonstration church, wiped and rebuilt.
+   *
+   * Two hours is the promise made on the demo itself ("nothing here is real —
+   * it is rebuilt every two hours"), so this interval is a published fact
+   * rather than a tuning choice.
+   */
+  "demo-reset": { label: "Demo church reset", intervalMinutes: 120 },
 } as const;
 
 export type CronJob = keyof typeof CRON_JOBS;

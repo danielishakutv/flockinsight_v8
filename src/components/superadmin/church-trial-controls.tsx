@@ -3,15 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { CalendarClock, Gift, Loader2 } from "lucide-react";
+import { CalendarClock, FlaskConical, Gift, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   setPaymentWaived,
   extendTrial,
+  setDemoChurch,
 } from "@/app/superadmin/churches/[id]/actions";
 import { WAIVER_DURATIONS } from "@/lib/trial";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -27,9 +30,12 @@ export function ChurchTrialControls({
   waiverLapsed,
   trialEndsAt,
   standingLabel,
+  isDemo,
 }: {
   churchId: string;
   paymentWaived: boolean;
+  /** Is this the one church that gets wiped and re-seeded every two hours? */
+  isDemo: boolean;
   /** The stored deadline, whether or not it has passed. Null = no end date. */
   waiverEndsAt: string | null;
   /** Waiver flag is on but its deadline has been and gone. */
@@ -65,6 +71,27 @@ export function ChurchTrialControls({
       const res = await setPaymentWaived(churchId, false);
       if (res.ok) {
         toast.success("Waiver removed.");
+        router.refresh();
+      } else toast.error(res.error);
+    });
+  }
+
+  function toggleDemo(next: boolean) {
+    if (
+      next &&
+      !confirm(
+        "Make this the demonstration church?\n\nIts members, attendance, giving and everything else operational will be DELETED and replaced with demo data every two hours. Only do this to a church that exists for that purpose.",
+      )
+    )
+      return;
+    start(async () => {
+      const res = await setDemoChurch(churchId, next);
+      if (res.ok) {
+        toast.success(
+          next
+            ? "This is now the demo church. It resets every two hours."
+            : "No longer the demo church. Nothing was deleted.",
+        );
         router.refresh();
       } else toast.error(res.error);
     });
@@ -141,6 +168,43 @@ export function ChurchTrialControls({
                 Remove waiver
               </Button>
             )}
+          </div>
+        </div>
+
+        {/*
+          The demo switch, in the same card as the comp.
+          Both answer the same question — "does this church behave like a
+          paying one" — and both are things only an operator may do.
+        */}
+        <div
+          className={cn(
+            "rounded-xl border p-3",
+            isDemo && "border-amber-500/50 bg-amber-500/5",
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <FlaskConical className="size-4" /> The demonstration church
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Everything operational is deleted and replaced with demo data
+                every two hours. Visitors must leave an email and phone number,
+                and confirm the email after 15 minutes. Only one church at a
+                time.
+              </p>
+              {isDemo && (
+                <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  This church is the demo. Its data is not safe here.
+                </p>
+              )}
+            </div>
+            <Switch
+              checked={isDemo}
+              onCheckedChange={toggleDemo}
+              disabled={pending}
+              aria-label="Demonstration church"
+            />
           </div>
         </div>
 

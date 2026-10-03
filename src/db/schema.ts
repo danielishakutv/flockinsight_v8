@@ -278,6 +278,18 @@ export const church = pgTable("church", {
   // ----- Free trial ("first 7 Sundays free") -----
   // End of the free trial. Null = grandfathered (never gated). Set at signup.
   trialEndsAt: timestamp({ withTimezone: true }),
+  /**
+   * The demonstration church: one shared workspace anybody may poke at.
+   *
+   * It behaves like any other church except that its operational data is
+   * wiped and re-seeded every two hours, every page says DEMO out loud, and
+   * whoever opens it has to leave an email address and a phone number first.
+   *
+   * A flag rather than an id in the environment, so switching which church
+   * demonstrates the product is a toggle in /superadmin and not a deploy. At
+   * most one church may carry it (enforced where it is set).
+   */
+  isDemo: boolean().notNull().default(false),
   // Superadmin comp: when true, the church never needs to pay to keep using the app.
   paymentWaived: boolean().notNull().default(false),
   /**
@@ -2766,6 +2778,56 @@ export const leadActivityKindEnum = pgEnum("lead_activity_kind", [
   "meeting",
   "status",
 ]);
+
+/**
+ * Somebody trying the demo.
+ *
+ * The demo is ONE login shared by everybody, so nothing about a visitor can
+ * live on the user account — this table is per browser, keyed by a cookie, and
+ * it is the only thing that knows who is looking.
+ *
+ * Why ask at all: an unmetered shared workspace with a published password is
+ * an invitation to abuse, and the people who try a church product are exactly
+ * the people worth speaking to. So entry costs an email address and a phone
+ * number, which also become a `lead`.
+ *
+ * Why verify the email after fifteen minutes rather than before: the first
+ * fifteen minutes is where somebody decides whether this is worth their
+ * attention, and a verification code in front of that loses more real
+ * prospects than it stops bad actors. A typed address gets you in; a proved
+ * one keeps you in.
+ */
+export const demoSession = pgTable(
+  "demo_session",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Opaque value held in an httpOnly cookie. Not guessable, not an id. */
+    token: text().notNull().unique(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text(),
+    email: text().notNull(),
+    phone: text(),
+    /** Set when the code sent to that address comes back. */
+    verifiedAt: timestamp({ withTimezone: true }),
+    /** The live OTP, so the gate can show "enter the code" after a reload. */
+    otpId: uuid(),
+    /** The lead row this created, so sales sees it beside every other one. */
+    leadId: uuid().references((): AnyPgColumn => lead.id, {
+      onDelete: "set null",
+    }),
+    /** Kept for abuse investigations, and for "how long do people stay". */
+    ip: text(),
+    userAgent: text(),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("demo_session_church_idx").on(t.churchId, t.startedAt),
+    index("demo_session_email_idx").on(t.email),
+  ],
+);
 
 export const lead = pgTable(
   "lead",

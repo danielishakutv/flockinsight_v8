@@ -38,10 +38,23 @@ export const activePlan = cache(async (): Promise<string> => {
   if (!churchId) return "starter";
 
   const [row] = await db
-    .select({ plan: church.plan })
+    .select({ plan: church.plan, isDemo: church.isDemo })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
+
+  /*
+   * The demonstration church shows everything.
+   *
+   * It is a showroom: a visitor evaluating the product should see Finance,
+   * SMS, Training and the rest working, not a wall of upgrade prompts for
+   * whatever plan the row happens to carry. It cannot pay for anything and
+   * owns no real data, so there is nothing for this to cost — and it is read
+   * from the same `isDemo` flag the reset cron uses, so one toggle decides
+   * both.
+   */
+  if (row?.isDemo) return "enterprise";
+
   // No row, or no plan: the smallest allowance, never the largest.
   return row?.plan ?? "starter";
 });

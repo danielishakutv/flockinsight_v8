@@ -2249,6 +2249,26 @@ export const en = {
   /* ============================================================
    * Online giving — the public page, and setting it up
    * ========================================================== */
+  /* ============================================================
+   * The demonstration church
+   * ========================================================== */
+  demo: {
+    whosLooking: "Who's looking?",
+    yourEmail: "Your email address",
+    emailPlaceholder: "you@yourchurch.org",
+    yourPhone: "Your phone number",
+    phonePlaceholder: "08012345678",
+    nameOrChurch: "Your name or church",
+    optional: "(optional)",
+    namePlaceholder: "Grace Chapel, Ikeja",
+    startExploring: "Start exploring",
+    enterCode: "Enter the 6-digit code",
+    carryOn: "Carry on",
+    sendAnother: "Send another",
+    emailMeACode: "Email me a code",
+    differentEmail: "Use a different email address",
+  },
+
   give: {
     /* ---- the public giving page ---- */
     howMuch: "How much would you like to give?",

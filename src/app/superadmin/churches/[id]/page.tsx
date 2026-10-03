@@ -481,6 +481,7 @@ export default async function SuperadminChurchPage({
           c.paymentWaivedUntil ? c.paymentWaivedUntil.toISOString() : null
         }
         waiverLapsed={c.paymentWaived && !waiverActive(c)}
+        isDemo={c.isDemo}
         trialEndsAt={c.trialEndsAt ? c.trialEndsAt.toISOString() : null}
         standingLabel={standingLabel}
       />

@@ -165,6 +165,69 @@ export async function setPaymentWaived(
   return { ok: true };
 }
 
+/**
+ * Mark (or unmark) a church as the demonstration church.
+ *
+ * AT MOST ONE, enforced in the same transaction that sets it: two demo
+ * churches would both be wiped every two hours, and the second one would be
+ * somebody's actual records.
+ *
+ * It also refuses a church with money on it. A church that has paid, or has a
+ * wallet balance, is not a demo — and the cost of getting this wrong is its
+ * data being deleted on a schedule, so the check belongs here as well as in
+ * the cron that does the deleting.
+ */
+export async function setDemoChurch(
+  id: string,
+  isDemo: boolean,
+): Promise<ActionResult> {
+  const admin = await requirePlatform("platform.churches.manage");
+  const [c] = await db
+    .select({
+      name: church.name,
+      walletBalance: church.walletBalance,
+      planRenewsAt: church.planRenewsAt,
+    })
+    .from(church)
+    .where(eq(church.id, id))
+    .limit(1);
+  if (!c) return { ok: false, error: "Church not found." };
+
+  if (isDemo) {
+    const paid =
+      Number(c.walletBalance) > 0 ||
+      (c.planRenewsAt != null && c.planRenewsAt.getTime() > Date.now());
+    if (paid)
+      return {
+        ok: false,
+        error:
+          "That church has a wallet balance or a paid plan, so it looks like a real one. The demo church is wiped every two hours — pick another.",
+      };
+  }
+
+  await db.transaction(async (tx) => {
+    if (isDemo) {
+      // Clear any previous holder first, in the same transaction.
+      await tx.update(church).set({ isDemo: false }).where(eq(church.isDemo, true));
+    }
+    await tx.update(church).set({ isDemo }).where(eq(church.id, id));
+  });
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: isDemo ? "set_demo_church" : "unset_demo_church",
+    summary: isDemo
+      ? `Made "${c.name}" the demonstration church — its data will be wiped every 2 hours`
+      : `"${c.name}" is no longer the demonstration church`,
+    targetType: "church",
+    targetId: id,
+  });
+
+  revalidatePath(`/superadmin/churches/${id}`);
+  return { ok: true };
+}
+
 /** Extend a church's free trial by N weeks (from the later of now / current end). */
 export async function extendTrial(id: string, weeks: number): Promise<ActionResult> {
   const admin = await requirePlatform("platform.churches.manage");

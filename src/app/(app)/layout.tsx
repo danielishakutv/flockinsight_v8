@@ -8,9 +8,12 @@ import {
 import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { computeStanding } from "@/lib/trial";
+import { getDemoState } from "@/lib/demo";
 import { getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
+import { DemoGate } from "@/components/app/demo-gate";
+import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
 import { DesktopTopbar } from "@/components/app/desktop-topbar";
@@ -53,6 +56,28 @@ export default async function AppLayout({
   const canRecord = access.isOwner || access.perms.has("attendance.manage");
   const canManageBilling = access.isOwner || access.perms.has("settings.manage");
 
+  /*
+   * The demo door, before anything else about this church is rendered.
+   *
+   * Ahead of the trial gate on purpose: the demo church never pays, so the
+   * trial gate would be the first thing a visitor met otherwise. A superadmin
+   * is exempt — they are the one person who needs to get in to fix it.
+   */
+  const demo = await getDemoState(church.id, church.isDemo);
+  if (!isSuperAdmin && (demo.kind === "ask" || demo.kind === "expired")) {
+    return (
+      <I18nProvider locale={locale} dict={dict}>
+        <DemoGate
+          churchName={church.name}
+          mode={demo.kind === "ask" ? "ask" : "verify"}
+          email={demo.kind === "expired" ? demo.email : undefined}
+          otpSent={demo.kind === "expired" ? demo.otpSent : false}
+        />
+        <Toaster />
+      </I18nProvider>
+    );
+  }
+
   // "First 7 Sundays free" gate. A superadmin acting-as a church bypasses it so
   // they can still help. Only an EXPIRED trial (no payment/waiver) blocks.
   const standing = computeStanding(church);
@@ -93,6 +118,14 @@ export default async function AppLayout({
         aria-hidden
         className="bg-background fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)]"
       />
+      {/* Above everything, including the impersonation band: on the demo the
+          single most important fact on the screen is that none of it is real. */}
+      {church.isDemo && (
+        <DemoBanner
+          expiresAt={demo.kind === "grace" ? demo.expiresAt : null}
+          verified={demo.kind === "ok" || demo.kind === "not-demo"}
+        />
+      )}
       {impersonating && <ImpersonationBanner churchName={church.name} />}
       {showTrialBanner && standing.daysLeft != null && (
         <TrialBanner
