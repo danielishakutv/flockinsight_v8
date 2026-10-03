@@ -2217,6 +2217,7 @@ export const en = {
       "We'll send a 6-digit code to this address. Your current address keeps working until you enter it.",
     newPhoneHint:
       "We'll send a 6-digit code to this number by SMS. Nothing changes until you enter it.",
+    confirmWithPassword: "Confirm with your current password",
     sendCode: "Send code",
     cancel: "Cancel",
     startAgain: "Start again",

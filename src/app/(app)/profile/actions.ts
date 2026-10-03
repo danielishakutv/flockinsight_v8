@@ -74,9 +74,28 @@ export async function updateMyProfile(
   return { ok: true };
 }
 
-/** Send a code to a NEW email address. Nothing is saved until it comes back. */
-export async function sendEmailChangeCode(email: string): Promise<CodeResult> {
+/**
+ * Send a code to a NEW email address. Nothing is saved until it comes back.
+ *
+ * The current PASSWORD is required as well, and the two prove different
+ * things: the code proves whoever asked can read mail at the new address, and
+ * the password proves they are the account's owner. The code alone is not
+ * enough — an unlocked phone on a church desk would otherwise be sufficient to
+ * move somebody's sign-in email to an attacker's own address, after which a
+ * password reset hands over the account completely.
+ */
+export async function sendEmailChangeCode(
+  email: string,
+  currentPassword: string,
+): Promise<CodeResult> {
   const { user: me } = await requireUser();
+
+  const ok = await verifyUserPassword(me.id, String(currentPassword || ""));
+  // null = this account signs in some other way, so there is no password to
+  // check. The code to the new address is then the only proof available.
+  if (ok === false)
+    return { ok: false, error: "That isn't your current password." };
+
   const res = await startEmailChange({
     userId: me.id,
     userName: me.name,

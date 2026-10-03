@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useT } from "@/components/i18n-provider";
 
 type Channel = "email" | "phone";
@@ -27,7 +28,8 @@ type Channel = "email" | "phone";
 /** Where one row is in its change-and-confirm flow. */
 type Step =
   | { kind: "idle" }
-  | { kind: "editing"; value: string }
+  /** `password` is only collected for the email row — see sendCode(). */
+  | { kind: "editing"; value: string; password: string }
   | { kind: "code"; otpId: string; masked: string; code: string };
 
 /**
@@ -66,12 +68,19 @@ export function AccountContact({
     setSteps((s) => ({ ...s, [channel]: step }));
   }
 
-  function sendCode(channel: Channel, value: string) {
+  function sendCode(channel: Channel, value: string, password: string) {
     setBusy(channel);
     start(async () => {
+      /*
+       * The password goes with the EMAIL only. It is a credential, so moving
+       * it has to prove two separate things — that the asker owns the account
+       * (the password) and that they can read mail at the new address (the
+       * code). A phone number is neither a login nor a reset path, so a code
+       * to it is the whole proof needed.
+       */
       const res =
         channel === "email"
-          ? await sendEmailChangeCode(value)
+          ? await sendEmailChangeCode(value, password)
           : await sendPhoneChangeCode(value);
       setBusy(null);
       if (!res.ok) {
@@ -126,14 +135,29 @@ export function AccountContact({
           disabledReason={null}
           step={steps.email}
           busy={busy === "email" && pending}
-          onBegin={() => setStep("email", { kind: "editing", value: "" })}
+          needsPassword
+          onBegin={() =>
+            setStep("email", { kind: "editing", value: "", password: "" })
+          }
           onCancel={() => setStep("email", { kind: "idle" })}
-          onChangeValue={(v) => setStep("email", { kind: "editing", value: v })}
+          onChangeValue={(v) => {
+            const cur = steps.email;
+            setStep("email", {
+              kind: "editing",
+              value: v,
+              password: cur.kind === "editing" ? cur.password : "",
+            });
+          }}
+          onChangePassword={(pw) => {
+            const cur = steps.email;
+            if (cur.kind === "editing")
+              setStep("email", { ...cur, password: pw });
+          }}
           onChangeCode={(code) => {
             const s = steps.email;
             if (s.kind === "code") setStep("email", { ...s, code });
           }}
-          onSend={(v) => sendCode("email", v)}
+          onSend={(v, pw) => sendCode("email", v, pw)}
           onConfirm={(otpId, code) => confirm("email", otpId, code)}
         />
         <ContactRow
@@ -159,14 +183,22 @@ export function AccountContact({
           disabledReason={smsConfigured ? null : t("profile.smsNotConfigured")}
           step={steps.phone}
           busy={busy === "phone" && pending}
-          onBegin={() => setStep("phone", { kind: "editing", value: phone ?? "" })}
+          onBegin={() =>
+            setStep("phone", {
+              kind: "editing",
+              value: phone ?? "",
+              password: "",
+            })
+          }
           onCancel={() => setStep("phone", { kind: "idle" })}
-          onChangeValue={(v) => setStep("phone", { kind: "editing", value: v })}
+          onChangeValue={(v) =>
+            setStep("phone", { kind: "editing", value: v, password: "" })
+          }
           onChangeCode={(code) => {
             const s = steps.phone;
             if (s.kind === "code") setStep("phone", { ...s, code });
           }}
-          onSend={(v) => sendCode("phone", v)}
+          onSend={(v, pw) => sendCode("phone", v, pw)}
           onConfirm={(otpId, code) => confirm("phone", otpId, code)}
         />
       </CardContent>
@@ -185,11 +217,13 @@ function ContactRow({
   verified,
   verifiedLabel,
   disabledReason,
+  needsPassword = false,
   step,
   busy,
   onBegin,
   onCancel,
   onChangeValue,
+  onChangePassword,
   onChangeCode,
   onSend,
   onConfirm,
@@ -205,13 +239,16 @@ function ContactRow({
   verifiedLabel: string;
   /** Non-null disables the button and says why, rather than failing on press. */
   disabledReason: string | null;
+  /** Ask for the current password before sending the code (email only). */
+  needsPassword?: boolean;
   step: Step;
   busy: boolean;
   onBegin: () => void;
   onCancel: () => void;
   onChangeValue: (v: string) => void;
+  onChangePassword?: (v: string) => void;
   onChangeCode: (v: string) => void;
-  onSend: (v: string) => void;
+  onSend: (v: string, password: string) => void;
   onConfirm: (otpId: string, code: string) => void;
 }) {
   const t = useT();
@@ -266,7 +303,7 @@ function ContactRow({
           className="mt-3 space-y-2 rounded-xl border p-3"
           onSubmit={(e) => {
             e.preventDefault();
-            onSend(step.value);
+            onSend(step.value, step.password);
           }}
         >
           <Label htmlFor={idBase}>
@@ -283,13 +320,33 @@ function ContactRow({
             autoFocus
             required
           />
+          {needsPassword && (
+            <div className="space-y-2 pt-1">
+              <Label htmlFor={`${idBase}-pw`}>
+                {t("profile.confirmWithPassword")}
+              </Label>
+              <PasswordInput
+                id={`${idBase}-pw`}
+                value={step.password}
+                onChange={(e) => onChangePassword?.(e.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+          )}
           <p className="text-muted-foreground text-xs">
             {channel === "email"
               ? t("profile.newEmailHint")
               : t("profile.newPhoneHint")}
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="submit" disabled={busy || !step.value.trim()}>
+            <Button
+              type="submit"
+              disabled={
+                busy ||
+                !step.value.trim() ||
+                (needsPassword && !step.password)
+              }
+            >
               {busy && <Loader2 className="animate-spin" />}
               {t("profile.sendCode")}
             </Button>

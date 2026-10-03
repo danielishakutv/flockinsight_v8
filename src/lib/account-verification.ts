@@ -17,14 +17,19 @@ import { escapeHtml } from "@/lib/html-escape";
  * an account — the real owner locked out of the address they still control, and
  * no record anywhere of where it went.
  *
- * So, three rules:
+ * So, four rules:
  *
  *  1. The code goes to the NEW destination, which is the only thing that proves
  *     the person asking can actually receive mail there. Nothing is written
  *     until it comes back.
- *  2. The code is bound to the user id it was issued for, checked before the
+ *  2. For an email — a credential — the caller must also have proved the
+ *     CURRENT password (see the profile action). The code and the password
+ *     prove different things, and only together do they mean "the owner asked
+ *     for this": a code alone is satisfied by anybody holding an unlocked
+ *     session, which is the common case this has to survive.
+ *  3. The code is bound to the user id it was issued for, checked before the
  *     code is spent. A code mailed to one account cannot move another.
- *  3. The address that LOSES the account is told it lost it. Whoever is being
+ *  4. The address that LOSES the account is told it lost it. Whoever is being
  *     displaced is the one person certain to notice a change they did not make,
  *     and after the swap we would never write to them again.
  *
