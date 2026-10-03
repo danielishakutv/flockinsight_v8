@@ -1,7 +1,7 @@
 import "server-only";
 import { PLANS, PLAN_BY_ID, type Plan, type PlanId } from "@/lib/plans";
 import { getSetting, setSetting } from "@/lib/platform-settings";
-import { MB, planStorageBytes } from "@/lib/storage-bytes";
+import { formatBytes, MB, planStorageBytes } from "@/lib/storage-bytes";
 import {
   DEFAULT_STORAGE_BUNDLES,
   type StorageBundle,
@@ -46,16 +46,38 @@ export async function getPlanPrices(): Promise<Record<PlanId, number | null>> {
   return out;
 }
 
-/** Plan catalog with admin-resolved prices AND features applied. */
+/**
+ * Plan catalog with admin-resolved prices, features AND allowances applied.
+ *
+ * The storage and email lines are GENERATED from the live allowances rather than
+ * written into the bullet list, and that is deliberate. Those two numbers are
+ * admin-editable precisely because a supplier's pricing moves — so a bullet
+ * saying "200 MB for photos" is a sentence that goes wrong the first time
+ * somebody answers a bill from their phone. The live page advertised 200 MB and
+ * 500 MB while the enforced allowances were 100 MB and 300 MB, and the only
+ * reason nobody noticed is that no church ever filled the smaller one.
+ *
+ * They go at the top of the list, after the member limit, because what a plan
+ * includes is the second thing anybody looks for.
+ */
 export async function getPlans(): Promise<Plan[]> {
-  const [prices, features] = await Promise.all([
+  const [prices, features, storageMb, emails] = await Promise.all([
     getPlanPrices(),
     getAllPlanFeatures(),
+    getAllPlanStorageMb(),
+    getAllPlanEmails(),
   ]);
   return PLANS.map((p) => ({
     ...p,
     priceMonthly: prices[p.id],
-    features: features[p.id],
+    emailAllowance: emails[p.id],
+    features: [
+      ...features[p.id],
+      `${formatBytes(storageMb[p.id] * MB, 0)} of storage for photos, documents and media`,
+      emails[p.id] === null
+        ? "Email volume to suit"
+        : `${emails[p.id]!.toLocaleString()} emails a month`,
+    ],
   }));
 }
 

@@ -51,19 +51,20 @@ export const PLANS: Plan[] = [
     id: "starter",
     name: "Starter",
     tagline: "For new and small churches finding their feet.",
-    priceMonthly: 0,
+    // Not free: the launch promo makes the first 7 Sundays free, which is what
+    // the pricing page strikes through. A default of 0 here would have the
+    // landing page say "Free" the moment anybody cleared the price override.
+    priceMonthly: 5000,
     memberLimit: 150,
     emailAllowance: 300,
     features: [
       "Up to 150 members",
-      "200 MB for photos & documents",
       "Attendance in seconds, with history and trends",
       "Members, households & children — with birthdays, anniversaries and notes",
       "Groups, ministries & home cells",
       "Offerings & tithes by category",
       "Group contributions — one shareable link showing every naira a department has collected",
       "Your own public church page, with events people can register for",
-      "300 emails a month",
       "Birthday & anniversary greetings by email",
       "Earn wallet credit for every church you refer",
       "1 admin account",
@@ -80,8 +81,6 @@ export const PLANS: Plan[] = [
     features: [
       "Up to 1,000 members",
       "Everything in Starter",
-      "500 MB media storage",
-      "1,500 emails a month",
       "Virtual meetings (beta) — video, audio, screen sharing and scripture on screen, straight from a browser. Built for weak connections, with a one-tap audio-only mode. Up to 50 people in a room",
       "Training & classes — Foundation, Baptism, Pre-Marital, leadership, with badges beside members' names",
       "Building projects & pledge tracking",
@@ -108,8 +107,6 @@ export const PLANS: Plan[] = [
     features: [
       "Unlimited members",
       "Everything in Growth",
-      "2 GB media storage",
-      "5,000 emails a month",
       "Meetings for up to 200 people",
       "Repeating meetings — set Wednesday prayer up once and it runs every week, with the same link every time",
       "Record a meeting and keep it in the media library",
@@ -131,7 +128,6 @@ export const PLANS: Plan[] = [
     emailAllowance: null,
     features: [
       "Everything in Pro",
-      "20 GB media storage, and email volume to suit",
       "Branches & denominations — one report across every branch, grouped by zone",
       "Automatic weekly or monthly branch reports by email",
       "For churches outside Nigeria: your own currency, timezone and language",
