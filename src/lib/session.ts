@@ -175,6 +175,29 @@ export const requireChurch = cache(async () => {
   // be entering precisely to investigate or fix it.
   if (activeChurch.status === "suspended" && !actAsId) redirect("/suspended");
 
+  /*
+   * The demonstration church's door, enforced HERE rather than in a layout.
+   *
+   * It began as a branch in the app layout, which meant it only ran while a
+   * page was being rendered — so anybody who knew the shared demo password
+   * could call a server action directly and never meet it. Every page, every
+   * server action and every API route in the app passes through this function,
+   * so this is the one place that cannot be stepped around.
+   *
+   * A superadmin is exempt: they are the one person who needs to get in to fix
+   * it. An acting-as superadmin likewise.
+   */
+  if (activeChurch.isDemo && !actAsId) {
+    const { getDemoState } = await import("./demo");
+    const [state, admin] = await Promise.all([
+      getDemoState(activeChurch.id, true),
+      getIsSuperAdmin(),
+    ]);
+    if (!admin && (state.kind === "ask" || state.kind === "expired")) {
+      redirect("/try");
+    }
+  }
+
   return {
     user: data.user,
     session: data.session,

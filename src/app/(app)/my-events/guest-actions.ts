@@ -12,6 +12,7 @@ import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { escapeHtml } from "@/lib/html-escape";
+import { refuseIfDemo } from "@/lib/demo";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -145,6 +146,10 @@ export async function messageEventGuests(
     .select({ name: eventGuest.name, email: eventGuest.email, phone: eventGuest.phone })
     .from(eventGuest)
     .where(where);
+
+  // The demo must not reach a real guest list — see refuseIfDemo.
+  const demoRefusal = await refuseIfDemo(c.id, "Messaging guests");
+  if (demoRefusal) return demoRefusal;
 
   if (d.channel === "sms") {
     const list = guests

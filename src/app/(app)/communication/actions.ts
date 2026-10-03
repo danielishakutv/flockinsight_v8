@@ -28,6 +28,7 @@ import { recordUsage } from "@/lib/usage";
 import { recordAction } from "@/lib/analytics";
 import { sendPushToUsers } from "@/lib/push";
 import { audit } from "@/lib/audit";
+import { refuseIfDemo } from "@/lib/demo";
 import { escapeHtml } from "@/lib/html-escape";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
@@ -192,6 +193,17 @@ export async function sendCommunication(
   const { church: c, user: u } = await requireChurch();
   if (!(await can("communication.manage")))
     return { ok: false, error: "You don't have permission to send messages." };
+
+  /*
+   * Not from the demo.
+   *
+   * This action takes typed phone numbers and email addresses and sends to
+   * them. On a shared login with a published password that is a spam cannon
+   * aimed at our own Resend and Termii accounts — so the demo says plainly
+   * that it does not send, rather than pretending to.
+   */
+  const demoRefusal = await refuseIfDemo(c.id, "Sending messages");
+  if (demoRefusal) return demoRefusal;
 
   /*
    * Email is on every plan; SMS is not.

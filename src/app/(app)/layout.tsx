@@ -12,7 +12,6 @@ import { getDemoState } from "@/lib/demo";
 import { getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
-import { DemoGate } from "@/components/app/demo-gate";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/app-topbar";
@@ -57,26 +56,13 @@ export default async function AppLayout({
   const canManageBilling = access.isOwner || access.perms.has("settings.manage");
 
   /*
-   * The demo door, before anything else about this church is rendered.
+   * How much of the fifteen minutes is left, for the banner.
    *
-   * Ahead of the trial gate on purpose: the demo church never pays, so the
-   * trial gate would be the first thing a visitor met otherwise. A superadmin
-   * is exempt — they are the one person who needs to get in to fix it.
+   * The GATE itself is not here any more — requireChurch() above has already
+   * sent anybody who has not been through it to /try, which is the only way to
+   * cover server actions as well as pages. This is just the countdown.
    */
   const demo = await getDemoState(church.id, church.isDemo);
-  if (!isSuperAdmin && (demo.kind === "ask" || demo.kind === "expired")) {
-    return (
-      <I18nProvider locale={locale} dict={dict}>
-        <DemoGate
-          churchName={church.name}
-          mode={demo.kind === "ask" ? "ask" : "verify"}
-          email={demo.kind === "expired" ? demo.email : undefined}
-          otpSent={demo.kind === "expired" ? demo.otpSent : false}
-        />
-        <Toaster />
-      </I18nProvider>
-    );
-  }
 
   // "First 7 Sundays free" gate. A superadmin acting-as a church bypasses it so
   // they can still help. Only an EXPIRED trial (no payment/waiver) blocks.

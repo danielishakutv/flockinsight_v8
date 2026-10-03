@@ -29,6 +29,29 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.66.0",
+    date: "2026-10-03",
+    summary:
+      "Your church can now take offerings online, straight into its own bank account \u2014 and six other things that were quietly missing: your own profile, a church you can switch between, SMS that waits for the hours networks will actually deliver it, and a demo anybody can try.",
+    changes: {
+      Added: [
+        "Online giving. Connect your church's own Paystack, Flutterwave or Monnify account \u2014 or a payment link you already have \u2014 and share one page people can give from. Gifts land in your own bank account on your own settlement schedule; FlockInsight never holds the money and takes none of it. Each link can take any amount, a few suggested amounts, or one fixed amount, and successful gifts appear in your giving records under the category you chose, with a receipt sent automatically. Growth plan and up.",
+        "Your profile. Your name, your photo, how you sign in and your password, in one place \u2014 and reachable by anybody on your team, including a member you have given a staff login. Changing your sign-in email asks for your password and sends a code to the new address, and the old address is told it has lost the account.",
+        "If you are part of more than one church, you are now asked which one you are working in when you sign in, and can switch at any time from the menu beside your name. Before this, the second church was invisible.",
+        "A demonstration church anybody can try, with data in every module, rebuilt from scratch every two hours.",
+      ],
+      Improved: [
+        "SMS sent outside 8am\u20138pm is now held until the morning instead of being charged and thrown away. Nigerian networks only deliver bulk SMS in those hours \u2014 a Saturday-night reminder was money spent on nothing, with \u201cSent to 143\u201d in the history to prove otherwise. The composer says the hours before you type, anything held appears in a \u201cWaiting to send\u201d list with the time it will go, and you can cancel it. Nothing is charged until it actually goes.",
+        "Complimentary access can now have an end date \u2014 three months, six, nine, a year \u2014 and your billing page says when it runs out. We warn you two weeks, one week and three days before.",
+        "A FlockInsight operator who also pastors a church can now use that church normally, instead of being sent to the platform admin area every time.",
+      ],
+      Security: [
+        "Payment keys are encrypted before they are stored, with a key held outside the database \u2014 so a backup of the database is useless on its own. We check them against the provider before switching anything on, and never show them back to you.",
+        "A verification code is never held for the morning. SMS codes expire in ten minutes, so instead of queueing one we say plainly that a text cannot carry it right now and point you at email.",
+      ],
+    },
+  },
+  {
     version: "0.65.0",
     date: "2026-09-26",
     summary:

@@ -12,6 +12,7 @@ import { teamLimitStatus } from "@/lib/entitlements-server";
 import { planName } from "@/lib/plans";
 import { can } from "@/lib/permissions";
 import { betterAuthRoleFor } from "@/lib/staff-access";
+import { refuseIfDemo } from "@/lib/demo";
 
 /**
  * Giving an existing congregation member a login and a church role.
@@ -84,6 +85,10 @@ export async function inviteMemberAsStaff(input: {
 }): Promise<AccessResult> {
   const { ctx, error } = await guard();
   if (error) return { ok: false, error };
+
+  // An invitation is an email to an address somebody typed. Not from the demo.
+  const demoRefusal = await refuseIfDemo(ctx.church.id, "Inviting people");
+  if (demoRefusal) return demoRefusal;
 
   /*
    * The plan's team size, which was advertised from the beginning and enforced

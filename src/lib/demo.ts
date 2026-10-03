@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, demoSession, lead } from "@/db/schema";
 import { issueOtp, verifyOtp } from "@/lib/otp";
@@ -105,6 +105,34 @@ export async function getDemoState(churchId: string, isDemo: boolean): Promise<D
   };
 }
 
+/**
+ * Refuse something the demo must not be allowed to do to the outside world.
+ *
+ * The demo is a shared login with a published password, and the communication
+ * module will send an email or a text to any address somebody types into it.
+ * That is a spam cannon pointed at our own Resend and Termii accounts, so the
+ * demo does not send real messages to anybody — and it says so rather than
+ * pretending to send.
+ *
+ * Returned, not thrown, because every caller is a server action that already
+ * speaks this shape.
+ */
+export async function refuseIfDemo(
+  churchId: string,
+  what = "Sending real messages",
+): Promise<{ ok: false; error: string } | null> {
+  const [row] = await db
+    .select({ isDemo: church.isDemo })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  if (!row?.isDemo) return null;
+  return {
+    ok: false,
+    error: `${what} is switched off in the demo — it would reach real inboxes and phones. Everything else works; start your own church to send for real.`,
+  };
+}
+
 export type StartResult =
   | { ok: true; minutesLeft: number }
   | { ok: false; error: string };
@@ -135,6 +163,33 @@ export async function startDemoVisit(opts: {
 
   const token = randomBytes(24).toString("base64url");
   const h = await headers();
+
+  /*
+   * A cap per address, per hour.
+   *
+   * Clearing the cookie and typing a new address is otherwise an unlimited
+   * supply of fifteen-minute visits, which makes the verification step
+   * decorative. Keyed on the IP Cloudflare gives us — the same header the auth
+   * rate limiter trusts, and for the same reason: it is the one value a client
+   * cannot set.
+   *
+   * Generous enough that a church office behind one address can all have a
+   * look, and the limit says what to do instead of just refusing.
+   */
+  const ip = h.get("cf-connecting-ip");
+  if (ip) {
+    const since = new Date(Date.now() - 60 * 60_000);
+    const [{ n } = { n: 0 }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(demoSession)
+      .where(and(eq(demoSession.ip, ip), gt(demoSession.startedAt, since)));
+    if (Number(n) >= 6)
+      return {
+        ok: false,
+        error:
+          "That's a lot of demo visits from here in the last hour. Confirm your email with the code we sent to carry on, or try again later.",
+      };
+  }
 
   /*
    * The lead, written first and best-effort.
