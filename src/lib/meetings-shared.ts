@@ -684,6 +684,23 @@ export function meetingLimitFor(plan: string): number | null {
 }
 
 /**
+ * Which plans may set a meeting to repeat.
+ *
+ * A paid upgrade rather than part of meetings, and the distinction is
+ * deliberate: Growth can hold a meeting, Pro can stop having to create it. For a
+ * church running a midweek prayer meeting, a Bible study and a leadership
+ * meeting, that is the difference between twelve set-ups a month and none.
+ *
+ * An unknown plan id is treated as the lowest, same as every other limit here —
+ * a plan we do not recognise must never accidentally mean "everything".
+ */
+export const REPEAT_PLANS: readonly string[] = ["pro", "enterprise"];
+
+export function canRepeatMeetings(plan: string | null | undefined): boolean {
+  return !!plan && REPEAT_PLANS.includes(plan);
+}
+
+/**
  * What a participant's tracks are called on the SFU.
  *
  * Fixed rather than generated, because a track is already scoped by the session

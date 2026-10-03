@@ -22,6 +22,15 @@
 // /superadmin/pricing (lib/pricing.ts), so a supplier's price change is
 // answered from a phone rather than from a deploy.
 //
+// WHICH MEANS: EDITING THIS FILE MAY CHANGE NOTHING ON THE WEBSITE. A saved
+// override in platform_setting wins over everything here, for ever, silently.
+// The live pricing page spent months advertising "Up to 70 members" and "Basic
+// giving tracking" — neither of which had existed in this file for a long time —
+// because somebody had once pressed Save on a feature list, and not one module
+// shipped afterwards ever appeared. After changing anything here, check
+// /superadmin/pricing: a plan showing "Edited" is not reading this file, and
+// "Use the built-in copy" is what hands it back.
+//
 export type PlanId = "starter" | "growth" | "pro" | "enterprise";
 
 export type Plan = {
@@ -49,11 +58,11 @@ export const PLANS: Plan[] = [
       "Up to 150 members",
       "200 MB for photos & documents",
       "Attendance in seconds, with history and trends",
-      "Members, households & children",
+      "Members, households & children — with birthdays, anniversaries and notes",
       "Groups, ministries & home cells",
       "Offerings & tithes by category",
       "Group contributions — one shareable link showing every naira a department has collected",
-      "Your own public church page & events",
+      "Your own public church page, with events people can register for",
       "300 emails a month",
       "Birthday & anniversary greetings by email",
       "Earn wallet credit for every church you refer",
@@ -64,7 +73,7 @@ export const PLANS: Plan[] = [
     id: "growth",
     name: "Growth",
     tagline: "For growing churches that want real insight.",
-    priceMonthly: 5000,
+    priceMonthly: 10000,
     memberLimit: 1000,
     emailAllowance: 1500,
     highlight: true,
@@ -73,17 +82,19 @@ export const PLANS: Plan[] = [
       "Everything in Starter",
       "500 MB media storage",
       "1,500 emails a month",
+      "Virtual meetings (beta) — video, audio, screen sharing and scripture on screen, straight from a browser. Built for weak connections, with a one-tap audio-only mode. Up to 50 people in a room",
       "Training & classes — Foundation, Baptism, Pre-Marital, leadership, with badges beside members' names",
-      "Virtual meetings — video, audio, screen sharing and scripture on screen, straight from a browser. Built for weak connections, with a one-tap audio-only mode. Up to 25 people, 8 hours a month",
       "Building projects & pledge tracking",
       "Group contributions with receipts, two-signature checks and a record of where the money went",
       "First-timer follow-up & visitor care",
-      "Forms with a shareable link & QR code",
-      "Devotionals & newsletters by email",
-      "Automatic service reminders",
+      "Forms with a shareable link & QR code, and answers matched to the member who sent them",
+      "Devotionals & newsletters your members can subscribe to",
+      "Automatic service reminders by email",
       "Analytics & growth trends",
-      "CSV import / export",
       "Livestream from YouTube or Facebook onto your own watch page",
+      "Give a member a staff login with exactly the access you choose",
+      "Activity log — who changed what, across every module",
+      "CSV import / export",
       "Up to 10 team members & custom roles",
     ],
   },
@@ -91,7 +102,7 @@ export const PLANS: Plan[] = [
     id: "pro",
     name: "Pro",
     tagline: "For established churches running at scale.",
-    priceMonthly: 15000,
+    priceMonthly: 25000,
     memberLimit: null,
     emailAllowance: 5000,
     features: [
@@ -99,12 +110,13 @@ export const PLANS: Plan[] = [
       "Everything in Growth",
       "2 GB media storage",
       "5,000 emails a month",
-      "Meetings for up to 100 people, 30 hours a month",
+      "Meetings for up to 200 people",
+      "Repeating meetings — set Wednesday prayer up once and it runs every week, with the same link every time",
+      "Record a meeting and keep it in the media library",
       "Church finance — income, expenses, accounts & funds that fill themselves from giving",
       "Bulk SMS with your church's own sender ID",
-      "Sermon & media library",
-      "Record your meetings and keep them in the media library for 90 days",
-      "Reports centre: 31 datasets as CSV or PDF, plus a full export",
+      "Sermon & media library — audio, video and slides, with your own watch pages",
+      "Reports centre: 31 datasets as CSV or PDF, plus a full export of everything",
       "Branded PDFs carrying your logo & colours",
       "Unlimited team members & roles",
       "Priority support",
@@ -122,6 +134,7 @@ export const PLANS: Plan[] = [
       "20 GB media storage, and email volume to suit",
       "Branches & denominations — one report across every branch, grouped by zone",
       "Automatic weekly or monthly branch reports by email",
+      "For churches outside Nigeria: your own currency, timezone and language",
       "Dedicated account manager",
       "Custom integrations & onboarding",
       "Service-level agreement (SLA)",

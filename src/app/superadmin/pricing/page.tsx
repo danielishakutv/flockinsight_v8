@@ -1,5 +1,6 @@
 import {
   allPlanCopyOverridden,
+  allPlanFeatureDrift,
   getAllPlanEmails,
   getAllPlanFeatures,
   getAllPlanStorageMb,
@@ -22,6 +23,7 @@ export default async function SuperadminPricingPage() {
     storageMb,
     emails,
     overridden,
+    drift,
     referralRewards,
     referralStats,
   ] =
@@ -32,6 +34,7 @@ export default async function SuperadminPricingPage() {
       getAllPlanStorageMb(),
       getAllPlanEmails(),
       allPlanCopyOverridden(),
+      allPlanFeatureDrift(),
       getReferralRewards(),
       platformReferralStats(),
     ]);
@@ -45,6 +48,7 @@ export default async function SuperadminPricingPage() {
         }}
         bundles={bundles}
         features={features}
+        drift={drift}
         referralRewards={referralRewards}
         referralStats={referralStats}
       />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canRepeatMeetings,
   chooseTransport,
   MESH_CEILING,
   meetingLimitFor,
@@ -48,5 +49,28 @@ describe("meetingLimitFor", () => {
     // A plan id we do not recognise must not accidentally mean "unlimited" —
     // relayed media costs real money per gigabyte.
     expect(meetingLimitFor("something-new")).toBe(12);
+  });
+});
+
+describe("canRepeatMeetings", () => {
+  it("is a paid upgrade above the plan that merely has meetings", () => {
+    // Growth can hold a meeting; Pro can stop having to create it. That gap is
+    // the product decision, so it is pinned rather than left to a config file.
+    expect(canRepeatMeetings("pro")).toBe(true);
+    expect(canRepeatMeetings("enterprise")).toBe(true);
+    expect(canRepeatMeetings("growth")).toBe(false);
+    expect(canRepeatMeetings("starter")).toBe(false);
+  });
+
+  it("refuses a plan it does not recognise, and a missing one", () => {
+    /*
+     * Same rule as every other limit here: an unknown plan id must never
+     * accidentally mean "everything". A typo in a plan column is a bug, and the
+     * safe reading of a bug is the smallest allowance.
+     */
+    expect(canRepeatMeetings("something-new")).toBe(false);
+    expect(canRepeatMeetings(null)).toBe(false);
+    expect(canRepeatMeetings(undefined)).toBe(false);
+    expect(canRepeatMeetings("")).toBe(false);
   });
 });

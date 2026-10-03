@@ -4,7 +4,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import {
+  planFeatureDrift,
   resetPlanCopy,
+  resetPlanFeatures,
   setPlanEmails,
   setPlanFeatures,
   setPlanPrice,
@@ -222,6 +224,44 @@ export async function resetPlanCopyAction(plan: PlanId): Promise<ActionResult> {
     action: "set_pricing",
     severity: "notice",
     summary: `Reset ${planName(plan)} features and allowances to the built-in defaults`,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/superadmin/pricing");
+  return { ok: true };
+}
+
+/**
+ * Hand one plan's bullet list back to the built-in copy.
+ *
+ * The counterpart to saving one. Pressing Save pins a list for ever, which is how
+ * the live price list came to be advertising a member limit and a feature set
+ * from long after both had changed — and why not one module shipped since then
+ * appeared on it. This is the way back.
+ *
+ * Unlike `resetPlanCopyAction` it leaves the storage and email allowances exactly
+ * as they were: those are numbers an operator may have tuned against a real
+ * supplier bill, and losing them to fix a stale sentence would be its own quiet
+ * data loss.
+ */
+export async function resetPlanFeaturesAction(plan: PlanId): Promise<ActionResult> {
+  const admin = await requirePlatform("platform.pricing.manage");
+  if (!["starter", "growth", "pro", "enterprise"].includes(plan)) {
+    return { ok: false, error: "Unknown plan." };
+  }
+
+  // Read before clearing, so the log keeps the copy that was replaced. There is
+  // no other record of it once the setting is empty.
+  const before = await planFeatureDrift(plan);
+  await resetPlanFeatures(plan);
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_pricing",
+    severity: "notice",
+    summary: `Reset the ${planName(plan)} feature list to the built-in copy (was ${before.live.length} bullets, now ${before.builtIn.length})`,
   });
 
   revalidatePath("/");

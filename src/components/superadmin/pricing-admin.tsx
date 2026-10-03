@@ -9,13 +9,16 @@ import {
   ListChecks,
   Loader2,
   Plus,
+  RotateCcw,
   Tag,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   setPlanPrices,
   setPlanFeaturesAction,
+  resetPlanFeaturesAction,
   setStorageBundlesAction,
   setReferralRewardsAction,
   type PlanPriceInput,
@@ -34,12 +37,18 @@ export function PricingAdmin({
   initial,
   bundles: initialBundles,
   features,
+  drift,
   referralRewards,
   referralStats,
 }: {
   initial: PlanPriceInput;
   bundles: StorageBundle[];
   features: Record<PlanId, string[]>;
+  /**
+   * Whether each plan's live list is a saved override, and what the app would
+   * say if it were not. This is the thing that was invisible.
+   */
+  drift: Record<PlanId, { overridden: boolean; builtIn: string[]; missing: string[] }>;
   referralRewards: { referrer: number; referred: number };
   referralStats: { referred: number; rewarded: number };
 }) {
@@ -218,8 +227,20 @@ export function PricingAdmin({
             The bullet list shown for each plan on the landing &amp; pricing
             pages. Reorder with the arrows.
           </p>
+          <p className="text-muted-foreground text-sm">
+            Saving a list <strong>pins it for ever</strong> — the plan stops
+            following the app, so a module shipped afterwards will not appear
+            here or on the website until somebody edits this page again. Any plan
+            in that state says so below, and lists what it is not telling
+            churches about.
+          </p>
           {ALL_PLANS.map((id) => (
-            <FeaturesEditor key={id} plan={id} initial={features[id] ?? []} />
+            <FeaturesEditor
+              key={id}
+              plan={id}
+              initial={features[id] ?? []}
+              drift={drift[id]}
+            />
           ))}
         </CardContent>
       </Card>
@@ -310,14 +331,30 @@ export function PricingAdmin({
 function FeaturesEditor({
   plan,
   initial,
+  drift,
 }: {
   plan: PlanId;
   initial: string[];
+  drift?: { overridden: boolean; builtIn: string[]; missing: string[] };
 }) {
   const router = useRouter();
   const [items, setItems] = useState<string[]>(initial);
   const [saving, start] = useTransition();
   const meta = PLAN_BY_ID[plan];
+
+  /** Hand this plan's list back to the app, keeping its allowances. */
+  function useBuiltIn() {
+    start(async () => {
+      const res = await resetPlanFeaturesAction(plan);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setItems(drift?.builtIn ?? []);
+      toast.success(`${meta.name} now follows the app`);
+      router.refresh();
+    });
+  }
 
   const edit = (i: number, v: string) =>
     setItems((p) => p.map((x, j) => (j === i ? v : x)));
@@ -346,7 +383,46 @@ function FeaturesEditor({
 
   return (
     <div className="rounded-xl border p-3">
-      <p className="mb-2 font-bold">{meta.name}</p>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <p className="font-bold">{meta.name}</p>
+        {drift?.overridden && (
+          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-400">
+            Edited — not following the app
+          </span>
+        )}
+      </div>
+
+      {drift?.overridden && drift.missing.length > 0 && (
+        /*
+          The sentences churches are NOT being told, named one by one. A count
+          would not have been enough to make anybody act: what makes this
+          actionable is reading "Virtual meetings" in the list and realising the
+          price page has never mentioned them.
+        */
+        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+            <TriangleAlert className="size-3.5" />
+            {drift.missing.length} thing{drift.missing.length === 1 ? "" : "s"} the app
+            offers that this plan does not mention
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-[11px] text-amber-800/90 dark:text-amber-300/80">
+            {drift.missing.slice(0, 8).map((m) => (
+              <li key={m}>• {m}</li>
+            ))}
+            {drift.missing.length > 8 && <li>• …and {drift.missing.length - 8} more</li>}
+          </ul>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+            disabled={saving}
+            onClick={useBuiltIn}
+          >
+            <RotateCcw className="size-4" /> Use the built-in copy
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-2">
         {items.map((f, i) => (
           <div key={i} className="flex items-center gap-1.5">

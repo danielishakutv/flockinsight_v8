@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -104,11 +105,21 @@ export function MeetingDialog({
   onOpenChange,
   initial,
   onSaved,
+  canRepeat,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: MeetingFormValues;
   onSaved?: (result: { id: string; code: string }) => void;
+  /**
+   * Whether this church's plan includes repeating meetings.
+   *
+   * Passed in rather than read here: the plan is a server fact, and the server
+   * checks it again on save. This only decides what the form offers, so somebody
+   * on Growth is told what the feature is instead of being handed a control that
+   * fails.
+   */
+  canRepeat: boolean;
 }) {
   const t = useT();
   const [values, setValues] = useState<MeetingFormValues>(initial);
@@ -259,7 +270,7 @@ export function MeetingDialog({
             <Select
               value={values.repeat}
               onValueChange={(v) => set("repeat", v as MeetingRepeat)}
-              disabled={!values.scheduledFor}
+              disabled={!values.scheduledFor || !canRepeat}
             >
               <SelectTrigger id="m-repeat" className="w-full">
                 <SelectValue />
@@ -273,7 +284,22 @@ export function MeetingDialog({
               </SelectContent>
             </Select>
 
-            {!values.scheduledFor ? (
+            {!canRepeat ? (
+              /*
+                Shown, not hidden. A church on Growth that never learns this
+                exists goes on creating a meeting every Wednesday by hand — so
+                the control stays visible, says what it does, and says what it
+                would take. An upgrade prompt is only honest if it tells you what
+                you would get.
+              */
+              <p className="text-muted-foreground mt-1.5 text-xs">
+                <Sparkles className="mr-1 inline size-3.5 text-amber-500" />
+                {t("meetings.repeatIsPro")}{" "}
+                <Link href="/settings/billing" className="font-semibold underline">
+                  {t("meetings.seePlans")}
+                </Link>
+              </p>
+            ) : !values.scheduledFor ? (
               <p className="text-muted-foreground mt-1 text-xs">
                 {t("meetings.repeatNeedsADate")}
               </p>

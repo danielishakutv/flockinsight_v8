@@ -232,6 +232,62 @@ export async function allPlanCopyOverridden(): Promise<Record<PlanId, boolean>> 
 }
 
 /**
+ * Whether a plan's bullet list is a saved override that no longer matches the
+ * app, and what the app would say instead.
+ *
+ * The whole reason this exists: an override is invisible and permanent, so every
+ * module shipped after somebody once pressed Save was missing from the price
+ * list and nothing anywhere said so. The admin now shows the difference, and can
+ * hand the plan back to the code in one press.
+ */
+export async function planFeatureDrift(id: PlanId): Promise<{
+  overridden: boolean;
+  live: string[];
+  builtIn: string[];
+  /** Built-in bullets the live list does not have — what churches are not told. */
+  missing: string[];
+}> {
+  const builtIn = PLAN_BY_ID[id]?.features ?? [];
+  const saved = (await getSetting(planFeaturesKey(id), "")).trim();
+  if (!saved) return { overridden: false, live: builtIn, builtIn, missing: [] };
+
+  let live = builtIn;
+  try {
+    const parsed = cleanFeatures(JSON.parse(saved));
+    if (parsed.length) live = parsed;
+  } catch {
+    /* an unreadable override is treated as none, same as every reader here */
+  }
+  const have = new Set(live.map((l) => l.toLowerCase()));
+  return {
+    overridden: true,
+    live,
+    builtIn,
+    missing: builtIn.filter((b) => !have.has(b.toLowerCase())),
+  };
+}
+
+export type PlanFeatureDrift = Awaited<ReturnType<typeof planFeatureDrift>>;
+
+export async function allPlanFeatureDrift(): Promise<Record<PlanId, PlanFeatureDrift>> {
+  const out = {} as Record<PlanId, PlanFeatureDrift>;
+  await Promise.all(PLANS.map(async (p) => (out[p.id] = await planFeatureDrift(p.id))));
+  return out;
+}
+
+/**
+ * Hand a plan's bullet list back to the code, leaving its allowances alone.
+ *
+ * Separate from `resetPlanCopy`, which also clears the storage and email
+ * overrides. Those are numbers an operator may have tuned deliberately against a
+ * supplier's bill, and losing them to fix a stale sentence would be its own
+ * quiet data loss.
+ */
+export async function resetPlanFeatures(id: PlanId): Promise<void> {
+  await setSetting(planFeaturesKey(id), "");
+}
+
+/**
  * Drop a plan's overrides so the built-in copy applies again.
  *
  * Clearing rather than deleting: the row stays, emptied, which every reader

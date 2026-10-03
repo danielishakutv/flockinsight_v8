@@ -8,6 +8,7 @@ import { siteUrl } from "@/lib/site";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { MeetingsList, type MeetingRow } from "@/components/meetings/meetings-list";
+import { canRepeatMeetings } from "@/lib/meetings-shared";
 import { getT } from "@/lib/i18n/server";
 import { BetaBadge } from "@/components/beta-badge";
 
@@ -146,7 +147,12 @@ export default async function MeetingsPage() {
           </CardContent>
         </Card>
       ) : (
-        <MeetingsList meetings={meetings} origin={siteUrl()} canManage={canManage} />
+        <MeetingsList
+          meetings={meetings}
+          origin={siteUrl()}
+          canManage={canManage}
+          canRepeat={canRepeatMeetings(church.plan)}
+        />
       )}
     </PageContainer>
   );

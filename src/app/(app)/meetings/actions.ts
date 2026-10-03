@@ -27,6 +27,7 @@ import {
   type MeetingRepeat,
 } from "@/lib/meeting-recurrence";
 import {
+  canRepeatMeetings,
   chooseTransport,
   generatePasscode,
   MEETING_KINDS,
@@ -137,6 +138,21 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
   const repeat: MeetingRepeat = scheduledFor ? v.repeat : "none";
   if (v.repeat !== "none" && !scheduledFor)
     return { ok: false, error: "Pick a date and time first — a repeat starts from it." };
+
+  /*
+   * Repeating is a paid upgrade, checked on the server.
+   *
+   * The dialog already hides it on a plan that does not include it, but the form
+   * came from a browser — and this is the only place the church's actual plan is
+   * known for certain. Worded as what to do about it rather than as a refusal.
+   */
+  if (repeat !== "none" && !canRepeatMeetings(g.plan)) {
+    return {
+      ok: false,
+      error:
+        "Repeating meetings are on the Pro plan. Upgrade to set a meeting up once and have it run every week.",
+    };
+  }
 
   /*
    * The end date is the END of that day, not its first second. Somebody typing

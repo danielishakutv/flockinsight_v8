@@ -1403,6 +1403,9 @@ export const en = {
     repeatFortnightly: "Every 2 weeks",
     repeatMonthly: "Every month, on the same date",
     repeatMonthlyWeekday: "Every month, on the same weekday",
+    repeatIsPro:
+      "Repeating meetings are on the Pro plan — set it up once and it runs every week, with the same link every time.",
+    seePlans: "See plans",
     repeatNeedsADate:
       "Pick a date and time above first — a repeat starts from it.",
     repeatHowItWorks:

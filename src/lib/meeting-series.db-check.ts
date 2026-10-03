@@ -23,11 +23,27 @@ import {
   listSeriesOccurrences,
 } from "@/lib/meetings";
 import { MAX_MISSED_RUNS } from "@/lib/meeting-recurrence";
+import type { PlanId } from "@/lib/plans";
 
 const stamp = Date.now();
 let churchId = "";
 let timezone = "Africa/Lagos";
+/** The plan this church was really on, put back in `afterAll`. */
+let realPlan: PlanId = "starter";
 const made: string[] = [];
+
+/**
+ * Repeating meetings are a paid upgrade, so the fixture church is put on a plan
+ * that includes them for the duration of this file and put back afterwards.
+ *
+ * Every test here is about the chain rather than about the gate, and a suite
+ * that silently tested nothing because the test church happened to be on Growth
+ * would be worse than no suite at all — which is exactly what happened the first
+ * time this ran.
+ */
+async function setPlan(plan: PlanId) {
+  await db.update(church).set({ plan }).where(eq(church.id, churchId));
+}
 
 /** The first occurrence of a series, as the form would have created it. */
 async function startSeries(opts: {
@@ -77,14 +93,19 @@ async function occurrences(seriesId: string) {
 
 beforeAll(async () => {
   const [c] = await db
-    .select({ id: church.id, timezone: church.timezone })
+    .select({ id: church.id, timezone: church.timezone, plan: church.plan })
     .from(church)
     .limit(1);
   churchId = c.id;
   timezone = c.timezone;
+  realPlan = c.plan;
+  await setPlan("pro");
 });
 
 afterAll(async () => {
+  // The plan first: it belongs to a real church row that other files read, and
+  // leaving it changed would be this suite breaking the next one.
+  await setPlan(realPlan);
   if (made.length) await db.delete(meeting).where(inArray(meeting.id, made));
 });
 
@@ -329,6 +350,46 @@ describe("the series reads correctly on the detail page", () => {
 
     const found = await listSeriesOccurrences({ ...mine, churchId: "not-a-real-church" });
     expect(found).toEqual([]);
+  });
+});
+
+describe("repeating is a paid upgrade", () => {
+  it("stops the chain for a church whose plan no longer includes it", async () => {
+    /*
+     * The downgrade path, and the reason the plan is checked here as well as at
+     * the form. A church on Pro in March that is on Growth in June must not keep
+     * being handed a meeting a week — that is a feature they stopped paying for
+     * quietly continuing to work.
+     */
+    const first = await startSeries({ repeat: "weekly", scheduledFor: lastWeek() });
+    await setPlan("growth");
+
+    try {
+      // Through a real ending, which is how this actually happens: the host
+      // finishes Wednesday's meeting and there is no next Wednesday.
+      await endMeeting(first.id);
+
+      expect(await occurrences(first.id)).toHaveLength(1);
+      // The chain stops, and the occurrence that already exists is untouched
+      // apart from ending — its link has been shared and it is on calendars.
+      expect((await read(first.id)).repeat).toBe("none");
+      expect((await read(first.id)).status).toBe("ended");
+    } finally {
+      // Back to the plan the rest of this file assumes, whatever the assertions
+      // above did.
+      await setPlan("pro");
+    }
+  });
+
+  it("carries on for a church whose plan does include it", async () => {
+    // The same shape, one plan different — so the test above is known to be
+    // measuring the plan and not some other reason nothing was created.
+    const first = await startSeries({ repeat: "weekly", scheduledFor: lastWeek() });
+    await endMeeting(first.id);
+
+    const rows = await occurrences(first.id);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].repeat).toBe("weekly");
   });
 });
 

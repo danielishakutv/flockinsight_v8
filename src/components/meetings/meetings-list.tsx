@@ -87,10 +87,13 @@ export function MeetingsList({
   meetings,
   origin,
   canManage,
+  canRepeat,
 }: {
   meetings: MeetingRow[];
   origin: string;
   canManage: boolean;
+  /** Whether this church's plan includes repeating meetings. */
+  canRepeat: boolean;
 }) {
   const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -213,6 +216,7 @@ export function MeetingsList({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         initial={editing}
+        canRepeat={canRepeat}
         onSaved={({ code }) => {
           // Clipboard access is refused on an insecure origin, and some
           // browsers refuse it outside a direct user gesture. Saying nothing

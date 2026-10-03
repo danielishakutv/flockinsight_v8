@@ -20,6 +20,7 @@ import {
   MEMBER_DEFAULT_PERMISSIONS,
 } from "@/lib/permissions-catalog";
 import {
+  canRepeatMeetings,
   generateMeetingCode,
   generatePasscode,
   parseStage,
@@ -1017,13 +1018,41 @@ export async function rollSeriesForward(
   }
 
   const [c] = await db
-    .select({ timezone: church.timezone })
+    .select({ timezone: church.timezone, plan: church.plan })
     .from(church)
     .where(eq(church.id, m.churchId))
     .limit(1);
   // The church's own clock, because "every Wednesday at 6pm" is a promise about
   // a wall clock and not about an offset from UTC.
   const timezone = c?.timezone ?? "Africa/Lagos";
+
+  /*
+   * Repeating is a paid upgrade, and a church that has left that plan stops
+   * generating new occurrences.
+   *
+   * Checked HERE as well as at the form, because this is the path that runs
+   * weeks later: a church on Pro in March that is on Growth in June would
+   * otherwise keep being given a meeting a week for ever, which is a feature
+   * they are no longer paying for quietly continuing to work.
+   *
+   * The occurrence that already exists is left completely alone — it is on
+   * somebody's calendar and its link has been shared. Only the chain stops, and
+   * the log says why, so it is not a mystery when somebody asks.
+   */
+  if (!canRepeatMeetings(c?.plan)) {
+    await stopSeries(m.id);
+    await auditSystem({
+      churchId: m.churchId,
+      action: "meetings.meeting.update",
+      summary: `Stopped repeating "${m.title}" — repeating meetings are not on this church's plan`,
+      targetType: "meeting",
+      targetId: m.id,
+      targetLabel: m.title,
+      severity: "notice",
+      meta: { plan: c?.plan ?? null },
+    });
+    return null;
+  }
 
   /*
    * A meeting with no scheduled time repeats from when it was actually held —
