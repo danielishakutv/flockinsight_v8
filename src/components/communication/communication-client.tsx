@@ -42,6 +42,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/components/i18n-provider";
+import {
+  SMS_WINDOW_LABEL,
+  nextSmsWindowStart,
+  withinSmsWindow,
+} from "@/lib/sms-window";
+import { QueuedSmsList, type QueuedSms } from "@/components/communication/queued-sms";
 
 export type CommMember = {
   id: string;
@@ -83,6 +89,8 @@ export function CommunicationClient({
   smsBalance,
   senderApproved,
   smsAvailable = true,
+  timezone,
+  queued = [],
   recent,
 }: {
   canManage: boolean;
@@ -94,6 +102,9 @@ export function CommunicationClient({
   smsBalance: number;
   senderApproved: boolean;
   smsAvailable?: boolean;
+  /** The church's timezone — the only clock the 8am-8pm rule is measured on. */
+  timezone: string;
+  queued?: QueuedSms[];
   recent: LogRow[];
 }) {
   const t = useT();
@@ -114,9 +125,13 @@ export function CommunicationClient({
   const [contactDraft, setContactDraft] = useState("");
   // Staff notice
   const [staffTitle, setStaffTitle] = useState("");
+  /** The "it will go at 8am" message, after a send was held. */
+  const [queuedNotice, setQueuedNotice] = useState<string | null>(null);
   const [alsoEmail, setAlsoEmail] = useState(true);
 
   const contactKey = channel === "sms" ? "phone" : "email";
+  const windowOpen = withinSmsWindow(new Date(), timezone);
+  const nextWindow = nextSmsWindowStart(new Date(), timezone);
 
   const reach = useMemo(() => {
     if (channel === "staff") return staffCount;
@@ -218,8 +233,24 @@ export function CommunicationClient({
               : `${allContacts.length} new contacts`
             : audienceLabel(),
       });
-      if (!res.ok) {
+      if (res.ok === false) {
         toast.error(res.error);
+        return;
+      }
+
+      /*
+       * Held for the delivery window.
+       *
+       * Said at length rather than as a toast that disappears: somebody who
+       * believes a message went out at 10pm will not look again until a
+       * member asks why they never heard. The notice names the hour it will
+       * go, and the composer keeps the wording so it can be cancelled and
+       * re-sent differently if the timing is wrong.
+       */
+      if (res.ok === "queued") {
+        setQueuedNotice(res.notice);
+        toast.success(`Queued for ${res.count} ${res.count === 1 ? "person" : "people"}.`);
+        router.refresh();
         return;
       }
       const cost = res.cost ? ` · ${formatMoney(res.cost, currency)}` : "";
@@ -297,6 +328,32 @@ export function CommunicationClient({
 
       <Card>
         <CardContent className="space-y-4 py-5">
+          {/*
+            Said before anybody types, not after they press Send.
+            Recomputed on every render from the church's own timezone, so an
+            open composer that crosses 8pm starts telling the truth without a
+            reload. The server decides again at send time; this is the warning.
+          */}
+          {channel === "sms" && smsAvailable && !windowOpen && (
+            <div className="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3 text-sm text-sky-700 dark:text-sky-300">
+              <strong>{t("communication.outsideSendingHours")}</strong> Networks only
+              deliver SMS between {SMS_WINDOW_LABEL}, so anything you send now is
+              queued and goes out at{" "}
+              {nextWindow.toLocaleString(undefined, {
+                weekday: "long",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZone: timezone,
+              })}
+              . Your wallet isn&apos;t charged until then. Email goes out
+              straight away.
+            </div>
+          )}
+          {queuedNotice && (
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+              {queuedNotice}
+            </div>
+          )}
           {channel === "sms" && !smsAvailable && (
             <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
               SMS isn&apos;t available in your country yet — we&apos;re working on
@@ -599,6 +656,12 @@ export function CommunicationClient({
           </div>
         </CardContent>
       </Card>
+
+      {/*
+        Waiting, before History — what has not happened yet matters more than
+        what has, and a church that cannot see a queued message cannot stop it.
+      */}
+      <QueuedSmsList items={queued} canManage={canManage} timezone={timezone} />
 
       {/* History */}
       {recent.length > 0 && (

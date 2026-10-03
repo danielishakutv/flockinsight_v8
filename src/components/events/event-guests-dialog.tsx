@@ -87,6 +87,15 @@ export function EventGuestsDialog({
     startSend(async () => {
       const res = await messageEventGuests({ eventId, channel, subject, body });
       if (!res.ok) return void toast.error(res.error);
+      // Held for the SMS window. Said as its own message: "Sent to 0" would be
+      // read as a failure, and "Sent to 12" would be a lie.
+      if ("queued" in res) {
+        toast.success(res.notice);
+        setBody("");
+        setSubject("");
+        router.refresh();
+        return;
+      }
       toast.success(`Sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ""}.`);
       setBody("");
       setSubject("");

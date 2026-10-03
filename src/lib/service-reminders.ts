@@ -169,8 +169,13 @@ export async function runServiceReminders(): Promise<ReminderSummary> {
             churchId: c.churchId,
             recipients,
             label: `Reminder: ${svc.name}`,
+            origin: "service-reminders",
           });
-          if (res.ok) sentSms = res.sent;
+          if (res.ok === true) sentSms = res.sent;
+          else if (res.ok === "queued")
+            console.log(
+              `[service-reminders] ${res.count} reminder(s) queued for church ${c.churchId} until ${res.sendAfter.toISOString()}`,
+            );
         }
       }
 

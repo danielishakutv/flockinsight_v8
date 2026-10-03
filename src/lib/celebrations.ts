@@ -248,8 +248,16 @@ export async function runCelebrations(): Promise<CelebrationSummary> {
         churchId: c.churchId,
         recipients: smsRecipients,
         label: "Birthday & anniversary wishes",
+        origin: "celebrations",
       });
-      if (res.ok) summary.sms += res.sent;
+      // `ok === true` only. A queued batch has not been sent, and counting it
+      // here would have the run report greetings nobody has received yet; it
+      // is in the church's SMS queue, visible on the communication page.
+      if (res.ok === true) summary.sms += res.sent;
+      else if (res.ok === "queued")
+        console.log(
+          `[celebrations] ${res.count} greeting(s) queued for church ${c.churchId} until ${res.sendAfter.toISOString()}`,
+        );
     }
   }
 

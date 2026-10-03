@@ -100,6 +100,8 @@ const messageSchema = z.object({
 
 export type MessageGuestsResult =
   | { ok: true; sent: number; failed: number; cost?: number }
+  /** Held for the 8am-8pm SMS window; nothing charged yet. */
+  | { ok: true; queued: number; notice: string }
   | { ok: false; error: string };
 
 function fill(text: string, name: string, eventTitle: string, churchName: string) {
@@ -159,7 +161,9 @@ export async function messageEventGuests(
       userId: u.id,
       label: `Event guests · ${ev.title}`,
     });
-    if (!res.ok) return res;
+    if (res.ok === false) return res;
+    if (res.ok === "queued")
+      return { ok: true, queued: res.count, notice: res.notice };
     return { ok: true, sent: res.sent, failed: res.failed, cost: res.cost };
   }
 

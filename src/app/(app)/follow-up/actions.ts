@@ -15,7 +15,11 @@ import { siteUrl } from "@/lib/site";
 import { audit } from "@/lib/audit";
 import { escapeHtml } from "@/lib/html-escape";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true }
+  /** Accepted but held for the 8am-8pm SMS window; `notice` says when. */
+  | { ok: true; queued: true; notice: string }
+  | { ok: false; error: string };
 
 const INTERACTION_TYPES = [
   "visit",
@@ -149,8 +153,18 @@ export async function sendSmsToMember(
     message,
     userId: user.id,
     reason: "Follow-up SMS",
+    audience: "Follow-up SMS",
   });
-  if (!result.ok) return result;
+  if (result.ok === false) return result;
+  /*
+   * Queued, so it has NOT reached anybody yet.
+   *
+   * No interaction is logged: "reached" is a pastoral record, and writing one
+   * for a message still sitting in a queue would tell whoever reads the
+   * follow-up history that this person has been spoken to.
+   */
+  if (result.ok === "queued")
+    return { ok: true, queued: true, notice: result.notice };
 
   // Log the successful SMS as an interaction.
   const today = new Date().toISOString().slice(0, 10);

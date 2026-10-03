@@ -26,6 +26,14 @@ export const CRON_JOBS = {
   // matters and the crontab should run them every few minutes.
   broadcasts: { label: "Scheduled broadcasts", intervalMinutes: 15 },
   devotionals: { label: "Devotional delivery", intervalMinutes: 15 },
+  /*
+   * The SMS held overnight for the 8am-8pm delivery window.
+   *
+   * Five minutes, the shortest interval here: at 8am a queue that built up
+   * overnight is a church's Sunday reminders, and every tick of delay is a
+   * minute later than they asked for.
+   */
+  "sms-queue": { label: "Queued SMS", intervalMinutes: 5 },
 
   // Meeting housekeeping: closes rooms whose last person vanished, and sweeps
   // the signalling buffer. Cheap, and wanted often — a room that shows as live

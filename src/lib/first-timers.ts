@@ -166,8 +166,13 @@ export async function runFirstTimers(): Promise<FirstTimerSummary> {
         churchId: c.churchId,
         recipients: smsRecipients,
         label: "First-timer welcome & invites",
+        origin: "first-timers",
       });
-      if (res.ok) summary.sms += res.sent;
+      if (res.ok === true) summary.sms += res.sent;
+      else if (res.ok === "queued")
+        console.log(
+          `[first-timers] ${res.count} message(s) queued for church ${c.churchId} until ${res.sendAfter.toISOString()}`,
+        );
     }
   }
 

@@ -139,8 +139,14 @@ export async function sendGivingReceipt(opts: {
           to: opts.phone as string,
           message: body,
           reason: "Giving receipt",
+          origin: "giving-receipts",
         });
-        ok = res.ok;
+        /*
+         * A receipt for a gift recorded at 9pm cannot be delivered tonight, so
+         * it is queued — which counts as accepted here, because the queue will
+         * send it and nothing else has to be done. Only a refusal is a failure.
+         */
+        ok = res.ok !== false;
       } catch {
         ok = false;
       }

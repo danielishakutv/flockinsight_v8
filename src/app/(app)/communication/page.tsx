@@ -7,6 +7,7 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { listQueuedSms } from "@/lib/sms-queue";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +24,7 @@ export default async function CommunicationPage() {
   await requireCan("communication.view");
   const canManage = await can("communication.manage");
 
-  const [members, groups, [{ staffCount }], [smsRow], price, recent] =
+  const [members, groups, [{ staffCount }], [smsRow], price, recent, queued] =
     await Promise.all([
       db
         .select({
@@ -72,6 +73,8 @@ export default async function CommunicationPage() {
         .where(eq(communicationLog.churchId, c.id))
         .orderBy(desc(communicationLog.createdAt))
         .limit(20),
+      // SMS waiting for the 8am-8pm window, plus anything that failed in it.
+      listQueuedSms(c.id),
     ]);
 
   const list: CommMember[] = members.map((m) => ({
@@ -105,6 +108,13 @@ export default async function CommunicationPage() {
         smsBalance={Number(smsRow.balance)}
         senderApproved={smsRow.status === "approved"}
         smsAvailable={smsAvailableForCountry(c.country)}
+        /*
+         * The church's own timezone, so the composer can say "it is 9pm here,
+         * this will go at 8am" rather than reading the clock of whichever
+         * phone happens to be looking at it.
+         */
+        timezone={c.timezone}
+        queued={queued}
         recent={recent.map((r) => ({
           id: r.id,
           channel: r.channel,

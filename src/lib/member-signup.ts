@@ -561,11 +561,20 @@ export async function sendSignupOtp(opts: {
       payload: opts.payload,
     });
     if (!issued.ok) return { ok: false, error: issued.error };
+    /*
+     * A code, so never queued.
+     *
+     * It expires in ten minutes. Holding it until 8am would mean telling
+     * somebody standing in the church foyer to expect a text that arrives
+     * tomorrow and is dead when it does. "refuse" says plainly that SMS
+     * cannot carry it right now and points at email, which can.
+     */
     const res = await sendChurchSms({
       churchId: opts.churchId,
       to: phone,
       message: `${opts.churchName}: your verification code is ${issued.code}. It expires in 10 minutes.`,
       reason: "Member self-registration verification",
+      timing: "refuse",
     });
     if (!res.ok) {
       return {
@@ -659,8 +668,11 @@ export async function sendSignupConfirmation(opts: {
         to: opts.phone as string,
         message: body,
         reason: "Self-registration confirmation",
+        origin: "member-signup",
       });
-      ok = res.ok;
+      // Queued counts as accepted: the queue sends it in the morning, and the
+      // person has already seen their confirmation on screen.
+      ok = res.ok !== false;
     } catch {
       ok = false;
     }

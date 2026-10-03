@@ -308,6 +308,8 @@ export async function regenerateMemberUpdateLink(
 
 export type SendLinkResult =
   | { ok: true; channel: "email" | "sms" }
+  /** Held for the 8am-8pm SMS window. `notice` says when it will go. */
+  | { ok: true; channel: "sms"; queued: true; notice: string }
   | { ok: false; error: string };
 
 /** Text or email a member their personal self-update link. */
@@ -341,8 +343,11 @@ export async function sendMemberUpdateLink(
       message: `${church.name}: please review & update your details here: ${url}`,
       userId: user.id,
       reason: "Member self-update link",
+      audience: `Self-update link: ${m.firstName ?? "a member"}`,
     });
-    if (!res.ok) return { ok: false, error: res.error };
+    if (res.ok === false) return { ok: false, error: res.error };
+    if (res.ok === "queued")
+      return { ok: true, channel: "sms", queued: true, notice: res.notice };
     await audit({
       churchId: church.id,
       action: "members.update_link.send",

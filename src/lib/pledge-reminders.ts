@@ -234,8 +234,11 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
             to: r.phone,
             message: fill(c.smsBody),
             reason: "Pledge reminder",
+            origin: "pledge-reminders",
           });
-          if (res.ok) sentSms = smsPages(fill(c.smsBody));
+          // Only a real send counts against the run. A queued one is recorded
+          // in the queue, and counting it twice would overstate what went out.
+          if (res.ok === true) sentSms = smsPages(fill(c.smsBody));
         } catch {
           /* keep going */
         }

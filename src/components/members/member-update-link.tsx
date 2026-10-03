@@ -78,6 +78,9 @@ export function MemberUpdateLink({
     start(async () => {
       const res = await sendMemberUpdateLink(memberId, channel);
       if (!res.ok) return void toast.error(res.error);
+      // "Link sent by SMS" would be wrong for one that is still waiting for
+      // 8am — and this is a link somebody is about to be told to expect.
+      if ("queued" in res) return void toast.success(res.notice);
       toast.success(channel === "sms" ? "Link sent by SMS" : "Link emailed");
     });
   }

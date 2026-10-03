@@ -1589,6 +1589,9 @@ export const en = {
    * Communication
    * ========================================================== */
   communication: {
+    /* The 8am-8pm SMS delivery window. */
+    outsideSendingHours: "It's outside sending hours.",
+    queuedCancelled: "That message won't be sent.",
     exportCsv: "Export CSV",
     newMessage: "New message",
     nothingHereYet: "Nothing here yet",

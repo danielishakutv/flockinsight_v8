@@ -34,6 +34,12 @@ const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
 export type SendResult =
   | { ok: true; sent: number; failed: number; cost?: number }
+  /**
+   * Accepted, but held until the SMS delivery window opens. Not a success and
+   * not a failure: nothing has reached anybody, nothing has been charged, and
+   * the person who pressed Send has to be told which of those it is.
+   */
+  | { ok: "queued"; count: number; notice: string }
   | { ok: false; error: string };
 
 function fill(text: string, name: string, churchName: string) {
@@ -233,6 +239,10 @@ export async function sendCommunication(
     const list = reachable.map((r) => ({
       phone: r.phone as string,
       message: fill(d.body, r.name, c.name),
+      // Carried so that a send held until morning still names each person in
+      // the history, instead of showing a list of bare phone numbers.
+      memberId: memberIdOf(r),
+      name: r.name,
     }));
     if (list.length === 0)
       return {
@@ -248,8 +258,37 @@ export async function sendCommunication(
       recipients: list,
       userId: u.id,
       label: `${d.audienceLabel} · SMS`,
+      origin: "communication",
     });
-    if (!res.ok) return res;
+    if (res.ok === false) return res;
+
+    /*
+     * Outside 8am-8pm. The send is in the queue, so there is no delivery to
+     * record yet and no communication_log row to write — the queue worker
+     * writes one when the message actually goes, with the real counts and the
+     * real cost. Logging it now would put a send in the history that has not
+     * happened, which is exactly the lie this whole change is fixing.
+     */
+    if (res.ok === "queued") {
+      await audit({
+        churchId: c.id,
+        action: "communication.sms.queue",
+        summary: `Queued an SMS to ${res.count} ${d.audienceLabel.toLowerCase()} for the next delivery window`,
+        targetType: "communication",
+        targetId: null,
+        targetLabel: d.audienceLabel,
+        meta: {
+          channel: "sms",
+          audience: d.audience,
+          body: d.body,
+          recipients: res.count,
+          sendAfter: res.sendAfter.toISOString(),
+        },
+        severity: "notice",
+      });
+      revalidatePath("/communication");
+      return { ok: "queued", count: res.count, notice: res.notice };
+    }
 
     // Match each gateway outcome back to the person it belongs to. Outcomes
     // come back keyed by the number exactly as we supplied it.
@@ -555,4 +594,41 @@ export async function notifyStaff(
   revalidatePath("/communication/history");
   revalidatePath("/notifications");
   return { ok: true, staff: userIds.length, pushSent, emailSent };
+}
+
+/**
+ * Cancel an SMS that is waiting for the delivery window.
+ *
+ * Scoped to the caller's church inside `cancelQueuedSms`, so an id typed into
+ * a form cannot reach another church's queue — and only a row still waiting
+ * can be cancelled, because cancelling something already sent is not a thing
+ * that can happen and saying it worked would be a lie.
+ */
+export async function cancelQueuedSmsAction(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { church: c, user: u } = await requireChurch();
+  if (!(await can("communication.manage")))
+    return { ok: false, error: "You don't have permission to do that." };
+
+  const { cancelQueuedSms } = await import("@/lib/sms-queue");
+  const done = await cancelQueuedSms(c.id, String(id || ""));
+  if (!done)
+    return {
+      ok: false,
+      error: "That message has already gone out, or isn't waiting any more.",
+    };
+
+  await audit({
+    churchId: c.id,
+    action: "communication.sms.cancel",
+    summary: "Cancelled an SMS that was waiting for the delivery window",
+    targetType: "communication",
+    targetId: id,
+    severity: "notice",
+  });
+  void u;
+
+  revalidatePath("/communication");
+  return { ok: true };
 }

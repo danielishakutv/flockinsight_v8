@@ -617,6 +617,13 @@
       "when": 1791041527844,
       "tag": "0087_user_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791043704559,
+      "tag": "0088_scheduled_sms",
+      "breakpoints": true
     }
   ]
 }

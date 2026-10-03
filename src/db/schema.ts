@@ -1660,6 +1660,71 @@ export const payment = pgTable(
  * Communication module — bulk/group/single SMS, email, staff notices
  * ========================================================== */
 
+/**
+ * SMS waiting for the delivery window to open.
+ *
+ * Nigerian networks only deliver bulk SMS between 8am and 8pm; anything handed
+ * over outside that is charged and dropped. So a send made at 9pm is not
+ * refused and is not sent — it is parked here with the hour it may go, and a
+ * cron hands it to the gateway then. See lib/sms-window.ts for the rule and
+ * lib/sms-queue.ts for the worker.
+ *
+ * The recipients ride along as JSON rather than as rows. A queued send is a
+ * snapshot of a decision somebody already made — these numbers, this wording —
+ * and resolving "all members" again at 8am would send to a list that has
+ * changed since, which is not what was approved. The wallet is charged at send
+ * time, not now, so a queued message that is cancelled costs nothing.
+ */
+export const scheduledSms = pgTable(
+  "scheduled_sms",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** The human label for the audience, e.g. "All members", "Group: Choir". */
+    audience: text().notNull(),
+    /** The composed message, kept for the history and for the preview. */
+    body: text().notNull(),
+    /**
+     * Who it goes to, personalised: `[{ phone, message, memberId?, name? }]`.
+     * `message` is per recipient because {name} is already filled in.
+     */
+    recipients: jsonb()
+      .$type<
+        { phone: string; message: string; memberId?: string | null; name?: string | null }[]
+      >()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /**
+     * What created it: "communication" for the composer (which also writes a
+     * communication_log row when it finally sends), or the name of whichever
+     * automatic sender queued it — "celebrations", "service-reminders" and so
+     * on, so a surprise in the queue can be traced to its source.
+     */
+    origin: text().notNull().default("communication"),
+    /** Wallet ledger reason, carried through to the debit when it sends. */
+    reason: text(),
+    /** The earliest it may go. Set from nextSmsWindowStart() at queue time. */
+    sendAfter: timestamp({ withTimezone: true }).notNull(),
+    /** queued | sent | failed | cancelled */
+    status: text().notNull().default("queued"),
+    attempts: integer().notNull().default(0),
+    /** Why the last attempt failed, in words a church admin can act on. */
+    error: text(),
+    sentAt: timestamp({ withTimezone: true }),
+    /** The communication_log row written when it went out, when there is one. */
+    logId: uuid(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The worker's only query: what is due, oldest first.
+    index("scheduled_sms_due_idx").on(t.status, t.sendAfter),
+    index("scheduled_sms_church_idx").on(t.churchId, t.status),
+  ],
+);
+
 export const communicationLog = pgTable(
   "communication_log",
   {

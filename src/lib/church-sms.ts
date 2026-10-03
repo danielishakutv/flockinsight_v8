@@ -6,9 +6,19 @@ import { church, walletTxn } from "@/db/schema";
 import { sendSms, smsPages, normalizePhone, isSmsConfigured } from "@/lib/sms";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { recordUsage } from "@/lib/usage";
+import { SMS_WINDOW_LABEL, withinSmsWindow } from "@/lib/sms-window";
 
 export type ChurchSmsResult =
   | { ok: true; cost: number; balance: number }
+  /**
+   * Accepted, but held for the delivery window. Nothing has been charged.
+   *
+   * Deliberately a THIRD outcome rather than `ok: true` with zero sent: a
+   * caller that treated it as sent would tell somebody their message had gone,
+   * and one that treated it as a failure would have them send it again. Its own
+   * shape forces every call site to say which it means.
+   */
+  | { ok: "queued"; sendAfter: Date; count: number; notice: string }
   | { ok: false; error: string };
 
 /**
@@ -22,6 +32,22 @@ export async function sendChurchSms(opts: {
   message: string;
   userId?: string;
   reason?: string;
+  /**
+   * What to do outside the 8am-8pm delivery window.
+   *
+   *  "queue"  (default) park it until the window opens.
+   *  "refuse" don't send and don't queue - say plainly that it cannot go.
+   *           For anything with a short life, like a verification code: it
+   *           would expire long before 8am, so queueing it is the same as
+   *           losing it, and sending it is the same as dropping it.
+   *  "now"    hand it over regardless. Only for a caller that has already
+   *           checked the window itself (the queue worker).
+   */
+  timing?: "queue" | "now" | "refuse";
+  /** Which sender queued it, so a surprise in the queue can be traced. */
+  origin?: string;
+  /** The audience label the queue shows. Falls back to `reason`. */
+  audience?: string;
 }): Promise<ChurchSmsResult> {
   if (!isSmsConfigured()) {
     return { ok: false, error: "SMS isn't enabled on the platform yet." };
@@ -33,6 +59,7 @@ export async function sendChurchSms(opts: {
       status: church.smsSenderStatus,
       balance: church.walletBalance,
       country: church.country,
+      timezone: church.timezone,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
@@ -71,6 +98,33 @@ export async function sendChurchSms(opts: {
     .filter((n): n is string => !!n);
   if (recipients.length === 0)
     return { ok: false, error: "No valid phone number to send to." };
+
+  /*
+   * The delivery window, checked HERE for the same reason the country gate is:
+   * the crons send too, and none of them passes through a screen anybody could
+   * have put a warning on. A 9pm message handed to the gateway is charged and
+   * dropped, so the only honest options are to refuse it or to hold it - and
+   * holding it is what the person who pressed Send actually wanted.
+   */
+  const timing = opts.timing ?? "queue";
+  if (timing !== "now" && !withinSmsWindow(new Date(), c.timezone)) {
+    if (timing === "refuse")
+      return {
+        ok: false,
+        error: `Networks only deliver SMS between ${SMS_WINDOW_LABEL}, so a code can't be sent by text right now. Please use an email address instead.`,
+      };
+    const { queueChurchSms } = await import("@/lib/sms-queue");
+    return queueChurchSms({
+      churchId: opts.churchId,
+      timezone: c.timezone,
+      audience: opts.audience ?? opts.reason ?? `${recipients.length} recipient(s)`,
+      body: opts.message,
+      recipients: recipients.map((phone) => ({ phone, message: opts.message })),
+      origin: opts.origin ?? "automated",
+      reason: opts.reason,
+      userId: opts.userId,
+    });
+  }
 
   const price = await getSmsPrice();
   const cost = +(price * smsPages(opts.message) * recipients.length).toFixed(2);
@@ -128,6 +182,7 @@ export type SmsOutcome = {
 };
 
 export type BatchSmsResult =
+  | { ok: "queued"; sendAfter: Date; count: number; notice: string }
   | {
       ok: true;
       sent: number;
@@ -147,9 +202,18 @@ export type BatchSmsResult =
  */
 export async function sendChurchSmsBatch(opts: {
   churchId: string;
-  recipients: { phone: string; message: string }[];
+  recipients: {
+    phone: string;
+    message: string;
+    /** Carried through the queue so a delayed send still names the person. */
+    memberId?: string | null;
+    name?: string | null;
+  }[];
   userId?: string;
   label?: string;
+  /** See sendChurchSms - "now" ignores the window, "refuse" rejects. */
+  timing?: "queue" | "now" | "refuse";
+  origin?: string;
 }): Promise<BatchSmsResult> {
   if (!isSmsConfigured())
     return { ok: false, error: "SMS isn't enabled on the platform yet." };
@@ -160,6 +224,7 @@ export async function sendChurchSmsBatch(opts: {
       status: church.smsSenderStatus,
       balance: church.walletBalance,
       country: church.country,
+      timezone: church.timezone,
     })
     .from(church)
     .where(eq(church.id, opts.churchId))
@@ -181,6 +246,35 @@ export async function sendChurchSmsBatch(opts: {
       ok: false,
       error: "Your SMS sender ID isn't approved yet. Apply in Settings → SMS.",
     };
+
+  /*
+   * Outside the window: hold the whole batch and charge nothing.
+   *
+   * Queued BEFORE normalising, on purpose - what goes out at 8am is then
+   * exactly the list that was approved now, not a list re-resolved in the
+   * morning after somebody was added to the group.
+   */
+  const timing = opts.timing ?? "queue";
+  if (timing !== "now" && !withinSmsWindow(new Date(), c.timezone)) {
+    if (timing === "refuse")
+      return {
+        ok: false,
+        error: `Networks only deliver SMS between ${SMS_WINDOW_LABEL}, so this can't be sent by text right now.`,
+      };
+    const { queueChurchSms } = await import("@/lib/sms-queue");
+    return queueChurchSms({
+      churchId: opts.churchId,
+      timezone: c.timezone,
+      audience: opts.label ?? `${opts.recipients.length} recipient(s)`,
+      // The first message stands for the batch in the history; every recipient
+      // still keeps their own personalised copy.
+      body: opts.recipients[0]?.message ?? "",
+      recipients: opts.recipients,
+      origin: opts.origin ?? "automated",
+      reason: opts.label,
+      userId: opts.userId,
+    });
+  }
 
   // Normalise. An unusable number is reported back as "skipped" rather than
   // silently dropped — otherwise a send to 120 quietly becomes a send to 116
