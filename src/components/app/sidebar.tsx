@@ -8,6 +8,7 @@ import { mobileMenuSections, navAllowed } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
 import { useT } from "@/components/i18n-provider";
+import { BetaBadge } from "@/components/beta-badge";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -82,13 +83,14 @@ export function Sidebar({
                     <div className="min-w-0 flex-1">
                       <p
                         className={cn(
-                          "truncate text-sm leading-tight font-semibold",
+                          "flex items-center gap-1.5 truncate text-sm leading-tight font-semibold",
                           active
                             ? "text-primary"
                             : "text-sidebar-foreground/90",
                         )}
                       >
-                        {t(item.labelKey)}
+                        <span className="truncate">{t(item.labelKey)}</span>
+                        {item.beta && <BetaBadge />}
                       </p>
                       <p className="text-sidebar-foreground/50 truncate text-[11px] leading-tight">
                         {t(item.descriptionKey)}

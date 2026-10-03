@@ -41,6 +41,12 @@ export type NavItem = {
   icon: LucideIcon;
   /** Permission(s) needed to see this. Undefined = always visible. */
   perm?: string | string[];
+  /**
+   * A module that works and is still being hardened, labelled as such in the
+   * menu. Said here rather than in the components so the word cannot drift
+   * between the sidebar and the mobile sheet.
+   */
+  beta?: boolean;
 };
 
 /** Is a nav item visible given the user's permissions? */
@@ -98,7 +104,7 @@ export const mainNav: NavItem[] = [
     icon: GraduationCap,
     perm: "training.view",
   },
-  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view" },
+  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view", beta: true },
   { labelKey: "nav.livestreams", href: "/livestreams", icon: Radio, perm: "meetings.view" },
   { labelKey: "nav.giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
   {
@@ -299,6 +305,7 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         descriptionKey: "nav.meetingsDesc",
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
         perm: "meetings.view",
+        beta: true,
       },
       {
         labelKey: "nav.followUp",

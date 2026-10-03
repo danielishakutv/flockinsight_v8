@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, LayoutGrid, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
+import { BetaBadge } from "@/components/beta-badge";
 import {
   mobileMenuSections,
   mobileNavLeft,
@@ -188,11 +189,12 @@ export function MobileNav({
                           <div className="min-w-0 flex-1">
                             <p
                               className={cn(
-                                "leading-tight font-semibold",
+                                "flex items-center gap-1.5 leading-tight font-semibold",
                                 active && "text-primary",
                               )}
                             >
-                              {t(item.labelKey)}
+                              <span className="truncate">{t(item.labelKey)}</span>
+                              {item.beta && <BetaBadge />}
                             </p>
                             <p className="text-muted-foreground truncate text-xs">
                               {t(item.descriptionKey)}

@@ -18,6 +18,10 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
         title: "How it works, in one paragraph",
         blocks: [
           {
+            kind: "note",
+            text: "Meetings is in beta. It works, and churches are using it — it is newer than the rest of the platform and we are still hardening it, so you will see a Beta label on it. If something goes wrong in a meeting, tell us: that is exactly what the label is asking for.",
+          },
+          {
             kind: "text",
             text: "You create a meeting, you get a link, you send the link. Whoever opens it types their name and joins — in their browser, on a phone or a laptop, with no app and no account. Audio and video travel directly between the people in the meeting; our server only passes the handshake. That is what keeps it fast and what keeps it free to run.",
           },

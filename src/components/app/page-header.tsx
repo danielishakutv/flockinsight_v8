@@ -18,16 +18,20 @@ export function PageHeader({
   title,
   description,
   action,
+  badge,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** Sits beside the title — a "Beta" pill, or anything else that small. */
+  badge?: React.ReactNode;
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">
+        <h1 className="flex flex-wrap items-center gap-2.5 text-3xl font-extrabold tracking-tight lg:text-4xl">
           {title}
+          {badge}
         </h1>
         {description && (
           <p className="text-muted-foreground mt-1 text-base">{description}</p>

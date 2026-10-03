@@ -61,6 +61,23 @@ export async function POST(
   if (!peer)
     return fail("You've been signed out of this meeting.", 401, { code: "stale-peer" });
 
+  /*
+   * An ended room accepts nothing more.
+   *
+   * The clients tear themselves down when they hear the room has ended, but a
+   * tab that was asleep, offline, or simply slow must not be able to put a
+   * verse on a screen nobody is watching, or re-admit somebody to a meeting
+   * that is over. The one exception is finishing a recording: the host's
+   * browser may still be holding an hour of somebody's service, and the row
+   * that says so is on our side.
+   */
+  if (
+    (m.status === "ended" || m.status === "cancelled") &&
+    action !== "recording.stop"
+  ) {
+    return fail("This meeting has already ended.", 409, { code: "ended" });
+  }
+
   await heartbeat(peer.id);
   const host = isHostRole(peer.role);
   const deny = () => fail("Only the host can do that.", 403);

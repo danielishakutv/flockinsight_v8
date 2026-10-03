@@ -233,6 +233,12 @@ export class MeetingClient {
 
   private cursor: number;
   private running = false;
+  /**
+   * Set the moment the call is over for this browser, so the ending is
+   * announced exactly once. A poll already in flight, a queued flush and the
+   * host's own button can all arrive at the same conclusion a moment apart.
+   */
+  private ending = false;
   private listening: AbortController | null = null;
 
   private peers = new Map<string, PeerState>();
@@ -366,7 +372,13 @@ export class MeetingClient {
     this.sfu?.close();
     this.sfu = null;
 
-    if (!this.running && this.peers.size === 0) return;
+    /*
+     * No early exit. This used to return when nothing was running and there
+     * were no peers — which is exactly the state of somebody alone in a room,
+     * so their camera and microphone were never released and the indicator
+     * light stayed on after they had left. Everything below is idempotent, so
+     * running it twice costs nothing and running it once is the whole point.
+     */
     this.running = false;
 
     if (typeof document !== "undefined") {
@@ -394,6 +406,46 @@ export class MeetingClient {
 
   private stopStream(s: MediaStream | null) {
     s?.getTracks().forEach((t) => t.stop());
+  }
+
+  /**
+   * The meeting is over for this browser: say why, once, and let go of
+   * everything.
+   *
+   * This used to stop the listening loop and tell the interface, and nothing
+   * else — which is not the same as leaving. On a mesh the peer connections are
+   * DIRECT, so a room whose signalling had stopped carried on sending pictures
+   * and sound between the people still in it, with every camera light on,
+   * behind a screen that said the meeting had ended. "End for everyone" has to
+   * mean ended: the connections close and the devices are released here, in the
+   * engine, so it happens the same way whichever of the four endings it was —
+   * the host's button, a removal, the housekeeping cron, or a stale session.
+   */
+  private shutdown(reason: string): void {
+    if (this.ending) return;
+    this.ending = true;
+    this.running = false;
+    this.events.onEnded?.(reason);
+    void this.stop().catch((e) => {
+      // Nothing above can act on this, but a camera that would not release is
+      // exactly the kind of thing that must not fail in silence.
+      console.error("[meeting] teardown after the call ended did not finish", e);
+    });
+  }
+
+  /**
+   * End it for this browser, on this browser's own initiative — leaving, or a
+   * host who has just ended it for the room. Shares the one-way door with every
+   * other ending, so a poll landing a moment later cannot overwrite the reason
+   * the person was given.
+   */
+  endLocally(reason: string): void {
+    this.shutdown(reason);
+  }
+
+  /** Whether this client has already been shut down. */
+  get finished(): boolean {
+    return this.ending;
   }
 
   /**
@@ -433,8 +485,7 @@ export class MeetingClient {
         });
 
         if (res.status === 401) {
-          this.events.onEnded?.("You were signed out of this meeting.");
-          this.running = false;
+          this.shutdown("You were signed out of this meeting.");
           return;
         }
         if (!res.ok) throw new Error(`sync ${res.status}`);
@@ -527,13 +578,11 @@ export class MeetingClient {
       this.cursor = data.cursor;
     }
     if (data.removed) {
-      this.events.onEnded?.("You were removed from this meeting.");
-      this.running = false;
+      this.shutdown("You were removed from this meeting.");
       return;
     }
     if (data.ended) {
-      this.events.onEnded?.("This meeting has ended.");
-      this.running = false;
+      this.shutdown("This meeting has ended.");
       return;
     }
     if (data.stage) this.events.onStage?.(data.stage);
@@ -811,12 +860,12 @@ export class MeetingClient {
       }
     }
     if (action === "removed" && s.payload.peerId === this.peerId) {
-      this.events.onEnded?.("The host removed you from the meeting.");
-      this.running = false;
+      this.shutdown("The host removed you from the meeting.");
+      return;
     }
     if (action === "ended") {
-      this.events.onEnded?.("The host ended the meeting.");
-      this.running = false;
+      this.shutdown("The host ended the meeting.");
+      return;
     }
     this.events.onControl?.(s.payload);
   }

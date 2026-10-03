@@ -23,6 +23,15 @@ export const en = {
    * Everywhere
    * ========================================================== */
   common: {
+    /**
+     * A module that works and is still being hardened. Said in the nav, on the
+     * module's own page and in the room itself, because the person who most
+     * needs to know is the one about to put a service through it.
+     */
+    beta: "Beta",
+    betaNote:
+      "This feature is new. It works, and we are still hardening it — please tell us anything that goes wrong.",
+
     findAChurch: "Find a church →",
     moreEvents: "More events",
     youAposVeBeenUnsubscribed: "You’ve been unsubscribed",
@@ -1351,6 +1360,8 @@ export const en = {
     cancelUpload: "Stop upload",
     recordingKeptSafe: "Kept on this device until it is saved.",
     allowToContinue: "Allow your camera and microphone to continue",
+    allowMicToContinue: "Allow your microphone to continue",
+    allowCameraToContinue: "Allow your camera to continue",
     joinAnywayHint: "You can still join to listen and use the chat.",
     videoOffInDataSaver: "Video off while Data Saver is on",
     leaveThisMeeting: "Leave this meeting?",
@@ -1516,6 +1527,14 @@ export const en = {
       "You're in the lobby. Keep this page open — you'll go straight in.",
     meetingEnded: "This meeting has ended.",
     youLeft: "You left the meeting.",
+    youEndedForEveryone: "You ended the meeting for everyone.",
+    leaveOrEnd: "Leave, or end it for everyone?",
+    leaveOrEndHint:
+      "The meeting carries on without you unless you end it.",
+    leaveJustMe: "Leave — keep the meeting running",
+    endForEveryoneHint:
+      "Everyone is taken out of the room and the link stops working.",
+    endingForEveryone: "Ending the meeting…",
     youWereRemoved: "The host removed you from the meeting.",
     hostEnded: "The host ended the meeting.",
     rejoin: "Rejoin",

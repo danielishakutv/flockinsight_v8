@@ -85,6 +85,7 @@ import { useSpeaking } from "@/components/meetings/use-speaking";
 import { ShortcutsSheet } from "@/components/meetings/shortcuts-sheet";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
+import { BetaBadge } from "@/components/beta-badge";
 import type { TFunction } from "@/lib/i18n/translate";
 import { playMedia } from "@/lib/media-errors";
 
@@ -170,6 +171,15 @@ export function MeetingRoom(props: {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [endedReason, setEndedReason] = useState("");
+  /**
+   * Whether coming back is even possible.
+   *
+   * Only someone who left of their own accord can rejoin. A meeting that was
+   * ended, or that this person was removed from, is closed — and a Rejoin button
+   * over a closed room is a button that cannot work, which is worse than no
+   * button at all.
+   */
+  const [rejoinable, setRejoinable] = useState(false);
 
   const [session, setSession] = useState<JoinResponse | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
@@ -191,8 +201,16 @@ export function MeetingRoom(props: {
   const [handRaised, setHandRaised] = useState(false);
   /** What I chose to look at. Mine alone, and only while nothing is spotlit. */
   const [pinned, setPinned] = useState<string | null>(null);
-  /** Asked before the back gesture takes somebody out of a live call. */
+  /**
+   * The way out: asked before the back gesture, and before the red button.
+   *
+   * For a host it is a choice rather than a confirmation — leave, or end it for
+   * the room — because those are two different things and the button used to do
+   * only the first while the second hid in a menu behind a browser `confirm()`.
+   */
   const [confirmLeave, setConfirmLeave] = useState(false);
+  /** While the end-for-everyone request is in flight. */
+  const [endingForAll, setEndingForAll] = useState(false);
   /**
    * Whether this browser can share a screen at all. False on every iPhone and
    * iPad, where `getDisplayMedia` does not exist — so the control is not
@@ -248,6 +266,21 @@ export function MeetingRoom(props: {
 
   const clientRef = useRef<MeetingClient | null>(null);
   const recorderRef = useRef<MeetingRecorder | null>(null);
+  /**
+   * So the call is wound up exactly once.
+   *
+   * There are four ways out — the Leave button, the host's End for everyone, a
+   * removal, and the news arriving on a poll — and two of them can land within
+   * a moment of each other.
+   */
+  const closingRef = useRef(false);
+  /**
+   * `stopRecording` is defined much further down, after the pieces it needs,
+   * but the teardown above has to be able to call it. A ref rather than a
+   * reordering: the teardown is referenced by effects that register before the
+   * recording code exists, so moving it would be a use-before-declaration.
+   */
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
   const frameRef = useRef({ stage: EMPTY_STAGE as Stage, media, roster, localStream });
 
   const me = session?.me;
@@ -373,6 +406,42 @@ export function MeetingRoom(props: {
   }
 
   /* ============================================================
+   * Winding up
+   *
+   * Above joining, because joining wires the engine's `onEnded` straight to it.
+   * ========================================================== */
+
+  /**
+   * Everything the room itself has to put down once the call is over.
+   *
+   * By the time this runs the engine has already closed the peer connections
+   * and released the camera and microphone — that is its job, and it does it the
+   * same way whichever of the four endings it was. What is left is up here: a
+   * recording that was still writing, and the reference to the engine.
+   *
+   * A recording in flight goes to the on-device vault and the background
+   * uploader, the same route as a recording stopped by hand. It used to be
+   * downloaded straight to the host's Downloads folder on the way out, which
+   * meant the two endings produced different outcomes and an ended meeting was
+   * the one path where a service never reached the library.
+   */
+  const closeOut = useCallback(async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (recorderRef.current?.running) {
+      try {
+        await stopRecordingRef.current?.();
+      } catch (e) {
+        // The blob is in the vault before any of this, so the recording is not
+        // lost — but a host who was recording is owed the news either way.
+        console.error("[meetings] the recording did not stop cleanly as the call ended", e);
+        toast.error(t("meetings.recordingUploadFailed"));
+      }
+    }
+    clientRef.current = null;
+  }, [t]);
+
+  /* ============================================================
    * Joining
    * ========================================================== */
 
@@ -462,7 +531,19 @@ export function MeetingRoom(props: {
                * something true rather than nothing.
                */
               setEndedReason(endedMessage(reason, t));
+              setRejoinable(
+                reason.includes("left the meeting") || reason.includes("signed out"),
+              );
               setPhase("ended");
+              /*
+               * And actually finish. This used to change the screen and nothing
+               * else: the engine's connections stayed open and its camera stayed
+               * on, so "the host ended the meeting" was a notice over a call
+               * that was still running. The engine now releases its own devices
+               * the moment it reaches this point; the recording is the one thing
+               * it cannot know about.
+               */
+              void closeOut();
             },
             onError: (message) => toast.error(message),
             onMediaFault: (fault, device) => reportMediaFault(fault, device),
@@ -479,7 +560,13 @@ export function MeetingRoom(props: {
         setLocal(client.currentState());
 
         if (data.me.micOn) await client.setMic(true);
-        if (data.me.cameraOn) await client.setCamera(true);
+        /*
+         * Never a camera in Data Saver mode. The server already refuses the
+         * combination, so this is belt and braces — but it is one line, and the
+         * engine's answer to "camera on while saving data" is an error message,
+         * which is not something to greet somebody with as they walk in.
+         */
+        if (data.me.cameraOn && !data.me.lowData) await client.setCamera(true);
         setLocalStream(client.localStreams().camera);
 
         setPhase(data.me.admitted ? "live" : "lobby");
@@ -489,7 +576,7 @@ export function MeetingRoom(props: {
         setJoining(false);
       }
     },
-    [props.code, props.hostKey, t, reportMediaFault, nameForPeer],
+    [props.code, props.hostKey, t, reportMediaFault, nameForPeer, closeOut],
   );
 
   /* ============================================================
@@ -517,18 +604,25 @@ export function MeetingRoom(props: {
    * Leaving
    * ========================================================== */
 
-  const leave = useCallback(async () => {
+  /**
+   * Leave — just me. The meeting carries on for everybody else.
+   *
+   * Goes through the engine's own ending rather than tearing down from here, so
+   * leaving, being removed and the host ending it all travel the same road and
+   * cannot drift apart.
+   */
+  const leave = useCallback(() => {
     const client = clientRef.current;
-    if (recorderRef.current?.running) {
-      const result = await recorderRef.current.stop();
-      if (result) downloadRecording(result);
+    if (!client) {
+      setEndedReason(t("meetings.youLeft"));
+      setRejoinable(true);
+      setPhase("ended");
+      void closeOut();
+      return;
     }
-    client?.leave();
-    await client?.stop();
-    clientRef.current = null;
-    setEndedReason(t("meetings.youLeft"));
-    setPhase("ended");
-  }, [t]);
+    client.leave();
+    client.endLocally("You left the meeting.");
+  }, [closeOut, t]);
 
   /*
    * Only while an upload is actually in flight.
@@ -1184,6 +1278,38 @@ export function MeetingRoom(props: {
   ]);
 
 
+  /*
+   * Hand `stopRecording` to the teardown above.
+   *
+   * In an effect rather than during render: it is wanted by a button press, and
+   * every effect has run long before anybody can press one.
+   */
+  useEffect(() => {
+    stopRecordingRef.current = stopRecording;
+  }, [stopRecording]);
+
+  /**
+   * End it for the room.
+   *
+   * The order matters. The server is told first, because if that fails — a host
+   * on a dropped connection — nothing should have happened: they are still in
+   * the meeting, the recording is still running, and the error says so. Only
+   * once the room is actually closed is the recording wound up and this browser
+   * taken out, by the same route as every other ending.
+   */
+  const endForEveryone = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    setEndingForAll(true);
+    const res = await runAction("end");
+    setEndingForAll(false);
+    // `runAction` has already said why. Staying in the call is the right
+    // outcome: the meeting has not ended, so neither has this.
+    if (!res?.ok) return;
+    setConfirmLeave(false);
+    client.endLocally("You ended the meeting for everyone.");
+  }, [runAction]);
+
   /* ============================================================
    * Screens
    * ========================================================== */
@@ -1392,9 +1518,11 @@ export function MeetingRoom(props: {
         )}
 
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => window.location.reload()}>
-            <RefreshCcw className="size-4" /> {t("meetings.rejoin")}
-          </Button>
+          {rejoinable && (
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              <RefreshCcw className="size-4" /> {t("meetings.rejoin")}
+            </Button>
+          )}
           {props.manageHref && (
             <Button asChild>
               <a href={props.manageHref}>{t("meetings.backToMeetings")}</a>
@@ -1439,7 +1567,15 @@ export function MeetingRoom(props: {
       {/* Header */}
       <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-bold sm:text-base">{props.title}</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-sm font-bold sm:text-base">{props.title}</h1>
+            {/*
+              In the room as well as in the menu. Most people in a meeting
+              arrived from a link in WhatsApp and have never seen the rest of
+              the platform, so this is the only place they could be told.
+            */}
+            <BetaBadge tone="dark" />
+          </div>
           <p className="flex items-center gap-2 text-[11px] text-slate-400">
             <span>{formatDuration(elapsed)}</span>
             <span aria-hidden>·</span>
@@ -1722,10 +1858,10 @@ export function MeetingRoom(props: {
             onToggleScreen={toggleScreenShare}
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
-            onEndForAll={async () => {
-              if (!confirm(t("meetings.endForEveryone"))) return;
-              await runAction("end");
-            }}
+            // The same sheet as the red button, rather than a browser
+            // `confirm()` — one way to end a meeting, and one that says what
+            // ending it for everyone actually does.
+            onEndForAll={() => setConfirmLeave(true)}
             onCopyLink={() => {
               void navigator.clipboard
                 .writeText(window.location.href)
@@ -1737,8 +1873,8 @@ export function MeetingRoom(props: {
           <Button
             variant="destructive"
             size="icon-lg"
-            onClick={leave}
-            aria-label={t("meetings.leave")}
+            onClick={() => setConfirmLeave(true)}
+            aria-label={canHost ? t("meetings.leaveOrEnd") : t("meetings.leave")}
             className="ml-1 rounded-full"
           >
             <LogOut />
@@ -1747,44 +1883,90 @@ export function MeetingRoom(props: {
       </footer>
 
       {/*
-        The back gesture asks rather than acts. Somebody who opened this link
-        from WhatsApp is one tap from being out of the call, and "back" is the
-        button people press to close a thing they just opened — so it has to
-        mean "are you sure", not "goodbye".
+        The way out asks rather than acts, for two different reasons.
+
+        For anybody: somebody who opened this link from WhatsApp is one tap from
+        being out of the call, and "back" is the button people press to close a
+        thing they just opened — so it has to mean "are you sure", not
+        "goodbye".
+
+        For a host it is not a confirmation at all but a choice, because leaving
+        and ending the meeting are two different things and the red button can
+        only mean one of them. It used to mean "leave", with "End for everyone"
+        hidden in a menu behind a browser `confirm()` — so a host who thought
+        they had closed the meeting had merely walked out of it, leaving the room
+        open behind them. Ending is offered first and stated plainly; leaving
+        keeps the meeting running; staying is always a tap away.
       */}
       {confirmLeave && (
         <div
           className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center"
-          onClick={() => setConfirmLeave(false)}
+          onClick={() => {
+            if (!endingForAll) setConfirmLeave(false);
+          }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             className="bg-slate-900 w-full max-w-sm rounded-2xl p-5 text-white ring-1 ring-white/10"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
           >
-            <p className="text-lg font-bold">{t("meetings.leaveThisMeeting")}</p>
-            <p className="mt-1 text-sm text-slate-400">
-              {t("meetings.leaveThisMeetingHint")}
+            <p className="text-lg font-bold">
+              {canHost ? t("meetings.leaveOrEnd") : t("meetings.leaveThisMeeting")}
             </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
+            <p className="mt-1 text-sm text-slate-400">
+              {canHost
+                ? t("meetings.leaveOrEndHint")
+                : t("meetings.leaveThisMeetingHint")}
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2">
+              {canHost && (
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  disabled={endingForAll}
+                  onClick={() => void endForEveryone()}
+                >
+                  {endingForAll ? (
+                    <>
+                      <Loader2 className="animate-spin" />
+                      {t("meetings.endingForEveryone")}
+                    </>
+                  ) : (
+                    <>
+                      <PhoneOff />
+                      {t("meetings.endForEveryone")}
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
-                variant="destructive"
-                className="w-full sm:w-auto"
+                variant={canHost ? "secondary" : "destructive"}
+                className="w-full"
+                disabled={endingForAll}
                 onClick={() => {
                   setConfirmLeave(false);
-                  void leave();
+                  leave();
                 }}
               >
-                {t("meetings.leave")}
+                <LogOut />
+                {canHost ? t("meetings.leaveJustMe") : t("meetings.leave")}
               </Button>
               <Button
-                variant="secondary"
-                className="w-full sm:w-auto"
+                variant="ghost"
+                className="w-full text-slate-300 hover:text-white"
+                disabled={endingForAll}
                 onClick={() => setConfirmLeave(false)}
               >
                 {t("meetings.stayInMeeting")}
               </Button>
             </div>
+
+            {canHost && (
+              <p className="mt-3 text-center text-xs text-slate-500">
+                {t("meetings.endForEveryoneHint")}
+              </p>
+            )}
           </div>
         </div>
       )}

@@ -130,6 +130,27 @@ export async function POST(
   if (!peer)
     return fail("You've been signed out of this meeting.", 401, { code: "stale-peer" });
 
+  /*
+   * An ended room answers once and says so.
+   *
+   * Nothing is posted on, nothing is held open, and no heartbeat is taken: a
+   * peer arriving here after the room closed is a tab that was asleep or on a
+   * bad link, and the only thing it needs from us is the news. Relaying its
+   * offers and candidates into a closed room would let two stale tabs rebuild
+   * a call that everybody else has left.
+   */
+  if (m.status === "ended" || m.status === "cancelled") {
+    return json({
+      ok: true,
+      ended: true,
+      status: m.status,
+      cursor: Number.isFinite(Number(body?.cursor)) ? Number(body?.cursor) : 0,
+      signals: [],
+      roster: [],
+      serverTime: new Date().toISOString(),
+    });
+  }
+
   const cursor = Number.isFinite(Number(body?.cursor)) ? Number(body?.cursor) : 0;
   const wait = body?.wait === true;
   const state = parseState(body?.state);

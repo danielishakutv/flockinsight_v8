@@ -9,6 +9,7 @@ import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { MeetingsList, type MeetingRow } from "@/components/meetings/meetings-list";
 import { getT } from "@/lib/i18n/server";
+import { BetaBadge } from "@/components/beta-badge";
 
 export const metadata = { title: "Meetings" };
 
@@ -119,6 +120,7 @@ export default async function MeetingsPage() {
       <PageHeader
         title={t("meetings.title")}
         description={t("meetings.subtitle")}
+        badge={<BetaBadge className="text-xs" />}
       />
 
       <Card className="mb-5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   CameraOff,
@@ -22,6 +22,25 @@ import { mediaFault, type MediaFault } from "@/lib/meeting-client";
 import { pointerKind } from "@/lib/meetings-shared";
 import type { TKey } from "@/lib/i18n/translate";
 import { playMedia } from "@/lib/media-errors";
+import { BetaBadge } from "@/components/beta-badge";
+
+/**
+ * What we ask a device for, in one place.
+ *
+ * The same constraints are used by the first dialog and by a later camera
+ * request, so a camera granted on the second route behaves exactly like one
+ * granted on the first.
+ */
+const AUDIO_WANTED: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+const VIDEO_WANTED: MediaTrackConstraints = {
+  width: { ideal: 640 },
+  height: { ideal: 360 },
+  facingMode: "user",
+};
 
 export type JoinValues = {
   name: string;
@@ -93,40 +112,79 @@ export function JoinScreen({
   const [cameraOn, setCameraOn] = useState(!lowDataDefault);
   const [lowData, setLowData] = useState(lowDataDefault);
   const [passcode, setPasscode] = useState("");
-  const [fault, setFault] = useState<MediaFault | null>(null);
-  /** null while the browser's dialog is up — nothing else should render yet. */
+  /**
+   * Why a device did not open, per device.
+   *
+   * One shared fault used to cover both, which was fine while they were always
+   * asked for together and wrong the moment they were not: a camera refused in
+   * Data Saver mode would have read as "we couldn't reach your camera and
+   * microphone" to somebody whose microphone was working perfectly.
+   */
+  const [micFault, setMicFault] = useState<MediaFault | null>(null);
+  const [camFault, setCamFault] = useState<MediaFault | null>(null);
+  /** false while the browser's own dialog is up — nothing else should render yet. */
   const [asked, setAsked] = useState(false);
+  /** While a camera dialog this screen asked for a second time is up. */
+  const [askingCamera, setAskingCamera] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const previewRef = useRef<MediaStream | null>(null);
+  /**
+   * The microphone and the camera, held apart.
+   *
+   * They used to be one stream, and the camera was "turned off" by setting
+   * `track.enabled = false` — which keeps the track live, and a live video
+   * track is a camera light. Separate streams mean the camera can be stopped
+   * outright and taken again later, which is the only thing that actually puts
+   * the light out.
+   */
+  const micRef = useRef<MediaStream | null>(null);
+  const camRef = useRef<MediaStream | null>(null);
+  /** The camera in state as well, so the preview re-attaches when it changes. */
+  const [cam, setCam] = useState<MediaStream | null>(null);
+
+  const keepCamera = (stream: MediaStream | null) => {
+    camRef.current = stream;
+    setCam(stream);
+  };
+
+  /** Put the camera down for good. The light goes out when the track stops. */
+  const releaseCamera = useCallback(() => {
+    camRef.current?.getTracks().forEach((track) => track.stop());
+    camRef.current = null;
+    setCam(null);
+  }, []);
 
   /*
-   * Ask for both devices, once, as soon as this screen appears.
+   * Ask for what is actually going to be used, once, as soon as this screen
+   * appears.
    *
-   * This is the whole point of a screen before the call. The browser shows ONE
-   * dialog per getUserMedia call, so camera and microphone are asked for
+   * This is the whole point of a screen before the call: it is where somebody
+   * finds out their microphone is the wrong one, in private, instead of in
+   * front of forty people. The browser shows ONE dialog per getUserMedia call,
+   * so when video is wanted the camera and the microphone are asked for
    * together — two calls would be two dialogs, and the second arrives after
-   * the person has stopped reading. And it happens here rather than in the
-   * room because the remedy for a refusal is "change the setting and reload",
-   * which costs nothing on this screen and throws you out of a live meeting on
-   * the next one.
+   * the person has stopped reading.
    *
-   * Data Saver does not suppress the request. It decides what gets SENT, not
-   * whether the browser has been asked — a meeting that starts in Data Saver
-   * and switches to video mid-way should not stop to ask for permission in
-   * front of a waiting congregation.
-   *
-   * The granted stream is kept for the preview and stopped on the way out.
-   * Permission survives at the origin, so the room re-acquires silently with
-   * no second dialog.
+   * In Data Saver mode only the microphone is asked for. It used to ask for
+   * both, on the reasoning that permission should be in hand before anybody
+   * switched video on mid-call. That was a bad trade: Data Saver exists for the
+   * person whose camera is never going on, and it was asking them to grant a
+   * camera and then holding the track open — a light on, for a picture nobody
+   * would ever be sent. Turning Data Saver off and tapping the camera asks
+   * then, which is a dialog the person has that moment asked for.
    */
   useEffect(() => {
     let cancelled = false;
+    // Read once: this runs on mount only, and `lowData` changes afterwards.
+    const wantsCamera = !lowDataDefault;
 
     void (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         if (!cancelled) {
-          setFault("unsupported");
+          setMicFault("unsupported");
+          setCamFault("unsupported");
+          setMicOn(false);
+          setCameraOn(false);
           setAsked(true);
         }
         return;
@@ -134,20 +192,33 @@ export function JoinScreen({
 
       let stream: MediaStream | null = null;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-          video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" },
-        });
+        stream = await navigator.mediaDevices.getUserMedia(
+          wantsCamera
+            ? { audio: AUDIO_WANTED, video: VIDEO_WANTED }
+            : { audio: AUDIO_WANTED },
+        );
       } catch (first) {
-        // A machine with no camera fails the whole request, microphone and
-        // all. Falling back to audio keeps the meeting usable for someone on
-        // a desktop with no webcam, which is a great many church offices.
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          if (!cancelled) setCameraOn(false);
-        } catch {
+        if (!wantsCamera) {
           if (!cancelled) {
-            setFault(mediaFault(first));
+            setMicFault(mediaFault(first));
+            setMicOn(false);
+            setAsked(true);
+          }
+          return;
+        }
+        // A machine with no camera fails the whole request, microphone and
+        // all. Falling back to audio keeps the meeting usable for someone on a
+        // desktop with no webcam, which is a great many church offices.
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_WANTED });
+          if (!cancelled) {
+            setCameraOn(false);
+            setCamFault(mediaFault(first));
+          }
+        } catch (second) {
+          if (!cancelled) {
+            setMicFault(mediaFault(second));
+            setCamFault(mediaFault(first));
             setMicOn(false);
             setCameraOn(false);
             setAsked(true);
@@ -157,48 +228,125 @@ export function JoinScreen({
       }
 
       if (cancelled) {
-        stream?.getTracks().forEach((t) => t.stop());
+        stream?.getTracks().forEach((track) => track.stop());
         return;
       }
 
-      previewRef.current = stream;
-      setFault(null);
+      // Split what was granted in two, so the camera can be released on its
+      // own later without taking the microphone with it.
+      const audio = stream?.getAudioTracks() ?? [];
+      const video = stream?.getVideoTracks() ?? [];
+      micRef.current = audio.length > 0 ? new MediaStream(audio) : null;
+      keepCamera(video.length > 0 ? new MediaStream(video) : null);
+      if (audio.length > 0) setMicFault(null);
+      if (video.length > 0) {
+        setCamFault(null);
+      } else if (wantsCamera) {
+        // Asked for, granted, and nothing came back: there is no camera here.
+        // `?? ` so the fallback path's real reason is not overwritten by this
+        // guess at one.
+        setCameraOn(false);
+        setCamFault((existing) => existing ?? "missing");
+      }
       setAsked(true);
     })();
 
     return () => {
       cancelled = true;
-      previewRef.current?.getTracks().forEach((t) => t.stop());
-      previewRef.current = null;
+      micRef.current?.getTracks().forEach((track) => track.stop());
+      micRef.current = null;
+      camRef.current?.getTracks().forEach((track) => track.stop());
+      camRef.current = null;
     };
+  }, [lowDataDefault]);
+
+  /**
+   * Open the camera, now, because somebody has just asked for it.
+   *
+   * The only path to a second permission dialog on this screen, and it is one
+   * the person reached by tapping a camera button — so it arrives as an answer
+   * to something they did rather than out of nowhere.
+   */
+  const requestCamera = useCallback(async (): Promise<boolean> => {
+    if (camRef.current) return true;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCamFault("unsupported");
+      return false;
+    }
+    setAskingCamera(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_WANTED });
+      keepCamera(stream);
+      setCamFault(null);
+      return true;
+    } catch (first) {
+      const failure = (first as { name?: string })?.name ?? "";
+      // Only a constraint problem earns a second attempt. A refusal is a
+      // refusal, and asking again just produces the same dialog.
+      if (failure === "OverconstrainedError" || failure === "TypeError") {
+        try {
+          const plain = await navigator.mediaDevices.getUserMedia({ video: true });
+          keepCamera(plain);
+          setCamFault(null);
+          return true;
+        } catch (second) {
+          setCamFault(mediaFault(second));
+          return false;
+        }
+      }
+      setCamFault(mediaFault(first));
+      return false;
+    } finally {
+      setAskingCamera(false);
+    }
   }, []);
 
+  /** The camera button. Off releases the device; on takes it, asking if need be. */
+  const toggleCamera = useCallback(async () => {
+    if (lowData) return;
+    if (cameraOn) {
+      setCameraOn(false);
+      releaseCamera();
+      return;
+    }
+    if (await requestCamera()) setCameraOn(true);
+  }, [cameraOn, lowData, releaseCamera, requestCamera]);
+
   /*
-   * Show the preview only while the camera is actually wanted, and let the
-   * track go when it is not. A preview left running is a camera light that
-   * stays on after somebody thought they had turned it off.
+   * Show the preview only while the camera is actually wanted.
+   *
+   * There is nothing to disable any more — when the camera is off there is no
+   * track at all, because it was stopped. This only decides what the `<video>`
+   * element is pointed at.
    */
   useEffect(() => {
     const el = videoRef.current;
-    const stream = previewRef.current;
     if (!el) return;
 
-    const video = stream?.getVideoTracks() ?? [];
-    const wanted = cameraOn && !lowData;
-    for (const track of video) track.enabled = wanted;
-
-    if (wanted && stream) {
-      el.srcObject = stream;
+    if (cam && cameraOn && !lowData) {
+      el.srcObject = cam;
       playMedia(el, "join screen self-preview");
     } else {
       el.srcObject = null;
     }
-  }, [cameraOn, lowData, asked]);
+  }, [cam, cameraOn, lowData]);
 
-  /** Try the dialog again, for somebody who has just changed the setting. */
+  /**
+   * Try again, for somebody who has just changed something.
+   *
+   * A camera that failed on its own is asked for again, because a reload would
+   * land back in Data Saver mode and never get round to asking — so the button
+   * would appear to do nothing. Anything else reloads: a permission changed in
+   * the browser's own panel does not reach a page that is already open, and on
+   * this screen reloading costs nothing.
+   */
   const retry = () => {
-    setFault(null);
-    setAsked(false);
+    if (micFault === null && camFault !== null) {
+      void requestCamera().then((ok) => {
+        if (ok) setCameraOn(true);
+      });
+      return;
+    }
     window.location.reload();
   };
 
@@ -206,16 +354,34 @@ export function JoinScreen({
     e.preventDefault();
     // Release the devices here. Permission lives on at the origin, so the room
     // re-acquires what it needs without a second dialog.
-    previewRef.current?.getTracks().forEach((t) => t.stop());
-    previewRef.current = null;
+    micRef.current?.getTracks().forEach((track) => track.stop());
+    micRef.current = null;
+    releaseCamera();
     onJoin({
       name: name.trim() || "Guest",
-      micOn: micOn && fault === null,
-      cameraOn: cameraOn && !lowData && fault === null,
+      micOn: micOn && micFault === null,
+      // Only if a camera was actually opened here. Saying yes to one we never
+      // got would have the room ask for it again, in front of everybody, which
+      // is the dialog this screen exists to take care of.
+      cameraOn: cameraOn && !lowData && cam !== null,
       lowData,
       passcode,
     });
   };
+
+  /*
+   * One panel, for whichever device went wrong.
+   *
+   * The microphone comes first when both failed: a meeting without a camera is
+   * a meeting, and a meeting without a microphone is listening to one.
+   */
+  const shownFault = micFault ?? camFault;
+  const faultDeviceKey: TKey =
+    micFault !== null && camFault !== null
+      ? "meetings.deviceCameraAndMic"
+      : micFault !== null
+        ? "meetings.deviceMicrophone"
+        : "meetings.deviceCamera";
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-slate-950 px-4 py-8 text-white">
@@ -234,7 +400,10 @@ export function JoinScreen({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold sm:text-2xl">{title}</h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-xl font-bold sm:text-2xl">{title}</h1>
+              <BetaBadge tone="dark" />
+            </div>
             <p className="truncate text-sm text-slate-400">{churchName}</p>
           </div>
         </div>
@@ -263,11 +432,17 @@ export function JoinScreen({
                       // screen says "your camera is off", which reads as a
                       // setting rather than as a question waiting to be
                       // answered — and people dismiss the dialog to go and
-                      // look for the setting.
-                      t("meetings.allowToContinue")
-                    : lowData
-                      ? t("meetings.audioOnlyCameraStays")
-                      : t("meetings.cameraOff")}
+                      // look for the setting. It names only what is actually
+                      // being asked for, so somebody in Data Saver is not told
+                      // to allow a camera that was never requested.
+                      lowDataDefault
+                      ? t("meetings.allowMicToContinue")
+                      : t("meetings.allowToContinue")
+                    : askingCamera
+                      ? t("meetings.allowCameraToContinue")
+                      : lowData
+                        ? t("meetings.audioOnlyCameraStays")
+                        : t("meetings.cameraOff")}
                 </p>
               </div>
             )}
@@ -282,8 +457,8 @@ export function JoinScreen({
               />
               <RoundToggle
                 on={cameraOn && !lowData}
-                disabled={lowData}
-                onClick={() => setCameraOn((v) => !v)}
+                disabled={lowData || askingCamera}
+                onClick={() => void toggleCamera()}
                 onIcon={<Camera className="size-5" />}
                 offIcon={<CameraOff className="size-5" />}
                 label={
@@ -337,7 +512,13 @@ export function JoinScreen({
                 checked={lowData}
                 onCheckedChange={(v) => {
                   setLowData(v);
-                  if (v) setCameraOn(false);
+                  // Not just "off" — released. Data Saver turned on with the
+                  // camera merely disabled left the light burning for a picture
+                  // that was never going to be sent.
+                  if (v) {
+                    setCameraOn(false);
+                    releaseCamera();
+                  }
                 }}
                 aria-label={t("meetings.lowDataMode")}
                 className="mt-0.5"
@@ -353,28 +534,42 @@ export function JoinScreen({
               </span>
             </label>
 
-            {fault && (
+            {shownFault && (
               /*
                 A panel, not a line of small print. Everything here needs the
-                person to go and change something, and the Reload is the point:
+                person to go and change something, and Try again is the point:
                 a permission changed in the browser's own panel does not reach
                 a page that is already open, and on this screen reloading costs
                 nothing.
+
+                It names the device that actually failed. A refused camera in
+                Data Saver mode is not a reason to tell somebody their
+                microphone is broken, and the remedy is in a different place for
+                each.
               */
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
                 <p className="text-xs leading-relaxed text-amber-200">
-                  {t(mediaFaultKey(fault), {
-                    device: t("meetings.deviceCameraAndMic"),
-                  })}
+                  {t(mediaFaultKey(shownFault), { device: t(faultDeviceKey) })}
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="secondary" onClick={retry}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={askingCamera}
+                    onClick={retry}
+                  >
                     <RotateCcw className="size-4" /> {t("common.tryAgain")}
                   </Button>
                 </div>
-                <p className="mt-2 text-[11px] text-amber-200/70">
-                  {t("meetings.joinAnywayHint")}
-                </p>
+                {micFault !== null && (
+                  // Only when it is the microphone that failed. With a working
+                  // microphone and no camera you are not "joining anyway" —
+                  // you are joining, and there is nothing to reassure.
+                  <p className="mt-2 text-[11px] text-amber-200/70">
+                    {t("meetings.joinAnywayHint")}
+                  </p>
+                )}
               </div>
             )}
 
