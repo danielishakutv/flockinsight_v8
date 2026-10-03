@@ -34,6 +34,20 @@ export type VaultEntry = {
   lastError: string | null;
   attempts: number;
   blob: Blob;
+
+  /*
+   * Resume state. Optional, so entries written by an older build are still
+   * readable — a stored recording must never become unreadable because the app
+   * was updated around it.
+   */
+  /** The server-side upload this is being appended to, across sessions. */
+  uploadId?: string | null;
+  /** How many bytes the server had last time we checked. Never trusted alone. */
+  uploadedBytes?: number;
+  /** When the uploader last managed to send something, for backoff. */
+  lastAttemptAt?: number;
+  /** Set once it is in the library, just before the entry is released. */
+  done?: boolean;
 };
 
 export function vaultSupported(): boolean {
@@ -112,6 +126,25 @@ export async function releaseRecording(id: string): Promise<void> {
   } catch {
     /* Leaving a saved copy behind is harmless; losing an unsaved one is not. */
   }
+}
+
+/**
+ * Remember how far an upload got, so a later session resumes rather than
+ * restarts.
+ *
+ * Written after every chunk. The cost is one small IndexedDB put per 8 MB,
+ * which is nothing next to re-sending 200 MB because a laptop lid closed.
+ */
+export async function noteProgress(
+  id: string,
+  uploadId: string,
+  uploadedBytes: number,
+): Promise<void> {
+  const entry = await getPending(id);
+  if (!entry) return;
+  await run("readwrite", (s) =>
+    s.put({ ...entry, uploadId, uploadedBytes, lastAttemptAt: Date.now() }),
+  );
 }
 
 export async function noteFailure(id: string, error: string): Promise<void> {

@@ -67,6 +67,16 @@ export async function GET(request: Request) {
       console.error("[cron/meetings] transcode queue failed", e);
     }
 
+    // Partial uploads nobody came back for. Two weeks, because an upload here
+    // may legitimately span days on a poor connection.
+    let staleUploads: { removed: number; bytes: number } | null = null;
+    try {
+      const { sweepStaleUploads } = await import("@/lib/media-store");
+      staleUploads = await sweepStaleUploads(14);
+    } catch (e) {
+      console.error("[cron/meetings] temp sweep failed", e);
+    }
+
     // Once a day is plenty, and it is somebody else's free service — so this
     // only runs on the first tick of the hour before most Sunday services.
     let warmed = 0;
@@ -75,7 +85,7 @@ export async function GET(request: Request) {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings, transcoded }),
+      JSON.stringify({ ok: true, ended, expired, swept, warmed, stalledRecordings, transcoded, staleUploads }),
       { headers: { "Content-Type": "application/json" } },
     );
   });

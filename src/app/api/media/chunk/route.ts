@@ -59,7 +59,14 @@ export async function POST(request: Request) {
 
   /* ---------------------------------------------------------- start ---- */
   if (action === "start") {
-    let body: { kind?: string; mime?: string; bytes?: number; name?: string };
+    let body: {
+      kind?: string;
+      mime?: string;
+      bytes?: number;
+      name?: string;
+      /** Supplied when resuming an upload begun in an earlier session. */
+      uploadId?: string;
+    };
     try {
       body = await request.json();
     } catch {
@@ -93,8 +100,44 @@ export async function POST(request: Request) {
       );
 
     await ensureDirs();
-    const uploadId = randomUUID();
-    return json({ ok: true, uploadId, chunkSize: CHUNK_SIZE });
+    /*
+     * The caller may bring its own id, so a recording that has been waiting in
+     * this device's vault since yesterday resumes the same temp file rather
+     * than starting a second one beside it.
+     */
+    const asked = String(body.uploadId ?? "").trim();
+    const uploadId = /^[a-zA-Z0-9-]{8,64}$/.test(asked) ? asked : randomUUID();
+
+    let received = 0;
+    try {
+      received = (await stat(tmpPathFor(uploadId))).size;
+    } catch {
+      received = 0;
+    }
+    return json({ ok: true, uploadId, chunkSize: CHUNK_SIZE, received });
+  }
+
+  /* --------------------------------------------------------- status ---- */
+  /*
+   * How many bytes the server already holds for this upload.
+   *
+   * The server is the authority, not the browser. A recording may be resumed
+   * days later, in a different session, after a crash — and whatever the client
+   * remembers about its own progress is exactly the thing least likely to have
+   * survived. Asking means a resume continues from the true offset instead of
+   * duplicating or skipping bytes.
+   */
+  if (action === "status") {
+    const uploadId = url.searchParams.get("uploadId") ?? "";
+    if (!uploadId) return json({ ok: false, error: "No upload id." }, 400);
+    let received = 0;
+    try {
+      received = (await stat(tmpPathFor(uploadId))).size;
+    } catch {
+      // Nothing yet, or it was swept. Either way: start from zero.
+      received = 0;
+    }
+    return json({ ok: true, received });
   }
 
   /* --------------------------------------------------------- append ---- */
@@ -155,6 +198,8 @@ export async function POST(request: Request) {
       name?: string;
       title?: string;
       durationSec?: number;
+      /** When this file is a meeting recording, the row to close out. */
+      recordingId?: string | null;
     };
     try {
       body = await request.json();
@@ -217,6 +262,28 @@ export async function POST(request: Request) {
       })
       .returning();
 
+    /*
+     * If this was a meeting recording, close its row out here.
+     *
+     * One upload path, one completion. Recordings used to travel a second route
+     * of their own straight to Cloudinary — which could not carry anything over
+     * 100 MB, i.e. any real service. Two paths for one file is how a recording
+     * ends up half-saved by one and ignored by the other.
+     */
+    const recordingId = String(body.recordingId ?? "");
+    if (recordingId) {
+      const { completeRecording } = await import("@/lib/meetings");
+      await completeRecording({
+        id: recordingId,
+        churchId: church.id,
+        mediaId: row.id,
+        url: `/media/${row.id}`,
+        bytes: size,
+        durationSec: row.durationSec ?? 0,
+        status: "ready",
+      });
+    }
+
     await audit({
       churchId: church.id,
       action: "media.file.create",
@@ -224,7 +291,7 @@ export async function POST(request: Request) {
       targetType: "media",
       targetId: row.id,
       targetLabel: row.title ?? row.originalName ?? null,
-      meta: { bytes: size, kind, storage: "local" },
+      meta: { bytes: size, kind, storage: "local", recordingId: recordingId || null },
     });
 
     /*

@@ -27,16 +27,12 @@ import {
 import { toast } from "sonner";
 import { formatBytes } from "@/lib/storage-bytes";
 import {
-  UploadCancelled,
-  uploadDirect,
   type UploadProgress,
 } from "@/lib/direct-upload";
 import {
   downloadEntry,
   keepRecording,
   listPending,
-  noteFailure,
-  releaseRecording,
   type VaultEntry,
 } from "@/lib/recording-vault";
 import { Button } from "@/components/ui/button";
@@ -1052,90 +1048,54 @@ export function MeetingRoom(props: {
     [me, props.code],
   );
 
+  /*
+   * Tell the rest of the app a meeting is running.
+   *
+   * The background recording uploader yields its bandwidth while this is set,
+   * and takes it back when the call ends. On the document element because that
+   * uploader lives above this component and on every page — see
+   * components/meetings/recording-uploader.tsx.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.meetingLive = "1";
+    return () => {
+      delete root.dataset.meetingLive;
+      delete root.dataset.meetingOutgoingBitrate;
+      delete root.dataset.meetingLoss;
+    };
+  }, []);
+
+  /**
+   * Hand a finished recording to the background uploader.
+   *
+   * It used to upload here, straight to Cloudinary, from inside the meeting
+   * component. Three things were wrong with that and all three bit:
+   *
+   *   - Cloudinary will not store a single asset over 100 MB, so any recording
+   *     long enough to be worth keeping failed at the last chunk.
+   *   - The uploader was mounted inside the meeting, so leaving the call
+   *     unmounted it mid-upload.
+   *   - Nothing resumed it afterwards. The file sat in the vault until somebody
+   *     noticed and pressed a button.
+   *
+   * The file is already in the vault by the time this runs — written there
+   * before a single byte is sent anywhere. So there is nothing to do but say so
+   * and let the uploader in the app shell take it: to our own server, in
+   * chunks, resumable across sessions, using only spare bandwidth while the
+   * call is still running.
+   */
   const saveRecording = useCallback(
     async (file: PendingSave) => {
-      if (!me) return;
-
-      setSavingRecording(true);
-      setSaveProblem(null);
+      setSavingRecording(false);
       setUploadProgress(null);
-
-      const controller = new AbortController();
-      uploadAbortRef.current = controller;
-
-      try {
-        const signRes = await fetch(`/api/meet/${props.code}/recording/sign`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            peer: me.peerId,
-            secret: me.secret,
-            bytes: file.bytes,
-            mode: file.mode,
-          }),
-        });
-        const signData = await signRes.json();
-        if (!signData.ok) {
-          // The server knows why — quota full, storage not configured — and
-          // each of those is something the host can act on. Its sentence beats
-          // anything generic this end could write.
-          throw new Error(signData.error ?? t("common.somethingWentWrong"));
-        }
-
-        const uploaded = await uploadDirect(
-          file.blob,
-          file.filename,
-          signData.ticket,
-          setUploadProgress,
-          controller.signal,
-        );
-
-        const doneRes = await fetch(`/api/meet/${props.code}/recording/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            peer: me.peerId,
-            secret: me.secret,
-            publicId: uploaded.publicId,
-            recordingId: file.recordingId,
-            durationSec: file.durationSec,
-            mode: file.mode,
-          }),
-        });
-        const doneData = await doneRes.json();
-        if (!doneData.ok) throw new Error(doneData.error ?? t("common.somethingWentWrong"));
-
-        // Confirmed saved, and only now is the local copy let go.
-        await releaseRecording(file.vaultId);
-        toast.success(t("meetings.savedToLibrary"));
-        setPendingSave(null);
-        setUploadProgress(null);
-        void refreshUnsaved();
-      } catch (e) {
-        if (e instanceof UploadCancelled) {
-          setSaveProblem(t("meetings.uploadCancelled"));
-          // A cancel is still a recording that is not in the library, and the
-          // row must not keep claiming otherwise.
-          await reportRecordingFailure(
-            file.recordingId,
-            "cancelled",
-            "The host cancelled the upload.",
-          );
-        } else {
-          const message = e instanceof Error ? e.message : t("meetings.recordingUploadFailed");
-          setSaveProblem(message);
-          await noteFailure(file.vaultId, message);
-          // The same sentence the host is looking at goes onto the record, so
-          // the activity log and the host agree about what happened.
-          await reportRecordingFailure(file.recordingId, "upload", message);
-        }
-        void refreshUnsaved();
-      } finally {
-        uploadAbortRef.current = null;
-        setSavingRecording(false);
-      }
+      setSaveProblem(null);
+      setPendingSave(null);
+      void refreshUnsaved();
+      toast.success(t("meetings.recordingQueued"));
+      void file;
     },
-    [me, props.code, t, refreshUnsaved, reportRecordingFailure],
+    [refreshUnsaved, t],
   );
 
   const stopRecording = useCallback(async () => {

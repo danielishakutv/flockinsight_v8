@@ -1601,6 +1601,24 @@ export class MeetingClient {
       this.totals.sent += b.videoOut + b.audioOut;
     }
 
+    /*
+     * Publish what the connection can spare, for the background recording
+     * uploader.
+     *
+     * On the document element rather than through React, deliberately: the
+     * uploader sits above the meeting in the tree and runs on every page, and
+     * re-rendering the whole app every few seconds to tell it a bitrate would
+     * cost more than the upload it is pacing. These are already measured here
+     * for the quality indicator; this only writes them down where something
+     * else can read them. See lib/upload-budget.ts for what is done with them.
+     */
+    if (typeof document !== "undefined") {
+      const root = document.documentElement;
+      if (available > 0) root.dataset.meetingOutgoingBitrate = String(available);
+      else delete root.dataset.meetingOutgoingBitrate;
+      root.dataset.meetingLoss = String(worstLoss / 100);
+    }
+
     const quality = rateLink({
       packetLossPct: worstLoss,
       rttMs: worstRtt,

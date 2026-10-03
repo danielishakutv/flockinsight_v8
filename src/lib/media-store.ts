@@ -199,6 +199,55 @@ export function streamFile(
   });
 }
 
+/**
+ * Clear away partial uploads nobody is coming back for.
+ *
+ * The window is deliberately long. An upload here may legitimately span days: a
+ * recording waits for spare bandwidth, the host does not open the app over the
+ * week, the connection is poor every evening. A sweep that ran after a few
+ * hours would delete exactly the slow uploads this whole design exists to
+ * rescue, and the person would never know why their recording kept restarting.
+ *
+ * Judged on MODIFIED time, not created: an upload that received a chunk
+ * yesterday is alive, however old it is.
+ */
+export async function sweepStaleUploads(
+  olderThanDays = 14,
+  now: Date = new Date(),
+): Promise<{ removed: number; bytes: number }> {
+  const cutoff = now.getTime() - olderThanDays * 86_400_000;
+  let removed = 0;
+  let bytes = 0;
+
+  try {
+    const { readdir } = await import("node:fs/promises");
+    const names = await readdir(MEDIA_TMP);
+    for (const name of names) {
+      if (!name.endsWith(".part")) continue;
+      const full = path.join(MEDIA_TMP, name);
+      try {
+        const st = await stat(full);
+        if (st.mtimeMs >= cutoff) continue;
+        bytes += st.size;
+        await unlink(full);
+        removed++;
+      } catch {
+        /* vanished or unreadable — nothing to reclaim */
+      }
+    }
+  } catch {
+    // No temp directory yet. Nothing to sweep.
+    return { removed: 0, bytes: 0 };
+  }
+
+  if (removed > 0) {
+    console.log(
+      `[media-store] cleared ${removed} abandoned partial upload(s), ${(bytes / 1048576).toFixed(1)} MB`,
+    );
+  }
+  return { removed, bytes };
+}
+
 /** Total bytes this church is holding on disk, for reconciling the quota. */
 export async function churchDiskUsage(churchId: string): Promise<number> {
   const dir = path.join(path.resolve(MEDIA_ROOT), safeChurch(churchId));

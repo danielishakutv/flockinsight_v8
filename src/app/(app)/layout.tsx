@@ -15,6 +15,7 @@ import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { SplashScreen } from "@/components/pwa/splash-screen";
 import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
+import { RecordingUploader } from "@/components/meetings/recording-uploader";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
 import { PageTracker } from "@/components/analytics/page-tracker";
 import { TranslationPrompt } from "@/components/app/translation-prompt";
@@ -114,6 +115,13 @@ export default async function AppLayout({
             <UploadProvider>
               <WhatsNewBanner />
               {children}
+              {/*
+                In the shell, not in the meeting. A recording keeps uploading
+                after the host leaves the call, and resumes by itself on the
+                next visit — which is the difference between "it will get there"
+                and "somebody has to remember to press a button".
+              */}
+              <RecordingUploader />
             </UploadProvider>
           </main>
         </div>
