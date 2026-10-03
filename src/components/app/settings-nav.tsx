@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import type { TKey } from "@/lib/i18n/translate";
 
-type Need = "settings" | "team" | "finance";
+type Need = "settings" | "team" | "finance" | "giving";
 type Item = { labelKey: TKey; href: string; need: Need; icon: LucideIcon };
 type Group = { titleKey: TKey; items: Item[] };
 
@@ -51,6 +51,7 @@ const GROUPS: Group[] = [
       { labelKey: "settings.services", href: "/settings/services", need: "settings", icon: ListChecks },
       { labelKey: "settings.attendance", href: "/settings/attendance", need: "settings", icon: Users },
       { labelKey: "settings.givingCategories", href: "/settings/giving", need: "settings", icon: HandCoins },
+      { labelKey: "settings.onlineGiving", href: "/settings/payments", need: "giving", icon: CreditCard },
       { labelKey: "settings.financeSetup", href: "/settings/finance", need: "finance", icon: Landmark },
       { labelKey: "settings.language", href: "/settings/language", need: "settings", icon: Languages },
     ],
@@ -88,17 +89,26 @@ export function SettingsNav({
   canSettings,
   canTeam,
   canFinance,
+  canGiving = false,
 }: {
   canSettings: boolean;
   canTeam: boolean;
   canFinance: boolean;
+  /** Online giving answers to the giving permission, not to settings. */
+  canGiving?: boolean;
 }) {
   const t = useT();
   const pathname = usePathname();
   const router = useRouter();
 
   const allow = (need: Need) =>
-    need === "settings" ? canSettings : need === "team" ? canTeam : canFinance;
+    need === "settings"
+      ? canSettings
+      : need === "team"
+        ? canTeam
+        : need === "giving"
+          ? canGiving
+          : canFinance;
   const groups = GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => allow(i.need)),

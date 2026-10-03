@@ -698,6 +698,43 @@ export const pledgeStatusEnum = pgEnum("pledge_status", [
 ]);
 
 // How a gift was given. Optional on each giving record.
+/**
+ * Which gateway a church collects through.
+ *
+ * "link" is not a gateway: it is a church that already has a payment page
+ * somewhere and only wants us to show the button. It is listed here because
+ * every other part of the module - the link, the page, the QR code - works
+ * identically for it, and the only difference is that nothing comes back. A
+ * church on "link" records what lands the way it always has.
+ */
+export const paymentProviderEnum = pgEnum("payment_provider", [
+  "paystack",
+  "flutterwave",
+  "monnify",
+  "link",
+]);
+
+/** How much a giver may put in. See giving_link.amountMode. */
+export const giveAmountModeEnum = pgEnum("give_amount_mode", [
+  "open",
+  "fixed",
+  "preset",
+]);
+
+/**
+ * Where one attempt to give online got to.
+ *
+ * "pending" is the normal state for most rows and most of them stay there:
+ * somebody opens a checkout and changes their mind. That is not a failure and
+ * is never shown as one - it is simply a gift that did not happen.
+ */
+export const onlinePaymentStatusEnum = pgEnum("online_payment_status", [
+  "pending",
+  "success",
+  "failed",
+  "abandoned",
+]);
+
 export const givingMethodEnum = pgEnum("giving_method", [
   "cash",
   "transfer",
@@ -1012,6 +1049,192 @@ export const groupMembership = pgTable(
  * Categories are church-defined (like services); each `giving` row is one
  * recorded gift, optionally tied to a member.
  * ========================================================== */
+
+/* ============================================================
+ * Online giving - a church collecting through its OWN gateway
+ * ========================================================== */
+
+/**
+ * One church's payment gateway credentials.
+ *
+ * THE MONEY NEVER TOUCHES US. These are the church's own keys, so a gift goes
+ * straight from the giver to the church's own Paystack/Flutterwave/Monnify
+ * account, settled on that account's own schedule. FlockInsight takes no cut
+ * and holds no balance - which also means we never have to be a licensed
+ * money handler, and a church's giving does not stop if our wallet does.
+ *
+ * SECRETS ARE SEALED, NEVER STORED PLAIN (see lib/secret-box.ts). The public
+ * key is public by definition and sits in a plain column; everything that can
+ * move money is encrypted with a key that is not in the database, so a backup
+ * or an export is useless on its own.
+ *
+ * One row per provider per church, with at most one `isActive`. Keeping the
+ * old row means a church that switches provider and switches back does not
+ * have to find its keys again.
+ */
+export const churchGateway = pgTable(
+  "church_gateway",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    provider: paymentProviderEnum().notNull(),
+    /** Public/merchant key. Public by design - safe in the clear. */
+    publicKey: text(),
+    /** The secret key, sealed. Null for "link". */
+    secretSealed: text(),
+    /**
+     * Provider extras, sealed as one JSON blob: Monnify's contract code,
+     * Flutterwave's webhook secret hash, anything a future provider needs.
+     *
+     * One sealed column rather than a column per provider, because the set of
+     * fields belongs to the provider and not to us - adding a gateway should
+     * not be a migration.
+     */
+    extraSealed: text(),
+    /** For "link": the church's own payment page. */
+    linkUrl: text(),
+    /** Only one per church may be active; enforced in code and in the UI. */
+    isActive: boolean().notNull().default(false),
+    /**
+     * When the keys last answered a real call to the provider.
+     *
+     * Stored rather than inferred: "it worked when we saved it" is the only
+     * evidence that matters before a church sends a giving link to a thousand
+     * people, and a key revoked at the gateway is otherwise invisible until a
+     * giver sees an error.
+     */
+    verifiedAt: timestamp({ withTimezone: true }),
+    /** What the provider said when it last refused. Shown to the church. */
+    lastError: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("church_gateway_provider_idx").on(t.churchId, t.provider),
+    index("church_gateway_church_idx").on(t.churchId),
+  ],
+);
+
+/**
+ * A shareable collection link: /give/<slug>.
+ *
+ * One church can run several at once - "Tithes & offerings", "Building fund",
+ * "Harvest 2026" - each with its own wording, its own giving category and its
+ * own idea of how much. The slug is globally unique so a link printed on a
+ * banner or turned into a QR code keeps working.
+ */
+export const givingLink = pgTable(
+  "giving_link",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** The half of the URL people see: /give/<slug>. */
+    slug: text().notNull().unique(),
+    title: text().notNull(),
+    /** Shown under the title. What the collection is for, in the church's words. */
+    description: text(),
+    /**
+     * Which giving category a successful gift is recorded under. Set null on
+     * delete so the link keeps working - an uncategorised gift is recoverable,
+     * a broken link in the middle of a service is not.
+     */
+    categoryId: uuid().references(() => givingCategory.id, {
+      onDelete: "set null",
+    }),
+    amountMode: giveAmountModeEnum().notNull().default("open"),
+    /** For "fixed": the only amount accepted. */
+    fixedAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** For "preset": the buttons offered, plus "other" unless minAmount blocks it. */
+    presetAmounts: jsonb().$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Floor for an open amount, so a gateway does not reject a 10-naira gift. */
+    minAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** Optional goal, for the thermometer on the page. */
+    targetAmount: numeric({ precision: 14, scale: 2, mode: "number" }),
+    /** Ask for a phone number as well as a name and email. */
+    askPhone: boolean().notNull().default(true),
+    /** Let somebody give without leaving a name. */
+    allowAnonymous: boolean().notNull().default(true),
+    /** Show the running total and the number of givers on the public page. */
+    showProgress: boolean().notNull().default(false),
+    /** What the thank-you page says. */
+    thankYouMessage: text(),
+    isActive: boolean().notNull().default(true),
+    /** After this, the page says the collection has closed. */
+    closesAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("giving_link_church_idx").on(t.churchId, t.isActive)],
+);
+
+/**
+ * One attempt to give online.
+ *
+ * A row is written BEFORE the giver is sent to the gateway, not after they
+ * come back. The reference we generate is the only thing tying a gateway
+ * transaction to a church, a link and a person, and inventing it at the end
+ * would mean a payment that completes while the giver's phone dies is a
+ * payment nobody can account for.
+ *
+ * `givingId` is what makes settling idempotent: a webhook and a browser
+ * redirect routinely arrive for the same payment, and whichever gets there
+ * first writes the giving row. The other sees it is set and stops.
+ */
+export const onlinePayment = pgTable(
+  "online_payment",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    linkId: uuid().references((): AnyPgColumn => givingLink.id, {
+      onDelete: "set null",
+    }),
+    provider: paymentProviderEnum().notNull(),
+    /** Our reference, sent to the gateway. Globally unique. */
+    reference: text().notNull().unique(),
+    /** The gateway's own id for the transaction, once we know it. */
+    gatewayRef: text(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull(),
+    status: onlinePaymentStatusEnum().notNull().default("pending"),
+    giverName: text(),
+    giverEmail: text(),
+    giverPhone: text(),
+    /** Matched to a member when the email or phone is recognised. */
+    memberId: uuid().references(() => member.id, { onDelete: "set null" }),
+    note: text(),
+    /** The giving row written on success - and the idempotency latch. */
+    givingId: uuid().references((): AnyPgColumn => giving.id, {
+      onDelete: "set null",
+    }),
+    /** Why the gateway refused, in its own words. Kept for support. */
+    failReason: text(),
+    paidAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("online_payment_church_idx").on(t.churchId, t.status),
+    index("online_payment_link_idx").on(t.linkId),
+    index("online_payment_created_idx").on(t.createdAt),
+  ],
+);
 
 export const givingCategory = pgTable(
   "giving_category",

@@ -81,6 +81,7 @@ export const PLANS: Plan[] = [
     features: [
       "Up to 1,000 members",
       "Everything in Starter",
+      "Online giving \u2014 take offerings and tithes through your own Paystack, Flutterwave or Monnify account, from one shareable link. The money goes straight to your own bank account; we take nothing",
       "Virtual meetings (beta) — video, audio, screen sharing and scripture on screen, straight from a browser. Built for weak connections, with a one-tap audio-only mode. Up to 50 people in a room",
       "Training & classes — Foundation, Baptism, Pre-Marital, leadership, with badges beside members' names",
       "Building projects & pledge tracking",

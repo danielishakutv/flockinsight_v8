@@ -80,6 +80,7 @@ export type FeatureKey =
   | "analytics"
   | "activityLog"
   | "dataExport"
+  | "onlineGiving"
   // --- Pro ---
   | "meetings.repeat"
   | "meetings.record"
@@ -148,6 +149,12 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   },
 
   /* ---------------------------------------------------- Growth */
+  onlineGiving: {
+    plan: "growth",
+    label: "Online giving",
+    blurb:
+      "Take offerings and tithes online through your own Paystack, Flutterwave or Monnify account \u2014 one shareable link, and the money lands in your own bank account.",
+  },
   meetings: {
     plan: "growth",
     label: "Virtual meetings",

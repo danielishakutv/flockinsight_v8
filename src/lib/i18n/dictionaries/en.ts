@@ -2132,6 +2132,7 @@ export const en = {
     services: "Services",
     attendance: "Who you count",
     givingCategories: "Giving",
+    onlineGiving: "Online giving",
     financeSetup: "Finance",
     reminders: "Reminders",
     firstTimers: "First-timers",
@@ -2243,6 +2244,74 @@ export const en = {
     repeatPassword: "Repeat new password",
     changePassword: "Change password",
     passwordChanged: "Your password is changed.",
+  },
+
+  /* ============================================================
+   * Online giving — the public page, and setting it up
+   * ========================================================== */
+  give: {
+    /* ---- the public giving page ---- */
+    howMuch: "How much would you like to give?",
+    amount: "Amount",
+    yourEmail: "Your email address",
+    emailPlaceholder: "you@example.com",
+    receiptGoesHere: "Your receipt goes here. It is not shown to anyone else.",
+    yourName: "Your name",
+    optionalAnonymous: "(optional — leave blank to give anonymously)",
+    anonymous: "Anonymous",
+    yourFullName: "Your full name",
+    phoneNumber: "Phone number",
+    optional: "(optional)",
+    phoneHelps: "Helps the church record your gift against your name.",
+    anythingToAdd: "Anything to add?",
+    notePlaceholder: "Tithe for October",
+    taking: "Taking you to pay…",
+    continue: "Continue",
+    smallestGift: "The smallest gift through this link is {amount}.",
+    speakToChurch: "Please speak to the church if you'd like to give.",
+    ownPage: "{church} takes gifts on its own giving page.",
+    continueToGive: "Continue to give",
+    ownPageNote: "You'll be taken to the church's own payment page.",
+    cardSafety:
+      "Your card details are entered on your payment provider's own secure page, never here. Gifts go directly into {church}'s own account.",
+
+    /* ---- setting it up ---- */
+    /* the recent-gifts table */
+    colGiver: "Giver",
+    colFor: "For",
+    colAmount: "Amount",
+    colStatus: "Status",
+    colWhen: "When",
+    inUse: "In use",
+    saved: "Saved",
+    noRecordsBack: "No records come back",
+    givingOff: "Online giving is off.",
+    copyFailed: "Couldn't copy. Select it and copy it by hand.",
+    closed: "Closed",
+    openForGiving: "Open for giving",
+    whatIsItCalled: "What is it called?",
+    titlePlaceholder: "Tithes & offerings",
+    recordUnder: "Record gifts under",
+    noCategory: "No category",
+    whatIsItFor: "What is it for? (optional)",
+    descriptionPlaceholder: "Shown under the title on the giving page.",
+    howMuchCanPeopleGive: "How much can people give?",
+    modeOpen: "Any amount they choose",
+    modePreset: "Suggested amounts, or their own",
+    modeFixed: "One fixed amount",
+    suggestedAmounts: "Suggested amounts",
+    askPhone: "Ask for a phone number",
+    askPhoneHint:
+      "Lets you match the gift to a member, and send an SMS receipt.",
+    allowAnonymous: "Allow anonymous gifts",
+    allowAnonymousHint:
+      "They still need an email address — the gateway sends its own receipt there.",
+    showProgress: "Show the running total",
+    showProgressHint:
+      "A thermometer on the page. Good for a building fund, usually wrong for weekly tithes.",
+    thankYouMessage: "Thank-you message (optional)",
+    thankYouPlaceholder:
+      "God bless you. Your gift goes straight into the building fund.",
   },
 
   activity: {

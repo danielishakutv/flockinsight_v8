@@ -16,7 +16,9 @@ export default async function SettingsLayout({
   // Finance settings answer to the finance permission, not the settings one —
   // the page behind it is the same one Finance shows, under the same gate.
   const canFinance = access.isOwner || access.perms.has("finance.view");
-  if (!canSettings && !canTeam) redirect("/dashboard");
+  // Online giving sits here but belongs to whoever keeps the giving records.
+  const canGiving = access.isOwner || access.perms.has("giving.view");
+  if (!canSettings && !canTeam && !canGiving) redirect("/dashboard");
 
   return (
     <PageContainer className="max-w-6xl">
@@ -29,6 +31,7 @@ export default async function SettingsLayout({
           canSettings={canSettings}
           canTeam={canTeam}
           canFinance={canFinance}
+          canGiving={canGiving}
         />
         <div className="mt-6 min-w-0 lg:mt-0">{children}</div>
       </div>
