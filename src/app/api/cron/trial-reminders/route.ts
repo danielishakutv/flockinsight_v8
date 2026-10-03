@@ -5,6 +5,9 @@ import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 import { withCronRun } from "@/lib/cron-run";
+// A church writes its own name, and it ends up inside an HTML email to its
+// own managers. Nothing stops somebody typing a tag into it.
+import { escapeHtml } from "@/lib/html-escape";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -93,7 +96,7 @@ export async function GET(request: Request) {
         );
       const html = emailLayout(
         `Your FlockInsight trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
-        `<p>Hi,</p><p>${c.name} has been enjoying its first 7 Sundays free on FlockInsight. That trial ends in <strong>${daysLeft} day${daysLeft === 1 ? "" : "s"}</strong>.</p><p>To keep attendance, members, giving, devotionals and everything else, choose a plan. Need a little more time? Just reply or request an extension in the app and our Head of Missions will take a look.</p>`,
+        `<p>Hi,</p><p>${escapeHtml(c.name)} has been enjoying its first 7 Sundays free on FlockInsight. That trial ends in <strong>${daysLeft} day${daysLeft === 1 ? "" : "s"}</strong>.</p><p>To keep attendance, members, giving, devotionals and everything else, choose a plan. Need a little more time? Just reply or request an extension in the app and our Head of Missions will take a look.</p>`,
         { label: "Choose a plan", url: `${siteUrl()}${link}` },
       );
       await Promise.all(
@@ -173,7 +176,7 @@ export async function GET(request: Request) {
         );
       const html = emailLayout(
         `Your complimentary access ends in ${dayWord}`,
-        `<p>Hi,</p><p>FlockInsight has been on us for <strong>${c.name}</strong>. That complimentary period ends in <strong>${dayWord}</strong>.</p><p>Choose a plan before then and nothing changes — your attendance, members, giving and everything else carry straight on. If you'd like us to extend it, just reply to this email.</p>`,
+        `<p>Hi,</p><p>FlockInsight has been on us for <strong>${escapeHtml(c.name)}</strong>. That complimentary period ends in <strong>${dayWord}</strong>.</p><p>Choose a plan before then and nothing changes — your attendance, members, giving and everything else carry straight on. If you'd like us to extend it, just reply to this email.</p>`,
         { label: "Choose a plan", url: `${siteUrl()}${link}` },
       );
       await Promise.all(
