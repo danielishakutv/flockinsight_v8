@@ -229,6 +229,8 @@ export const en = {
     sectionPeople: "People",
     sectionAccount: "Account",
     yourProfile: "Your profile",
+    yourChurches: "Your churches",
+    chooseChurch: "Choose a church…",
     platformAdmin: "Platform Admin",
     signOut: "Sign out",
     signedOut: "Signed out",

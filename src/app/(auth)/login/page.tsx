@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { signIn, authClient } from "@/lib/auth-client";
+import { landingPath } from "@/app/select-church/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,7 +24,12 @@ function LoginForm() {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
-  const redirectTo = params.get("redirect") || "/dashboard";
+  /*
+   * An explicit ?redirect= always wins: somebody following an invite link is
+   * going where the link said. Without one, where to land is the server's
+   * question to answer — see landingPath().
+   */
+  const explicitRedirect = params.get("redirect");
   const [loading, setLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
@@ -51,7 +57,16 @@ function LoginForm() {
       return;
     }
     toast.success(t("common.welcomeBack"));
-    router.push(redirectTo);
+    /*
+     * Asked, not assumed. Somebody in two churches is sent to the chooser,
+     * somebody with none to onboarding, and a platform operator with no church
+     * to /superadmin — all facts only the server holds. A failure here is not
+     * worth blocking a successful sign-in, so the dashboard remains the
+     * fallback and the shell will redirect from there if it has to.
+     */
+    const target =
+      explicitRedirect ?? (await landingPath().catch(() => "/dashboard"));
+    router.push(target);
     router.refresh();
   }
 
@@ -60,7 +75,7 @@ function LoginForm() {
     setResending(true);
     const { error } = await authClient.sendVerificationEmail({
       email: unverifiedEmail,
-      callbackURL: redirectTo,
+      callbackURL: explicitRedirect ?? "/dashboard",
     });
     setResending(false);
     if (error) {

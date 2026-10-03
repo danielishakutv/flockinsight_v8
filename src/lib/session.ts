@@ -150,6 +150,27 @@ export const requireChurch = cache(async () => {
     .limit(1);
 
   if (!activeChurch) redirect("/onboarding");
+
+  /*
+   * The active church must be one of theirs.
+   *
+   * It is a plain column with no foreign key, set at login or by a switch, and
+   * it can outlive the membership that justified it — somebody removed from a
+   * church they were switched into would otherwise keep rendering its shell
+   * with every permission check failing, which looks like the app breaking
+   * rather than like access ending.
+   *
+   * Narrow on purpose: only redirected when they DO belong somewhere else, so
+   * there is a real choice to offer. With no memberships at all this changes
+   * nothing, because this is also the path a church's own owner takes in the
+   * seconds between creating a church and the staff row landing.
+   */
+  if (!actAsId) {
+    const mine = await getMyChurches();
+    if (mine.length > 0 && !mine.some((c) => c.id === activeChurch.id)) {
+      redirect("/select-church");
+    }
+  }
   // Don't bounce an acting-as superadmin out of a suspended church — they may
   // be entering precisely to investigate or fix it.
   if (activeChurch.status === "suspended" && !actAsId) redirect("/suspended");

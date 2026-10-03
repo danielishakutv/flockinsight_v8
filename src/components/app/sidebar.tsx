@@ -24,6 +24,8 @@ export function Sidebar({
   perms = [],
   isOwner = false,
   plan = "starter",
+  churches = [],
+  activeChurchId = null,
 }: {
   churchName: string;
   userName: string;
@@ -37,6 +39,9 @@ export function Sidebar({
    * to the smallest, like every other allowance in the app.
    */
   plan?: string;
+  /** For the switcher in the account menu. Empty or one = no switcher. */
+  churches?: { id: string; name: string }[];
+  activeChurchId?: string | null;
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -120,6 +125,8 @@ export function Sidebar({
           email={userEmail}
           image={userImage}
           isSuperAdmin={isSuperAdmin}
+          churches={churches}
+          activeChurchId={activeChurchId}
           className="w-full"
         />
       </div>

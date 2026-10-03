@@ -1,11 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import Link from "next/link";
-import { LogOut, Settings, Moon, Sun, Laptop, Shield, UserRound } from "lucide-react";
+import {
+  Check,
+  Church,
+  Laptop,
+  LogOut,
+  Moon,
+  Settings,
+  Shield,
+  Sun,
+  UserRound,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
+import { chooseChurch } from "@/app/select-church/actions";
 import { useT } from "@/components/i18n-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -27,12 +39,17 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+/** How many churches fit in the menu before it becomes a page of its own. */
+const INLINE_CHURCH_LIMIT = 6;
+
 export function UserMenu({
   name,
   email,
   image,
   className,
   isSuperAdmin = false,
+  churches = [],
+  activeChurchId = null,
 }: {
   name: string;
   email: string;
@@ -40,10 +57,36 @@ export function UserMenu({
   image?: string | null;
   className?: string;
   isSuperAdmin?: boolean;
+  /**
+   * Every church this person is staff in. One or none means no switcher —
+   * showing a list of one is noise in a menu that is already busy.
+   */
+  churches?: { id: string; name: string }[];
+  activeChurchId?: string | null;
 }) {
   const t = useT();
   const router = useRouter();
   const { setTheme } = useTheme();
+  const [switching, startSwitch] = useTransition();
+
+  function switchTo(id: string) {
+    if (id === activeChurchId) return;
+    startSwitch(async () => {
+      const res = await chooseChurch(id);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      /*
+       * Home, not wherever they were. Half the app is addressed by a record id
+       * that belongs to the church they just left — a member page, a service, a
+       * meeting — and staying put would mean a not-found or, worse, a page that
+       * looks right with somebody else's numbers on it.
+       */
+      router.push("/dashboard");
+      router.refresh();
+    });
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -98,6 +141,32 @@ export function UserMenu({
               {t("nav.platformAdmin")}
             </Link>
           </DropdownMenuItem>
+        )}
+        {churches.length > 1 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+              {t("nav.yourChurches")}
+            </DropdownMenuLabel>
+            {churches.slice(0, INLINE_CHURCH_LIMIT).map((c) => (
+              <DropdownMenuItem
+                key={c.id}
+                disabled={switching}
+                onClick={() => switchTo(c.id)}
+              >
+                {c.id === activeChurchId ? <Check /> : <Church />}
+                <span className="truncate">{c.name}</span>
+              </DropdownMenuItem>
+            ))}
+            {churches.length > INLINE_CHURCH_LIMIT && (
+              <DropdownMenuItem asChild>
+                <Link href="/select-church">
+                  <Church />
+                  {t("nav.chooseChurch")}
+                </Link>
+              </DropdownMenuItem>
+            )}
+          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">

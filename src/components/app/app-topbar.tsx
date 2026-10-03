@@ -10,12 +10,16 @@ export function AppTopbar({
   userImage,
   isSuperAdmin = false,
   unread = 0,
+  churches = [],
+  activeChurchId = null,
 }: {
   userName: string;
   userEmail: string;
   userImage?: string | null;
   isSuperAdmin?: boolean;
   unread?: number;
+  churches?: { id: string; name: string }[];
+  activeChurchId?: string | null;
 }) {
   return (
     <header className="bg-background/80 sticky top-[env(safe-area-inset-top)] z-30 flex h-16 items-center justify-between border-b px-4 backdrop-blur lg:hidden">
@@ -29,6 +33,8 @@ export function AppTopbar({
           email={userEmail}
           image={userImage}
           isSuperAdmin={isSuperAdmin}
+          churches={churches}
+          activeChurchId={activeChurchId}
         />
       </div>
     </header>

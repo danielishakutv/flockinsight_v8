@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { getIsSuperAdmin, getMustChangePassword, requireChurch } from "@/lib/session";
+import {
+  getIsSuperAdmin,
+  getMustChangePassword,
+  getMyChurches,
+  requireChurch,
+} from "@/lib/session";
 import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { computeStanding } from "@/lib/trial";
@@ -32,7 +37,7 @@ export default async function AppLayout({
   if (await getMustChangePassword()) redirect("/set-password");
   const { user, church, impersonating } = await requireChurch();
   const { locale, dict } = await getI18n();
-  const [isSuperAdmin, access, unread] = await Promise.all([
+  const [isSuperAdmin, access, unread, myChurches] = await Promise.all([
     getIsSuperAdmin(),
     getAccess(),
     unreadCount({
@@ -41,6 +46,8 @@ export default async function AppLayout({
       country: church.country,
       userId: user.id,
     }),
+    // Only to decide whether the account menu shows a switcher at all.
+    getMyChurches(),
   ]);
   const perms = [...access.perms];
   const canRecord = access.isOwner || access.perms.has("attendance.manage");
@@ -100,6 +107,8 @@ export default async function AppLayout({
           userEmail={user.email}
           userImage={user.image}
           isSuperAdmin={isSuperAdmin}
+          churches={myChurches.map((c) => ({ id: c.id, name: c.name }))}
+          activeChurchId={church.id}
           perms={perms}
           isOwner={access.isOwner}
           plan={church.plan}
@@ -112,6 +121,8 @@ export default async function AppLayout({
             userImage={user.image}
             isSuperAdmin={isSuperAdmin}
             unread={unread}
+            churches={myChurches.map((c) => ({ id: c.id, name: c.name }))}
+            activeChurchId={church.id}
           />
           <DesktopTopbar unread={unread} canRecord={canRecord} />
           <main className="flex-1 overflow-x-clip pb-24 lg:pb-0">
