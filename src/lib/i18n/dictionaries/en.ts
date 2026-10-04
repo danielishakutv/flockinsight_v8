@@ -229,6 +229,8 @@ export const en = {
     sectionPeople: "People",
     sectionAccount: "Account",
     yourProfile: "Your profile",
+    studio: "Photo studio",
+    studioDesc: "Put your logo on a whole service's photos at once",
     yourChurches: "Your churches",
     chooseChurch: "Choose a church…",
     platformAdmin: "Platform Admin",
@@ -2332,6 +2334,118 @@ export const en = {
     thankYouMessage: "Thank-you message (optional)",
     thankYouPlaceholder:
       "God bless you. Your gift goes straight into the building fund.",
+  },
+
+  /* ============================================================
+   * The photo studio — branding photographs, all on the device
+   * ========================================================== */
+  studio: {
+    title: "Photo studio",
+    subtitle:
+      "Put your church's logo on a whole service's photographs at once, compress them for sharing, and download them as a zip.",
+    howToUse: "How to use it",
+
+    /* ---- photos ---- */
+    photos: "Photos",
+    photosHint:
+      "Everything happens on this device — your photos are never uploaded, so nothing waits on your connection and nothing uses your storage.",
+    addPhotos: "Add photos",
+    dropHint:
+      "Or drag them here, or paste from your clipboard. Up to {max} at a time.",
+    clear: "Clear",
+    selected: "{n} selected",
+    landscapeCount: "{n} landscape",
+    portraitCount: "{n} portrait",
+    notImages: "Those files aren't images.",
+    limitReached: "That's the limit of {max} photos in one go.",
+    unreadable: "{name} couldn't be read as an image.",
+    processFailed: "Couldn't process {name}.",
+
+    /* ---- logo ---- */
+    logoTitle: "Your logo or watermark",
+    uploadLogo: "Upload a logo",
+    useChurchLogo: "Use my church logo",
+    logoHint:
+      "PNG, JPG or WebP. A logo on a plain white background is fine — we can knock the white out for you.",
+    startAgain: "Start again",
+    backgroundRemoved: "Background removed",
+    removeBackground: "Remove background",
+    edgesTrimmed: "Edges trimmed",
+    trimEdges: "Trim blank edges",
+    crop: "Crop",
+    cropDragging: "Drag on the logo…",
+    clearCrop: "Clear crop",
+    toleranceLabel: "How much of the background to take ({n})",
+    toleranceHint:
+      "Raise it if a pale halo is left. Lower it if the logo itself starts disappearing. It only works inward from the edges, so white inside a letter is never touched.",
+    logoUnreadable: "That file couldn't be read as an image.",
+    churchLogoFailed:
+      "Couldn't load your church logo from Settings. Upload the file here instead.",
+
+    /* ---- placement ---- */
+    placementTitle: "Where it goes",
+    placementHint:
+      "Portrait and landscape photos are set separately, and each photo uses the right one automatically — so a mixed batch comes out consistent without sorting it first.",
+    position: "Position",
+    sizeLabel: "Size — {n}% of the photo's width",
+    marginLabel: "Distance from the edge — {n}%",
+    strengthLabel: "Strength — {n}%",
+    preview: "Preview",
+    previewEmpty: "Add a photo to see this",
+    previewNone: "No photos of this shape in the batch yet",
+    previewFailed: "Couldn't draw the preview on this device.",
+
+    /* ---- text ---- */
+    textTitle: "A line of text",
+    textHint:
+      "The service and the date, a sermon title, a verse. Burned onto the photo, so it survives being forwarded.",
+    textToggle: "Add a line of text",
+    textWhat: "What it says",
+    textPlaceholder: "Sunday Service",
+    textPosition: "Text position",
+    textSize: "Text size — {n}%",
+    colour: "Colour",
+    backdrop: "Shade behind the words",
+
+    /* ---- output ---- */
+    outputTitle: "Size and quality",
+    outputHint:
+      "Quality is kept; the file is not. A 4MB camera photo usually lands under 500KB with nothing visible lost, which is what makes a whole service shareable on WhatsApp.",
+    longestEdge: "Longest edge",
+    shape: "Shape",
+    fileType: "File type",
+    webp: "WebP — smallest",
+    jpeg: "JPEG — works everywhere",
+    qualityLabel: "Quality — {n}",
+
+    /* ---- presets ---- */
+    presetTitle: "Save this as your church's brand",
+    presetHint:
+      "Everything above except the logo file itself. Whoever opens the studio next — on any phone — starts with these settings, so four volunteers produce one consistent look.",
+    presetName: "Name",
+    presetNamePlaceholder: "Our brand",
+    save: "Save",
+    presetSaved: "Saved. Everyone in your church opens the studio with this.",
+    presetLoaded: "Loaded “{name}”.",
+    presetDeleted: "Preset deleted.",
+    presetDeleteConfirm: "Delete the preset “{name}”?",
+    presetDefault: "default",
+
+    /* ---- doing it ---- */
+    process: "Process {n} photos",
+    processOne: "Process 1 photo",
+    processEmpty: "Process photos",
+    working: "Working… {done} of {total}",
+    ready:
+      "{n} ready — {saving}",
+    downloadAll: "Download all ({n})",
+    saveToLibrary: "Save to library",
+    saving: "Saving {done}/{total}…",
+    savedToLibrary:
+      "{n} in your media library. They are removed automatically after {days} days — your originals are untouched.",
+    saveFailed: "Nothing could be saved to the library.",
+    retentionNote:
+      "Saving to the library gives you a shareable link. Those copies are removed after {days} days so they do not eat your storage — your originals and your downloads are not affected.",
   },
 
   activity: {

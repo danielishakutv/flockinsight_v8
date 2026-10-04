@@ -10,8 +10,10 @@
  *
  *   node scripts/audit-tap-targets.mjs
  *
- * One finding is expected and correct: the remove-photo button on a thumbnail
- * is 36px, because 44 would cover half of the photo being judged.
+ * Two findings are expected and correct, both the same situation: the
+ * remove-photo button on a thumbnail (in the image uploader, and on each photo
+ * in the photo studio) is 36px, because 44 would cover half of the photo being
+ * judged.
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

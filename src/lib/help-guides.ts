@@ -19,6 +19,7 @@ import { MONEY_GUIDES } from "./help/money";
 import { CONTRIBUTION_GUIDES } from "./help/contributions";
 import { COMMS_GUIDES } from "./help/comms";
 import { CONTENT_GUIDES } from "./help/content";
+import { STUDIO_GUIDES } from "./help/studio";
 import { PUBLIC_GUIDES } from "./help/publicpage";
 import { ACCOUNT_GUIDES } from "./help/account";
 
@@ -53,6 +54,7 @@ const ALL: Omit<Guide, "minutes">[] = [
   ...CONTRIBUTION_GUIDES,
   ...COMMS_GUIDES,
   ...CONTENT_GUIDES,
+  ...STUDIO_GUIDES,
   ...PUBLIC_GUIDES,
   ...ACCOUNT_GUIDES,
 ];

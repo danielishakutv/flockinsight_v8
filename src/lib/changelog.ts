@@ -29,6 +29,32 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.67.0",
+    date: "2026-10-04",
+    summary:
+      "A photo studio. Put your church's logo on a whole service's photographs at once, add the date, shrink them for WhatsApp, and download the lot as a zip \u2014 on your phone, without uploading anything.",
+    changes: {
+      Added: [
+        "Photo studio, under Media. Add up to a hundred photos, upload your logo, choose where it sits, and press Process. Every photo comes out with the same mark in the same place \u2014 which is the difference between a church that looks like itself and one that looks like whoever was holding the phone.",
+        "Portrait and landscape are set up separately, and each photo automatically uses the settings for its own shape. A mixed batch from a service comes out consistent without sorting it first.",
+        "Your logo, tidied up: remove a white background (it only works inward from the edges, so white inside a letter is never touched), trim the blank space around it, or crop it by dragging a box. Every control can be turned off again without re-uploading.",
+        "A line of text burned onto the photo \u2014 the service and the date, a sermon title, a verse \u2014 with one tap to insert your church's name or today's date. Because it is part of the picture, it survives being forwarded; a caption does not.",
+        "Download one photo, or all of them as a single zip file.",
+        "Export shapes for where you actually post: square for an Instagram grid, 4:5 for a feed post, 9:16 for a status or a story, 16:9 for a screen.",
+        "Save it all as your church's brand. Whoever opens the studio next \u2014 on any phone \u2014 starts with the same position, size, strength and output settings, so four volunteers produce one consistent look.",
+        "A full guide at Help \u2192 The photo studio: a start-to-finish walkthrough, a table of what to do when the logo looks wrong, and which size to choose for what.",
+      ],
+      Improved: [
+        "Quality is kept and the file is not: a 4MB camera photo usually comes out under 500KB with nothing visible lost, which is what makes a whole service shareable on WhatsApp. The studio shows you the saving on every photo.",
+        "Photos that other tools turn sideways come out the right way up, because the studio reads how the phone was held \u2014 which also means the watermark lands where you put it.",
+      ],
+      Security: [
+        "The studio removes the hidden location data from every photo it processes. A phone records the GPS coordinates of where a picture was taken, including inside somebody's home, and posting the file publishes them. Almost nobody knows they are there.",
+        "Nothing is uploaded. Every pixel is processed on your own device, so your photographs never reach our server, use none of your storage, and do not wait on your connection.",
+      ],
+    },
+  },
+  {
     version: "0.66.0",
     date: "2026-10-03",
     summary:

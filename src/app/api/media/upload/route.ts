@@ -11,6 +11,7 @@ import {
 } from "@/lib/media";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
+import { studioExpiry } from "@/lib/image-studio";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -144,6 +145,14 @@ export async function POST(request: Request) {
       originalName: file.name,
       title: title || undefined,
       uploadedBy: user.id,
+      /*
+       * The retention, set here and not by the caller.
+       *
+       * A studio export is a copy of something the church already has, so it
+       * is kept for a month and then swept. Everything else is the church's
+       * own file and is kept until they delete it.
+       */
+      expiresAt: kind === "studio" ? studioExpiry() : null,
     });
   } catch (e) {
     console.error("[media/upload] failed", e);

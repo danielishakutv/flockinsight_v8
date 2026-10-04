@@ -638,6 +638,13 @@
       "when": 1791057728429,
       "tag": "0090_demo_church",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791101037399,
+      "tag": "0091_image_studio",
+      "breakpoints": true
     }
   ]
 }

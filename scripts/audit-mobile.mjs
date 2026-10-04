@@ -56,6 +56,7 @@ const APP_PAGES = [
   "/finance/categories",
   "/follow-up",
   "/media",
+  "/studio",
   "/forms",
   "/devotionals",
   "/my-events",
@@ -206,15 +207,40 @@ const LONG_TOKEN = /[^\s<>&]{22,}/;
  *     there can overflow.
  *   - Its cells are fixed-ratio media tiles. Three photos across is how a phone
  *     gallery is meant to look; three columns of figures is not.
+ *   - The grid itself has an explicit width that fits. A w-[132px] grid cannot
+ *     overflow a 288px content box however many columns it has — a 3x3 position
+ *     picker is three columns by its nature, and collapsing it would stop it
+ *     being a picture of where the thing goes.
+ *   - Its cells are a fixed size that multiplies out to something that fits.
+ *     Three size-10 buttons is 120px; three size-40 tiles is 480px and is
+ *     still reported.
  *
  * Deliberately shallow — one element, no parsing. It only has to tell a gallery
  * of photos from a row of numbers.
  */
-function gridCannotOverflow(html, from) {
+function gridCannotOverflow(html, from, cls = [], cols = 0) {
+  // An explicit width that already fits settles it, whatever is inside.
+  for (const c of cls) {
+    const px = /^w-\[(\d+)px\]$/.exec(c);
+    if (px && Number(px[1]) <= CONTENT_AT_320) return true;
+  }
+
   const next = /<(\/?)([a-zA-Z][^\s/>]*)([^>]*)>/.exec(html.slice(from, from + 600));
   if (!next) return true;
   if (next[1] === "/") return true; // closed straight away: no children
-  return classesOf(next[3]).some((c) => /^aspect-/.test(c));
+
+  const childClasses = classesOf(next[3]);
+  if (childClasses.some((c) => /^aspect-/.test(c))) return true;
+
+  // A fixed-size cell: Tailwind's size-N is N * 4px. Multiply it out rather
+  // than trusting it, so a grid of large tiles is still caught.
+  for (const c of childClasses) {
+    const size = /^size-(\d+)$/.exec(c);
+    if (size && cols > 0 && Number(size[1]) * 4 * cols <= CONTENT_AT_320) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function scan(path, html) {
@@ -308,7 +334,7 @@ function scan(path, html) {
     // Three columns is a defect when the cells hold words or figures, and
     // correct when they hold square thumbnails, and moot when the grid is empty.
     const cols = rigidGridColumns(cls);
-    if (cols >= 3 && !gridCannotOverflow(html, lastIndex)) {
+    if (cols >= 3 && !gridCannotOverflow(html, lastIndex, cls, cols)) {
       add("MEDIUM", "grid-too-many-columns", {
         columns: cols,
         perColumnAt320: `${Math.round(CONTENT_AT_320 / cols)}px`,

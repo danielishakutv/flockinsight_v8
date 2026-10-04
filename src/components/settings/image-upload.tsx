@@ -45,7 +45,15 @@ export async function compress(
  */
 export async function uploadImage(
   file: File,
-  kind: "logo" | "cover" | "photo" | "member" | "avatar" | "event" | "devotional",
+  kind:
+    | "logo"
+    | "cover"
+    | "photo"
+    | "member"
+    | "avatar"
+    | "studio"
+    | "event"
+    | "devotional",
   maxDim: number,
 ): Promise<string> {
   const blob = await compress(file, maxDim);

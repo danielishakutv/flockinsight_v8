@@ -25,6 +25,7 @@ import {
   UsersRound,
   Video,
   Wallet,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -133,6 +134,12 @@ export const mainNav: NavItem[] = [
     perm: "followup.view",
   },
   { labelKey: "nav.media", href: "/media", icon: FolderOpen, perm: "media.view" },
+  {
+    labelKey: "nav.studio",
+    href: "/studio",
+    icon: Wand2,
+    perm: "media.view",
+  },
   { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view", feature: "forms" },
   {
     labelKey: "nav.devotionals",
@@ -260,6 +267,14 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         icon: FolderOpen,
         descriptionKey: "nav.mediaDesc",
         tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
+        perm: "media.view",
+      },
+      {
+        labelKey: "nav.studio",
+        href: "/studio",
+        icon: Wand2,
+        descriptionKey: "nav.studioDesc",
+        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
         perm: "media.view",
       },
       {

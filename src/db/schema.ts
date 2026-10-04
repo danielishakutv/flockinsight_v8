@@ -519,6 +519,18 @@ export const media = pgTable(
     durationSec: numeric({ precision: 10, scale: 2, mode: "number" }), // audio/video
     // ----- Display / library -----
     title: text(), // human label (e.g. sermon title); falls back to originalName
+    /**
+     * When this file should be removed, or null to keep it for ever.
+     *
+     * Set on DERIVATIVES — a watermarked copy saved out of the image studio,
+     * where the church still holds the original and the point of saving it was
+     * to get a link into a WhatsApp group this week. Keeping those for ever
+     * quietly eats a 200MB quota with files nobody opens again.
+     *
+     * Nothing a church uploaded itself ever carries one. The storage cron
+     * removes what has lapsed (see /api/cron/storage).
+     */
+    expiresAt: timestamp({ withTimezone: true }),
     originalName: text(),
     uploadedBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -526,6 +538,57 @@ export const media = pgTable(
   (t) => [
     index("media_church_idx").on(t.churchId),
     index("media_church_kind_idx").on(t.churchId, t.kind),
+  ],
+);
+
+/**
+ * A church's photo-branding preset: its logo, and where it goes.
+ *
+ * Saved per church rather than per person, because the point of the studio is
+ * that two hundred photographs taken by four volunteers come out looking like
+ * one church. A preset is the brand; whoever is holding the phone should not
+ * be deciding it again each week.
+ *
+ * `config` is the whole StudioPreset as JSON (lib/image-studio.ts) — position
+ * and size for portrait AND landscape, the text overlay, the output size and
+ * quality. One column rather than twenty, because every one of those is read
+ * and written together by one screen, and adding a knob should not be a
+ * migration. `normalisePreset()` mends anything missing or out of range on the
+ * way out, so an old row can never crash the editor.
+ */
+export const imagePreset = pgTable(
+  "image_preset",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    /**
+     * The logo, as a URL in the church's own media library.
+     *
+     * A reference, not bytes: the logo is already an upload the church made,
+     * it is small, and a URL means the preview on another volunteer's phone
+     * shows the same mark without anybody re-uploading it.
+     */
+    logoUrl: text(),
+    /** The media row the logo came from, so deleting it can be noticed. */
+    logoMediaId: uuid().references((): AnyPgColumn => media.id, {
+      onDelete: "set null",
+    }),
+    config: jsonb().$type<Record<string, unknown>>(),
+    /** The one the studio opens with. At most one per church. */
+    isDefault: boolean().notNull().default(false),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("image_preset_church_idx").on(t.churchId),
+    uniqueIndex("image_preset_name_idx").on(t.churchId, t.name),
   ],
 );
 

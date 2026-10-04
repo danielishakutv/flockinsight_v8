@@ -68,6 +68,7 @@ export type FeatureKey =
   | "events"
   | "celebrations"
   | "email"
+  | "photoStudio"
   // --- Growth ---
   | "meetings"
   | "livestreams"
@@ -146,6 +147,24 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     plan: "starter",
     label: "Email",
     blurb: "Email your members, within your plan's monthly allowance.",
+  },
+  /*
+   * On the SMALLEST plan, deliberately, and it is the only module here that
+   * costs nothing to serve: every pixel is processed on the church's own
+   * device, so a thousand churches watermarking a thousand services uses no
+   * CPU, no bandwidth and no storage of ours.
+   *
+   * Which makes it the wrong thing to charge for and the right thing to give
+   * away — a church with no designer gets something it would otherwise pay a
+   * person for, and the entry plan becomes markedly more generous for free.
+   * Moving it up a tier is a one-word change here if that ever stops being
+   * true.
+   */
+  photoStudio: {
+    plan: "starter",
+    label: "Photo studio",
+    blurb:
+      "Put your logo on a whole service's photographs at once, shrink them for sharing, and download them as a zip \u2014 all on your own phone.",
   },
 
   /* ---------------------------------------------------- Growth */

@@ -22,6 +22,15 @@ export type MediaKind =
    * face does not need permission over the church. See AVATAR_KIND below.
    */
   | "avatar"
+  /**
+   * A branded copy made in the photo studio.
+   *
+   * Its own kind for one reason: it is a DERIVATIVE. The church still has the
+   * original, and the point of saving one here is to get a link into a
+   * WhatsApp group this week — so these are the only media rows that carry an
+   * expiry, and the storage cron removes them after 30 days.
+   */
+  | "studio"
   | "event"
   | "devotional"
   | "sermon"
@@ -34,6 +43,7 @@ export const MEDIA_KINDS: MediaKind[] = [
   "photo",
   "member",
   "avatar",
+  "studio",
   "event",
   "devotional",
   "sermon",
@@ -70,6 +80,8 @@ export function permForKind(kind: MediaKind): string {
     // door.
     case "avatar":
       return "settings.manage";
+    case "studio":
+      return "media.manage";
     case "member":
       return "members.manage";
     case "devotional":
@@ -115,6 +127,14 @@ export async function storeMedia(opts: {
   originalName?: string;
   title?: string;
   uploadedBy?: string | null;
+  /**
+   * When this row should be swept away, or omitted to keep it for ever.
+   *
+   * Decided by the SERVER from the kind, never passed in from a browser — a
+   * client-chosen retention is a client-chosen way to keep a file for ever.
+   * See the upload route.
+   */
+  expiresAt?: Date | null;
 }): Promise<Media> {
   if (!isCloudinaryConfigured())
     throw new Error("Cloudinary isn't configured.");
@@ -149,6 +169,7 @@ export async function storeMedia(opts: {
       title: opts.title || opts.originalName || null,
       originalName: opts.originalName || null,
       uploadedBy: opts.uploadedBy ?? undefined,
+      expiresAt: opts.expiresAt ?? null,
     })
     .returning();
   return row;

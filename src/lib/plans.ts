@@ -64,6 +64,7 @@ export const PLANS: Plan[] = [
       "Groups, ministries & home cells",
       "Offerings & tithes by category",
       "Group contributions — one shareable link showing every naira a department has collected",
+      "Photo studio — put your logo on a whole service's photographs at once, add the date, shrink them for WhatsApp and download the lot as a zip. Works on a phone, with no upload and no waiting",
       "Your own public church page, with events people can register for",
       "Birthday & anniversary greetings by email",
       "Earn wallet credit for every church you refer",

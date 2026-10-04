@@ -5,6 +5,7 @@ import { debitWallet } from "@/lib/wallet";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { withCronRun } from "@/lib/cron-run";
+import { pruneExpiredMedia } from "@/lib/media-prune";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -86,8 +87,24 @@ export async function GET(request: Request) {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, renewed, lapsed }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  /*
+   * Then take out the rubbish.
+   *
+   * Derivatives saved from the image studio carry an expiry; nothing a church
+   * uploaded itself does. Done in the storage job rather than a job of its own
+   * because it is the same subject — what the church is paying quota for — and
+   * because one daily sweep is all a 30-day retention needs.
+   */
+  const pruned = await pruneExpiredMedia(now);
+  if (pruned.removed || pruned.failed) {
+    console.log(
+      `[storage] pruned ${pruned.removed} expired file(s), ${pruned.failed} could not be removed`,
+    );
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, renewed, lapsed, pruned: pruned.removed }),
+    { headers: { "Content-Type": "application/json" } },
+  );
   });
 }
