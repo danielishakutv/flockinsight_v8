@@ -23,6 +23,7 @@
  */
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
+import { PRESET_BY_ID, brandPreset } from "./qr/design";
 import {
   attendanceSession,
   devotional,
@@ -42,7 +43,11 @@ import {
   platformSetting,
   pledge,
   project,
+  qrCode,
   service,
+  shortLink,
+  shortLinkDestination,
+  shortLinkStat,
   subscriber,
   trainingCohort,
   trainingCourse,
@@ -73,6 +78,8 @@ type Manifest = {
   attendanceSession: string[];
   formResponse: string[];
   form: string[];
+  qrCode: string[];
+  shortLink: string[];
   devotional: string[];
   subscriber: string[];
   event: string[];
@@ -91,7 +98,8 @@ function emptyManifest(churchId: string): Manifest {
     trainingCourse: [], financeTransaction: [], financeAccount: [],
     financeCategory: [], giving: [], pledge: [], project: [],
     givingCategory: [], followUpInteraction: [], attendanceSession: [],
-    formResponse: [], form: [], devotional: [], subscriber: [], event: [],
+    formResponse: [], form: [], qrCode: [], shortLink: [],
+    devotional: [], subscriber: [], event: [],
     groupMembership: [], group: [], member: [], household: [], service: [],
   };
 }
@@ -192,6 +200,13 @@ export async function undoDemoSeed(churchId: string) {
     ["giving categories", m.givingCategory, (ids) => db.delete(givingCategory).where(inArray(givingCategory.id, ids))],
     ["follow-up interactions", m.followUpInteraction, (ids) => db.delete(followUpInteraction).where(inArray(followUpInteraction.id, ids))],
     ["attendance records", m.attendanceSession, (ids) => db.delete(attendanceSession).where(inArray(attendanceSession.id, ids))],
+    /* QR codes before the links they point at: the code's own foreign key is
+     * `set null`, so leaving them would not block the delete — it would leave
+     * a demo code pointing at nothing, which is exactly the broken state the
+     * showroom must never show. */
+    ["QR codes", m.qrCode, (ids) => db.delete(qrCode).where(inArray(qrCode.id, ids))],
+    /* The stats and the destination history cascade from the link itself. */
+    ["short links", m.shortLink, (ids) => db.delete(shortLink).where(inArray(shortLink.id, ids))],
     ["form responses", m.formResponse, (ids) => db.delete(formResponse).where(inArray(formResponse.id, ids))],
     ["forms", m.form, (ids) => db.delete(form).where(inArray(form.id, ids))],
     ["devotionals", m.devotional, (ids) => db.delete(devotional).where(inArray(devotional.id, ids))],
@@ -951,6 +966,189 @@ export async function seedDemoData(churchId: string) {
     .returning({ id: subscriber.id });
   man.subscriber.push(...subRows.map((r) => r.id));
   note(`${devos.length} devotionals, ${subs.length} subscribers`);
+
+  /* ---------- short links + QR codes ---------- */
+  /*
+   * A showroom needs this one to look USED rather than merely present: the
+   * point of a short link is the follow count beside it and the history of
+   * where it has pointed, and an empty table of three links demonstrates
+   * nothing. So each link gets a plausible run of daily figures, a split
+   * between scans and typed follows, and the giving link gets a second
+   * destination so the history has something in it.
+   *
+   * The codes are unique platform-wide, so each is prefixed to the demo church
+   * — two demo churches, or a demo beside a real one that happened to want
+   * "give", must not collide.
+   */
+  const codePrefix = `d${churchId.slice(0, 4).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const linkSpecs = [
+    {
+      code: `${codePrefix}-give`,
+      title: "Giving page",
+      destination: "https://example.church/give",
+      note: "On the screen at the front during the offering.",
+      follows: 412,
+      scanShare: 0.78,
+      previous: "https://example.church/offering-old",
+    },
+    {
+      code: `${codePrefix}-newhere`,
+      title: "New here? Tell us about yourself",
+      destination: "https://example.church/first-timer",
+      note: "Back of the welcome card.",
+      follows: 96,
+      scanShare: 0.62,
+      previous: null,
+    },
+    {
+      code: `${codePrefix}-carols`,
+      title: "Carol service registration",
+      destination: "https://example.church/carols",
+      note: "The 400 flyers we printed in November.",
+      follows: 238,
+      scanShare: 0.91,
+      previous: null,
+    },
+  ] as const;
+
+  const linkRows = await db
+    .insert(shortLink)
+    .values(
+      linkSpecs.map((l) => ({
+        churchId,
+        code: l.code,
+        title: l.title,
+        destination: l.destination,
+        note: l.note,
+        clickCount: l.follows,
+        lastClickAt: daysAgo(int(0, 2)),
+        createdAt: daysAgo(int(40, 90)),
+      })),
+    )
+    .returning({ id: shortLink.id, code: shortLink.code });
+  man.shortLink.push(...linkRows.map((r) => r.id));
+
+  const historyRows: (typeof shortLinkDestination.$inferInsert)[] = [];
+  const statRows: (typeof shortLinkStat.$inferInsert)[] = [];
+
+  for (let i = 0; i < linkRows.length; i++) {
+    const spec = linkSpecs[i];
+    const row = linkRows[i];
+
+    // Oldest first in the array; the page orders by date, so this reads as a
+    // history either way.
+    if (spec.previous) {
+      historyRows.push({
+        linkId: row.id,
+        churchId,
+        destination: spec.previous,
+        createdAt: daysAgo(70),
+      });
+    }
+    historyRows.push({
+      linkId: row.id,
+      churchId,
+      destination: spec.destination,
+      createdAt: daysAgo(spec.previous ? 21 : 70),
+    });
+
+    /*
+     * Sundays carry most of the follows, because that is what the chart is
+     * for: a church looking at this should recognise its own week in it.
+     */
+    let left = spec.follows;
+    const days: { day: string; clicks: number }[] = [];
+    for (let d = 29; d >= 0 && left > 0; d--) {
+      const date = daysAgo(d);
+      const sunday = date.getDay() === 0;
+      const want = sunday ? int(8, 30) : int(0, 4);
+      const clicks = Math.min(left, want);
+      left -= clicks;
+      if (clicks > 0) days.push({ day: iso(date), clicks });
+    }
+    // Anything left over predates the window and is only in the total, which
+    // is honest: the chart says "the last 30 days" and means it.
+    for (const d of days) {
+      statRows.push({ linkId: row.id, churchId, bucket: "day", key: d.day, clicks: d.clicks });
+    }
+
+    const scans = Math.round(spec.follows * spec.scanShare);
+    statRows.push({ linkId: row.id, churchId, bucket: "source", key: "qr", clicks: scans });
+    statRows.push({
+      linkId: row.id,
+      churchId,
+      bucket: "source",
+      key: "direct",
+      clicks: spec.follows - scans,
+    });
+    statRows.push({
+      linkId: row.id,
+      churchId,
+      bucket: "device",
+      key: "phone",
+      clicks: Math.round(spec.follows * 0.86),
+    });
+    statRows.push({
+      linkId: row.id,
+      churchId,
+      bucket: "device",
+      key: "computer",
+      clicks: spec.follows - Math.round(spec.follows * 0.86),
+    });
+  }
+
+  await db.insert(shortLinkDestination).values(historyRows);
+  await db.insert(shortLinkStat).values(statRows);
+
+  /*
+   * Three saved designs, each from a different preset, so the list shows what
+   * the designer can do rather than three identical black squares. Every one
+   * of these presets is asserted scannable in design.test.ts.
+   */
+  const giveLink = linkRows[0];
+  const carolsLink = linkRows[2];
+  const codeRows = await db
+    .insert(qrCode)
+    .values([
+      {
+        churchId,
+        title: "Give — screen at the front",
+        kind: "link" as const,
+        payload: { kind: "link" as const, url: `https://flockinsight.com/l/${giveLink.code}?s=qr` },
+        design: brandPreset(PRESET_BY_ID.offeringboard, "#5b3df5"),
+        shortLinkId: giveLink.id,
+        downloadCount: 4,
+      },
+      {
+        churchId,
+        title: "Carol service flyer",
+        kind: "link" as const,
+        payload: { kind: "link" as const, url: `https://flockinsight.com/l/${carolsLink.code}?s=qr` },
+        design: brandPreset(PRESET_BY_ID.bulletin, "#5b3df5"),
+        shortLinkId: carolsLink.id,
+        downloadCount: 2,
+      },
+      {
+        churchId,
+        title: "Guest WiFi — welcome desk",
+        kind: "wifi" as const,
+        payload: {
+          kind: "wifi" as const,
+          ssid: "Grace House Guest",
+          password: "Welcome2026",
+          security: "WPA" as const,
+          hidden: false,
+        },
+        design: brandPreset(PRESET_BY_ID.welcomedesk, "#5b3df5"),
+        shortLinkId: null,
+        downloadCount: 1,
+      },
+    ])
+    .returning({ id: qrCode.id });
+  man.qrCode.push(...codeRows.map((r) => r.id));
+  note(
+    `${linkRows.length} short links with ${statRows.length} days of figures, ${codeRows.length} QR codes`,
+  );
 
   // Persist the manifest last: if anything above failed, --undo would have
   // had an incomplete list anyway, and a half-written manifest is worse than

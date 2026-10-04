@@ -44,6 +44,7 @@ export const AUDIT_MODULES: AuditModule[] = [
   { key: "communication", label: "Communication", perm: "communication.view" },
   { key: "devotionals", label: "Devotionals", perm: "devotionals.view" },
   { key: "forms", label: "Forms", perm: "forms.view" },
+  { key: "links", label: "Links & QR codes", perm: "links.view" },
   { key: "media", label: "Media", perm: "media.view" },
   { key: "events", label: "Events" },
   { key: "reports", label: "Reports & exports" },

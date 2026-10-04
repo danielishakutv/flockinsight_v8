@@ -4839,3 +4839,203 @@ export type ContributionContributor = typeof contributionContributor.$inferSelec
 export type ContributionEntry = typeof contributionEntry.$inferSelect;
 export type ContributionPayout = typeof contributionPayout.$inferSelect;
 export type ContributionApproval = typeof contributionApproval.$inferSelect;
+
+/* ============================================================
+ * FlockInsight domain — short links & QR codes
+ *
+ * Two features that only make sense together. A QR code on a printed poster
+ * is permanent; the thing it points at is not. A church prints four hundred
+ * flyers for a carol service in November, the registration form moves in
+ * December, and the flyers are now litter. So a QR code here points at a SHORT
+ * LINK of ours by default, and the link's destination is a column somebody can
+ * edit from a phone.
+ *
+ * WHY CLICKS ARE STORED AS TOTALS AND NOT AS ROWS. The obvious design is one
+ * row per click, aggregated on read. That grows without bound — a link shared
+ * in a WhatsApp group with three hundred people produces three hundred rows,
+ * and a popular link produces them every week for ever, on a VPS that has
+ * already been taken down once by resource starvation. `short_link_stat` holds
+ * one row per link per bucket per value instead: 365 rows a year for the daily
+ * chart, a handful for the sources, exactly three for the devices. Every click
+ * is a single upsert statement, and nothing needs a pruning cron to keep it
+ * from eating the disk.
+ *
+ * What that costs, stated plainly: no per-click timeline, and no way to ask
+ * about one visitor. Neither is a question a church has needed to ask, and not
+ * storing the data is also the only way to be sure it cannot leak.
+ * ========================================================== */
+
+export const shortLinkStatusEnum = pgEnum("short_link_status", [
+  "active", // redirecting
+  "paused", // temporarily off; the code is kept
+  "archived", // retired, the code kept so it cannot be reissued to somebody else
+]);
+
+export const shortLink = pgTable(
+  "short_link",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * The half-name in /l/<code>.
+     *
+     * Globally unique, not unique per church, because the link has no church in
+     * it — one namespace, one owner per code. A church's own codes are theirs
+     * for ever: archiving a link keeps the row precisely so the code cannot be
+     * handed to somebody else and start taking people somewhere unexpected.
+     */
+    code: text().notNull().unique(),
+    title: text(),
+    destination: text().notNull(),
+    status: shortLinkStatusEnum().notNull().default("active"),
+    /** Why it exists, for whoever finds it in two years. */
+    note: text(),
+    /** Stops redirecting after this moment. Null = never. */
+    expiresAt: timestamp({ withTimezone: true }),
+    /**
+     * Denormalised totals, so a list of forty links is one query.
+     *
+     * The authoritative per-day figures are in `short_link_stat`; these are
+     * for the row in the table and for the sort order.
+     */
+    clickCount: integer().notNull().default(0),
+    lastClickAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("short_link_church_idx").on(t.churchId),
+    index("short_link_status_idx").on(t.churchId, t.status),
+  ],
+);
+
+/**
+ * Every address a link has ever pointed at.
+ *
+ * The feature is "change where it goes after it is printed", and a change with
+ * no record of what it used to be is not a feature anybody can trust. One row
+ * per destination, including the first, so the list reads as a history rather
+ * than as a diff against a value that is no longer anywhere.
+ */
+export const shortLinkDestination = pgTable(
+  "short_link_destination",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    linkId: uuid()
+      .notNull()
+      .references(() => shortLink.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    destination: text().notNull(),
+    changedBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("short_link_destination_link_idx").on(t.linkId, t.createdAt)],
+);
+
+/**
+ * Click totals, one row per link per bucket per value.
+ *
+ * `bucket` is "day", "source" or "device" and `key` is the value within it —
+ * a date as YYYY-MM-DD, a referrer host or "qr"/"direct", or one of three
+ * device words. One text key for all three rather than three tables, because
+ * every click writes to all three at once and one statement with three rows is
+ * one round trip.
+ */
+export const shortLinkStat = pgTable(
+  "short_link_stat",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    linkId: uuid()
+      .notNull()
+      .references(() => shortLink.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    bucket: text().notNull(),
+    key: text().notNull(),
+    clicks: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("short_link_stat_link_idx").on(t.linkId, t.bucket),
+    /* What the upsert conflicts on. Without it a click would insert a new row
+     * every time instead of incrementing one, which is the unbounded growth
+     * this table exists to avoid. */
+    uniqueIndex("short_link_stat_unique").on(t.linkId, t.bucket, t.key),
+  ],
+);
+
+export const qrCodeKindEnum = pgEnum("qr_code_kind", [
+  "link", // one of this church's short links — the destination stays editable
+  "url", // a fixed address
+  "text",
+  "wifi",
+  "phone",
+  "sms",
+  "whatsapp",
+  "email",
+  "contact",
+  "location",
+  "event",
+]);
+
+export const qrCode = pgTable(
+  "qr_code",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    title: text().notNull().default("Untitled code"),
+    kind: qrCodeKindEnum().notNull().default("url"),
+    /** What it encodes — see QrPayload in lib/qr/payload.ts. */
+    payload: jsonb()
+      .$type<import("@/lib/qr/payload").QrPayload>()
+      .notNull()
+      .default(sql`'{"kind":"url","url":""}'::jsonb`),
+    /** What it looks like — see QrDesign in lib/qr/design.ts. */
+    design: jsonb()
+      .$type<import("@/lib/qr/design").QrDesign>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /**
+     * The short link this points at, when it is a dynamic code.
+     *
+     * `set null` rather than cascade: deleting the link must not delete the
+     * design somebody spent twenty minutes on. The code then shows as pointing
+     * at nothing, which is a problem a person can see and fix, rather than a
+     * row that silently vanished.
+     */
+    shortLinkId: uuid().references(() => shortLink.id, { onDelete: "set null" }),
+    /** How many times it has been downloaded, as a sign of what is in use. */
+    downloadCount: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("qr_code_church_idx").on(t.churchId),
+    index("qr_code_link_idx").on(t.shortLinkId),
+  ],
+);
+
+export type ShortLink = typeof shortLink.$inferSelect;
+export type NewShortLink = typeof shortLink.$inferInsert;
+export type ShortLinkDestination = typeof shortLinkDestination.$inferSelect;
+export type ShortLinkStat = typeof shortLinkStat.$inferSelect;
+export type QrCode = typeof qrCode.$inferSelect;
+export type NewQrCode = typeof qrCode.$inferInsert;

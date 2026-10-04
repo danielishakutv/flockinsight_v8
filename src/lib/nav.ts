@@ -19,6 +19,7 @@ import {
   Network,
   PartyPopper,
   PlusCircle,
+  QrCode,
   Radio,
   Settings,
   Users,
@@ -141,6 +142,16 @@ export const mainNav: NavItem[] = [
     perm: "media.view",
   },
   { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view", feature: "forms" },
+  /*
+   * No `feature` key, deliberately, although the module has two.
+   *
+   * The QR half is on Starter and the shortener is on Growth, so there is no
+   * single entitlement that describes this entry. Naming the shortener's would
+   * put a "Growth" chip beside a page every church can already use in full;
+   * naming nothing shows the item to everybody, which is right, and the page
+   * itself gates its own two halves.
+   */
+  { labelKey: "nav.links", href: "/links", icon: QrCode, perm: "links.view" },
   {
     labelKey: "nav.devotionals",
     feature: "devotionals",
@@ -285,6 +296,14 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         descriptionKey: "nav.formsDesc",
         tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
         perm: "forms.view",
+      },
+      {
+        labelKey: "nav.links",
+        href: "/links",
+        icon: QrCode,
+        descriptionKey: "nav.linksDesc",
+        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+        perm: "links.view",
       },
       {
         labelKey: "nav.devotionals",

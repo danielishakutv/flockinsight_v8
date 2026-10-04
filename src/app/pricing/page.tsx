@@ -133,7 +133,18 @@ export default async function PricingPage() {
                   {p.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm">
                       <Check className="text-primary mt-0.5 size-4 shrink-0" />
-                      <span>{f}</span>
+                      {/*
+                        `break-words` because a feature line is prose written
+                        elsewhere (lib/plans.ts, or an override saved at
+                        /superadmin/pricing) and may contain a long unbreakable
+                        token. The short-links line names an example address,
+                        which at 320px is wider than the column and cannot wrap
+                        on its own — the mobile audit catches that as HIGH,
+                        because the CSS cannot behave any other way. A general
+                        guard here rather than reworded copy: the next long
+                        token would hit the same wall.
+                      */}
+                      <span className="break-words">{f}</span>
                     </li>
                   ))}
                 </ul>

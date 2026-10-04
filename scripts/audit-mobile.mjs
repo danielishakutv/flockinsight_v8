@@ -49,6 +49,8 @@ const APP_PAGES = [
   "/giving",
   "/giving/projects",
   "/giving/projects/report",
+  "/links",
+  "/links/qr/new",
   "/contributions",
   "/contributions/people",
   "/finance",

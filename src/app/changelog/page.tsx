@@ -87,7 +87,14 @@ export default function ChangelogPage() {
                             aria-hidden
                             className="bg-muted-foreground/40 mt-2 size-1.5 shrink-0 rounded-full"
                           />
-                          <span>{item}</span>
+                          {/*
+                            `break-words`, for the same reason as the feature
+                            lines on /pricing: a release note is prose written
+                            in lib/changelog.ts and may name an address or a
+                            long hyphenated phrase. At 320px those are wider
+                            than the column and cannot wrap on their own.
+                          */}
+                          <span className="break-words">{item}</span>
                         </li>
                       ))}
                     </ul>

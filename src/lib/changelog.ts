@@ -29,6 +29,31 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.68.0",
+    date: "2026-10-04",
+    summary:
+      "Short links and QR codes. One short address you can read out from the front — and change where it goes afterwards, without reprinting anything. Plus QR codes in your own colours, with your logo in the middle, checked to be sure they will really scan.",
+    changes: {
+      Added: [
+        "Short links: flockinsight.com/l/give on a poster, on a slide, or read from the front. Press Suggest and one is made for you, leaving out 0, o, 1, l and i — the five characters people get wrong when typing a link off a poster.",
+        "Change where a link goes at any time, and every printed copy follows at once. Every address it has ever pointed at is kept, with who changed it and when — so when a poster stops working you can see what it used to do.",
+        "A QR code designer: fourteen dot shapes, eight corner styles, gradients, bands of colour, a photograph showing through the dots, your logo or your church's initials in the middle, and a caption frame. Twelve complete looks to start from, each already in your church's colour.",
+        "QR codes for eleven things, not just a web address: your guest WiFi, a phone call, a WhatsApp message already written, a contact card for a pastor, a place on the map, and an event a phone can add to its calendar.",
+        "Dynamic codes. Point the code at one of your short links and you can change the destination for ever afterwards — which is what makes a printed code worth printing.",
+        "Figures for every link: follows per day for the last thirty days, where they came from, what kind of device, and — because a code made here carries a mark — how many scanned the poster rather than typed the link.",
+        "Pause, retire or expire a link. Each one shows a visitor a different page with a different sentence, so a paused link can be told from one that was mistyped. Retiring keeps the word reserved to you, so your old flyers can never start pointing somewhere unexpected.",
+        "A QR code button beside the share link on forms, your public page and group collections — the price list has promised “a shareable link and QR code” on forms since Growth launched, and this is the half that was missing.",
+      ],
+      Improved: [
+        "Every design is measured rather than eyeballed, and every warning carries the number behind it. Contrast as a ratio; how many millimetres across each dot would print; and what the logo in the middle actually costs — counted in codewords, exactly, by walking the same path the message was written along, rather than as the percentage-of-the-picture figure every other generator quotes and which is up to eight times wrong.",
+        "“Read it back” draws the finished picture, samples every dot the way a camera does, and compares what came back against what was encoded. It reports how many read wrong and shows you where on the code — which is usually the diagnosis: a ring around the middle is the logo, a drift across one corner is the photograph behind it, a scatter through the whole field is the contrast. It is the only honest answer when the dots are filled with a photograph.",
+        "Four verdicts rather than two. “Scans on screen — test a print” is the commonest outcome of a bold design, and collapsing it into either “fine” or “broken” is how a church ends up printing the broken one.",
+        "Anything covering the three corner squares, the dotted lines between them or the format strip is refused rather than warned about: those carry no redundancy at all, so nothing can repair them.",
+        "Help → Short links & QR codes has the walkthrough, a what-to-do-when-it-looks-wrong table, and what each check measures.",
+      ],
+    },
+  },
+  {
     version: "0.67.1",
     date: "2026-10-04",
     summary:

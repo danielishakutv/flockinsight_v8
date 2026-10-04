@@ -28,6 +28,7 @@ import type { FormStatus } from "@/lib/forms-shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/i18n-provider";
+import { QrButton } from "@/components/links/qr-button";
 
 type FormRow = {
   id: string;
@@ -197,6 +198,14 @@ function FormCard({
                   <Pencil className="size-4" /> Edit
                 </Link>
               </Button>
+              {f.status !== "draft" && (
+                /*
+                 * "Forms with a shareable link and QR code" has been on the
+                 * Growth plan since it launched, and the QR half did not exist
+                 * until now. This is it.
+                 */
+                <QrButton url={link} title={f.title} />
+              )}
               {f.status === "open" ? (
                 <Button
                   variant="ghost"

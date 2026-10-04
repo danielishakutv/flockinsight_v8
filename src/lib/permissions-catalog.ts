@@ -130,6 +130,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "links",
+    label: "Links & QR codes",
+    description:
+      "Short links for posters and pulpit announcements, and the QR codes that point at them.",
+    perms: [
+      { key: "links.view", label: "View & statistics" },
+      { key: "links.manage", label: "Create, edit & retire" },
+    ],
+  },
+  {
     key: "devotionals",
     label: "Devotionals & newsletters",
     description: "Publish devotionals/newsletters and manage subscribers.",

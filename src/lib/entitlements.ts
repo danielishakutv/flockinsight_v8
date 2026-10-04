@@ -69,6 +69,7 @@ export type FeatureKey =
   | "celebrations"
   | "email"
   | "photoStudio"
+  | "qrCodes"
   // --- Growth ---
   | "meetings"
   | "livestreams"
@@ -82,6 +83,7 @@ export type FeatureKey =
   | "activityLog"
   | "dataExport"
   | "onlineGiving"
+  | "shortLinks"
   // --- Pro ---
   | "meetings.repeat"
   | "meetings.record"
@@ -167,7 +169,46 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
       "Put your logo on a whole service's photographs at once, shrink them for sharing, and download them as a zip \u2014 all on your own phone.",
   },
 
+
+  /*
+   * ON STARTER FOR THE SAME REASON AS THE PHOTO STUDIO, and the reason is
+   * worth being precise about, because the other half of this module is not.
+   *
+   * Drawing a QR code costs us nothing at all. The encoder, the renderer and
+   * the scannability checks are pure functions that run on the church's own
+   * device: a thousand churches making a thousand codes uses no CPU of ours,
+   * no bandwidth and no storage, and the SVG and the PNG are both built and
+   * saved in the browser. So it is the wrong thing to charge for and the right
+   * thing to give away \u2014 and the price list has promised forms "with a
+   * shareable link and QR code" since Growth launched, which until now was a
+   * promise nothing in the product kept.
+   */
+  qrCodes: {
+    plan: "starter",
+    label: "QR codes",
+    blurb:
+      "Make a QR code for anything \u2014 your giving page, a form, your WiFi, a programme \u2014 with your logo in the middle and your own colours, checked to be sure it will actually scan.",
+  },
+
   /* ---------------------------------------------------- Growth */
+  /*
+   * THE SHORTENER IS NOT FREE, and the difference from `qrCodes` above is the
+   * honest reason it sits a tier up: a short link is a redirect WE serve, on
+   * our domain, on every scan of every poster, for as long as the poster
+   * exists \u2014 with a row written each time. That is a hosted service with a
+   * running cost and a support surface, not a drawing.
+   *
+   * It is also what makes a printed QR code worth printing, because the
+   * destination stays editable after the flyers are out. Which makes this the
+   * clearest upgrade reason on the price list: not "more of the same", but
+   * "the decision you are about to print becomes reversible".
+   */
+  shortLinks: {
+    plan: "growth",
+    label: "Short links",
+    blurb:
+      "Short, memorable links for a poster or a pulpit announcement \u2014 and you can change where each one goes afterwards, without reprinting anything. With a count of how many followed it, and whether they scanned or typed it.",
+  },
   onlineGiving: {
     plan: "growth",
     label: "Online giving",

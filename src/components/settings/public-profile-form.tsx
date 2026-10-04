@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUpload, GalleryUpload } from "@/components/settings/image-upload";
+import { QrButton } from "@/components/links/qr-button";
 import { CHURCH_THEMES } from "@/lib/church-themes";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
@@ -190,6 +191,7 @@ export function PublicProfileForm({
             <Button type="button" variant="outline" size="sm" onClick={share}>
               <Share2 className="size-4" /> Share
             </Button>
+            <QrButton url={url} title={`${f.name || "Our church"} page`} />
             <Button asChild variant="ghost" size="sm">
               <a href={url} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="size-4" /> Open page

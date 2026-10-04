@@ -12,6 +12,7 @@ import {
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/i18n-provider";
+import { QrButton } from "@/components/links/qr-button";
 
 /**
  * The share tab.
@@ -133,6 +134,12 @@ export function SharePanel({
           >
             <Copy className="size-4" aria-hidden /> {t("contributions.copyMessage")}
           </Button>
+          {/*
+            For the collection that goes on a noticeboard rather than into a
+            WhatsApp group. The code is saved, so it can be downloaded again
+            when the sheet is reprinted.
+          */}
+          <QrButton url={url} title={pot.title} variant="outline" size="default" />
           <Button asChild variant="outline">
             <a href={url} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="size-4" aria-hidden />{" "}
