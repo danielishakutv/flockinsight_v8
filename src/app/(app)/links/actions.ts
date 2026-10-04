@@ -20,6 +20,7 @@ import {
   codeTaken,
   createLink,
   freeCode,
+  getLink,
   setLinkStatus,
   updateLink,
 } from "@/lib/links";
@@ -287,6 +288,23 @@ export async function saveCode(input: CodeInput): Promise<ActionResult> {
     if (gate) return gate;
     if (!data.shortLinkId) {
       return { ok: false, error: "Choose which short link this code should point at." };
+    }
+    /*
+     * The id arrives from the client, and `qr_code.short_link_id` references
+     * `short_link.id` across the whole platform rather than within one church.
+     * Without this check a church could save a code against ANOTHER church's
+     * link id, and the designer and the list would then render that link's
+     * code, status and destination back to them: a cross-tenant read, from a
+     * foreign key the database was perfectly happy with.
+     *
+     * `getLink` is already scoped by church, so a link that is not theirs comes
+     * back null. Found by the automated review of this commit, not by writing
+     * the code — which is exactly the class of hole that looks fine in a
+     * diff.
+     */
+    const link = await getLink(ctx.church.id, data.shortLinkId);
+    if (!link) {
+      return { ok: false, error: "Choose one of your own short links." };
     }
   }
 

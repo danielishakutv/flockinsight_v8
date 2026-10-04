@@ -21,7 +21,7 @@
  * `afterAll`.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, not } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -43,7 +43,7 @@ import {
   updateLink,
   dayKeys,
 } from "@/lib/links";
-import { saveQrCode } from "@/lib/qr-codes";
+import { getQrCode, saveQrCode } from "@/lib/qr-codes";
 import { DEFAULT_DESIGN } from "@/lib/qr/design";
 
 let churchId = "";
@@ -332,6 +332,75 @@ describe("the destination history", () => {
       .from(shortLink)
       .where(eq(shortLink.id, link.id));
     expect(row.status).toBe("active");
+  });
+});
+
+/* ============================================================
+ * Cross-tenant foreign keys
+ * ========================================================== */
+
+describe("a QR code pointing at a link", () => {
+  it("will not show another church's link, even if the row names one", async () => {
+    /*
+     * The hole the automated review of this commit found, pinned shut.
+     *
+     * `qr_code.short_link_id` references `short_link.id` across the whole
+     * platform, not within one church — so the database is perfectly happy to
+     * store another church's link id, and the reads would then join it in and
+     * render that church's code, status and DESTINATION back to the wrong
+     * church. `saveCode` refuses such an id now; this checks the read as well,
+     * because the read is what turns a bad row into a leak and a bad row can
+     * also arrive from a restore or from a bug written later.
+     *
+     * Written against a row inserted DIRECTLY, deliberately: going through the
+     * action would only prove the action's check, and the point is that the
+     * query is safe on its own.
+     */
+    const other = await db
+      .select({ id: church.id })
+      .from(church)
+      .where(not(eq(church.id, churchId)))
+      .limit(1);
+    if (other.length === 0) {
+      // A single-church database cannot exercise this. Said out loud rather
+      // than passing quietly, so a green run is not mistaken for coverage.
+      console.warn("[links.db-check] only one church present — cross-tenant check skipped");
+      return;
+    }
+
+    const foreignCode = `${PREFIX}-foreign`;
+    const [foreignLink] = await db
+      .insert(shortLink)
+      .values({
+        churchId: other[0].id,
+        code: foreignCode,
+        destination: "https://secret.example.com/their-giving-page",
+        title: "Not ours",
+      })
+      .returning({ id: shortLink.id });
+    madeLinks.push(foreignLink.id);
+
+    const [row] = await db
+      .insert(qrCode)
+      .values({
+        churchId,
+        title: `${PREFIX} crosslink`,
+        kind: "link",
+        payload: { kind: "link", url: "https://flockinsight.com/l/whatever" },
+        design: DEFAULT_DESIGN,
+        shortLinkId: foreignLink.id,
+      })
+      .returning({ id: qrCode.id });
+    madeCodes.push(row.id);
+
+    const read = await getQrCode(churchId, row.id);
+    expect(read, "our own code row is still readable").toBeTruthy();
+    // ...but it must carry nothing at all from the other church's link.
+    expect(read!.shortLinkCode).toBeNull();
+    expect(read!.shortLinkDestination).toBeNull();
+    expect(read!.shortLinkStatus).toBeNull();
+    expect(JSON.stringify(read)).not.toContain("secret.example.com");
+    expect(JSON.stringify(read)).not.toContain(foreignCode);
   });
 });
 

@@ -84,6 +84,25 @@ function toRow(raw: {
   };
 }
 
+/**
+ * The join onto the short link, scoped to the SAME church as the code.
+ *
+ * The church condition is not redundant with the `where` clause above it. The
+ * `where` restricts which qr_code rows are read; this restricts which
+ * short_link row each one may pull in — and `qr_code.short_link_id` references
+ * `short_link.id` platform-wide, so a row carrying another church's id would
+ * otherwise join successfully and render that church's code and destination.
+ *
+ * `saveCode` now refuses such an id outright, so this should never fire. It
+ * stays because the join is what turns a bad row into a leak, and a row can
+ * also arrive from a restore, a migration, or a bug written later. The reads
+ * are the last line, so the reads are where the condition belongs.
+ */
+const LINK_JOIN = and(
+  eq(shortLink.id, qrCode.shortLinkId),
+  eq(shortLink.churchId, qrCode.churchId),
+);
+
 const SELECTION = {
   id: qrCode.id,
   title: qrCode.title,
@@ -104,7 +123,7 @@ export async function listQrCodes(churchId: string): Promise<QrRow[]> {
   const rows = await db
     .select(SELECTION)
     .from(qrCode)
-    .leftJoin(shortLink, eq(shortLink.id, qrCode.shortLinkId))
+    .leftJoin(shortLink, LINK_JOIN)
     .leftJoin(user, eq(user.id, qrCode.createdBy))
     .where(eq(qrCode.churchId, churchId))
     .orderBy(desc(qrCode.updatedAt));
@@ -115,7 +134,7 @@ export async function getQrCode(churchId: string, id: string): Promise<QrRow | n
   const [row] = await db
     .select(SELECTION)
     .from(qrCode)
-    .leftJoin(shortLink, eq(shortLink.id, qrCode.shortLinkId))
+    .leftJoin(shortLink, LINK_JOIN)
     .leftJoin(user, eq(user.id, qrCode.createdBy))
     .where(and(eq(qrCode.id, id), eq(qrCode.churchId, churchId)))
     .limit(1);
