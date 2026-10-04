@@ -2392,7 +2392,15 @@ export const en = {
     strengthLabel: "Strength — {n}%",
     preview: "Preview",
     previewEmpty: "Add a photo to see this",
-    previewNone: "No photos of this shape in the batch yet",
+    previewReading: "Reading your photos…",
+    previewNav:
+      "Swipe, or use the arrow keys, to check every photo before you download.",
+    previous: "Previous photo",
+    next: "Next photo",
+    counter: "{n} of {total}",
+    shapePortrait: "Portrait",
+    shapeLandscape: "Landscape",
+    previewThis: "Preview {name}",
     previewFailed: "Couldn't draw the preview on this device.",
 
     /* ---- text ---- */

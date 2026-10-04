@@ -29,6 +29,20 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.67.1",
+    date: "2026-10-04",
+    summary:
+      "The photo studio's preview is now a slide view: step through every photo and see the logo and text on each one before you download anything.",
+    changes: {
+      Improved: [
+        "The preview shows one photo at a time with Previous and Next, a count (“12 of 42”) and the filename — so you can check all forty-two before downloading, rather than trusting the first one and finding out later.",
+        "Swipe on a phone, or use the left and right arrow keys after tapping the preview.",
+        "Tap any thumbnail to see that photo large with the branding on. The one you are looking at is ringed in the grid.",
+        "Moving to a photo also selects its orientation, so the sliders beside the preview are always the ones affecting the photo on screen — previously you could be adjusting the landscape settings while looking at a portrait photo, and nothing appeared to happen.",
+      ],
+    },
+  },
+  {
     version: "0.67.0",
     date: "2026-10-04",
     summary:

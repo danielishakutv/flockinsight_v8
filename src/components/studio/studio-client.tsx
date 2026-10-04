@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileArchive,
   ImagePlus,
@@ -101,6 +103,18 @@ type Done = {
  */
 const MAX_PHOTOS = 100;
 
+/**
+ * How many downscaled previews to keep decoded at once.
+ *
+ * The preview is a carousel now, so somebody can walk through a hundred
+ * photographs — and a decoded 1200px bitmap is about 4MB of raw pixels. Keeping
+ * every one would reach 400MB and kill the tab on the ninetieth photo, with no
+ * message and nothing in the log. Eight is enough that stepping back and forth
+ * over a run of photos never re-decodes, and the oldest is closed as it falls
+ * out.
+ */
+const PREVIEW_CACHE_MAX = 8;
+
 export function StudioClient({
   churchName,
   churchLogoUrl,
@@ -119,6 +133,8 @@ export function StudioClient({
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [logo, setLogo] = useState<HTMLCanvasElement | null>(null);
   const [tab, setTab] = useState<OrientationKey>("landscape");
+  /** Which photo the preview is showing. Clamped on read, never in an effect. */
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [busy, setBusy] = useState<null | { done: number; total: number }>(null);
   const [uploading, setUploading] = useState<null | {
     done: number;
@@ -134,6 +150,8 @@ export function StudioClient({
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   /** Downscaled copies, so dragging a slider does not re-render 12 megapixels. */
   const previewCache = useRef<Map<string, ImageBitmap>>(new Map());
+  /** Where a drag on the preview started, for swipe detection. */
+  const swipeFrom = useRef<number | null>(null);
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -207,9 +225,38 @@ export function StudioClient({
     return () => window.removeEventListener("paste", onPaste);
   }, [addFiles]);
 
-  /* ---- the live preview ---- */
-  const previewSource = photos.find(
-    (p) => p.width > 0 && placementKeyFor(p.width, p.height) === tab,
+  /* ---- the live preview, as a carousel over every photo ---- */
+
+  /*
+   * Only measured photos can be previewed: the renderer needs the dimensions
+   * to know which orientation's settings apply. Unmeasured ones are a
+   * fraction of a second old and appear as soon as they are read.
+   */
+  const measured = photos.filter((p) => p.width > 0);
+  // Clamped here rather than corrected in an effect — removing the photo you
+  // were looking at should move the preview, not schedule a second render.
+  const index = Math.min(previewIndex, Math.max(0, measured.length - 1));
+  const previewSource = measured[index];
+
+  /**
+   * Move the preview, and bring the SETTINGS with it.
+   *
+   * This is the part that matters. If the preview showed a portrait photo
+   * while the sliders edited the landscape placement, dragging a slider would
+   * appear to do nothing — one screen quietly meaning two different things.
+   * So landing on a photo selects its orientation, and the controls beside it
+   * are always the ones affecting what is on screen.
+   */
+  const goTo = useCallback(
+    (next: number) => {
+      const list = photos.filter((p) => p.width > 0);
+      if (list.length === 0) return;
+      const clamped = Math.max(0, Math.min(next, list.length - 1));
+      setPreviewIndex(clamped);
+      const photo = list[clamped];
+      if (photo) setTab(placementKeyFor(photo.width, photo.height));
+    },
+    [photos],
   );
 
   useEffect(() => {
@@ -219,15 +266,26 @@ export function StudioClient({
     let cancelled = false;
 
     void (async () => {
-      let bitmap = previewCache.current.get(photo.id);
-      if (!bitmap) {
+      const cache = previewCache.current;
+      let bitmap = cache.get(photo.id);
+      if (bitmap) {
+        // Touch it, so Map's insertion order stays a recency order.
+        cache.delete(photo.id);
+        cache.set(photo.id, bitmap);
+      } else {
         const loaded = await previewBitmap(photo.file);
         if (cancelled) {
           loaded.bitmap.close?.();
           return;
         }
         bitmap = loaded.bitmap;
-        previewCache.current.set(photo.id, bitmap);
+        cache.set(photo.id, bitmap);
+        while (cache.size > PREVIEW_CACHE_MAX) {
+          const oldest = cache.keys().next().value;
+          if (oldest === undefined || oldest === photo.id) break;
+          cache.get(oldest)?.close?.();
+          cache.delete(oldest);
+        }
       }
       try {
         const { canvas: rendered } = renderBranded({ photo: bitmap, logo, preset });
@@ -258,6 +316,9 @@ export function StudioClient({
   }, []);
 
   function removePhoto(id: string) {
+    // Step back if the last photo was the one being previewed, so the preview
+    // does not jump to the start of the batch.
+    setPreviewIndex((i) => (i > 0 && i >= measured.length - 1 ? i - 1 : i));
     setPhotos((cur) => {
       const gone = cur.find((p) => p.id === id);
       if (gone) URL.revokeObjectURL(gone.thumb);
@@ -269,6 +330,7 @@ export function StudioClient({
   }
 
   function clearAll() {
+    setPreviewIndex(0);
     for (const p of photos) URL.revokeObjectURL(p.thumb);
     for (const b of previewCache.current.values()) b.close?.();
     previewCache.current.clear();
@@ -501,14 +563,34 @@ export function StudioClient({
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-8">
                 {photos.map((p) => {
                   const out = outputs.find((o) => o.id === p.id);
+                  const at = measured.findIndex((m) => m.id === p.id);
+                  const showing = at >= 0 && at === index;
                   return (
                     <div key={p.id} className="group relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.thumb}
-                        alt=""
-                        className="aspect-square w-full rounded-lg object-cover"
-                      />
+                      {/*
+                        A thumbnail is a way into the preview, not just a
+                        picture of what is queued: tapping one shows it large
+                        with the branding on, which is how somebody checks the
+                        three photos they were worried about.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => at >= 0 && goTo(at)}
+                        aria-label={t("studio.previewThis", { name: p.file.name })}
+                        aria-current={showing}
+                        className={cn(
+                          "block w-full rounded-lg",
+                          showing &&
+                            "ring-primary ring-offset-background ring-2 ring-offset-2",
+                        )}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.thumb}
+                          alt=""
+                          className="aspect-square w-full rounded-lg object-cover"
+                        />
+                      </button>
                       <button
                         type="button"
                         onClick={() => removePhoto(p.id)}
@@ -562,7 +644,18 @@ export function StudioClient({
               <button
                 key={key}
                 type="button"
-                onClick={() => setTab(key)}
+                onClick={() => {
+                  setTab(key);
+                  /*
+                   * Jump to a photo of that shape, if there is one. Otherwise
+                   * the tab would select settings for a photo nobody can see,
+                   * which is the same dead-slider problem from the other side.
+                   */
+                  const at = measured.findIndex(
+                    (p) => placementKeyFor(p.width, p.height) === key,
+                  );
+                  if (at >= 0) setPreviewIndex(at);
+                }}
                 className={cn(
                   "rounded-full px-4 py-1.5 text-sm font-semibold capitalize transition-colors",
                   tab === key
@@ -618,16 +711,98 @@ export function StudioClient({
                 {t("studio.preview")}
               </p>
               {previewSource ? (
-                <canvas
-                  ref={previewRef}
-                  className="bg-muted max-h-[420px] w-full rounded-xl border object-contain"
-                  style={{ maxWidth: "100%", height: "auto" }}
-                />
+                /*
+                 * Focusable, with arrow keys and a swipe. The whole purpose of
+                 * this pane is to check every photo before downloading a
+                 * hundred of them, and that has to be one gesture per photo —
+                 * not a scroll back up to the grid each time.
+                 */
+                <div
+                  role="group"
+                  aria-label={t("studio.preview")}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowLeft") {
+                      e.preventDefault();
+                      goTo(index - 1);
+                    }
+                    if (e.key === "ArrowRight") {
+                      e.preventDefault();
+                      goTo(index + 1);
+                    }
+                  }}
+                  onPointerDown={(e) => {
+                    swipeFrom.current = e.clientX;
+                  }}
+                  onPointerUp={(e) => {
+                    const from = swipeFrom.current;
+                    swipeFrom.current = null;
+                    if (from === null) return;
+                    const moved = e.clientX - from;
+                    // 48px, so a tap or a small wobble is not a swipe.
+                    if (Math.abs(moved) < 48) return;
+                    goTo(moved < 0 ? index + 1 : index - 1);
+                  }}
+                  className="focus-visible:ring-ring rounded-xl focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <canvas
+                    ref={previewRef}
+                    className="bg-muted max-h-[420px] w-full touch-pan-y rounded-xl border object-contain"
+                    style={{ maxWidth: "100%", height: "auto" }}
+                  />
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={t("studio.previous")}
+                      onClick={() => goTo(index - 1)}
+                      disabled={index <= 0}
+                      className="size-11 lg:size-9"
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={t("studio.next")}
+                      onClick={() => goTo(index + 1)}
+                      disabled={index >= measured.length - 1}
+                      className="size-11 lg:size-9"
+                    >
+                      <ChevronRight />
+                    </Button>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">
+                        {t("studio.counter", {
+                          n: index + 1,
+                          total: measured.length,
+                        })}
+                        <span className="text-muted-foreground ml-2 text-xs font-normal">
+                          {placementKeyFor(
+                            previewSource.width,
+                            previewSource.height,
+                          ) === "portrait"
+                            ? t("studio.shapePortrait")
+                            : t("studio.shapeLandscape")}
+                        </span>
+                      </p>
+                      {/* The filename, so a photo that needs attention can be
+                          found again in the folder it came from. */}
+                      <p className="text-muted-foreground truncate text-xs">
+                        {previewSource.file.name}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {t("studio.previewNav")}
+                  </p>
+                </div>
               ) : (
                 <div className="text-muted-foreground bg-muted/40 grid h-48 place-items-center rounded-xl border border-dashed p-4 text-center text-sm">
                   {photos.length === 0
                     ? t("studio.previewEmpty")
-                    : t("studio.previewNone")}
+                    : t("studio.previewReading")}
                 </div>
               )}
             </div>
