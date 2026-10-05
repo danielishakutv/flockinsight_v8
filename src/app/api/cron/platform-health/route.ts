@@ -76,6 +76,16 @@ export async function GET(request: Request) {
               senderIds.approved.map((a) => a.senderId).join(", "),
           );
         }
+        if (senderIds.ok && senderIds.contested.length > 0) {
+          /* A church asking for a name that is not theirs. Never approved
+           * automatically; said loudly because it may be a mistake or may not. */
+          console.warn(
+            `[cron/platform-health] REFUSED to approve ${senderIds.contested.length} sender ID(s) that belong elsewhere: ` +
+              senderIds.contested
+                .map((x) => `${x.name} wanted "${x.senderId}" (${x.reason})`)
+                .join("; "),
+          );
+        }
         if (senderIds.ok && senderIds.declined.length > 0) {
           /* Not applied automatically -- see lib/sender-id-reconcile.ts. Said
            * out loud so it is not only visible to whoever opens the page. */
@@ -109,6 +119,7 @@ export async function GET(request: Request) {
                 approved: senderIds.approved.length,
                 renamed: senderIds.renamed.length,
                 declined: senderIds.declined.length,
+                contested: senderIds.contested.length,
                 stillWaiting: senderIds.stillWaiting,
               }
             : { error: senderIds?.error ?? "threw" },

@@ -55,3 +55,37 @@ export function findOnNetwork<T extends NetworkSenderIdLike>(
   if (!ids || !senderId) return null;
   return indexNetworkSenderIds(ids).get(normalizeSenderId(senderId)) ?? null;
 }
+
+/**
+ * Sender IDs that more than one church is currently asking for.
+ *
+ * A SENDER ID IS AN IDENTITY, and approving one lets a church send messages
+ * that arrive under that name. So "the network says this ID is approved" is
+ * not on its own a reason to approve it FOR A PARTICULAR CHURCH — it says
+ * nothing about whose name it is. Without this check, any church could type
+ * "RPM YOLA" into the request box and be approved automatically, and would
+ * then be sending texts that reach people as their neighbour's parish.
+ *
+ * Returns the normalized keys claimed by two or more of the given churches.
+ * Neither claimant is approved: a genuine collision is for a person to settle,
+ * and picking whichever row the database returned first would decide who gets
+ * to be a church's name by accident.
+ */
+export function contestedSenderKeys(
+  claims: readonly { churchId: string; senderId: string | null }[],
+): Set<string> {
+  const byKey = new Map<string, Set<string>>();
+  for (const c of claims) {
+    if (!c.senderId) continue;
+    const key = normalizeSenderId(c.senderId);
+    if (!key) continue;
+    const set = byKey.get(key) ?? new Set<string>();
+    set.add(c.churchId);
+    byKey.set(key, set);
+  }
+  const contested = new Set<string>();
+  for (const [key, churches] of byKey) {
+    if (churches.size > 1) contested.add(key);
+  }
+  return contested;
+}

@@ -255,6 +255,17 @@ export function SmsAdmin({
        * email a church to say their ID failed when it had not. A human presses
        * Reject.
        */
+      /*
+       * Not approved, on purpose: the network says this ID is approved, but it
+       * is another church's name. Left up until dismissed — it is either a
+       * church that mistyped, or one trying to send as somebody else.
+       */
+      for (const x of res.contested) {
+        toast.error(
+          `${x.name} was NOT approved for “${x.senderId}”. ${x.reason}`,
+          { duration: Infinity, closeButton: true },
+        );
+      }
       for (const d of res.declined) {
         toast.error(
           `${d.name}: the network declined “${d.senderId}” (it says “${d.raw}”). Check the Termii dashboard, then Reject here if it is right.`,
@@ -264,7 +275,8 @@ export function SmsAdmin({
       if (
         res.approved.length === 0 &&
         res.renamed.length === 0 &&
-        res.declined.length === 0
+        res.declined.length === 0 &&
+        res.contested.length === 0
       ) {
         toast.message("Network list loaded — nothing waiting on it has changed.");
       }

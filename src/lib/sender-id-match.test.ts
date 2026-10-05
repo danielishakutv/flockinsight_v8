@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  contestedSenderKeys,
   findOnNetwork,
   indexNetworkSenderIds,
   normalizeSenderId,
@@ -97,5 +98,60 @@ describe("indexNetworkSenderIds", () => {
 
   it("skips a row with no sender ID rather than indexing an empty key", () => {
     expect(indexNetworkSenderIds([net("", "approved")]).size).toBe(0);
+  });
+});
+
+/*
+ * A sender ID is a NAME. Approving one lets a church send messages that arrive
+ * under it, so "the network approved this ID" is not on its own a reason to
+ * approve it for a particular church — it says nothing about whose name it is.
+ * Without this, any church could type a neighbouring parish's sender ID into
+ * the request box and be approved by a job that runs every half hour with
+ * nobody watching.
+ */
+describe("contestedSenderKeys", () => {
+  it("finds nothing when every church asks for its own name", () => {
+    expect(
+      contestedSenderKeys([
+        { churchId: "a", senderId: "RPM YOLA" },
+        { churchId: "b", senderId: "RPM MAGAMI" },
+      ]).size,
+    ).toBe(0);
+  });
+
+  it("catches two churches asking for the same name", () => {
+    const c = contestedSenderKeys([
+      { churchId: "a", senderId: "RPM YOLA" },
+      { churchId: "b", senderId: "RPM YOLA" },
+    ]);
+    expect(c.has("rpmyola")).toBe(true);
+  });
+
+  it("is not fooled by spacing or case, which is the whole attack", () => {
+    const c = contestedSenderKeys([
+      { churchId: "a", senderId: "RPM YOLA" },
+      { churchId: "b", senderId: "rpm  yola" },
+    ]);
+    expect(c.has("rpmyola")).toBe(true);
+  });
+
+  it("does not contest one church listed twice", () => {
+    // The same church appearing twice is not two claimants.
+    expect(
+      contestedSenderKeys([
+        { churchId: "a", senderId: "RPM YOLA" },
+        { churchId: "a", senderId: "RPM  YOLA" },
+      ]).size,
+    ).toBe(0);
+  });
+
+  it("ignores churches that have asked for nothing", () => {
+    expect(
+      contestedSenderKeys([
+        { churchId: "a", senderId: null },
+        { churchId: "b", senderId: null },
+        { churchId: "c", senderId: "   " },
+      ]).size,
+    ).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, smsSenderSubmission } from "@/db/schema";
 import {
@@ -7,7 +7,12 @@ import {
   type NetworkSenderId,
   type SenderIdStatus,
 } from "@/lib/termii-sender";
-import { indexNetworkSenderIds, normalizeSenderId } from "@/lib/sender-id-match";
+import {
+  contestedSenderKeys,
+  indexNetworkSenderIds,
+  normalizeSenderId,
+} from "@/lib/sender-id-match";
+import { platformSenderId } from "@/lib/sms-sender";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit";
 
@@ -49,6 +54,16 @@ export type ReconcileReport = {
   renamed: { churchId: string; name: string; from: string; to: string }[];
   /** On the network and declined. Surfaced for a human — never acted on. */
   declined: { churchId: string; name: string; senderId: string; raw: string }[];
+  /**
+   * Approved on the network, but NOT this church's to be approved for.
+   * Needs a person: see `whoOwns` below.
+   */
+  contested: {
+    churchId: string;
+    name: string;
+    senderId: string;
+    reason: string;
+  }[];
   /** Still waiting, and the network has no record of them yet. */
   stillWaiting: number;
 };
@@ -77,8 +92,17 @@ export async function reconcileSenderIdsWithNetwork(
     approved: [],
     renamed: [],
     declined: [],
+    contested: [],
     stillWaiting: 0,
   };
+
+  /*
+   * Two churches asking for the same name settle it with a person, not with
+   * whichever row the database happened to return first.
+   */
+  const contestedKeys = contestedSenderKeys(
+    waiting.map((c) => ({ churchId: c.id, senderId: c.senderId })),
+  );
 
   for (const c of waiting) {
     if (!c.senderId) continue;
@@ -86,6 +110,29 @@ export async function reconcileSenderIdsWithNetwork(
     const net = byKey.get(key);
     if (!net) {
       report.stillWaiting++;
+      continue;
+    }
+
+    /*
+     * IS THIS ID THIS CHURCH'S TO HAVE?
+     *
+     * Checked before anything is written, including the ledger row — writing
+     * one would hand the contesting church the ownership record itself.
+     *
+     * "The network approved this ID" says nothing about WHOSE name it is, and
+     * a sender ID is a name: approving one lets a church send messages that
+     * arrive under it. Without this, any church could type a neighbouring
+     * parish's sender ID into the request box and be approved automatically,
+     * by a job that runs every half hour with nobody watching.
+     */
+    const conflict = await whoOwns(key, c.id, contestedKeys);
+    if (conflict) {
+      report.contested.push({
+        churchId: c.id,
+        name: c.name,
+        senderId: c.senderId,
+        reason: conflict,
+      });
       continue;
     }
 
@@ -147,6 +194,67 @@ export async function reconcileSenderIdsWithNetwork(
   }
 
   return { ok: true, ids: list.ids, ...report };
+}
+
+/**
+ * Why this church may NOT be given this sender ID, or null if it may.
+ *
+ * Exported so the admin-initiated paths apply the same rule — a verdict that
+ * depends on which button was pressed is not a rule.
+ *
+ * Three ways an ID is not yours to take:
+ *
+ *  - Another church already holds it, approved. The clearest case, and the one
+ *    that lets a church send under a name people already recognise.
+ *  - The ledger records someone else as the claimant. `sms_sender_submission`
+ *    is unique per normalized ID and remembers who first asked for it, which
+ *    is the closest thing to a register of ownership we have.
+ *  - Two churches are asking for it right now. Neither gets it; a person
+ *    decides. Passed in rather than queried so one query covers the sweep.
+ *
+ * And the platform's own sender ID is never given away at all: it is the name
+ * FlockInsight's own system messages arrive under.
+ */
+export async function whoOwns(
+  key: string,
+  churchId: string,
+  contestedKeys: Set<string>,
+): Promise<string | null> {
+  const platform = platformSenderId();
+  if (platform && normalizeSenderId(platform) === key) {
+    return "This is FlockInsight's own platform sender ID and cannot be given to a church.";
+  }
+
+  if (contestedKeys.has(key)) {
+    return "More than one church is requesting this sender ID right now — decide which one it belongs to before approving either.";
+  }
+
+  const others = await db
+    .select({ id: church.id, name: church.name })
+    .from(church)
+    .where(
+      and(
+        eq(church.smsSenderStatus, "approved"),
+        ne(church.id, churchId),
+        // Compared the same way everywhere: spaces and case removed.
+        sql`replace(lower(${church.smsSenderId}), ' ', '') = ${key}`,
+      ),
+    )
+    .limit(1);
+  if (others.length > 0) {
+    return `“${others[0].name}” already holds this sender ID. Approving it here would let two churches send under one name.`;
+  }
+
+  const [ledger] = await db
+    .select({ churchId: smsSenderSubmission.churchId })
+    .from(smsSenderSubmission)
+    .where(eq(smsSenderSubmission.senderKey, key))
+    .limit(1);
+  if (ledger?.churchId && ledger.churchId !== churchId) {
+    return "This sender ID was registered for a different church. Check who it belongs to before approving it here.";
+  }
+
+  return null;
 }
 
 /** Keep the ledger's view of the network fresh (support/debugging trail). */

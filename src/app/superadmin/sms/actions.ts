@@ -21,7 +21,7 @@ import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
-import { reconcileSenderIdsWithNetwork } from "@/lib/sender-id-reconcile";
+import { reconcileSenderIdsWithNetwork, whoOwns } from "@/lib/sender-id-reconcile";
 
 import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -192,6 +192,14 @@ export async function submitSenderIdToTermii(
     await recordNetworkStatus(key, senderId, churchId, lookup.status, "exists");
 
     if (lookup.status === "approved") {
+      // Registered already — but registered to whom? Same rule as everywhere.
+      const conflict = await whoOwns(key, churchId, new Set<string>());
+      if (conflict) {
+        return {
+          ok: false,
+          error: `"${senderId}" is already approved on the network, but it was not approved for ${c.name}: ${conflict}`,
+        };
+      }
       await db
         .update(church)
         .set({ smsSenderStatus: "approved", smsSenderStage: null, smsSenderNote: null })
@@ -402,6 +410,22 @@ export async function checkSenderIdOnNetwork(churchId: string): Promise<CheckRes
     .where(eq(smsSenderSubmission.senderKey, normalizeSenderId(c.senderId)));
 
   if (lookup.status === "approved") {
+    /*
+     * Approved on the network is not the same as approved FOR THIS CHURCH. A
+     * sender ID is a name, and the network's verdict says nothing about whose
+     * it is — the same rule the unattended sweep applies.
+     */
+    const conflict = await whoOwns(
+      normalizeSenderId(c.senderId),
+      churchId,
+      new Set<string>(),
+    );
+    if (conflict) {
+      return {
+        ok: false,
+        error: `The network has approved "${c.senderId}", but it was not approved here: ${conflict}`,
+      };
+    }
     await db
       .update(church)
       .set({ smsSenderStatus: "approved", smsSenderStage: null, smsSenderNote: null })
@@ -477,6 +501,8 @@ export type ReconcileResult =
       renamed: { name: string; from: string; to: string }[];
       /** On the network and declined. Reported, never acted on. */
       declined: { name: string; senderId: string; raw: string }[];
+      /** Approved on the network, but not this church's name to take. */
+      contested: { name: string; senderId: string; reason: string }[];
     }
   | { ok: false; error: string };
 
@@ -506,6 +532,11 @@ export async function reconcileSenderIds(): Promise<ReconcileResult> {
       name: d.name,
       senderId: d.senderId,
       raw: d.raw,
+    })),
+    contested: res.contested.map((x) => ({
+      name: x.name,
+      senderId: x.senderId,
+      reason: x.reason,
     })),
   };
 }
