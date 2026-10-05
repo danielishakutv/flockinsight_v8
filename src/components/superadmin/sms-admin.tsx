@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import {
   adjustWallet,
   checkSenderIdOnNetwork,
-  listSenderIdsOnNetwork,
+  reconcileSenderIds,
   reviewSenderId,
   revokeSenderId,
   sendTestSms,
@@ -34,6 +34,9 @@ type NetworkSenderId = {
   status: "approved" | "pending" | "rejected" | "unknown";
   raw: string;
 };
+
+
+import { findOnNetwork } from "@/lib/sender-id-match";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -212,16 +215,60 @@ export function SmsAdmin({
     });
   }
 
+  /*
+   * Load the network's list AND settle anything it already answers.
+   *
+   * Loading used to be purely informational: the admin read "RPM YOLA ·
+   * approved" in the list and then had no button anywhere to act on it. If the
+   * network has already decided, reading the list is the moment to apply it —
+   * waiting for a per-church click is asking someone to copy an answer from
+   * one half of the screen to the other.
+   */
   function loadNetwork() {
     setLoadingNetwork(true);
     startTransition(async () => {
-      const res = await listSenderIdsOnNetwork();
+      const res = await reconcileSenderIds();
       setLoadingNetwork(false);
       if (!res.ok) {
         toast.error(res.error, { duration: 8000 });
         return;
       }
       setNetwork(res.ids);
+
+      for (const r of res.renamed) {
+        toast.message(
+          `${r.name}: sender ID corrected from “${r.from}” to “${r.to}” — that is the spelling actually registered on the network.`,
+          { duration: 12000, closeButton: true },
+        );
+      }
+      if (res.approved.length > 0) {
+        toast.success(
+          res.approved.length === 1
+            ? `${res.approved[0].name} approved — the network already had “${res.approved[0].senderId}”. They have been notified.`
+            : `${res.approved.length} churches approved from the network's list. They have been notified.`,
+          { duration: 12000, closeButton: true },
+        );
+      }
+      /*
+       * Reported, never applied. Termii's API has reported "pending" for IDs
+       * its own dashboard shows approved, so a wrong "rejected" here would
+       * email a church to say their ID failed when it had not. A human presses
+       * Reject.
+       */
+      for (const d of res.declined) {
+        toast.error(
+          `${d.name}: the network declined “${d.senderId}” (it says “${d.raw}”). Check the Termii dashboard, then Reject here if it is right.`,
+          { duration: Infinity, closeButton: true },
+        );
+      }
+      if (
+        res.approved.length === 0 &&
+        res.renamed.length === 0 &&
+        res.declined.length === 0
+      ) {
+        toast.message("Network list loaded — nothing waiting on it has changed.");
+      }
+      router.refresh();
     });
   }
 
@@ -379,6 +426,20 @@ export function SmsAdmin({
               // again — the network keeps one registration per ID, and a second
               // request just creates a duplicate nobody can remove.
               const withNetwork = c.stage === "submitted" || c.sentToNetwork;
+              /*
+               * What the network itself says about THIS ID, when the list has
+               * been loaded. Matched with spaces and case removed, because a
+               * church stored as "RPM  YOLA" is the same registration as the
+               * network's "RPM YOLA" — and reading those as two different IDs
+               * is what made an approved sender look unsubmitted.
+               */
+              const onNetwork = findOnNetwork(network, c.senderId);
+              /*
+               * Never offer to submit an ID the network already holds. The
+               * registration cannot be undone, and this was the only button on
+               * the row for "RPM YOLA" — already approved at the time.
+               */
+              const canSubmit = !withNetwork && !onNetwork;
               return (
                 <div
                   key={c.id}
@@ -390,9 +451,37 @@ export function SmsAdmin({
                       <Badge variant="secondary">
                         {withNetwork ? "Processing" : "Awaiting review"}
                       </Badge>
+                      {onNetwork && (
+                        <Badge
+                          variant={
+                            onNetwork.status === "approved"
+                              ? "success"
+                              : onNetwork.status === "rejected"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                        >
+                          network: {onNetwork.status}
+                        </Badge>
+                      )}
                     </p>
                     {c.note && (
                       <p className="text-muted-foreground truncate text-xs">{c.note}</p>
+                    )}
+                    {/* The row's own status and the network's can disagree, and
+                        when they do the network is right. Say which is which
+                        here rather than leaving the two badges to be compared. */}
+                    {onNetwork?.status === "approved" && (
+                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        The network has already approved this. Approve it here to
+                        let {c.name} send.
+                      </p>
+                    )}
+                    {onNetwork && onNetwork.status !== "approved" && (
+                      <p className="text-muted-foreground text-xs">
+                        Already registered on the network (it says &ldquo;
+                        {onNetwork.raw}&rdquo;) — it will not be submitted again.
+                      </p>
                     )}
                     {c.sentToNetwork && (
                       <p className="text-muted-foreground text-xs">
@@ -413,26 +502,38 @@ export function SmsAdmin({
                   >
                     <Pencil className="size-4" /> Edit ID
                   </Button>
-                  {!withNetwork && (
+                  {canSubmit && (
                     <Button size="sm" onClick={() => submit(c)} disabled={pending}>
                       <Send className="size-4" /> Submit to network
                     </Button>
                   )}
-                  {withNetwork && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => checkNetwork(c)}
-                        disabled={pending}
-                      >
-                        <RefreshCw className="size-4" /> Check status
-                      </Button>
-                      <Button size="sm" onClick={() => review(c, true)} disabled={pending}>
-                        <Check className="size-4" /> Mark approved
-                      </Button>
-                    </>
-                  )}
+                  {/*
+                    Check and Approve are ALWAYS offered.
+
+                    They used to appear only once this app had submitted the ID
+                    itself. But a sender ID is routinely requested and approved
+                    on the Termii dashboard, and such a church arrived here
+                    "Awaiting review" with no approve button at all — only
+                    *Submit to network*, for something already registered.
+                    Whether we did the submitting says nothing about whether it
+                    is approved.
+                  */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => checkNetwork(c)}
+                    disabled={pending}
+                  >
+                    <RefreshCw className="size-4" /> Check status
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={onNetwork?.status === "approved" ? "default" : "outline"}
+                    onClick={() => review(c, true)}
+                    disabled={pending}
+                  >
+                    <Check className="size-4" /> Mark approved
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

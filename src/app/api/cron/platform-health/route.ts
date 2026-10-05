@@ -4,15 +4,20 @@ import { snapshotTermiiBalance } from "@/lib/termii-balance";
 import { getFloatOverviewFresh } from "@/lib/float";
 import { syncAlerts } from "@/lib/platform-alerts";
 import { recordMrrSnapshot } from "@/lib/platform-stats";
+import { reconcileSenderIdsWithNetwork } from "@/lib/sender-id-reconcile";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/cron/platform-health — run every 30 minutes. Records the Termii
- * master-wallet balance and the day's MRR, re-evaluates every platform alert
- * rule, and notifies on newly-opened critical alerts. Auth via ?key=CRON_SECRET
- * or Bearer header.
+ * GET /api/cron/platform-health — run every 30 minutes.
+ *
+ * Records the Termii master-wallet balance and the day's MRR, re-evaluates
+ * every platform alert rule, notifies on newly-opened critical alerts, and
+ * settles any sender ID the network has decided on.
+ *
+ * Auth via an `Authorization: Bearer <CRON_SECRET>` header, or `?key=` —
+ * prefer the header, because a query string is written to the access log.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -45,6 +50,49 @@ export async function GET(request: Request) {
         console.error("[cron/platform-health] mrr snapshot failed", e);
       }
 
+      /*
+       * Sender IDs the network has already decided on.
+       *
+       * Its own try/catch, and last, because it reaches a third party: a
+       * Termii outage must not cost the float alerting above it, which is the
+       * part somebody is relying on right now.
+       *
+       * Scheduled rather than left to a button because a sender ID is usually
+       * approved on the Termii dashboard, with nothing here to hear about it.
+       * One church sat approved-but-unable-to-send until somebody happened to
+       * look. Half an hour is the longest that can now last.
+       */
+      let senderIds: Awaited<
+        ReturnType<typeof reconcileSenderIdsWithNetwork>
+      > | null = null;
+      try {
+        senderIds = await reconcileSenderIdsWithNetwork({
+          id: null,
+          name: "Automatic (network list)",
+        });
+        if (senderIds.ok && senderIds.approved.length > 0) {
+          console.log(
+            `[cron/platform-health] approved ${senderIds.approved.length} sender ID(s) from the network: ` +
+              senderIds.approved.map((a) => a.senderId).join(", "),
+          );
+        }
+        if (senderIds.ok && senderIds.declined.length > 0) {
+          /* Not applied automatically -- see lib/sender-id-reconcile.ts. Said
+           * out loud so it is not only visible to whoever opens the page. */
+          console.warn(
+            `[cron/platform-health] the network has DECLINED ${senderIds.declined.length} sender ID(s) still marked pending here: ` +
+              senderIds.declined.map((d) => `${d.senderId} (${d.raw})`).join(", "),
+          );
+        }
+        if (!senderIds.ok) {
+          console.error(
+            `[cron/platform-health] sender ID reconcile failed: ${senderIds.error}`,
+          );
+        }
+      } catch (e) {
+        console.error("[cron/platform-health] sender ID reconcile threw", e);
+      }
+
       // The dashboard's cached float is now out of date. "max" gives
       // stale-while-revalidate; the bare one-argument form is deprecated in
       // Next 16.
@@ -56,6 +104,14 @@ export async function GET(request: Request) {
           balance: balance.ok ? balance.balance : null,
           balanceError: balance.ok ? null : balance.error,
           snapshot,
+          senderIds: senderIds?.ok
+            ? {
+                approved: senderIds.approved.length,
+                renamed: senderIds.renamed.length,
+                declined: senderIds.declined.length,
+                stillWaiting: senderIds.stillWaiting,
+              }
+            : { error: senderIds?.error ?? "threw" },
           ...result,
         }),
         { headers: { "Content-Type": "application/json" } },

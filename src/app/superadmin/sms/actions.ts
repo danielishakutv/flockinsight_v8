@@ -21,6 +21,7 @@ import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
+import { reconcileSenderIdsWithNetwork } from "@/lib/sender-id-reconcile";
 
 import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -466,7 +467,57 @@ export async function listSenderIdsOnNetwork(): Promise<
   return await listNetworkSenderIds();
 }
 
-/** Manual verdict by a superadmin (e.g. they confirmed it on the Termii dashboard). */
+export type ReconcileResult =
+  | {
+      ok: true;
+      ids: NetworkSenderId[];
+      /** Churches released because the network already had them approved. */
+      approved: { name: string; senderId: string }[];
+      /** Stored spelling corrected to the one actually registered. */
+      renamed: { name: string; from: string; to: string }[];
+      /** On the network and declined. Reported, never acted on. */
+      declined: { name: string; senderId: string; raw: string }[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Read the network's list and settle every church still waiting on it.
+ *
+ * A thin wrapper: the work lives in lib/sender-id-reconcile.ts so the
+ * platform-health cron runs exactly the same code every half hour. The reason
+ * it is scheduled rather than only clickable is in that file — a church
+ * approved on Tuesday should be sending on Tuesday, not whenever somebody next
+ * opens this page and thinks to press Refresh.
+ */
+export async function reconcileSenderIds(): Promise<ReconcileResult> {
+  const admin = await requirePlatform("platform.sms.manage");
+  const res = await reconcileSenderIdsWithNetwork({
+    id: admin.id,
+    name: admin.name,
+  });
+  if (!res.ok) return res;
+  if (res.approved.length || res.renamed.length) revalidatePath("/superadmin/sms");
+  return {
+    ok: true,
+    ids: res.ids,
+    approved: res.approved.map((a) => ({ name: a.name, senderId: a.senderId })),
+    renamed: res.renamed.map((r) => ({ name: r.name, from: r.from, to: r.to })),
+    declined: res.declined.map((d) => ({
+      name: d.name,
+      senderId: d.senderId,
+      raw: d.raw,
+    })),
+  };
+}
+
+/**
+ * Manual verdict by a superadmin — they confirmed it on the Termii dashboard.
+ *
+ * Always available, for either verdict. It used to be reachable only once this
+ * app had itself submitted the ID to the network, which left a church approved
+ * on the Termii dashboard stuck at "Awaiting review" with no approve button at
+ * all. Approval is a fact about the network, not about who did the submitting.
+ */
 export async function reviewSenderId(
   churchId: string,
   approve: boolean,

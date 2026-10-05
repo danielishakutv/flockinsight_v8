@@ -23,10 +23,41 @@ warn() { printf '   \033[33m!\033[0m %s\n' "$*"; }
 ok() { printf '   \033[32mok\033[0m %s\n' "$*"; }
 
 # ── 1. Find the app's .env, rather than assuming a layout ────────────────────
-# Three layouts have been in use on this box over time, so look for all of
-# them and then fall back to a bounded search. -xdev stays on one filesystem.
+#
+# THIS BOX HOSTS SEVERAL APPS, which is the trap. Taking PM2's first process
+# landed on /home/dsii/public_html -- a different site entirely, with no
+# deploy/ directory, which read as "the script isn't deployed" when in fact we
+# were simply standing in somebody else's app. So every candidate is CHECKED
+# before it is accepted: a directory only counts if it is recognisably this
+# codebase, not merely because something is running there.
+
+# Is this directory FlockInsight, rather than one of its neighbours?
+is_this_app() {
+  [ -f "$1/package.json" ] && grep -qi 'flockinsight' "$1/package.json" 2>/dev/null
+}
+
+# The .env for a directory: beside it, or in the releases layout's shared/.
+env_for() {
+  for cand in "$1/.env" "$1/../shared/.env" "$1/../../shared/.env"; do
+    [ -f "$cand" ] && { (cd "$(dirname "$cand")" && printf '%s/%s' "$PWD" ".env"); return 0; }
+  done
+  return 1
+}
+
 find_env() {
   if [ -n "${ENV_FILE:-}" ]; then printf '%s' "$ENV_FILE"; return; fi
+
+  # Every PM2 process, not the first -- and only ones that are actually this app.
+  local cwd
+  while read -r cwd; do
+    [ -n "$cwd" ] || continue
+    [ -d "$cwd" ] || continue
+    is_this_app "$cwd" || continue
+    env_for "$cwd" && return
+  done <<EOF
+$(pm2 jlist 2>/dev/null | tr ',' '\n' | grep -oE '"pm_cwd":"[^"]*"' | cut -d'"' -f4 | sort -u)
+EOF
+
   for p in \
     "$HOME/apps/flockinsight/shared/.env" \
     "$HOME/apps/flockinsight/current/.env" \
@@ -35,13 +66,15 @@ find_env() {
   do
     [ -f "$p" ] && { printf '%s' "$p"; return; }
   done
-  # Whatever PM2 is actually running, which is the authoritative answer.
-  local cwd
-  cwd="$(pm2 jlist 2>/dev/null | tr ',' '\n' | grep -oE '"pm_cwd":"[^"]*"' \
-        | head -1 | cut -d'"' -f4)"
-  if [ -n "$cwd" ] && [ -f "$cwd/.env" ]; then printf '%s' "$cwd/.env"; return; fi
+
+  # Last resort, bounded. -xdev stays on one filesystem.
   find / -xdev -maxdepth 7 -name .env -path '*flock*' 2>/dev/null | head -1
 }
+
+# Say what is running here regardless, because "which app am I in" is half the
+# question every time somebody SSHes into this box.
+say "PM2 processes on this box"
+pm2 list 2>/dev/null | sed 's/^/   /' || warn "pm2 not on PATH"
 
 say "App environment"
 ENV_PATH="$(find_env)"

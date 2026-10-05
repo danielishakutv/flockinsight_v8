@@ -23,9 +23,11 @@ export type RequestResult =
 
 const TIMEOUT_MS = 20_000;
 
-export function normalizeSenderId(s: string): string {
-  return s.replace(/\s+/g, "").toLowerCase();
-}
+/* The matching rule lives in lib/sender-id-match.ts — pure, so the browser can
+ * apply the same one. Imported (this file uses it) and re-exported, so every
+ * existing importer is unaffected. */
+import { normalizeSenderId } from "@/lib/sender-id-match";
+export { normalizeSenderId };
 
 /** Submit a sender-ID request to Termii for review. */
 export async function requestSenderId(opts: {
