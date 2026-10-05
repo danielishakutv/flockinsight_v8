@@ -7,7 +7,7 @@ export const LINK_GUIDES: Omit<Guide, "minutes">[] = [
     category: "content",
     icon: "links",
     summary:
-      "One short address you can read out from the front — and change where it goes afterwards, without reprinting anything. Plus QR codes in your own colours, checked to be sure they will really scan.",
+      "One short address you can read out from the front — and change where it goes afterwards, without reprinting anything. Plus QR codes with your logo or your initials in the middle, adjusted automatically so they always scan.",
     whoFor: [
       "Whoever makes the bulletin, the flyers and the slides",
       "Media and communications teams",
@@ -117,39 +117,47 @@ export const LINK_GUIDES: Omit<Guide, "minutes">[] = [
         title: "Making a QR code",
         blocks: [
           {
+            kind: "text",
+            text: "Four questions, and the code is adjusted for you so that it always scans. There is nothing to get right, and nothing that can be saved broken.",
+          },
+          {
             kind: "steps",
             items: [
               {
                 title: "New QR code",
                 detail:
-                  "Or press the QR code button that now sits beside the share link on a form, your public page and a group collection — it opens the designer with the address already filled in.",
+                  "Or press the QR code button beside the share link on a form, your public page or a group collection — it opens with the address already filled in.",
               },
               {
-                title: "Decide what scanning it should do",
+                title: "Paste where it should go",
                 detail:
-                  "Eleven things, not just a web address: your WiFi, a phone call, a WhatsApp message already written, a contact card, a place on the map, an event a phone can add to its calendar.",
+                  "A web address, straight in. You can leave off the https://. For anything else — your WiFi, a phone call, a WhatsApp message already written, a contact card — change the dropdown above the field.",
               },
               {
-                title: "Pick a look",
+                title: "Pick a look and a colour",
                 detail:
-                  "Twelve complete designs, each shown drawn as itself and each already in your church's colour. Picking one keeps whatever you have put in the middle.",
+                  "Six looks, each drawn as itself so you can see what you are choosing. Any colour: if the one you pick is too light for a camera, a darker shade of the same colour is used and it says so under the preview.",
               },
               {
-                title: "Change anything you like",
+                title: "Put your logo or your initials in the middle",
                 detail:
-                  "Fourteen dot shapes, eight corner styles, gradients, bands of colour, your logo or your initials in the middle, a caption frame. Every change redraws instantly.",
+                  "Nothing, your church’s initials, or your logo. Whichever you choose, the code is rebuilt around it — stronger error correction, and a denser grid if it needs one — so a middle never costs you a working code.",
               },
               {
-                title: "Read the check beside the preview",
+                title: "Add words underneath, if you want",
                 detail:
-                  "This is the part that matters. See below.",
+                  "Optional, and worth it: a code with nothing beside it gets scanned far less often than one that says what it is for.",
               },
               {
-                title: "Download",
+                title: "Check where it goes, then download",
                 detail:
-                  "PNG for a screen or a WhatsApp message. SVG for anything going to a printer — it has no resolution to get wrong and prints at any size.",
+                  "Beside the preview it says in plain text exactly what scanning it opens, with a button to open it yourself. PNG for a screen or a WhatsApp message; SVG for anything going to a printer.",
               },
             ],
+          },
+          {
+            kind: "note",
+            text: "There used to be thirty settings here — fourteen dot shapes, eight corner styles, gradients, an error-correction level, a grid size — and a panel that told you what was wrong with whatever you had chosen. Most combinations warned and some could not be saved at all. Everything that decides whether a code works is now worked out for you, so the settings that remain are only about how it looks.",
           },
         ],
       },
@@ -171,110 +179,74 @@ export const LINK_GUIDES: Omit<Guide, "minutes">[] = [
         ],
       },
       {
-        title: "Will it scan? — what the checks actually do",
+        title: "How it makes sure it scans",
         blocks: [
           {
             kind: "text",
-            text: "A beautiful QR code that does not scan is worse than a plain one, and you find out weeks later, on four hundred printed flyers, with nothing in the preview having looked wrong. So every design is measured rather than eyeballed, and every finding tells you the number behind it.",
+            text: "A beautiful QR code that does not scan is worse than a plain one, and you find out weeks later, on four hundred printed flyers, with nothing in the preview having looked wrong. So the code is measured — and then adjusted until it passes, rather than reported on.",
           },
           {
             kind: "table",
-            headers: ["The check", "What it measures", "Why it matters"],
+            headers: ["What is measured", "What is done about it"],
             rows: [
               [
-                "Contrast",
-                "The ratio between the darkest your dots get and the lightest your background gets",
-                "Under about 3:1 a camera cannot tell them apart at all. A church foyer is much dimmer than the screen you are choosing the colour on.",
+                "Contrast between your colour and the paper",
+                "If a camera could not tell them apart, a darker shade of the same colour is used. The same colour, darker — never swapped for black.",
               ],
               [
-                "What the middle costs",
-                "How many codewords your logo covers, counted exactly",
-                "Error correction repairs whole codewords of eight dots each — so the usual “your logo covers 9% of the picture” is up to eight times wrong in either direction. This counts the real ones.",
+                "What the middle costs, in error-correction codewords",
+                "Counted exactly rather than estimated as a percentage of the picture, which is the figure every other generator quotes and is up to eightfold wrong. The correction level is then raised until the middle sits inside half the budget, leaving the other half for a crease, a glare or a thumb.",
               ],
               [
-                "What is left over",
-                "The codewords still spare after the decoration",
-                "That spare capacity is what survives a crease, a glare, a thumb over the corner and a cheap printer. About half is as much as a logo should take.",
+                "Whether the middle reaches the code’s own markings",
+                "The grid is made denser until it does not — or, only if nothing else works, the middle is made slightly smaller. You are told either way.",
               ],
               [
-                "The structure",
-                "Whether anything covers the three corner squares, the dotted lines or the format strip",
-                "Those carry no redundancy at all. Covering them is fatal, so it is refused rather than warned about.",
-              ],
-              [
-                "Printed size",
-                "How many millimetres across each dot would be",
-                "Under about 0.4mm no camera can resolve it however good the design is. More codes fail from being printed too small than from any decorative choice.",
+                "The border and the dot size",
+                "Fixed at the standard’s four squares, with the dots always filling their cells. Both were settings, and both were only ever a way to break the code.",
               ],
             ],
           },
           {
             kind: "text",
-            text: "Then there is “Read it back”, which does something different and stronger: it draws the finished picture, samples every dot the way a camera does, and compares what came back against what was encoded. It reports how many dots read wrong and can show you exactly where on the code. That is the only honest answer when your dots are filled with a photograph, and the map is usually the diagnosis — a ring around the middle is the logo, a drift across one corner is the photograph, a scatter through the whole field is the contrast.",
+            text: "Anything adjusted is listed under the preview, one line each: “We used a darker shade of your colour”, “We turned the error correction up”. Nothing is changed silently, and nothing waits for your approval.",
+          },
+          {
+            kind: "text",
+            text: "There is one further check, and it is optional. “Read it back” draws the finished picture, samples every square the way a camera does, and compares what came back against what was encoded. It is a reassurance rather than a gate — worth pressing before a big print run.",
           },
         ],
       },
       {
-        title: "The badge beside the preview",
+        title: "When something looks off",
         blocks: [
           {
             kind: "table",
-            headers: ["It says", "It means"],
-            rows: [
-              ["Scans anywhere", "Good contrast, nothing spent on decoration. Print it."],
-              ["Scans", "Fine. Something is using up a little margin."],
-              [
-                "Scans on screen — test a print",
-                "It works, and it is close enough to the edge that paper, a fold or a dim room could tip it. Print one and try it before ordering four hundred.",
-              ],
-              [
-                "Will not scan",
-                "Something is definitely wrong and the findings say which. It cannot be saved in this state.",
-              ],
-            ],
-          },
-          {
-            kind: "note",
-            text: "There are four states rather than two because the middle one is the commonest outcome of a bold design, and collapsing it into either “fine” or “broken” is how churches end up printing the broken one.",
-          },
-        ],
-      },
-      {
-        title: "When it looks wrong",
-        blocks: [
-          {
-            kind: "table",
-            headers: ["What you see", "What is happening", "What to do"],
+            headers: ["What you see", "What is happening"],
             rows: [
               [
-                "“Not enough contrast”",
-                "Your brand colour is lighter than a camera can separate from the background",
-                "Use a darker shade of the same colour. The check tells you the ratio you have; anything over 4.5:1 stops mattering which phone.",
+                "The colour came out darker than the one I picked",
+                "It was too light for a camera to separate from the paper. The line under the preview says so. Pick a darker colour yourself if you would rather choose which shade.",
               ],
               [
-                "“The middle covers more than the code can recover”",
-                "The logo is too big for this grid",
-                "Three ways out, and the right one depends on you: make the logo smaller, raise the error correction, or raise “Smallest grid”. A denser grid has more codewords, so the same logo costs proportionally less.",
+                "The code got bigger when I added my logo",
+                "A logo covers squares, and the only way to make that recoverable is to have more of them. This is the code being made to work, not something going wrong.",
               ],
               [
-                "The letters look like noise",
-                "Letters only read as letters on a small grid",
-                "Point the code at a short link instead of a long address. A shorter message makes a smaller grid and bigger letters.",
+                "No preview at all",
+                "The destination is empty, or what it points at is too long for any QR code. Point it at a short link instead — which is what the message suggests.",
               ],
               [
                 "The PNG will not download but the SVG will",
-                "An image in the design is on a host that will not let a browser read its pixels back",
-                "Upload the logo or photograph through the designer rather than pasting a web address, and both will work.",
+                "An image in the design is on a host that will not let a browser read its pixels back. Upload the logo through the designer rather than pasting a web address, and both will work.",
               ],
               [
-                "“This check could not run”",
-                "Same cause, and the design itself may be perfect",
-                "It is the check that failed, not the code. Nothing needs changing unless the other findings say so.",
+                "It scans on my phone but not on an old handheld scanner",
+                "Some older handheld and till scanners are fussier than a phone. Choose the Classic look in black for anything that has to work on one of those.",
               ],
               [
-                "Your phone scans it and an old scanner does not",
-                "Probably light dots on a dark background",
-                "Some older handheld and till scanners refuse an inverted code outright. If it is going anywhere other than a phone, test it on that device.",
+                "It will not scan from a printed sheet at all",
+                "Almost always printed too small. Each square needs to be about half a millimetre, which for a typical code means roughly 20mm across as an absolute minimum and 30mm to be comfortable.",
               ],
             ],
           },
@@ -309,7 +281,7 @@ export const LINK_GUIDES: Omit<Guide, "minutes">[] = [
               "It does not record who followed a link. The figures are totals per day, per source and per device, and nothing identifies a person — which is also the only way to be certain it cannot leak.",
               "It cannot tell a WhatsApp share from somebody typing the link. WhatsApp and most apps send nothing that says where a click came from, so both are counted as direct.",
               "It cannot check what your code looks like printed. It can tell you the millimetres per dot and that is genuinely most of it — but a test print costs one sheet of paper.",
-              "The scannability findings are in English, like the rest of the written guides, even where the app itself is in another language.",
+              "It does not offer gradients, patterned dots, a photograph behind the code, or light dots on a dark background. Those all produced warnings nobody could act on, and none of them is what a church asks for.",
             ],
           },
         ],
@@ -326,7 +298,11 @@ export const LINK_GUIDES: Omit<Guide, "minutes">[] = [
       },
       {
         q: "Why does my code look bigger after I added a logo?",
-        a: "Because a logo covers dots, and the only way to make that recoverable is to have more dots. The designer raises the grid for you when you make the middle larger, so the logo cannot reach the parts of the code that nothing can repair.",
+        a: "Because a logo covers squares, and the only way to make that recoverable is to have more of them. It is done for you, and the line under the preview says when it happened.",
+      },
+      {
+        q: "Can I still choose the error correction level and the grid size?",
+        a: "No, and that is deliberate. Those two decide whether a code with something in the middle works; they follow from what is in the middle rather than from taste; and leaving them to a person is what made most combinations warn. They are worked out for you every time.",
       },
       {
         q: "Can two churches have the same short word?",

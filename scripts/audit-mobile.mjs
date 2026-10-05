@@ -234,6 +234,21 @@ function gridCannotOverflow(html, from, cls = [], cols = 0) {
   const childClasses = classesOf(next[3]);
   if (childClasses.some((c) => /^aspect-/.test(c))) return true;
 
+  /*
+   * A cell that clips its own contents.
+   *
+   * Tailwind's `grid-cols-N` is `repeat(N, minmax(0, 1fr))`, so a track can
+   * never be widened by what is inside it — which means this rule is really
+   * about words SPILLING out of a narrow cell rather than about the grid
+   * overflowing the page. `overflow-hidden` on the cell settles that
+   * definitionally: whatever does not fit is clipped, not pushed out.
+   *
+   * Added for the QR style picker, whose cells hold a square swatch and a
+   * `truncate`d label. A general rule rather than an exemption for that
+   * grid — the same is true of any clipped cell.
+   */
+  if (childClasses.includes("overflow-hidden")) return true;
+
   // A fixed-size cell: Tailwind's size-N is N * 4px. Multiply it out rather
   // than trusting it, so a grid of large tiles is still caught.
   for (const c of childClasses) {

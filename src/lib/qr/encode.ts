@@ -774,22 +774,56 @@ export function spoiledCodewords(
 }
 
 /**
- * Damage to a function pattern, which error correction cannot repair at all.
+ * Damage to a function pattern, split by what the pattern is for.
  *
- * A finder eye, a timing line or the format information is how a scanner finds
- * and reads the symbol in the first place; there is no redundancy protecting
- * them. Counted separately from codewords for exactly that reason — one
- * covered format module is worse than thirty covered data modules.
+ * NOT ALL FUNCTION PATTERNS ARE EQUAL, and treating them as equal was a real
+ * bug. Error correction protects none of them, but they do not fail the same
+ * way:
+ *
+ *   `structural` — the finder eyes, their separators, the timing lines, the
+ *   format information and the version information. These are how a scanner
+ *   FINDS the symbol and learns how to read it. Cover any of them and there is
+ *   nothing to decode; this is fatal.
+ *
+ *   `alignment` — the little 5x5 rings. These correct for perspective
+ *   distortion: a decoder uses them where it finds them and estimates the grid
+ *   from the finder patterns where it does not. Covering one degrades a steep
+ *   angle or a curved surface and is fine on a flat printed code photographed
+ *   roughly square-on.
+ *
+ * That distinction matters because from version 7 to 13 there is an alignment
+ * pattern AT THE CENTRE of the symbol — so "any logo in the middle of a
+ * version 10 code is fatal" was the conclusion of counting them together, and
+ * it is wrong. Every commercial QR generator puts logos on codes that size and
+ * they scan.
  */
+export type FunctionDamage = { structural: number; alignment: number };
+
 export function damagedFunctionModules(
   symbol: QrSymbol,
   isDamaged: (x: number, y: number) => boolean,
-): number {
-  let count = 0;
+): FunctionDamage {
+  const out: FunctionDamage = { structural: 0, alignment: 0 };
   for (let y = 0; y < symbol.size; y++) {
     for (let x = 0; x < symbol.size; x++) {
-      if (symbol.roles[y * symbol.size + x] !== Role.Data && isDamaged(x, y)) count++;
+      const role = symbol.roles[y * symbol.size + x];
+      if (role === Role.Data || !isDamaged(x, y)) continue;
+      if (role === Role.Alignment) out.alignment++;
+      else out.structural++;
     }
   }
-  return count;
+  return out;
+}
+
+/**
+ * Does this version have an alignment pattern at the middle of the symbol?
+ *
+ * True for versions 7 to 13, where one of the alignment coordinates lands on
+ * the centre. The auto-fix prefers a version where it does not, so a logo
+ * costs nothing at all rather than costing something survivable.
+ */
+export function hasCentralAlignment(version: number): boolean {
+  const size = version * 4 + 17;
+  const centre = (size - 1) / 2;
+  return alignmentPositions(version).some((p) => Math.abs(p - centre) <= 2);
 }

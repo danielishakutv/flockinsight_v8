@@ -23,7 +23,7 @@
  */
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { PRESET_BY_ID, brandPreset } from "./qr/design";
+import { designFor } from "./qr/simple";
 import {
   attendanceSession,
   devotional,
@@ -1101,9 +1101,10 @@ export async function seedDemoData(churchId: string) {
   await db.insert(shortLinkStat).values(statRows);
 
   /*
-   * Three saved designs, each from a different preset, so the list shows what
-   * the designer can do rather than three identical black squares. Every one
-   * of these presets is asserted scannable in design.test.ts.
+   * Three saved designs, each a different style, so the list shows what the
+   * designer can do rather than three identical black squares. Built through
+   * `designFor` like any other code, so the showroom cannot drift from the
+   * product \u2014 and `simple.test.ts` asserts every style scans.
    */
   const giveLink = linkRows[0];
   const carolsLink = linkRows[2];
@@ -1115,7 +1116,12 @@ export async function seedDemoData(churchId: string) {
         title: "Give — screen at the front",
         kind: "link" as const,
         payload: { kind: "link" as const, url: `https://flockinsight.com/l/${giveLink.code}?s=qr` },
-        design: brandPreset(PRESET_BY_ID.offeringboard, "#5b3df5"),
+        design: designFor({
+          style: "bold",
+          colour: "#5b3df5",
+          middle: { kind: "letters", text: "GH" },
+          caption: "SCAN TO GIVE",
+        }),
         shortLinkId: giveLink.id,
         downloadCount: 4,
       },
@@ -1124,7 +1130,12 @@ export async function seedDemoData(churchId: string) {
         title: "Carol service flyer",
         kind: "link" as const,
         payload: { kind: "link" as const, url: `https://flockinsight.com/l/${carolsLink.code}?s=qr` },
-        design: brandPreset(PRESET_BY_ID.bulletin, "#5b3df5"),
+        design: designFor({
+          style: "rounded",
+          colour: "#5b3df5",
+          middle: { kind: "none" },
+          caption: "CAROL SERVICE",
+        }),
         shortLinkId: carolsLink.id,
         downloadCount: 2,
       },
@@ -1139,7 +1150,12 @@ export async function seedDemoData(churchId: string) {
           security: "WPA" as const,
           hidden: false,
         },
-        design: brandPreset(PRESET_BY_ID.welcomedesk, "#5b3df5"),
+        design: designFor({
+          style: "dots",
+          colour: "#115e59",
+          middle: { kind: "none" },
+          caption: "GUEST WIFI",
+        }),
         shortLinkId: null,
         downloadCount: 1,
       },

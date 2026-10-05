@@ -15,7 +15,7 @@ import {
   spoiledCodewords,
   type QrSymbol,
 } from "@/lib/qr/encode";
-import { rawDataModules } from "@/lib/qr/tables";
+import { alignmentPositions, rawDataModules } from "@/lib/qr/tables";
 import { analyse, confidenceOf } from "@/lib/qr/verify";
 import { describeSample, sampleRendered } from "@/lib/qr/verify-render";
 
@@ -119,15 +119,35 @@ describe("the codeword map", () => {
 
   it("counts nothing spoiled when nothing is damaged", () => {
     expect(spoiledCodewords(s, () => false)).toBe(0);
-    expect(damagedFunctionModules(s, () => false)).toBe(0);
+    expect(damagedFunctionModules(s, () => false)).toEqual({
+      structural: 0,
+      alignment: 0,
+    });
   });
 
   it("counts function-pattern damage separately, because nothing repairs it", () => {
     // The top-left finder eye: 49 modules, none of them protected.
     const inEye = (x: number, y: number): boolean => x < 7 && y < 7;
-    expect(damagedFunctionModules(s, inEye)).toBe(49);
+    expect(damagedFunctionModules(s, inEye)).toEqual({ structural: 49, alignment: 0 });
     // And none of those are codewords, so the codeword count stays at zero.
     expect(spoiledCodewords(s, inEye)).toBe(0);
+  });
+
+  it("separates an alignment ring from the patterns that are fatal", () => {
+    /*
+     * The distinction that a wrong answer depended on. Counting alignment
+     * rings with the finder and format patterns made every logo on a version
+     * 7-to-13 code read as unscannable, because those versions put a ring
+     * exactly at the centre — and such codes scan perfectly well.
+     */
+    const [first, second] = alignmentPositions(s.version);
+    expect(second, `version ${s.version} should have alignment patterns`).toBeDefined();
+    const ring = (x: number, y: number): boolean =>
+      Math.abs(x - second) <= 2 && Math.abs(y - second) <= 2;
+    const damage = damagedFunctionModules(s, ring);
+    expect(first).toBe(6);
+    expect(damage.alignment).toBe(25); // a 5x5 ring
+    expect(damage.structural).toBe(0);
   });
 });
 
@@ -210,6 +230,21 @@ describe("contrast", () => {
  * ========================================================== */
 
 describe("the middle", () => {
+  it("treats a covered alignment ring as a note, not a blocker", () => {
+    // Version 7 to 13 put one at the centre, so this is the normal case for a
+    // logo on a medium-sized code rather than an edge case.
+    const big = symbol({ ecLevel: "H", minVersion: 10 });
+    expect(big.version).toBeGreaterThanOrEqual(10);
+    const a = analyse(big, design({ centre: centre({ size: 0.2 }), ecLevel: "H", minVersion: 10 }));
+    expect(a.metrics.functionDamage.alignment).toBeGreaterThan(0);
+    expect(a.metrics.functionDamage.structural).toBe(0);
+    expect(a.scannable).toBe(true);
+    const note = a.findings.find((f) => f.key === "centre.alignment");
+    expect(note?.level).toBe("note");
+    // It must say what is actually lost, not merely that something is.
+    expect(note?.detail).toContain("steep angle");
+  });
+
   it("costs nothing when there is nothing in it", () => {
     const a = analyse(symbol(), design({ centre: { type: "none" } }));
     expect(a.metrics.spoiled).toBe(0);
@@ -299,7 +334,7 @@ describe("the middle", () => {
       tiny.symbol,
       design({ centre: centre({ size: 0.3, shape: "square" }) }),
     );
-    expect(a.metrics.functionDamage).toBe(8);
+    expect(a.metrics.functionDamage.structural).toBe(8);
     expect(a.scannable).toBe(false);
     expect(a.findings.find((f) => f.key === "centre.function")?.level).toBe("blocker");
   });
@@ -319,7 +354,7 @@ describe("the middle", () => {
       if (!ok.ok) continue;
       expect(
         analyse(ok.symbol, design({ centre: centre({ size, shape: "square" }) })).metrics
-          .functionDamage,
+          .functionDamage.structural,
         `size ${size} at version ${version}`,
       ).toBe(0);
     }
@@ -365,7 +400,7 @@ describe("the middle", () => {
       centre: centre({ size: 0.8, shape: "square" }),
     };
     const a = analyse(tiny.symbol, oversized);
-    expect(a.metrics.functionDamage).toBeGreaterThan(0);
+    expect(a.metrics.functionDamage.structural).toBeGreaterThan(0);
     expect(a.scannable).toBe(false);
     const blocker = a.findings.find((f) => f.key === "centre.function");
     expect(blocker?.level).toBe("blocker");

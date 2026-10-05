@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DESIGN,
   MODULE_SHAPES,
-  PRESETS,
   backgroundColors,
-  brandPreset,
   contrastRatio,
   fillColors,
   hexChannels,
@@ -103,13 +101,10 @@ describe("normalising a stored design", () => {
     expect(normaliseDesign("not an object")).toEqual(DEFAULT_DESIGN);
   });
 
-  it("round-trips the default and every preset through storage unchanged", () => {
+  it("round-trips the default through storage unchanged", () => {
     expect(normaliseDesign(JSON.parse(JSON.stringify(DEFAULT_DESIGN)))).toEqual(
       DEFAULT_DESIGN,
     );
-    for (const p of PRESETS) {
-      expect(normaliseDesign(JSON.parse(JSON.stringify(p.design))), p.id).toEqual(p.design);
-    }
   });
 
   it("keeps the quiet zone at two modules or more, whatever is asked", () => {
@@ -222,69 +217,6 @@ describe("normalising a stored design", () => {
 /* ============================================================
  * Presets
  * ========================================================== */
-
-describe("the presets", () => {
-  it("has a unique id, a name and a blurb for each", () => {
-    const ids = PRESETS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const p of PRESETS) {
-      expect(p.name.length, p.id).toBeGreaterThan(2);
-      expect(p.blurb.length, p.id).toBeGreaterThan(20);
-    }
-  });
-
-  it("every one of them scans — none can be shipped broken", () => {
-    /*
-     * The assertion that matters most in this file. A church with no designer
-     * picks from this list and prints the result; a preset that produces an
-     * unscannable code is a bug that reaches paper. Checked against the real
-     * analysis, not against a weaker rule written for the test.
-     */
-    for (const p of PRESETS) {
-      const symbol = symbolFor(p.design);
-      const analysis = analyse(symbol, p.design);
-      const blockers = analysis.findings.filter((f) => f.level === "blocker");
-      expect(blockers.map((f) => f.key), `${p.id}: ${blockers.map((f) => f.title).join("; ")}`).toEqual([]);
-      expect(analysis.scannable, p.id).toBe(true);
-      expect(analysis.metrics.functionDamage, p.id).toBe(0);
-    }
-  });
-
-  it("every one of them renders to well-formed markup", () => {
-    for (const p of PRESETS) {
-      const svg = renderSvg(symbolFor(p.design), p.design, { title: p.name });
-      expect(svg.startsWith("<svg "), p.id).toBe(true);
-      expect(svg.endsWith("</svg>"), p.id).toBe(true);
-      expect(svg, p.id).not.toContain("NaN");
-      expect(svg, p.id).not.toContain("undefined");
-      expect(svg, p.id).not.toContain("Infinity");
-      // Three eyes and a body of modules, at the very least.
-      expect(svg, p.id).toContain("fill-rule=\"evenodd\"");
-    }
-  });
-
-  it("substitutes the church's colour where the preset is built on one", () => {
-    const bulletin = PRESETS.find((p) => p.id === "bulletin")!;
-    const branded = brandPreset(bulletin, "#0d9488");
-    expect(branded.fill).toMatchObject({ color: "#0d9488" });
-    expect(branded.frame.color).toBe("#0d9488");
-    // And it does not mutate the shared preset.
-    expect(bulletin.design.fill).toMatchObject({ color: "#5b3df5" });
-  });
-
-  it("leaves a preset built on a colour relationship alone", () => {
-    // Replacing one band of four in Stained glass produces something nobody
-    // chose; it is a deliberate non-substitution, not an oversight.
-    const glass = PRESETS.find((p) => p.id === "stainedglass")!;
-    expect(brandPreset(glass, "#0d9488").fill).toEqual(glass.design.fill);
-  });
-
-  it("ignores a brand colour that is not a colour", () => {
-    const bulletin = PRESETS.find((p) => p.id === "bulletin")!;
-    expect(brandPreset(bulletin, "indigo")).toEqual(bulletin.design);
-    expect(brandPreset(bulletin, null)).toEqual(bulletin.design);
-  });
-});
 
 describe("church initials", () => {
   it("takes the first letter of the words that carry meaning", () => {

@@ -8,7 +8,7 @@ import { checkDestination } from "@/lib/links-shared";
 import { getTheme } from "@/lib/church-themes";
 import { PageContainer } from "@/components/app/page-header";
 import { QrDesigner } from "@/components/links/qr-designer";
-import { DEFAULT_DESIGN, PRESETS, brandPreset } from "@/lib/qr/design";
+import { DEFAULT_DESIGN } from "@/lib/qr/design";
 import { blankPayload } from "@/lib/qr/payload";
 
 export const metadata = { title: "New QR code" };
@@ -25,9 +25,9 @@ export const metadata = { title: "New QR code" };
  * query parameter is not a trusted input even when the link that set it was
  * ours: this page can be reached by typing a URL.
  *
- * It opens on a preset in the church's own colour rather than on the plain
- * default, because the plain default is the thing somebody would have made
- * without us.
+ * The look opens in the church's own colour; everything that decides whether
+ * the code scans is worked out by `autoFix`, so this page passes no design
+ * settings at all.
  */
 export default async function NewQrPage({
   searchParams,
@@ -63,19 +63,22 @@ export default async function NewQrPage({
       : null;
 
   /*
-   * An address handed in by another page wins over the dynamic default: the
-   * sender knows what it wants a code for, and offering a short-link picker
-   * instead would be asking a question that has already been answered. A
-   * preselected link wins over both.
+   * STARTS ON A TYPED ADDRESS, and that is a bug fix rather than a preference.
+   *
+   * It used to open on "one of your short links" whenever the plan included
+   * them, so a church that had not made a link yet landed on an empty picker
+   * with no preview at all and nothing it could do. "Paste the address" is both
+   * the common case and the one that always works, so it is the default; an
+   * address handed in by another page, or a link preselected by the links
+   * module, still wins over it.
    */
   const payload = preselected
     ? blankPayload("link")
     : handed.ok
       ? { kind: "url" as const, url: handed.url }
-      : blankPayload(features.shortLinks ? "link" : "url");
+      : blankPayload("url");
 
   const brand = getTheme(church.theme).primary;
-  const opening = brandPreset(PRESETS[1] ?? PRESETS[0], brand);
 
   return (
     <PageContainer className="max-w-7xl">
@@ -83,7 +86,7 @@ export default async function NewQrPage({
         codeId={null}
         initialTitle={typeof query.title === "string" ? query.title.slice(0, 120) : ""}
         initialPayload={payload}
-        initialDesign={opening ?? DEFAULT_DESIGN}
+        initialDesign={DEFAULT_DESIGN}
         initialLinkId={preselected}
         links={links.map((l) => ({
           id: l.id,

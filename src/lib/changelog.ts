@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.68.1",
+    date: "2026-10-05",
+    summary:
+      "The QR code maker is four questions now, and it adjusts the code for you so that it always scans. Putting your logo or your initials in the middle used to warn, or refuse to save at all; it just works.",
+    changes: {
+      Changed: [
+        "Thirty settings became four: where it goes, the look, the colour, and what is in the middle. Gone are the fourteen dot shapes, the eight corner styles, the gradients, the bands of colour, the photograph fills, the error-correction level and the grid size.",
+        "The panel of scannability warnings is gone too, because there is nothing left for it to warn about. It described a fault and asked you to repair it; the repair now happens by itself.",
+        "Anything adjusted is listed under the preview in one line “We used a darker shade of your colour”, “We turned the error correction up”. Nothing is changed silently.",
+        "Beside the preview it now says in plain text exactly what scanning the code opens, with a button to open it and check.",
+      ],
+      Fixed: [
+        "Putting your logo or your church’s initials in the middle used to warn at a fifth of the width and refuse to save at a third. Measured across the looks and sizes a church would actually pick, twelve of forty-eight combinations could not be saved and seventeen more warned. The same sweep now comes back clean: the correction level and the grid are worked out from what is in the middle.",
+        "A colour too light to scan is now darkened to the nearest shade of the same colour that a camera can read, instead of being flagged and left. It is the same colour, darker — never swapped for black.",
+        "Opening the maker with no short links yet showed an empty picker and no preview at all, with nothing you could do. It starts on a plain web address now, which is both the common case and the one that always works.",
+        "A logo on a medium-sized code (versions 7 to 13 of the standard) was reported as unscannable because those sizes put one of the small alignment squares exactly in the centre, and every function pattern was being counted as fatal. A scanner reads the grid from the three corner squares instead, so such codes scan perfectly well — which is why every other generator produces them.",
+      ],
+    },
+  },
+  {
     version: "0.68.0",
     date: "2026-10-04",
     summary:

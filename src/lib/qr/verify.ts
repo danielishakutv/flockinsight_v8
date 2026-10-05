@@ -114,8 +114,17 @@ export type Analysis = {
     correctable: number;
     /** Codewords left for the world, after the decoration. */
     headroom: number;
-    /** Function-pattern modules covered. Any is serious. */
-    functionDamage: number;
+    /**
+     * Function-pattern modules covered, split by consequence.
+     *
+     * `structural` is fatal — the eyes, the timing lines and the format strip
+     * are how a scanner finds and reads the symbol, and nothing repairs them.
+     * `alignment` is survivable: a decoder estimates the grid from the finder
+     * patterns where an alignment ring is missing. See the note on
+     * `damagedFunctionModules` in encode.ts for why counting them together
+     * produced a wrong answer.
+     */
+    functionDamage: { structural: number; alignment: number };
     version: number;
     /** Total modules across, including the quiet zone and any frame. */
     across: number;
@@ -249,17 +258,43 @@ export function analyse(
   /* ---------------------------------------------------- the decoration */
   const covers = centreCovers(symbol, design);
   const spoiled = covers ? spoiledCodewords(symbol, covers) : 0;
-  const functionDamage = covers ? damagedFunctionModules(symbol, covers) : 0;
+  const functionDamage = covers
+    ? damagedFunctionModules(symbol, covers)
+    : { structural: 0, alignment: 0 };
   const correctable = symbol.plan.correctableCodewords;
   const allowance = Math.floor(correctable * DECORATION_BUDGET);
   const headroom = correctable - spoiled;
 
-  if (functionDamage > 0) {
+  if (functionDamage.structural > 0) {
+    const n = functionDamage.structural;
     findings.push({
       level: "blocker",
       key: "centre.function",
       title: "The middle is covering part of the code's structure",
-      detail: `${functionDamage} module${functionDamage === 1 ? "" : "s"} of finder pattern, timing line or format information ${functionDamage === 1 ? "is" : "are"} underneath it. Those carry no redundancy at all — they are how a scanner finds and reads the symbol — so nothing can repair them. Make the middle smaller, or raise “Smallest grid” so there is more code around it.`,
+      detail: `${n} module${n === 1 ? "" : "s"} of finder pattern, timing line or format information ${n === 1 ? "is" : "are"} underneath it. Those carry no redundancy at all — they are how a scanner finds and reads the symbol — so nothing can repair them. Make the middle smaller, or use a denser grid so there is more code around it.`,
+    });
+  }
+
+  if (functionDamage.alignment > 0) {
+    /*
+     * A note, not a warning, and the difference is load-bearing.
+     *
+     * From version 7 to 13 there is an alignment ring AT THE CENTRE of the
+     * symbol, so any middle on a code that size covers it. Counting that with
+     * the fatal patterns made every logo on a version 10 code read as
+     * unscannable, which is wrong: a decoder estimates the grid from the
+     * finder patterns where an alignment ring is missing, and every
+     * commercial generator puts logos on codes this size.
+     *
+     * It is not nothing either, which is why it is said at all: the rings
+     * exist to correct perspective, so what is lost is tolerance for a steep
+     * angle or a curved surface.
+     */
+    findings.push({
+      level: "note",
+      key: "centre.alignment",
+      title: "The middle sits over one of the small alignment squares",
+      detail: `Unavoidable at this size — versions 7 to 13 of the standard put one of them exactly in the centre. A phone photographing the code flat reads the grid from the three corner squares instead, which is why this is normal rather than a fault. What it costs is tolerance for a steep angle or a curved surface, so keep it off a mug or a lamp post.`,
     });
   }
 

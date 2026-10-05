@@ -367,6 +367,84 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/* ------------------------------------------------------------------ *
+ * Moving a colour without changing it
+ *
+ * For the auto-fix. A church picks its brand colour, and some brand colours
+ * are too light to scan on white. The answer is not to refuse the colour, and
+ * not to replace it with black — it is to use the SAME colour, darker. So
+ * these convert to HSL and move only the lightness, which is the one channel
+ * that changes contrast without changing which colour it is.
+ * ------------------------------------------------------------------ */
+
+export type Hsl = { h: number; s: number; l: number };
+
+export function hexToHsl(hex: string): Hsl {
+  const [r, g, b] = hexChannels(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return { h, s: sat, l };
+}
+
+export function hslToHex({ h, s, l }: Hsl): string {
+  const f = (n: number): number => {
+    const k = (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  const to = (v: number): string =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
+}
+
+/**
+ * The same colour, moved until it has enough contrast against `against`.
+ *
+ * Darkens when the background is light and lightens when it is dark, in small
+ * steps, stopping at the first step that clears `target`. Returns the original
+ * when it already does, so a caller can tell whether anything happened by
+ * comparing. Gives up and returns the most extreme step rather than looping:
+ * a mid-grey on a mid-grey cannot be fixed by lightness alone, and at that
+ * point the honest thing is the best available rather than an exception.
+ */
+export function adjustForContrast(
+  colour: string,
+  against: string,
+  target: number,
+): string {
+  if (contrastRatio(colour, against) >= target) return colour;
+
+  const hsl = hexToHsl(colour);
+  // Which way to move: away from the background's own lightness.
+  const darken = luminance(against) > luminance(colour) || luminance(against) > 0.18;
+  let best = colour;
+  let bestRatio = contrastRatio(colour, against);
+
+  for (let step = 1; step <= 20; step++) {
+    const l = darken
+      ? Math.max(0.04, hsl.l - step * 0.04)
+      : Math.min(0.97, hsl.l + step * 0.04);
+    const candidate = hslToHex({ ...hsl, l });
+    const ratio = contrastRatio(candidate, against);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      best = candidate;
+    }
+    if (ratio >= target) return candidate;
+  }
+  return best;
+}
+
 /** Every colour a fill can paint a module, for the contrast check. */
 export function fillColors(fill: QrFill): string[] {
   switch (fill.type) {
@@ -600,286 +678,19 @@ export function normaliseDesign(raw: unknown): QrDesign {
 }
 
 /* ============================================================
- * Presets
+ * There used to be twelve presets here.
  *
- * What a church actually picks from. Each one is a complete design, chosen so
- * that the list reads as nine different ideas rather than one idea in nine
- * colours — and every one of them passes `verify.ts` at its default settings
- * with a logo of the default size, which `design.test.ts` asserts so that a
- * preset cannot be shipped broken.
+ * Each was a complete design \u2014 a module shape, an eye style, a fill, a
+ * correction level, a grid floor \u2014 and they existed so that a gallery could
+ * offer twelve visibly different codes. They came out with the thirty controls
+ * they were built to show off, for the same reason: most of their combinations
+ * warned, and the ones with a logo at the natural size could not be saved.
  *
- * `brand` is substituted for the church's own theme colour where it appears,
- * so the same preset looks like the church that chose it.
+ * What replaced them is `lib/qr/simple.ts`: six styles that are shapes only,
+ * plus an auto-fix that decides the correction level and the grid from what is
+ * actually in the middle. A style can no longer carry a setting that breaks
+ * the code, because a style no longer carries any such setting.
  * ========================================================== */
-
-export type QrPreset = {
-  id: string;
-  name: string;
-  /** Where it earns its keep — shown under the name. */
-  blurb: string;
-  design: QrDesign;
-};
-
-/** Build a design from the default, overriding only what differs. */
-function preset(over: Partial<QrDesign>): QrDesign {
-  return normaliseDesign({ ...DEFAULT_DESIGN, ...over });
-}
-
-export const PRESETS: QrPreset[] = [
-  {
-    id: "ink",
-    name: "Minimal ink",
-    blurb: "Black on white, soft corners. Reads from the back of the hall and photocopies cleanly.",
-    design: preset({
-      module: "rounded",
-      eyeFrame: "rounded",
-      eyeBall: "rounded",
-      fill: { type: "solid", color: "#11182a" },
-    }),
-  },
-  {
-    id: "bulletin",
-    name: "Sunday bulletin",
-    blurb: "Your brand colour, a caption bar underneath. The one to put on a printed sheet.",
-    design: preset({
-      module: "squircle",
-      eyeFrame: "cushion",
-      eyeBall: "rounded",
-      fill: { type: "solid", color: "#5b3df5" },
-      frame: {
-        style: "bar",
-        text: "SCAN FOR THIS WEEK",
-        position: "bottom",
-        color: "#5b3df5",
-        textColor: "#ffffff",
-      },
-      cornerRadius: 2,
-    }),
-  },
-  {
-    id: "dawn",
-    name: "Dawn",
-    blurb: "A deep diagonal gradient with circular eyes. Looks made rather than generated.",
-    design: preset({
-      module: "dot",
-      moduleScale: 0.92,
-      eyeFrame: "circle",
-      eyeBall: "circle",
-      /*
-       * The light end was sky-500 (#0ea5e9) until the preset test measured it:
-       * 2.8:1 on white, below the floor, so this preset shipped as a code that
-       * would not reliably scan. #075985 is the same hue three steps darker,
-       * at 7.6:1.
-       */
-      fill: { type: "linear", from: "#5b3df5", to: "#075985", angle: 45 },
-      background: { type: "solid", color: "#ffffff" },
-      cornerRadius: 3,
-    }),
-  },
-  {
-    id: "stainedglass",
-    name: "Stained glass",
-    blurb: "Concentric bands of colour out from the middle, like light through a window.",
-    design: preset({
-      module: "squircle",
-      eyeFrame: "flower",
-      eyeBall: "flower",
-      // Every band is at least 5:1 against the cream ground; the orange and
-      // the teal were two steps lighter and measured 3.4 and 3.6.
-      fill: { type: "rings", colors: ["#be123c", "#c2410c", "#5b3df5", "#115e59"] },
-      background: { type: "solid", color: "#fffaf3" },
-      cornerRadius: 4,
-    }),
-  },
-  {
-    id: "monogram",
-    name: "Monogram",
-    blurb: "Your church's initials in the middle, on a dense grid built to hold them.",
-    design: preset({
-      module: "fluid",
-      eyeFrame: "rounded",
-      eyeBall: "circle",
-      fill: { type: "solid", color: "#11182a" },
-      centre: {
-        type: "monogram",
-        text: "GH",
-        size: 0.22,
-        shape: "circle",
-        color: "#ffffff",
-        backdropColor: "#5b3df5",
-      },
-      // High correction and a denser grid, because the middle is spent.
-      ecLevel: "H",
-      minVersion: 5,
-    }),
-  },
-  {
-    id: "photowall",
-    name: "Photo wall",
-    blurb: "The modules are windows onto one of your own photographs.",
-    design: preset({
-      module: "square",
-      eyeFrame: "square",
-      eyeBall: "square",
-      fill: { type: "image", url: "" },
-      background: { type: "solid", color: "#ffffff" },
-      eyeFrameColor: "#11182a",
-      eyeBallColor: "#11182a",
-      ecLevel: "H",
-    }),
-  },
-  {
-    id: "scripture",
-    name: "Scripture",
-    blurb: "Letters instead of squares — a word, a reference, a name, repeating through the grid.",
-    design: preset({
-      module: "letters",
-      letters: "GRACE",
-      moduleScale: 1,
-      eyeFrame: "square",
-      eyeBall: "square",
-      fill: { type: "solid", color: "#0d5f4f" },
-      background: { type: "solid", color: "#f7faf8" },
-      ecLevel: "Q",
-      // Letters are sparse, so the grid is kept small enough to read them.
-      minVersion: 2,
-    }),
-  },
-  {
-    id: "welcomedesk",
-    name: "Welcome desk",
-    blurb: "A card with a ribbon. Stands up in an acrylic holder and looks deliberate.",
-    design: preset({
-      module: "rounded",
-      eyeFrame: "leaf",
-      eyeBall: "leaf",
-      fill: { type: "solid", color: "#115e59" },
-      background: { type: "solid", color: "#ffffff" },
-      frame: {
-        style: "ribbon",
-        text: "NEW HERE? START HERE",
-        position: "bottom",
-        color: "#115e59",
-        textColor: "#ffffff",
-      },
-      cornerRadius: 2,
-    }),
-  },
-  {
-    id: "offeringboard",
-    name: "Offering board",
-    blurb: "Big, dark, high contrast, with a cross in the middle. Built to be read from a seat.",
-    design: preset({
-      module: "square",
-      eyeFrame: "square",
-      eyeBall: "square",
-      fill: { type: "solid", color: "#11182a" },
-      background: { type: "solid", color: "#ffffff" },
-      centre: {
-        type: "icon",
-        icon: "cross",
-        size: 0.18,
-        shape: "square",
-        color: "#ffffff",
-        backdropColor: "#11182a",
-      },
-      frame: {
-        style: "card",
-        text: "GIVE",
-        position: "bottom",
-        color: "#11182a",
-        textColor: "#ffffff",
-      },
-      ecLevel: "H",
-      minVersion: 4,
-    }),
-  },
-  {
-    id: "harvest",
-    name: "Harvest",
-    blurb: "Warm, organic, fluid modules that join up. For a programme or a thanksgiving.",
-    design: preset({
-      module: "fluid",
-      eyeFrame: "cushion",
-      eyeBall: "rounded",
-      fill: { type: "linear", from: "#b45309", to: "#be123c", angle: 135 },
-      background: { type: "linear", from: "#fffbeb", to: "#fff1f2", angle: 135 },
-      cornerRadius: 4,
-    }),
-  },
-  {
-    id: "mosaic",
-    name: "Mosaic",
-    blurb: "Modules of slightly different sizes, like tesserae. No two codes look the same.",
-    design: preset({
-      module: "mosaic",
-      moduleScale: 0.95,
-      eyeFrame: "beveled",
-      eyeBall: "diamond",
-      fill: { type: "radial", from: "#7c3aed", to: "#1e293b" },
-      background: { type: "solid", color: "#ffffff" },
-      cornerRadius: 3,
-      ecLevel: "Q",
-    }),
-  },
-  {
-    id: "night",
-    name: "Night service",
-    blurb: "Light modules on a dark field. Some older scanners refuse inverted codes, so test it.",
-    design: preset({
-      module: "rounded",
-      eyeFrame: "rounded",
-      eyeBall: "circle",
-      fill: { type: "solid", color: "#f8fafc" },
-      background: { type: "linear", from: "#11182a", to: "#312e81", angle: 160 },
-      cornerRadius: 4,
-      ecLevel: "Q",
-    }),
-  },
-];
-
-export const PRESET_BY_ID: Record<string, QrPreset> = Object.fromEntries(
-  PRESETS.map((p) => [p.id, p]),
-);
-
-/**
- * A preset in a church's own colours.
- *
- * Only the indigo the presets are written in is replaced, and only where it is
- * the single most prominent colour — a preset built around a deliberate colour
- * relationship (Stained glass, Harvest) keeps it, because substituting one
- * band of four produces something nobody chose.
- */
-export function brandPreset(p: QrPreset, brand: string | null | undefined): QrDesign {
-  if (!isHexColor(brand)) return p.design;
-  const b = brand.trim().toLowerCase();
-  const swap = (c: string): string => (c === "#5b3df5" ? b : c);
-  const design = structuredCloneish(p.design);
-
-  if (design.fill.type === "solid") design.fill.color = swap(design.fill.color);
-  if (design.fill.type === "linear") {
-    design.fill.from = swap(design.fill.from);
-    design.fill.to = swap(design.fill.to);
-  }
-  if (design.fill.type === "radial") {
-    design.fill.from = swap(design.fill.from);
-    design.fill.to = swap(design.fill.to);
-  }
-  if (design.frame.style !== "none") design.frame.color = swap(design.frame.color);
-  if (design.centre.type !== "none") {
-    design.centre.backdropColor = swap(design.centre.backdropColor);
-  }
-  return design;
-}
-
-/**
- * A deep copy without `structuredClone`, which is missing in some of the
- * runtimes this file is imported from. The design is plain JSON by
- * construction, so this is exact rather than a best effort.
- */
-function structuredCloneish(design: QrDesign): QrDesign {
-  return JSON.parse(JSON.stringify(design)) as QrDesign;
-}
 
 /* ============================================================
  * How small a grid a decoration can live on
