@@ -139,11 +139,22 @@ async function install(block: string) {
    * Keep a copy before touching anything. The crontab on this box holds
    * backups and a watchdog as well as these jobs, and `crontab -` replaces the
    * whole file — so the one irreversible step gets a backup first.
+   *
+   * OWNER-ONLY, IN AN OWNER-ONLY DIRECTORY. A crontab holds secrets — this
+   * one has carried CRON_SECRET on every line — and the default mode is
+   * whatever umask says, which on most boxes is world-readable. The directory
+   * is locked down as well as the file, because a mode passed to
+   * `writeFileSync` only applies when the file is created, and an explicit
+   * `chmod` after the write is what makes that true regardless.
    */
+  const dir = path.join(os.homedir(), ".crontab-backups");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backup = path.join(os.homedir(), `crontab.backup.${stamp}`);
-  fs.writeFileSync(backup, current, "utf8");
-  console.error(`existing crontab saved to ${backup}`);
+  const backup = path.join(dir, `crontab.${stamp}`);
+  fs.writeFileSync(backup, current, { encoding: "utf8", mode: 0o600 });
+  fs.chmodSync(backup, 0o600);
+  console.error(`existing crontab saved to ${backup} (mode 600)`);
 
   const begin = current.indexOf(BEGIN);
   const end = current.indexOf(END);
