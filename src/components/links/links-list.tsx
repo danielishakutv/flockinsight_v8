@@ -101,16 +101,16 @@ export function LinksList({
         <div>
           <h2 className="flex items-center gap-1.5 text-lg font-semibold">
             <Link2 className="size-4" />
-            Short links
+            {t("links.shortLinks")}
           </h2>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            One short address you can put on a poster — and repoint afterwards.
+            {t("links.oneShortAddressYouCan")}
           </p>
         </div>
         {canManage && !locked && (
           <Button onClick={() => setEditing("new")} className="min-h-11">
             <Plus className="size-4" />
-            New short link
+            {t("links.newShortLink")}
           </Button>
         )}
       </div>
@@ -119,7 +119,7 @@ export function LinksList({
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
           <p className="flex items-center gap-1.5 text-sm font-medium">
             <Lock className="size-4" />
-            Short links are on the Growth plan
+            {t("links.shortLinksAreOnThe")}
           </p>
           <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
             {lockedMessage}
@@ -136,9 +136,7 @@ export function LinksList({
           <p className="text-sm">{t("links.noShortLinksYet")}</p>
           {canManage && !locked && (
             <p className="mx-auto mt-1 max-w-sm px-6 text-xs leading-relaxed">
-              The first one worth making is for your giving page. Then put a QR code of
-              it on the screen at the front, and you never read a long address out
-              again.
+              {t("links.theFirstOneWorthMaking")}
             </p>
           )}
         </div>
@@ -229,7 +227,7 @@ function LinkRow({
             </Badge>
             {link.expired && link.status === "active" && (
               <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300">
-                Expired
+                {t("links.expired")}
               </Badge>
             )}
             {link.qrCount > 0 && (
@@ -385,7 +383,7 @@ function LinkDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="link-destination" className="text-xs font-medium">
-              Where should it go?
+              {t("links.whereShouldItGo")}
             </Label>
             <Input
               id="link-destination"
@@ -396,13 +394,13 @@ function LinkDialog({
               className="min-h-11"
             />
             <p className="text-muted-foreground text-xs">
-              You can leave off https:// — it is added for you.
+              {t("links.youCanLeaveOffHttps")}
             </p>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="short-code" className="text-xs font-medium">
-              The short address
+              {t("links.theShortAddress")}
             </Label>
             <div className="flex gap-2">
               <div className="border-input bg-background flex min-h-11 min-w-0 flex-1 items-center rounded-lg border pl-3">
@@ -440,8 +438,7 @@ function LinkDialog({
               </p>
             ) : (
               <p className="text-muted-foreground text-xs leading-relaxed">
-                A suggested code leaves out 0, o, 1, l and i, because these get read off
-                posters and typed by hand.
+                {t("links.aSuggestedCodeLeavesOut")}
               </p>
             )}
             {link && normalised !== link.code && (
@@ -455,7 +452,7 @@ function LinkDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="short-name" className="text-xs font-medium">
-              What to call it
+              {t("links.whatToCallIt")}
             </Label>
             <Input
               id="short-name"
@@ -469,7 +466,7 @@ function LinkDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="stop-on" className="text-xs font-medium">
-                Stop working on
+                {t("links.stopWorkingOn")}
               </Label>
               <Input
                 id="stop-on"
@@ -479,13 +476,13 @@ function LinkDialog({
                 className="min-h-11"
               />
               <p className="text-muted-foreground text-xs">
-                Leave empty for never. It works all through the day you choose.
+                {t("links.leaveEmptyForNever")}
               </p>
             </div>
             {link && (
               <div className="space-y-1.5">
                 <Label htmlFor="short-status" className="text-xs font-medium">
-                  Status
+                  {t("common.status")}
                 </Label>
                 <select
                   id="short-status"
@@ -503,7 +500,7 @@ function LinkDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="short-note" className="text-xs font-medium">
-              A note for whoever finds this in two years
+              {t("links.aNoteForWhoeverFinds")}
             </Label>
             <Textarea
               id="short-note"
@@ -518,7 +515,7 @@ function LinkDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving} className="min-h-11">
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={submit}

@@ -85,6 +85,13 @@ const NEVER_TRANSLATED = [
 function isNotProse(s) {
   if (NEVER_TRANSLATED.some((re) => re.test(s.trim()))) return true;
   const t = s.trim();
+  /*
+   * Code caught between two tags. The multi-line pass can straddle a JSX
+   * ternary — `) : link.status === "active" ? (` sits between a `>` and a `<`
+   * and reads as a sentence to a regex. Reporting it would teach people to
+   * skim the output, which is worse than missing a string.
+   */
+  if (/===|!==|=>|&&|\|\||\?\s*\($|^\)\s*:/.test(t)) return true;
   if (t.length < 2) return true;
   if (!/[a-z]/i.test(t)) return true; // symbols, numbers, punctuation
   if (/^[a-z0-9_-]+$/i.test(t) && !/\s/.test(t) && t.length < 4) return true;
@@ -161,6 +168,35 @@ function findings(file) {
       if (!isNotProse(text)) hits.push({ line: i + 1, kind: "message", text });
     }
   });
+
+  /*
+   * JSX text that sits on its OWN line, which the per-line pass above cannot
+   * see — it matches `>text<` within a single line, and prettier puts any
+   * string longer than the print width on a line of its own:
+   *
+   *     <Label htmlFor="qr-caption" className="font-semibold">
+   *       Words underneath
+   *     </Label>
+   *
+   * `[ 	
+]` rather than `[ 	]`: these files are CRLF, and a `
+` sitting
+   * between the tag and the newline is enough to make the whole pass find
+   * nothing at all — which is exactly how it failed the first time.
+   *
+   * That is not a rare shape; it is what EVERY long string in this codebase
+   * looks like, so the audit was blind to exactly the sentences most worth
+   * translating. Found by the QR module, which reported "nothing untranslated"
+   * while showing eleven English sentences.
+   */
+  for (const m of clean.matchAll(
+    /(?<![=!<>\-])>[ \t\r]*\n\s*([^<>{}]{2,300}?)\s*\n\s*<(?=\/|[A-Za-z])/g,
+  )) {
+    const text = m[1].trim().replace(/\s+/g, " ");
+    if (isNotProse(text)) continue;
+    const line = clean.slice(0, m.index).split("\n").length;
+    hits.push({ line, kind: "text", text });
+  }
 
   return hits;
 }

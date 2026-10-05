@@ -37,7 +37,7 @@ import {
   type QrDesign,
 } from "@/lib/qr/design";
 import { EC_LABEL } from "@/lib/qr/tables";
-import { centreBox, layoutFor } from "@/lib/qr/render";
+import { CENTRE_BACKDROP_PAD, centreBox, layoutFor } from "@/lib/qr/render";
 
 /* ============================================================
  * Thresholds
@@ -156,8 +156,16 @@ function centreCovers(
   const box = centreBox(symbol, design, layout);
   if (!box) return null;
 
+  /*
+   * A monogram is drawn on a padded plate too, so it covers the same enlarged
+   * area a logo does. Leaving it at 1 measured a ring of modules as intact
+   * while the renderer was painting over them.
+   */
   const grown =
-    design.centre.type === "image" && design.centre.backdrop ? 1.18 : 1;
+    (design.centre.type === "image" && design.centre.backdrop) ||
+    design.centre.type === "monogram"
+      ? CENTRE_BACKDROP_PAD
+      : 1;
   const size = box.size * grown;
   // Back into symbol-local coordinates, since the caller walks the symbol.
   const x0 = box.x - layout.offsetX - (size - box.size) / 2;

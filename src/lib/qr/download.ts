@@ -10,6 +10,7 @@
  */
 
 import { renderSvg, svgDataUrl } from "@/lib/qr/render";
+import { inlineDesignImages } from "@/lib/qr/inline-images";
 import type { QrDesign } from "@/lib/qr/design";
 import type { QrSymbol } from "@/lib/qr/encode";
 
@@ -52,21 +53,40 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export type ExportResult = { ok: true } | { ok: false; error: string };
+export type ExportResult =
+  /** `warning` means the file downloaded but something about it is worth saying. */
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
 
-/** The SVG itself — the one to send to a printer. */
-export function downloadSvg(
+/**
+ * The SVG itself — the one to send to a printer.
+ *
+ * The logo is built into the file rather than linked, because the person who
+ * opens this next is a printer or a designer, and neither of them can reach
+ * our CDN from inside Illustrator. If it cannot be built in, the file is still
+ * worth having, so it downloads with the logo linked and says so.
+ */
+export async function downloadSvg(
   symbol: QrSymbol,
   design: QrDesign,
   title: string,
-): ExportResult {
+): Promise<ExportResult> {
   try {
-    const svg = renderSvg(symbol, design, { pixelSize: 1024, title });
+    const inlined = await inlineDesignImages(design);
+    const svg = renderSvg(symbol, inlined.ok ? inlined.design : design, {
+      pixelSize: 1024,
+      title,
+    });
     downloadBlob(
       new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
       qrFileName(title, "svg"),
     );
-    return { ok: true };
+    return inlined.ok
+      ? { ok: true }
+      : {
+          ok: true,
+          warning: `${inlined.error} The file still downloaded, but it links to the image rather than containing it.`,
+        };
   } catch (error) {
     console.error("[qr] downloadSvg failed", error);
     return {
@@ -93,7 +113,16 @@ export async function downloadPng(
   title: string,
   pixelSize: number,
 ): Promise<ExportResult> {
-  const svg = renderSvg(symbol, design, { pixelSize, title });
+  /*
+   * Before anything else. A rasteriser cannot fetch the logo (see
+   * inline-images.ts), so without this the PNG gets a broken-image icon in the
+   * middle of the code and nothing anywhere reports a failure.
+   */
+  const inlined = await inlineDesignImages(design);
+  if (!inlined.ok) return { ok: false, error: inlined.error };
+  const ready = inlined.design;
+
+  const svg = renderSvg(symbol, ready, { pixelSize, title });
 
   let image: HTMLImageElement;
   try {
@@ -162,7 +191,10 @@ export async function copyPng(
     };
   }
 
-  const svg = renderSvg(symbol, design, { pixelSize });
+  const inlined = await inlineDesignImages(design);
+  if (!inlined.ok) return { ok: false, error: inlined.error };
+
+  const svg = renderSvg(symbol, inlined.design, { pixelSize });
   try {
     const image = await loadImage(svgDataUrl(svg));
     const canvas = document.createElement("canvas");

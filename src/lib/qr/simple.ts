@@ -165,12 +165,25 @@ export function designFor(choice: SimpleChoice): QrDesign {
   const centre: QrDesign["centre"] =
     c.middle.kind === "letters" && c.middle.text.trim()
       ? {
+          /*
+           * Letters on PAPER, not on the brand colour — which is the opposite
+           * of what this used to do, and the reason it looked broken.
+           *
+           * The plate was filled with `c.colour`, the same colour as every
+           * module around it, so there was nothing to separate the two: the
+           * mark merged into its neighbours and read as a lumpy blob with
+           * white letters floating on it. Worse, a scanner saw the same thing
+           * a person did — plate-coloured pixels where it expected modules is
+           * plausible data, and plausible data is not correctable, whereas a
+           * clean light hole is. The logo branch below already knew this. Now
+           * both say it the same way.
+           */
           type: "monogram",
           text: c.middle.text.trim(),
           size: MIDDLE_SIZE,
           shape: "circle",
-          color: PAPER,
-          backdropColor: c.colour,
+          color: c.colour,
+          backdropColor: PAPER,
         }
       : c.middle.kind === "logo" && c.middle.url
         ? {

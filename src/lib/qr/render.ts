@@ -398,6 +398,43 @@ export function centreBox(
   };
 }
 
+/**
+ * How much larger the plate behind a logo or a monogram is than the mark on it.
+ *
+ * Shared with `centreCovers` in verify.ts, which budgets the damage this
+ * costs. If the two ever disagree, the code is measured as less damaged than
+ * it is drawn — so they read the same constant rather than both saying 1.18.
+ */
+export const CENTRE_BACKDROP_PAD = 1.18;
+
+/** Cap height and average advance of a bold uppercase glyph, as fractions of the font size. */
+const CAP_HEIGHT = 0.72;
+const GLYPH_ADVANCE = 0.64;
+
+/**
+ * The largest font size whose letters still sit inside the circular plate.
+ *
+ * The old formula divided by the character count, which kept the text's WIDTH
+ * constant but took no account of the plate being round: at one character it
+ * returned a font size equal to the whole plate, so the glyph ran to the edge
+ * on every side, and at three or four it shrank far more than it needed to.
+ *
+ * This solves the actual constraint instead. The text's cap box is w x h with
+ * w = advance * n * f and h = capHeight * f; for it to fit inside a circle of
+ * diameter d, its corner has to be inside the radius:
+ *
+ *     (w/2)^2 + (h/2)^2 <= (d/2)^2
+ *
+ * which rearranges to the hypot below. The 0.88 is breathing room so the
+ * letters do not graze the rim, and the 0.62 ceiling stops a single letter
+ * from filling the plate completely.
+ */
+export function monogramFontSize(size: number, length: number): number {
+  const n = Math.max(1, length);
+  const fits = size / (2 * Math.hypot((GLYPH_ADVANCE * n) / 2, CAP_HEIGHT / 2));
+  return Math.min(size * 0.62, fits * 0.88);
+}
+
 function plate(shape: string, x: number, y: number, size: number, fill: string): string {
   const d =
     shape === "circle"
@@ -428,7 +465,7 @@ function centreMarkup(
      * dark ones, so a scanner does not see a hole it can repair — it sees
      * plausible data, and plausible data is not correctable.
      */
-    const padded = size * 1.18;
+    const padded = size * CENTRE_BACKDROP_PAD;
     const px = x - (padded - size) / 2;
     const py = y - (padded - size) / 2;
     const clipId = `${id}-c`;
@@ -449,16 +486,20 @@ function centreMarkup(
 
   if (centre.type === "monogram") {
     const text = centre.text.trim() || "·";
+    const fontSize = monogramFontSize(size, text.length);
     /*
-     * The font shrinks as the monogram gains characters, so "RCCG" fits the
-     * same plate as "GH" instead of running off both sides. Measured in
-     * module units against the plate's width, not guessed.
+     * Padded by the same 1.18 as the logo, and for the same reason: the ring
+     * of plate showing past the letters is what tells a scanner this is a hole
+     * rather than data. `centreCovers` in verify.ts budgets for this factor,
+     * so the two have to move together.
      */
-    const fontSize = (size * 0.62) / Math.max(1, text.length * 0.62);
+    const padded = size * CENTRE_BACKDROP_PAD;
+    const px = x - (padded - size) / 2;
+    const py = y - (padded - size) / 2;
     return {
       defs: "",
       body:
-        plate(centre.shape, x, y, size, centre.backdropColor) +
+        plate(centre.shape, px, py, padded, centre.backdropColor) +
         `<text x="${n(x + size / 2)}" y="${n(y + size / 2)}" fill="${centre.color}" ` +
         `font-family="${FONT}" font-weight="800" font-size="${n(fontSize)}" ` +
         `letter-spacing="${n(fontSize * 0.02)}" text-anchor="middle" ` +

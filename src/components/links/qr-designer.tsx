@@ -126,13 +126,7 @@ export function QrDesigner(props: DesignerProps) {
 
   function remove() {
     if (!props.codeId) return;
-    if (
-      !confirm(
-        `Delete "${title}"? Any printed copies keep working — this only removes the design.`,
-      )
-    ) {
-      return;
-    }
+    if (!confirm(t("links.deleteCodeConfirm", { title }))) return;
     startDelete(async () => {
       const res = await deleteCode(props.codeId!);
       if (res.ok) {
@@ -148,7 +142,7 @@ export function QrDesigner(props: DesignerProps) {
         <Button asChild variant="ghost" size="sm" className="min-h-11">
           <Link href="/links">
             <ArrowLeft className="size-4" />
-            Links &amp; QR codes
+            {t("links.linksAndQrCodes")}
           </Link>
         </Button>
         {props.canManage && (
@@ -165,7 +159,7 @@ export function QrDesigner(props: DesignerProps) {
                 ) : (
                   <Trash2 className="size-4" />
                 )}
-                Delete
+                {t("common.delete")}
               </Button>
             )}
             <Button onClick={save} disabled={saving} className="min-h-11">
@@ -174,7 +168,7 @@ export function QrDesigner(props: DesignerProps) {
               ) : (
                 <Save className="size-4" />
               )}
-              {props.codeId ? "Save" : "Save this code"}
+              {props.codeId ? t("common.save") : t("links.saveThisCode")}
             </Button>
           </div>
         )}
@@ -182,7 +176,7 @@ export function QrDesigner(props: DesignerProps) {
 
       <div className="space-y-1.5">
         <Label htmlFor="qr-title" className="text-xs font-medium">
-          What to call it
+          {t("links.whatToCallIt")}
         </Label>
         <Input
           id="qr-title"

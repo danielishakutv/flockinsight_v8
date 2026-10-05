@@ -47,17 +47,17 @@ export function QrCodeList({
         <div>
           <h2 className="flex items-center gap-1.5 text-lg font-semibold">
             <QrCode className="size-4" />
-            QR codes
+            {t("links.qrCodes")}
           </h2>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Your logo, your colours, and a check that it will really scan.
+            {t("links.yourLogoYourColoursAnd")}
           </p>
         </div>
         {canManage && (
           <Button asChild className="min-h-11">
             <Link href="/links/qr/new">
               <Plus className="size-4" />
-              New QR code
+              {t("links.newQrCode")}
             </Link>
           </Button>
         )}
@@ -69,8 +69,7 @@ export function QrCodeList({
           <p className="text-sm">{t("links.noQrCodesYet")}</p>
           {canManage && (
             <p className="mx-auto mt-1 max-w-sm px-6 text-xs leading-relaxed">
-              Try your WiFi first — a code taped by the welcome desk means nobody ever
-              reads the password out again.
+              {t("links.tryYourWifiFirst")}
             </p>
           )}
         </div>

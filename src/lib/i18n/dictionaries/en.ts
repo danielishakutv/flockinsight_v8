@@ -2643,6 +2643,63 @@ export const en = {
 
 
   links: {
+    /* The maker panel — the four choices and the preview beside them. */
+    pickAnythingIfAColour:
+      "Pick anything. If a colour is too light for a camera to read, we use a darker shade of the same colour and tell you underneath.",
+    otherColour: "Other",
+    whichLettersTwoOrThree: "Which letters? Two or three read best.",
+    useMyChurchLogo: "Use my church logo",
+    wordsUnderneath: "Words underneath",
+    optionalAndItMakesA:
+      "Optional, and it makes a real difference: a code with nothing beside it gets scanned far less often than one that says what it is for.",
+    readyToPrint: "Ready to print",
+    openItToCheck: "Open it, to check",
+    whatWeAdjustedSoIt: "What we adjusted so it scans",
+    copy: "Copy",
+    drawsTheFinishedPicture:
+      "Draws the finished picture and reads every square back out of the pixels. Optional — the code is already built to scan.",
+    linksAndQrCodes: "Links & QR codes",
+    /* Where the code points. */
+    whereShouldItGo: "Where should it go?",
+    whichShortLink: "Which short link?",
+    makeOneAndThisCode:
+      "Make one and this code can point at it — then you can change where it goes later without reprinting anything.",
+    makeAShortLink: "Make a short link",
+    security: "Security",
+    thisNetworkIsHidden: "This network is hidden",
+    aWifiCodeCarriesThe:
+      "A WiFi code carries the password inside it — that is how it joins a phone without anybody reading it out. So put it on your guest network, not the one the office computers are on.",
+    thePasswordIsNeverShown:
+      "The password is never shown in your list of codes, only here.",
+    changeWhereItGoes: "Change where it goes",
+    goesTo: "goes to",
+    /* The two lists. */
+    qrCodes: "QR codes",
+    yourLogoYourColoursAnd:
+      "Your logo, your colours, and a check that it will really scan.",
+    newQrCode: "New QR code",
+    tryYourWifiFirst:
+      "Try your WiFi first — a code taped by the welcome desk means nobody ever reads the password out again.",
+    shortLinks: "Short links",
+    oneShortAddressYouCan:
+      "One short address you can put on a poster — and repoint afterwards.",
+    newShortLink: "New short link",
+    shortLinksAreOnThe: "Short links are on the Growth plan",
+    theFirstOneWorthMaking:
+      "The first one worth making is for your giving page. Then put a QR code of it on the screen at the front, and you never read a long address out again.",
+    expired: "Expired",
+    youCanLeaveOffHttps: "You can leave off https:// — it is added for you.",
+    theShortAddress: "The short address",
+    aSuggestedCodeLeavesOut:
+      "A suggested code leaves out 0, o, 1, l and i, because these get read off posters and typed by hand.",
+    stopWorkingOn: "Stop working on",
+    leaveEmptyForNever: "Leave empty for never. It works all through the day you choose.",
+    status: "Status",
+    aNoteForWhoeverFinds: "A note for whoever finds this in two years",
+    /* The designer's own buttons. */
+    saveThisCode: "Save this code",
+    deleteCodeConfirm:
+      "Delete “{title}”? Any printed copies keep working — this only removes the design.",
     theLook: "The look",
     theColour: "The colour",
     inTheMiddle: "In the middle",

@@ -90,18 +90,34 @@ export function QrPreview({
   const { symbol, design, svg, changes } = state;
   const opensUrl = /^https?:\/\//i.test(destination);
 
+  /*
+   * Both exports fetch the logo and build it into the file before drawing it
+   * (see inline-images.ts), so both are async and both can report that the
+   * file came out without it. `warning` is a file that downloaded with
+   * something worth saying about it, which is not the same as a failure.
+   */
   async function exportPng() {
     setExporting(true);
     const res = await downloadPng(symbol, design, title || "qr-code", pngSize);
     setExporting(false);
-    if (res.ok) onDownloaded?.();
-    else toast.error(res.error);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    if (res.warning) toast.warning(res.warning);
+    onDownloaded?.();
   }
 
-  function exportSvg() {
-    const res = downloadSvg(symbol, design, title || "qr-code");
-    if (res.ok) onDownloaded?.();
-    else toast.error(res.error);
+  async function exportSvg() {
+    setExporting(true);
+    const res = await downloadSvg(symbol, design, title || "qr-code");
+    setExporting(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    if (res.warning) toast.warning(res.warning);
+    onDownloaded?.();
   }
 
   async function copy() {
@@ -142,7 +158,7 @@ export function QrPreview({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge className="gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
             <Check className="size-3.5" />
-            Ready to print
+            {t("links.readyToPrint")}
           </Badge>
           <Badge variant="secondary">
             {symbol.size}×{symbol.size} squares
@@ -158,7 +174,7 @@ export function QrPreview({
           <Button asChild variant="outline" size="sm" className="mt-2.5 min-h-11">
             <a href={destination} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="size-4" />
-              Open it, to check
+              {t("links.openItToCheck")}
             </a>
           </Button>
         )}
@@ -169,7 +185,7 @@ export function QrPreview({
         <div className="border-border bg-muted/40 rounded-2xl border p-4 sm:p-5">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold">
             <Wand2 className="size-4" />
-            What we adjusted so it scans
+            {t("links.whatWeAdjustedSoIt")}
           </h3>
           <ul className="mt-2 space-y-1.5">
             {changes.map((change) => (
@@ -192,13 +208,18 @@ export function QrPreview({
             )}
             PNG
           </Button>
-          <Button onClick={exportSvg} variant="outline" className="min-h-11">
+          <Button
+            onClick={exportSvg}
+            disabled={exporting}
+            variant="outline"
+            className="min-h-11"
+          >
             <Download className="size-4" />
             SVG
           </Button>
           <Button onClick={copy} variant="outline" className="min-h-11">
             <Copy className="size-4" />
-            Copy
+            {t("links.copy")}
           </Button>
         </div>
 
@@ -231,8 +252,7 @@ export function QrPreview({
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">{t("links.checkItLikeACamera")}</h3>
             <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-              Draws the finished picture and reads every square back out of the pixels.
-              Optional — the code is already built to scan.
+              {t("links.drawsTheFinishedPicture")}
             </p>
           </div>
           <Button

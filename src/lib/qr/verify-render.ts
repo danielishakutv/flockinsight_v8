@@ -28,6 +28,7 @@
 import { codewordMap, moduleAt, Role, type QrSymbol } from "@/lib/qr/encode";
 import type { QrDesign } from "@/lib/qr/design";
 import { layoutFor, renderSvg, svgDataUrl } from "@/lib/qr/render";
+import { inlineDesignImages, needsInlining } from "@/lib/qr/inline-images";
 
 /** Pixels per module when rasterising. Eight is plenty and stays fast. */
 const SAMPLES_PER_MODULE = 8;
@@ -72,7 +73,27 @@ export async function sampleRendered(
   }
 
   const layout = layoutFor(symbol, design);
-  const markup = svg ?? renderSvg(symbol, design);
+
+  /*
+   * The markup passed in is the one on screen, where the logo is a LINK to our
+   * CDN. That link resolves in the page and is silently ignored once the same
+   * markup goes through `new Image()` — so measuring it would measure a code
+   * with a hole where the logo is, and call it clean. The picture has to be
+   * made self-contained before it means anything. See inline-images.ts.
+   */
+  let drawable = design;
+  if (needsInlining(design)) {
+    const inlined = await inlineDesignImages(design);
+    if (!inlined.ok) {
+      return {
+        ok: false,
+        reason: "image-failed",
+        error: inlined.error,
+      };
+    }
+    drawable = inlined.design;
+  }
+  const markup = drawable === design && svg ? svg : renderSvg(symbol, drawable);
   const width = Math.round(layout.width * SAMPLES_PER_MODULE);
   const height = Math.round(layout.height * SAMPLES_PER_MODULE);
 

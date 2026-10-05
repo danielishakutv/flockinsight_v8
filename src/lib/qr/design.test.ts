@@ -13,7 +13,14 @@ import {
   type QrDesign,
 } from "@/lib/qr/design";
 import { encodeQr, type QrSymbol } from "@/lib/qr/encode";
-import { centreBox, layoutFor, renderSvg, svgDataUrl } from "@/lib/qr/render";
+import {
+  CENTRE_BACKDROP_PAD,
+  centreBox,
+  layoutFor,
+  monogramFontSize,
+  renderSvg,
+  svgDataUrl,
+} from "@/lib/qr/render";
 import { analyse, confidenceOf } from "@/lib/qr/verify";
 
 const URL = "https://flockinsight.com/l/sunday";
@@ -413,5 +420,91 @@ describe("confidence", () => {
       margin: 4,
     });
     expect(confidenceOf(analyse(symbolFor(design), design))).toBe("excellent");
+  });
+});
+
+/* ============================================================
+ * The mark in the middle
+ * ========================================================== */
+
+describe("the monogram's plate", () => {
+  /**
+   * The letters used to be drawn in the brand colour ON the brand colour, with
+   * no padding, so the mark merged into the modules around it and read as a
+   * lumpy blob. These pin the two halves of the fix.
+   */
+  function monogram(text: string, size = 0.2): QrDesign {
+    return normaliseDesign({
+      ...DEFAULT_DESIGN,
+      centre: {
+        type: "monogram",
+        text,
+        size,
+        shape: "circle",
+        color: "#7c2d92",
+        backdropColor: "#ffffff",
+      },
+    });
+  }
+
+  it("fits inside the plate at every length a church can type", () => {
+    // The plate is a circle of diameter `size`. The text's cap box has to fit
+    // inside it — corner within the radius — or the letters cross the rim.
+    const size = 100;
+    for (const length of [1, 2, 3, 4]) {
+      const f = monogramFontSize(size, length);
+      const halfWidth = (0.64 * length * f) / 2;
+      const halfHeight = (0.72 * f) / 2;
+      expect(Math.hypot(halfWidth, halfHeight)).toBeLessThanOrEqual(size / 2);
+    }
+  });
+
+  it("never returns a font as large as the plate itself", () => {
+    // The old formula returned exactly `size` for a single letter.
+    expect(monogramFontSize(100, 1)).toBeLessThan(100);
+    expect(monogramFontSize(100, 1)).toBeCloseTo(62, 0);
+  });
+
+  it("shrinks as letters are added, but by less than the old divide-by-length", () => {
+    const sizes = [1, 2, 3, 4].map((n) => monogramFontSize(100, n));
+    for (let i = 1; i < sizes.length; i++) {
+      expect(sizes[i]).toBeLessThan(sizes[i - 1]);
+    }
+    // Four characters used to land at 25; the real constraint allows more.
+    expect(sizes[3]).toBeGreaterThan(25);
+  });
+
+  it("draws the plate larger than the letters, so there is a ring of paper", () => {
+    const design = monogram("GH");
+    const svg = renderSvg(symbolFor(design), design);
+    // The plate is paper-coloured, not brand-coloured — the whole point of the
+    // fix. A brand-coloured plate on brand-coloured modules has no edge.
+    expect(svg).toContain('fill="#ffffff"');
+    expect(CENTRE_BACKDROP_PAD).toBeGreaterThan(1);
+  });
+
+  it("is measured as covering the same area it is drawn over", () => {
+    /*
+     * verify.ts budgets the damage the centre costs, and it grew the covered
+     * area by the backdrop padding for an IMAGE but not for a monogram — so a
+     * ring of modules was painted over and counted as intact. Both are drawn
+     * on the same padded plate, so both must cost the same.
+     */
+    const letters = monogram("GHC");
+    const logo: QrDesign = normaliseDesign({
+      ...letters,
+      centre: {
+        type: "image",
+        url: "https://example.org/logo.png",
+        size: 0.2,
+        shape: "circle",
+        backdrop: true,
+        backdropColor: "#ffffff",
+      },
+    });
+    const symbol = symbolFor(letters);
+    expect(analyse(symbol, letters).metrics.spoiled).toBe(
+      analyse(symbol, logo).metrics.spoiled,
+    );
   });
 });

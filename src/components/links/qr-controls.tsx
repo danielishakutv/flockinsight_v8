@@ -72,8 +72,7 @@ export function QrControls({
       <section className="bg-card rounded-2xl border p-4 sm:p-5">
         <h3 className="font-semibold">{t("links.theColour")}</h3>
         <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-          Pick anything. If a colour is too light for a camera to read, we use a darker
-          shade of the same colour and tell you underneath.
+          {t("links.pickAnythingIfAColour")}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {SWATCHES.map((swatch) => (
@@ -83,9 +82,16 @@ export function QrControls({
               onClick={() => set({ colour: swatch })}
               aria-label={`Use the colour ${swatch}`}
               aria-pressed={choice.colour === swatch}
+              /*
+               * An unselected swatch keeps a visible rim. With a transparent
+               * border the first swatch — the near-black one that is the right
+               * answer for anything going near a photocopier — disappeared
+               * completely into the dark card behind it, so the row read as
+               * starting with a hole.
+               */
               className={cn(
                 "grid size-11 place-items-center rounded-xl border-2 transition",
-                choice.colour === swatch ? "border-foreground" : "border-transparent",
+                choice.colour === swatch ? "border-foreground" : "border-border",
               )}
               style={{ backgroundColor: swatch }}
             >
@@ -100,7 +106,7 @@ export function QrControls({
               aria-label={t("links.chooseAnotherColour")}
               className="size-7 cursor-pointer rounded border-0 bg-transparent p-0"
             />
-            Other
+            {t("links.otherColour")}
           </label>
         </div>
       </section>
@@ -147,7 +153,7 @@ export function QrControls({
         {choice.middle.kind === "letters" && (
           <div className="mt-3 space-y-1.5">
             <Label htmlFor="qr-letters" className="text-xs font-medium">
-              Which letters? Two or three read best.
+              {t("links.whichLettersTwoOrThree")}
             </Label>
             <div className="flex gap-2">
               <Input
@@ -192,7 +198,7 @@ export function QrControls({
                 className="min-h-11"
                 onClick={() => set({ middle: { kind: "logo", url: churchLogo } })}
               >
-                Use my church logo
+                {t("links.useMyChurchLogo")}
               </Button>
             )}
           </div>
@@ -202,11 +208,10 @@ export function QrControls({
       {/* ------------------------------------------------- 4. the caption */}
       <section className="bg-card rounded-2xl border p-4 sm:p-5">
         <Label htmlFor="qr-caption" className="font-semibold">
-          Words underneath
+          {t("links.wordsUnderneath")}
         </Label>
         <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-          Optional, and it makes a real difference: a code with nothing beside it gets
-          scanned far less often than one that says what it is for.
+          {t("links.optionalAndItMakesA")}
         </p>
         <Input
           id="qr-caption"

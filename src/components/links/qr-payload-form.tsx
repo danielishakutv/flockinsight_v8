@@ -86,7 +86,7 @@ export function QrPayloadForm({
     <div className="bg-card space-y-4 rounded-2xl border p-4 sm:p-5">
       <div className="space-y-1.5">
         <Label htmlFor="qr-kind" className="font-semibold">
-          Where should it go?
+          {t("links.whereShouldItGo")}
         </Label>
         <select
           id="qr-kind"
@@ -128,20 +128,19 @@ export function QrPayloadForm({
       {payload.kind === "link" && (
         <div className="space-y-1.5">
           <Label htmlFor="qr-shortlink" className="text-xs font-medium">
-            Which short link?
+            {t("links.whichShortLink")}
           </Label>
           {links.length === 0 ? (
             <div className="border-border bg-muted/40 rounded-xl border p-3">
               <p className="text-sm font-medium">{t("links.youHaveNoShortLinks")}</p>
               <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                Make one and this code can point at it — then you can change where it
-                goes later without reprinting anything.
+                {t("links.makeOneAndThisCode")}
               </p>
               <Link
                 href="/links"
                 className="text-primary mt-2 inline-flex min-h-11 items-center gap-1 text-xs font-medium hover:underline"
               >
-                Make a short link
+                {t("links.makeAShortLink")}
                 <ExternalLink className="size-3.5" />
               </Link>
             </div>
@@ -195,7 +194,7 @@ export function QrPayloadForm({
           />
           <div className="space-y-1.5">
             <Label htmlFor="qr-wifi-security" className="text-xs font-medium">
-              Security
+              {t("links.security")}
             </Label>
             <select
               id="qr-wifi-security"
@@ -224,12 +223,10 @@ export function QrPayloadForm({
               onChange={(e) => onChange({ ...payload, hidden: e.target.checked })}
               className="accent-primary size-4"
             />
-            This network is hidden
+            {t("links.thisNetworkIsHidden")}
           </label>
           <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed">
-            A WiFi code carries the password inside it — that is how it joins a phone
-            without anybody reading it out. So put it on your guest network, not the one
-            the office computers are on.
+            {t("links.aWifiCodeCarriesThe")}
           </p>
         </>
       )}
@@ -426,7 +423,7 @@ export function QrPayloadForm({
       {payloadIsSensitive(payload) && (
         <p className="text-muted-foreground flex gap-1.5 text-xs leading-relaxed">
           <Lock className="mt-0.5 size-3.5 shrink-0" />
-          The password is never shown in your list of codes, only here.
+          {t("links.thePasswordIsNeverShown")}
         </p>
       )}
     </div>
@@ -438,6 +435,7 @@ export function QrPayloadForm({
  * ========================================================== */
 
 function SelectedLink({ link, baseUrl }: { link: LinkChoice; baseUrl: string }) {
+  const t = useT();
   return (
     <div className="border-border bg-muted/40 mt-2 rounded-xl border p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -445,14 +443,14 @@ function SelectedLink({ link, baseUrl }: { link: LinkChoice; baseUrl: string }) 
         {link.status !== "active" && <Badge variant="outline">{link.status}</Badge>}
       </div>
       <p className="text-muted-foreground mt-1 text-xs break-all">
-        goes to {prettyDestination(link.destination, 70)}
+        {t("links.goesTo")} {prettyDestination(link.destination, 70)}
       </p>
       <Link
         href={`/links/${link.id}`}
         className="text-primary mt-2 inline-flex min-h-11 items-center gap-1 text-xs font-medium hover:underline"
       >
         <PencilLine className="size-3.5" />
-        Change where it goes
+        {t("links.changeWhereItGoes")}
       </Link>
     </div>
   );
