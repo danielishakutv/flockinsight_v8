@@ -2631,6 +2631,29 @@ export const firstTimerSetting = pgTable("first_timer_setting", {
     .$onUpdate(() => new Date()),
 });
 
+/**
+ * What was actually sent to a first-timer, per channel, and how it went.
+ *
+ * THIS USED TO BE A CLAIM AND NOTHING MORE: one row per member per stage,
+ * written BEFORE the message was sent, purely so a second cron run would not
+ * send twice. Which meant a send that then failed — sender ID not approved, no
+ * wallet balance, SMS held for the delivery window and never flushed — left a
+ * row saying "done" and the visitor never heard from the church again. Nothing
+ * anywhere recorded that it had not gone out, so nobody could tell.
+ *
+ * So it now records the OUTCOME as well as the claim, and does it per channel:
+ *
+ *   `outcome` — pending, sent, queued (handed to the 8am-8pm queue) or failed.
+ *   `detail`  — why, when it failed. This is what a church reads.
+ *   `attempts`— so a permanently broken configuration stops retrying.
+ *
+ * Per channel because a church's email can succeed while its SMS fails, and
+ * retrying the pair would re-send the email that already arrived.
+ *
+ * `channel` carries a default of "all" for the rows written before this
+ * existed; the sequence treats such a row as "both channels already done", so
+ * nobody who was contacted last month gets contacted again.
+ */
 export const firstTimerRun = pgTable(
   "first_timer_run",
   {
@@ -2642,10 +2665,25 @@ export const firstTimerRun = pgTable(
       .notNull()
       .references(() => member.id, { onDelete: "cascade" }),
     stage: text().notNull(), // "welcome" | "invite"
+    /** "sms" | "email", or "all" on a row from before this column existed. */
+    channel: text().notNull().default("all"),
+    /** "pending" | "sent" | "queued" | "failed" */
+    outcome: text().notNull().default("sent"),
+    /** Why it failed, in the words the church is shown. */
+    detail: text(),
+    attempts: integer().notNull().default(1),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  // One send per member per stage — makes re-runs a no-op.
-  (t) => [uniqueIndex("first_timer_run_unique").on(t.memberId, t.stage)],
+  (t) => [
+    index("first_timer_run_member_idx").on(t.memberId),
+    /* One row per member per stage per channel — what makes a re-run a no-op
+     * for anything already sent, while still letting a failure be retried. */
+    uniqueIndex("first_timer_run_unique").on(t.memberId, t.stage, t.channel),
+  ],
 );
 
 /* ============================================================

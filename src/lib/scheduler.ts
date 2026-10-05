@@ -136,9 +136,17 @@ export function startScheduler(): void {
     }
 
     for (const row of status) {
-      // `overdue` already carries the grace period the health page uses, so
-      // the scheduler and the dashboard can never disagree about lateness.
-      if (!row.overdue) continue;
+      /*
+       * `due`, not `overdue`.
+       *
+       * This used to read `overdue`, which is the interval PLUS a grace period
+       * — the rule for deciding whether to complain, not whether to run. Every
+       * job therefore ran at up to half its declared rate: the 5-minute SMS
+       * queue flush went every 10, and the 15-minute broadcast job every 30.
+       * Nothing looked broken, because the health page uses the same lenient
+       * rule and so never reported a job it had itself delayed.
+       */
+      if (!row.due) continue;
 
       try {
         await withJobLock(row.job, () => runJob(row.job));

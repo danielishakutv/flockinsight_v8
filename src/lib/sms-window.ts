@@ -76,6 +76,28 @@ export function localHour(at: Date, timeZone: string): number {
   return zonedParts(at, safeZone(timeZone)).hour;
 }
 
+/**
+ * Minutes since local midnight where this church is — so a setting written as
+ * "10:00" can be compared against the clock on the wall there.
+ *
+ * Exported because a church's configured send time is stored as local HH:MM and
+ * every job that honours one needs the same comparison. The first-timer
+ * sequence did not have this and so ignored its own `sendTime` entirely,
+ * running whenever the daily cron happened to fire — which on a UTC box is
+ * the middle of the night in Lagos, outside the hours SMS may be delivered.
+ */
+export function localMinutesOfDay(at: Date, timeZone: string): number {
+  const p = zonedParts(at, safeZone(timeZone));
+  return p.hour * 60 + p.minute;
+}
+
+/** Minutes since midnight for a stored "HH:MM". Unparseable reads as 00:00. */
+export function minutesFromHHMM(hhmm: string): number {
+  const [h, m] = (hhmm || "").split(":").map((n) => Number.parseInt(n, 10));
+  if (!Number.isFinite(h)) return 0;
+  return h * 60 + (Number.isFinite(m) ? m : 0);
+}
+
 /** Can a message go out right now? */
 export function withinSmsWindow(at: Date, timeZone: string): boolean {
   const h = localHour(at, timeZone);

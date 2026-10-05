@@ -15,7 +15,8 @@ export const runtime = "nodejs";
  * Safe to call by hand, and safe to call twice — each row is claimed with a
  * conditional update before anything reaches the gateway.
  *
- * Auth via ?key=CRON_SECRET or a Bearer header.
+ * Auth via an `Authorization: Bearer <CRON_SECRET>` header, or `?key=` —
+ * prefer the header, because a query string is written to the access log.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -29,9 +30,19 @@ export async function GET(request: Request) {
 
   return withCronRun("sms-queue", async () => {
     const report = await flushSmsQueue();
-    if (report.considered > 0) {
+    if (report.considered > 0 || report.expired > 0) {
       console.log(
-        `[sms-queue] considered ${report.considered}, sent ${report.sent}, held ${report.held}, failed ${report.failed}`,
+        `[sms-queue] considered ${report.considered}, sent ${report.sent}, held ${report.held}, failed ${report.failed}, expired ${report.expired}`,
+      );
+    }
+    /*
+     * Expiry is a LOSS, so it is said loudly and separately. The only way to
+     * accumulate expired rows is for this job not to have been running, which
+     * is a configuration fault rather than anything a church did.
+     */
+    if (report.expired > 0) {
+      console.error(
+        `[sms-queue] ${report.expired} queued batch(es) were older than a day and were not sent. This job may not be scheduled \u2014 check the crontab.`,
       );
     }
     return new Response(JSON.stringify({ ok: true, ...report }), {

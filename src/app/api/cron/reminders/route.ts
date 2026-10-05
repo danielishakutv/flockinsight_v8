@@ -181,8 +181,16 @@ export async function GET(request: Request) {
     console.error("[cron/reminders] activation nudges failed", e);
   }
 
-  // Piggyback the daily first-timer nurture sequence so it runs without needing
-  // a separate crontab entry. Idempotent — safe if the dedicated cron also runs.
+  /*
+   * A safety net, NOT the schedule.
+   *
+   * This comment used to say the first-timer sequence ran here "without
+   * needing a separate crontab entry", which is how nobody noticed that its
+   * timing mattered. It needs an HOURLY run of its own to honour each church's
+   * local send time — see /api/cron/first-timers. The call stays because it is
+   * idempotent and costs nothing when there is nothing due, so it catches the
+   * case where the hourly job is missing.
+   */
   let firstTimers: Awaited<ReturnType<typeof runFirstTimers>> | null = null;
   try {
     firstTimers = await runFirstTimers();

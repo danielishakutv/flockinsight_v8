@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   localHour,
+  localMinutesOfDay,
+  minutesFromHHMM,
   nextSmsWindowStart,
   smsWindowNotice,
   withinSmsWindow,
@@ -96,5 +98,86 @@ describe("smsWindowNotice", () => {
     expect(notice).toContain("Sunday");
     expect(notice).toContain("8:00");
     expect(notice).toContain("Nothing is charged");
+  });
+});
+
+/*
+ * These two exist because the first-timer sequence stored "send at 10:00" and
+ * then never read it — so its sends fired whenever the daily cron did, which
+ * on a UTC box is the small hours in Lagos, outside the hours SMS may be
+ * delivered. The comparison the gate needs is minutes-since-local-midnight.
+ */
+describe("localMinutesOfDay", () => {
+  it("is the wall clock where the church is, not on the server", () => {
+    const at = new Date("2026-10-05T09:00:00Z");
+    expect(localMinutesOfDay(at, LAGOS)).toBe(10 * 60); // 10:00 in Lagos
+    expect(localMinutesOfDay(at, MAPUTO)).toBe(11 * 60); // 11:00 in Maputo
+  });
+
+  it("keeps the minutes, not just the hour", () => {
+    expect(localMinutesOfDay(new Date("2026-10-05T09:37:00Z"), LAGOS)).toBe(
+      10 * 60 + 37,
+    );
+  });
+
+  it("reads local midnight as zero rather than 24 hours", () => {
+    // 23:00Z is 00:00 the next day in Lagos; Intl can report that hour as 24.
+    expect(localMinutesOfDay(new Date("2026-10-05T23:00:00Z"), LAGOS)).toBe(0);
+  });
+
+  it("follows DST rather than a fixed offset", () => {
+    expect(localMinutesOfDay(new Date("2026-07-01T09:00:00Z"), LONDON)).toBe(
+      10 * 60,
+    );
+    expect(localMinutesOfDay(new Date("2026-01-01T09:00:00Z"), LONDON)).toBe(
+      9 * 60,
+    );
+  });
+
+  it("falls back to the home zone rather than throwing on a bad timezone", () => {
+    const at = new Date("2026-10-05T09:00:00Z");
+    expect(localMinutesOfDay(at, "Not/AZone")).toBe(
+      localMinutesOfDay(at, LAGOS),
+    );
+  });
+});
+
+describe("minutesFromHHMM", () => {
+  it("reads the stored setting", () => {
+    expect(minutesFromHHMM("10:00")).toBe(600);
+    expect(minutesFromHHMM("08:30")).toBe(510);
+    expect(minutesFromHHMM("00:00")).toBe(0);
+    expect(minutesFromHHMM("23:59")).toBe(1439);
+  });
+
+  it("treats nonsense as midnight, so the gate opens rather than jams shut", () => {
+    expect(minutesFromHHMM("")).toBe(0);
+    expect(minutesFromHHMM("nonsense")).toBe(0);
+    // An hour with no minutes is still an hour.
+    expect(minutesFromHHMM("9")).toBe(540);
+  });
+});
+
+describe("the first-timer send gate", () => {
+  // The gate the sequence applies: send once the local clock reaches sendTime.
+  const open = (at: string, tz: string, sendTime: string) =>
+    localMinutesOfDay(new Date(at), tz) >= minutesFromHHMM(sendTime);
+
+  it("stays shut before the church's hour and opens at it", () => {
+    expect(open("2026-10-05T08:59:00Z", LAGOS, "10:00")).toBe(false);
+    expect(open("2026-10-05T09:00:00Z", LAGOS, "10:00")).toBe(true);
+  });
+
+  it("opens inside the SMS window for any sane send time", () => {
+    // The point of the gate: a 10:00 local send can never land at 2am.
+    for (const tz of [LAGOS, MAPUTO, LONDON]) {
+      let firstOpen: Date | null = null;
+      for (let h = 0; h < 24 && !firstOpen; h++) {
+        const at = new Date(Date.UTC(2026, 9, 5, h, 0, 0));
+        if (open(at.toISOString(), tz, "10:00")) firstOpen = at;
+      }
+      expect(firstOpen, tz).not.toBeNull();
+      expect(withinSmsWindow(firstOpen!, tz), tz).toBe(true);
+    }
   });
 });

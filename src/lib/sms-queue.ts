@@ -10,6 +10,7 @@ import {
 import { recordRecipients, type RecipientOutcome } from "@/lib/comm-recipients";
 import { smsPages } from "@/lib/sms";
 import {
+  SMS_WINDOW_LABEL,
   nextSmsWindowStart,
   smsWindowNotice,
   withinSmsWindow,
@@ -184,11 +185,34 @@ export async function cancelQueuedSms(
 /** How many attempts a row gets before it stops being retried. */
 const MAX_ATTEMPTS = 3;
 
+/**
+ * How long past its moment a queued message may still be sent.
+ *
+ * ADDED AFTER FINDING THE QUEUE HAD NEVER BEEN FLUSHED IN PRODUCTION. The
+ * `sms-queue` job was missing from the crontab, so every message handed in
+ * outside the 8am-8pm delivery window had been sitting in this table
+ * unsent — and `flushSmsQueue` had no notion of staleness, so simply adding
+ * the cron line would have sent the entire backlog: "thanks for visiting"
+ * texts to people who visited two months ago, reminders for services already
+ * held, and the church's wallet charged for all of it.
+ *
+ * A church SMS is a thing with a moment. One delivered a day late is not the
+ * message that was written, so past this it is marked failed with the reason
+ * rather than delivered. The row is kept, so it is auditable and countable.
+ *
+ * 24 hours, not less: the normal lag is minutes (a message queued at 9pm goes
+ * at 8am, and `sendAfter` is already the 8am), and a retry pushes `sendAfter`
+ * forward 30 minutes, so nothing legitimate comes close to a day.
+ */
+const STALE_AFTER_HOURS = 24;
+
 export type FlushReport = {
   considered: number;
   sent: number;
   held: number;
   failed: number;
+  /** Too old to be worth delivering. See STALE_AFTER_HOURS. */
+  expired: number;
 };
 
 /**
@@ -200,6 +224,25 @@ export type FlushReport = {
  * rows and does nothing.
  */
 export async function flushSmsQueue(now: Date = new Date()): Promise<FlushReport> {
+  /*
+   * Expire the long-dead first, before anything is considered for sending.
+   *
+   * One statement, and it runs before the batch is read so a stale row cannot
+   * be picked up by the same pass. Marked failed with the reason in `error`,
+   * where the church's SMS history shows it.
+   */
+  const staleBefore = new Date(now.getTime() - STALE_AFTER_HOURS * 3_600_000);
+  const expired = await db
+    .update(scheduledSms)
+    .set({
+      status: "failed",
+      error: `Not sent: this was held for the ${SMS_WINDOW_LABEL} delivery window and more than ${STALE_AFTER_HOURS} hours passed before it could go out, so it was no longer the message you wrote. Nothing was charged.`,
+    })
+    .where(
+      and(eq(scheduledSms.status, "queued"), lte(scheduledSms.sendAfter, staleBefore)),
+    )
+    .returning({ id: scheduledSms.id });
+
   const due = await db
     .select({
       id: scheduledSms.id,
@@ -224,6 +267,7 @@ export async function flushSmsQueue(now: Date = new Date()): Promise<FlushReport
     sent: 0,
     held: 0,
     failed: 0,
+    expired: expired.length,
   };
 
   for (const row of due) {

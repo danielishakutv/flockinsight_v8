@@ -15,7 +15,12 @@ import { cronRun } from "@/db/schema";
 // The registry and the lateness rule live in a pure module so they can be
 // unit-tested without a database. Imported for use here, and re-exported so
 // existing importers of CRON_JOBS / CronJob keep working.
-import { CRON_JOBS, isCronOverdue, type CronJob } from "@/lib/cron-schedule";
+import {
+  CRON_JOBS,
+  isCronDue,
+  isCronOverdue,
+  type CronJob,
+} from "@/lib/cron-schedule";
 
 export { CRON_JOBS, isCronOverdue };
 export type { CronJob };
@@ -80,6 +85,9 @@ export type CronLiveness = {
   lastOk: boolean | null;
   lastDurationMs: number | null;
   lastError: string | null;
+  /** Its interval has elapsed. What the in-app scheduler acts on. */
+  due: boolean;
+  /** Its interval plus a grace period has elapsed. What alerts act on. */
   overdue: boolean;
 };
 
@@ -107,6 +115,7 @@ export async function getCronLiveness(): Promise<CronLiveness[]> {
     const row = latest.get(job);
     const lastRunAt = row?.startedAt ?? null;
     const overdue = isCronOverdue(lastRunAt, meta.intervalMinutes, now);
+    const due = isCronDue(lastRunAt, meta.intervalMinutes, now);
 
     return {
       job,
@@ -116,6 +125,9 @@ export async function getCronLiveness(): Promise<CronLiveness[]> {
       lastOk: row?.ok ?? null,
       lastDurationMs: row?.durationMs ?? null,
       lastError: row?.error ?? null,
+      /** Its interval has elapsed: the scheduler should run it now. */
+      due,
+      /** Its interval AND the grace period have elapsed: say something. */
       overdue,
     };
   });
