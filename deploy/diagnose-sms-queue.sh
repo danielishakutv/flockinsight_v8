@@ -120,9 +120,13 @@ elif [ "$IN_APP_CRON" = "true" ]; then
 else
   warn "sms-queue is NOT SCHEDULED AND NOT COVERED. Nothing flushes the queue."
   warn "This is the fault. Fix it with either:"
-  warn "  a) set IN_APP_CRON=true in $ENV_PATH, remove the crontab lines,"
-  warn "     then: pm2 restart all --update-env   (note: --update-env, or the"
-  warn "     old value is kept and nothing changes)"
+  warn "  a) comment out the api/cron lines in the crontab, set IN_APP_CRON=true"
+  warn "     in $ENV_PATH, then:"
+  warn "       pm2 restart flockinsight --update-env"
+  warn "     NOT 'pm2 restart all' — this box runs other sites, and restarting"
+  warn "     them to change a FlockInsight setting takes them down for nothing."
+  warn "     --update-env matters: without it PM2 keeps the old value and the"
+  warn "     restart changes nothing at all."
   warn "  b) pnpm exec tsx scripts/print-crontab.ts --install"
 fi
 
@@ -131,7 +135,19 @@ say "The queue itself"
 if [ -z "$DATABASE_URL" ]; then
   warn "DATABASE_URL not readable from $ENV_PATH — skipping"
 elif ! command -v psql >/dev/null 2>&1; then
-  warn "psql is not installed — skipping. Install with: apt-get install -y postgresql-client"
+  # psql is not installed here, and needing to install a package before you may
+  # look at your own table is a reason not to look. The app's own connection
+  # answers the same questions.
+  warn "psql is not installed — using the app's own database connection instead"
+  APP_DIR="$(dirname "$ENV_PATH")"
+  [ -f "$APP_DIR/scripts/sms-queue-report.ts" ] || APP_DIR="$(dirname "$APP_DIR")/current"
+  if [ -f "$APP_DIR/scripts/sms-queue-report.ts" ]; then
+    ( cd "$APP_DIR" && pnpm exec tsx scripts/sms-queue-report.ts ) \
+      || warn "the report failed — run it by hand from $APP_DIR"
+  else
+    warn "scripts/sms-queue-report.ts not found near $ENV_PATH"
+    warn "run it from the app directory: pnpm exec tsx scripts/sms-queue-report.ts"
+  fi
 else
   psql "$DATABASE_URL" -X -P pager=off <<'SQL'
 \echo '-- Batches by status. "queued" with an old `oldest` is the backlog.'
