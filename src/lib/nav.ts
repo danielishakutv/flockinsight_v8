@@ -1,5 +1,5 @@
 import type { TKey } from "@/lib/i18n/translate";
-import type { FeatureKey } from "@/lib/entitlements";
+import { isPilot, pilotAllows, type FeatureKey } from "@/lib/entitlements";
 import {
   BarChart3,
   Bell,
@@ -12,6 +12,7 @@ import {
   GraduationCap,
   HandCoins,
   Handshake,
+  Building2,
   HeartHandshake,
   UserPlus,
   LayoutDashboard,
@@ -71,6 +72,30 @@ export function navAllowed(
   if (isOwner || !perm) return true;
   const list = Array.isArray(perm) ? perm : [perm];
   return list.some((p) => perms.includes(p));
+}
+
+/**
+ * Should this entry appear for this church at all?
+ *
+ * Permission decides as it always has. On top of that, a module being PILOTED
+ * somewhere else is hidden rather than shown with an upgrade chip — the chip
+ * says "Pro", and during a pilot paying for Pro would not unlock it, so
+ * advertising it would be a promise the product cannot keep.
+ *
+ * Everything else still shows with its chip. A church that could have a module
+ * by upgrading should know it exists; that is the chip's whole job.
+ */
+export function navVisible(
+  item: { perm?: string | string[]; feature?: FeatureKey },
+  perms: string[],
+  isOwner: boolean,
+  churchSlug: string | null | undefined,
+): boolean {
+  if (!navAllowed(item.perm, perms, isOwner)) return false;
+  if (item.feature && isPilot(item.feature)) {
+    return pilotAllows(item.feature, churchSlug);
+  }
+  return true;
 }
 
 const SETTINGS_PERMS = ["settings.manage", "team.manage"];
@@ -152,6 +177,19 @@ export const mainNav: NavItem[] = [
     href: "/follow-up",
     icon: HeartHandshake,
     perm: "followup.view",
+  },
+  /*
+   * Piloted at one church — `PILOT_ONLY` in lib/entitlements hides this entry
+   * everywhere else, rather than showing a "Pro" chip for a module that paying
+   * for Pro would not currently unlock.
+   */
+  {
+    labelKey: "nav.facilities",
+    feature: "facilities",
+    href: "/facilities",
+    icon: Building2,
+    perm: "facilities.view",
+    beta: true,
   },
   { labelKey: "nav.media", href: "/media", icon: FolderOpen, perm: "media.view" },
   {

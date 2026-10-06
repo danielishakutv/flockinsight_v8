@@ -13,6 +13,7 @@ import {
   mobileNavLeft,
   mobileNavRight,
   navAllowed,
+  navVisible,
   recordAction,
   type NavItem,
 } from "@/lib/nav";
@@ -40,10 +41,13 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 
 export function MobileNav({
   perms = [],
+  churchSlug = null,
   isOwner = false,
   plan = "starter",
 }: {
   perms?: string[];
+  /** For hiding a module that is only being piloted elsewhere. */
+  churchSlug?: string | null;
   isOwner?: boolean;
   /** The church's plan, so the sheet can say which tier a module needs. */
   plan?: string;
@@ -54,16 +58,16 @@ export function MobileNav({
   const [moreOpen, setMoreOpen] = useState(false);
 
   const leftItems = mobileNavLeft.filter((i) =>
-    navAllowed(i.perm, perms, isOwner),
+    navVisible(i, perms, isOwner, churchSlug),
   );
   const rightItems = mobileNavRight.filter((i) =>
-    navAllowed(i.perm, perms, isOwner),
+    navVisible(i, perms, isOwner, churchSlug),
   );
   const canRecord = navAllowed(recordAction.perm, perms, isOwner);
   const sections = mobileMenuSections
     .map((s) => ({
       ...s,
-      items: s.items.filter((i) => navAllowed(i.perm, perms, isOwner)),
+      items: s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)),
     }))
     .filter((s) => s.items.length > 0);
 

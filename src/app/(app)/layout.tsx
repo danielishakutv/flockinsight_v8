@@ -131,6 +131,7 @@ export default async function AppLayout({
           perms={perms}
           isOwner={access.isOwner}
           plan={church.plan}
+          churchSlug={church.slug}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -159,7 +160,12 @@ export default async function AppLayout({
           </main>
         </div>
 
-        <MobileNav perms={perms} isOwner={access.isOwner} plan={church.plan} />
+        <MobileNav
+          perms={perms}
+          isOwner={access.isOwner}
+          plan={church.plan}
+          churchSlug={church.slug}
+        />
       </div>
       <Toaster />
       <SplashScreen />

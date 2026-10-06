@@ -92,6 +92,7 @@ export type FeatureKey =
   | "mediaLibrary"
   | "reports"
   | "brandedPdf"
+  | "facilities"
   // --- Enterprise ---
   | "branches";
 
@@ -314,6 +315,12 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   },
 
   /* ---------------------------------------------------- Enterprise */
+  facilities: {
+    plan: "pro",
+    label: "Facilities",
+    blurb:
+      "Your halls, rooms, grounds and equipment — booked on one calendar, with clashes refused and hire fees recorded.",
+  },
   branches: {
     plan: "enterprise",
     label: "Branches & denominations",
@@ -321,6 +328,62 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
       "One report across every branch, grouped by zone, with weekly or monthly summaries by email.",
   },
 };
+
+/* ============================================================
+ * Pilots
+ *
+ * A module that is finished but has never met a real church is not ready for
+ * every church. This is how one gets tried somewhere first: the feature keeps
+ * its proper tier, and on top of that only the named churches can reach it.
+ *
+ * Rolling it out to everybody is deleting one line from this map. Nothing else
+ * changes — the tier, the nav entry, the permission and the upgrade prompt are
+ * already right.
+ * ========================================================== */
+
+/** Features restricted to named church slugs, whatever their plan says. */
+export const PILOT_ONLY: Partial<Record<FeatureKey, readonly string[]>> = {
+  // Facilities ships to the team's own church first. Remove this line to open
+  // it to every church on Pro and above.
+  facilities: ["flockinsight-church"],
+};
+
+/**
+ * Whether a pilot lets this church in.
+ *
+ * True for anything that is not a pilot at all, so the ordinary path is
+ * unaffected. An unknown slug is refused rather than waved through: the safe
+ * reading of "we do not know which church this is" is the smaller allowance,
+ * the same way `planRank` treats an unknown plan.
+ */
+export function pilotAllows(
+  feature: FeatureKey,
+  churchSlug: string | null | undefined,
+): boolean {
+  const allowed = PILOT_ONLY[feature];
+  if (!allowed) return true;
+  return !!churchSlug && allowed.includes(churchSlug);
+}
+
+/** True when this feature is being piloted rather than generally available. */
+export function isPilot(feature: FeatureKey): boolean {
+  return !!PILOT_ONLY[feature];
+}
+
+/**
+ * The whole question: may THIS church use this feature?
+ *
+ * Plan AND pilot. Both have to say yes, so a pilot cannot accidentally hand a
+ * Starter church a Pro module, and a Pro plan cannot reach a module that is
+ * still being tried out somewhere else.
+ */
+export function churchHasFeature(
+  plan: string | null | undefined,
+  churchSlug: string | null | undefined,
+  feature: FeatureKey,
+): boolean {
+  return planIncludes(plan, feature) && pilotAllows(feature, churchSlug);
+}
 
 /** The lowest plan that includes a feature. */
 export function minPlanFor(feature: FeatureKey): PlanId {

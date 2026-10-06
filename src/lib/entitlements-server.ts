@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { church, staff } from "@/db/schema";
 import { getSession, getActAsChurchId } from "@/lib/session";
 import {
-  planIncludes,
+  churchHasFeature,
   teamLimitFor,
   upgradeMessage,
   type FeatureKey,
@@ -60,6 +60,28 @@ export const activePlan = cache(async (): Promise<string> => {
 });
 
 /**
+ * The active church's slug, for the pilot check.
+ *
+ * Separate from `activePlan` rather than folded into it, because the plan is
+ * read on paths that have no church at all and must still answer "starter".
+ * Null here simply means "no church", and `pilotAllows` refuses a pilot for a
+ * church it cannot name — the smaller allowance, as everywhere else in this
+ * file.
+ */
+export const activeChurchSlug = cache(async (): Promise<string | null> => {
+  const data = await getSession();
+  const churchId = (await getActAsChurchId()) ?? data?.session?.activeOrganizationId;
+  if (!churchId) return null;
+
+  const [row] = await db
+    .select({ slug: church.slug })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  return row?.slug ?? null;
+});
+
+/**
  * One church's plan, by id.
  *
  * For the paths where there is no active church to read: a meeting room is
@@ -75,20 +97,26 @@ export async function churchPlanOf(churchId: string): Promise<string> {
   return row?.plan ?? "starter";
 }
 
-/** Whether the active church's plan includes a feature. */
+/**
+ * Whether the active church may use a feature.
+ *
+ * Plan AND pilot. A feature being tried out at one church is invisible
+ * everywhere else however much that church pays, and the pilot never hands a
+ * module to a plan that does not include it either.
+ */
 export async function hasFeature(feature: FeatureKey): Promise<boolean> {
-  return planIncludes(await activePlan(), feature);
+  const [plan, slug] = await Promise.all([activePlan(), activeChurchSlug()]);
+  return churchHasFeature(plan, slug, feature);
 }
 
 /** Several at once, for a page that renders more than one gated section. */
 export async function hasFeatures<K extends FeatureKey>(
   ...features: K[]
 ): Promise<Record<K, boolean>> {
-  const plan = await activePlan();
-  return Object.fromEntries(features.map((f) => [f, planIncludes(plan, f)])) as Record<
-    K,
-    boolean
-  >;
+  const [plan, slug] = await Promise.all([activePlan(), activeChurchSlug()]);
+  return Object.fromEntries(
+    features.map((f) => [f, churchHasFeature(plan, slug, f)]),
+  ) as Record<K, boolean>;
 }
 
 export type FeatureRefusal = { ok: false; error: string; upgrade: FeatureKey };

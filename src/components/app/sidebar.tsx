@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Church } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mobileMenuSections, navAllowed } from "@/lib/nav";
+import { mobileMenuSections, navVisible } from "@/lib/nav";
 import { Wordmark } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
 import { useT } from "@/components/i18n-provider";
@@ -22,6 +22,7 @@ export function Sidebar({
   userImage,
   isSuperAdmin = false,
   perms = [],
+  churchSlug = null,
   isOwner = false,
   plan = "starter",
   churches = [],
@@ -33,6 +34,8 @@ export function Sidebar({
   userImage?: string | null;
   isSuperAdmin?: boolean;
   perms?: string[];
+  /** For hiding a module that is only being piloted elsewhere. */
+  churchSlug?: string | null;
   isOwner?: boolean;
   /**
    * The church's plan, so the menu can say which tier a module needs. Defaults
@@ -48,7 +51,7 @@ export function Sidebar({
   const sections = mobileMenuSections
     .map((s) => ({
       ...s,
-      items: s.items.filter((i) => navAllowed(i.perm, perms, isOwner)),
+      items: s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)),
     }))
     .filter((s) => s.items.length > 0);
 

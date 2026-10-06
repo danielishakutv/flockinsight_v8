@@ -119,6 +119,7 @@ export const PLANS: Plan[] = [
       "Sermon & media library — audio, video and slides, with your own watch pages",
       "Reports centre: 31 datasets as CSV or PDF, plus a full export of everything",
       "Branded PDFs carrying your logo & colours",
+      "Facilities — book the hall, the rooms and the bus on one calendar, with clashes refused and hire fees recorded",
       "Unlimited team members & roles",
       "Priority support",
     ],

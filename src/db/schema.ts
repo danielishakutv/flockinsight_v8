@@ -5173,3 +5173,217 @@ export type ShortLinkDestination = typeof shortLinkDestination.$inferSelect;
 export type ShortLinkStat = typeof shortLinkStat.$inferSelect;
 export type QrCode = typeof qrCode.$inferSelect;
 export type NewQrCode = typeof qrCode.$inferInsert;
+
+/* ============================================================
+ * FlockInsight domain — facilities
+ *
+ * What the church owns and lends out: the main auditorium, the fellowship
+ * hall, the classrooms, the bus, the canopies and chairs.
+ *
+ * Three tables, and the shape is deliberate.
+ *
+ *   `facility`         — the register. What exists, who holds the key, what it
+ *                        costs to hire, and whether it can be booked at all.
+ *   `facility_booking` — somebody wants it between two times. Church groups and
+ *                        outside hirers go in the SAME table, because the
+ *                        question "is the hall free on Saturday" has one answer,
+ *                        and splitting it in two is how a church double-books a
+ *                        wedding against its own youth meeting.
+ *   `facility_closure` — it is unavailable, and not because somebody booked it:
+ *                        repainting, a broken generator, a deep clean. Closures
+ *                        block bookings exactly like bookings do, and carry a
+ *                        cost, so the same row is both "the hall is shut" and
+ *                        the maintenance record of what it took to reopen it.
+ *
+ * THE ONE INVARIANT: an approved booking never overlaps another approved
+ * booking on the same facility, nor a closure. Checked in `lib/facility-shared`
+ * on the way in AND by a database exclusion constraint, because a double-booked
+ * wedding is not a bug you get to apologise for.
+ * ========================================================== */
+
+export const facilityKindEnum = pgEnum("facility_kind", [
+  "hall", // auditorium, fellowship hall
+  "room", // classroom, office, nursery
+  "open_space", // field, car park, grounds
+  "equipment", // chairs, canopies, PA system, generator
+  "vehicle", // the church bus
+  "other",
+]);
+
+/** What a hire fee is charged per. */
+export const facilityRateEnum = pgEnum("facility_rate", [
+  "free",
+  "hour",
+  "day",
+  "session",
+]);
+
+export const facilityBookingStatusEnum = pgEnum("facility_booking_status", [
+  "requested", // waiting on somebody with facilities.manage
+  "approved", // holds the slot — only these block other bookings
+  "declined",
+  "cancelled",
+]);
+
+export const facilityClosureKindEnum = pgEnum("facility_closure_kind", [
+  "maintenance", // planned: repainting, servicing
+  "repair", // unplanned: it broke
+  "cleaning",
+  "reserved", // held back by the church, not for hire
+  "other",
+]);
+
+export const facility = pgTable(
+  "facility",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    kind: facilityKindEnum().notNull().default("hall"),
+    /** Where to find it — "Ground floor, behind the main auditorium". */
+    location: text(),
+    description: text(),
+    /** How many people it seats. Null for a bus or a set of chairs. */
+    capacity: integer(),
+    photoUrl: text(),
+    /**
+     * Retired rather than deleted. A hall the church no longer uses still has
+     * last year's bookings hanging off it, and deleting it would take the
+     * record of who used what with it.
+     */
+    isActive: boolean().notNull().default(true),
+    /**
+     * Some things are worth listing and not worth booking — the car park, the
+     * toilets. They appear in the register and take no bookings.
+     */
+    isBookable: boolean().notNull().default(true),
+    /**
+     * Whether a request waits for somebody. Off means a booking is approved the
+     * moment it is made, which suits a small meeting room nobody fights over.
+     */
+    requiresApproval: boolean().notNull().default(true),
+    /**
+     * Minutes to leave either side of a booking, for setting up and clearing
+     * away. Counted by the conflict check, so a hall with a 60-minute buffer
+     * genuinely cannot be booked back-to-back.
+     */
+    bufferMinutes: integer().notNull().default(0),
+    /** What outsiders pay. `rate` says per what; "free" means it is not hired out. */
+    hireFee: numeric({ precision: 14, scale: 2, mode: "number" }),
+    rate: facilityRateEnum().notNull().default("free"),
+    /** Who holds the key, or who to ask. */
+    contactMemberId: uuid().references((): AnyPgColumn => member.id, {
+      onDelete: "set null",
+    }),
+    notes: text(),
+    sortOrder: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("facility_church_idx").on(t.churchId),
+    index("facility_church_active_idx").on(t.churchId, t.isActive),
+  ],
+);
+
+export const facilityBooking = pgTable(
+  "facility_booking",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    facilityId: uuid()
+      .notNull()
+      .references(() => facility.id, { onDelete: "cascade" }),
+    /** What it is for — "Ada and Emeka wedding", "Youth rehearsal". */
+    title: text().notNull(),
+    purpose: text(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    status: facilityBookingStatusEnum().notNull().default("requested"),
+    /*
+     * Who wants it. A member is linked; anybody else is written down by name,
+     * the same pattern as giving's member/giverName pair — a name is not a key,
+     * and the booking has to outlive the person leaving the register.
+     */
+    memberId: uuid().references((): AnyPgColumn => member.id, {
+      onDelete: "set null",
+    }),
+    requesterName: text(),
+    requesterPhone: text(),
+    requesterEmail: text(),
+    /** True when this is an outside hirer rather than the church's own people. */
+    isExternal: boolean().notNull().default(false),
+    /** The church group it is for, when it is one. */
+    groupId: uuid().references(() => group.id, { onDelete: "set null" }),
+    /** The event this reserves space for, when there is one. */
+    eventId: uuid().references(() => event.id, { onDelete: "set null" }),
+    expectedAttendance: integer(),
+    /**
+     * The agreed fee. Copied from the facility when the booking is made and
+     * editable after — what was agreed with a hirer must not change because
+     * somebody edited the price list a month later.
+     */
+    fee: numeric({ precision: 14, scale: 2, mode: "number" }),
+    feePaid: boolean().notNull().default(false),
+    approvedBy: text().references(() => user.id, { onDelete: "set null" }),
+    approvedAt: timestamp({ withTimezone: true }),
+    /** Said out loud to whoever asked, so a refusal is never unexplained. */
+    decisionNote: text(),
+    notes: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("facility_booking_church_idx").on(t.churchId),
+    // The calendar reads one facility over a window; the queue reads by status.
+    index("facility_booking_facility_time_idx").on(t.facilityId, t.startsAt),
+    index("facility_booking_church_status_idx").on(t.churchId, t.status),
+    index("facility_booking_time_idx").on(t.startsAt, t.endsAt),
+  ],
+);
+
+export const facilityClosure = pgTable(
+  "facility_closure",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    facilityId: uuid()
+      .notNull()
+      .references(() => facility.id, { onDelete: "cascade" }),
+    kind: facilityClosureKindEnum().notNull().default("maintenance"),
+    reason: text().notNull(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    /** What it cost to put right. The maintenance record, in the same row. */
+    cost: numeric({ precision: 14, scale: 2, mode: "number" }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("facility_closure_church_idx").on(t.churchId),
+    index("facility_closure_facility_time_idx").on(t.facilityId, t.startsAt),
+  ],
+);
+
+export type Facility = typeof facility.$inferSelect;
+export type NewFacility = typeof facility.$inferInsert;
+export type FacilityBooking = typeof facilityBooking.$inferSelect;
+export type FacilityClosure = typeof facilityClosure.$inferSelect;

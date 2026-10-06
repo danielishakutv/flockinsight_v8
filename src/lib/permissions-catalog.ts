@@ -88,6 +88,16 @@ export const PERMISSION_CATALOG: PermModule[] = [
     ],
   },
   {
+    key: "facilities",
+    label: "Facilities",
+    description:
+      "Halls, rooms, grounds and equipment, and who has booked them.",
+    perms: [
+      { key: "facilities.view", label: "View & request" },
+      { key: "facilities.manage", label: "Manage & approve" },
+    ],
+  },
+  {
     key: "followup",
     label: "Follow-up",
     description: "Visitor and new-member follow-up.",
