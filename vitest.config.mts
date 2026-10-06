@@ -1,8 +1,20 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
+
+/*
+ * The same version next.config.ts inlines into the app. `src/lib/version.ts`
+ * refuses to load without it, deliberately — a version that can be absent is
+ * how it came to be three releases stale in the first place.
+ */
+const APP_VERSION: string = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+).version;
+
 export default defineConfig({
   test: {
+    env: { NEXT_PUBLIC_APP_VERSION: APP_VERSION },
     environment: "node",
     include: ["src/**/*.test.ts"],
     /*

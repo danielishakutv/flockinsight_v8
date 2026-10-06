@@ -26,7 +26,35 @@ export async function GET(req: Request) {
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
     null;
 
-  const full = hasFeedKey(supplied) || (await getIsSuperAdmin());
+  const keyAccepted = hasFeedKey(supplied);
+  const isSuperAdmin = await getIsSuperAdmin();
+
+  /*
+   * A key that was offered and refused is an error, not a demotion.
+   *
+   * This used to fall through to the public view, so a wrong or missing-on-
+   * the-server key returned 200 with `scope: "public"` and `counts.total: 0`
+   * — which reads exactly like "the roadmap is empty". It cost a real
+   * planning session: the documented command in AGENTS.md was run, came back
+   * with nothing, and the honest answer was that the key had been rejected.
+   *
+   * Sending no key at all is still fine and still gets the public items. It
+   * is only a supplied-and-wrong key that is now told so.
+   */
+  if (supplied && !keyAccepted && !isSuperAdmin) {
+    return NextResponse.json(
+      {
+        error: "roadmap_key_rejected",
+        message:
+          "That roadmap key was not accepted. Check ROADMAP_FEED_KEY on the " +
+          "server — if it is unset there, no key opens the full feed. Send no " +
+          "key at all for the public items.",
+      },
+      { status: 401, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  const full = keyAccepted || isSuperAdmin;
   const items = await roadmapFeed(full);
 
   return NextResponse.json(

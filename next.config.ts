@@ -1,4 +1,24 @@
+import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
+
+/*
+ * The running version, read from package.json here and inlined into the build.
+ *
+ * It used to be a string literal in src/lib/version.ts with a comment asking
+ * whoever edited it to keep it in sync. It drifted to three releases behind
+ * and silently switched off the what's-new banner and the release-draft cron,
+ * because a stale version string is still a valid one.
+ *
+ * Deriving it in `src/lib/version.ts` by importing package.json would have
+ * worked, but that file is imported by client components and the bundler does
+ * NOT tree-shake a JSON module down to one key — the whole thing ships,
+ * handing every browser the dependency list and the script names. So it is
+ * injected as a value instead: Next replaces `process.env.NEXT_PUBLIC_APP_VERSION`
+ * with the literal at build time and nothing else travels.
+ */
+const APP_VERSION: string = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+).version;
 
 // Security headers applied to every response (boosts security posture / score).
 // No CSP here to avoid breaking Next's inline runtime; the headers below are the
@@ -42,6 +62,13 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  /*
+   * Inlined into both the server and the client build. `src/lib/version.ts`
+   * throws if it is missing, so a config that stops injecting it fails the
+   * build rather than shipping an app that reports no version at all.
+   */
+  env: { NEXT_PUBLIC_APP_VERSION: APP_VERSION },
+
   /*
    * Type checking during the build, unless the deploy turns it off.
    *

@@ -4,10 +4,25 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
+import { releases } from "@/lib/changelog";
 import { useStoredValue, writeStoredValue } from "@/lib/client-state";
 import { useT } from "@/components/i18n-provider";
 
 const KEY = "fi_seen_version";
+
+/**
+ * What this release was about, taken from the changelog entry for the running
+ * version.
+ *
+ * It used to be a sentence typed into the markup below — "Branches for
+ * churches that run several campuses, and a search box in every long
+ * dropdown", which was 0.65's news and stayed there through four releases.
+ * Two copies of the same fact, and the one nobody was looking at went stale.
+ * The changelog is the copy that gets written anyway, so it is the one that
+ * wins.
+ */
+const SUMMARY =
+  releases.find((r) => r.version === APP_VERSION)?.summary ?? null;
 
 /**
  * A dismissible "there's a new update" banner. Shows once after a deploy bumps
@@ -39,10 +54,12 @@ export function WhatsNewBanner() {
         </div>
         <div className="min-w-0 flex-1 text-sm">
           <span className="font-semibold">{t("app.flockinsightJustGotAnUpdate")}</span>
-          <span className="text-muted-foreground">
-            Branches for churches that run several campuses, and a search box
-            in every long dropdown.
-          </span>{" "}
+          {SUMMARY && (
+            <>
+              {" "}
+              <span className="text-muted-foreground">{SUMMARY}</span>
+            </>
+          )}{" "}
           <Link
             href="/changelog"
             onClick={dismiss}
