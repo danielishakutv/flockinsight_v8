@@ -4,7 +4,10 @@ import {
   DATASETS,
   allowedDatasets,
   canDownload,
+  catalogPhrasesComplete,
+  dateFilterPhrase,
   getDataset,
+  linkedDatasets,
 } from "@/lib/report-catalog";
 import { parseRange, rangeLabel, rangeQuery, rangeSuffix } from "@/lib/report-range";
 
@@ -35,6 +38,85 @@ describe("the dataset catalogue", () => {
           `${d.id} joins to unknown dataset "${target}"`,
         ).toBe(true);
       }
+    }
+  });
+});
+
+describe("saying it in English", () => {
+  /*
+   * The reports page used to show a dataset's wiring verbatim: "Filtered by
+   * created at" and "Joins to household_id -> households.household_id". These
+   * tests hold the replacement, because the failure they guard against is
+   * silent — a new dataset with an unmapped date column would simply start
+   * printing a column name at a church administrator, and nothing would break.
+   */
+  it("has a readable phrase for every date column in use", () => {
+    const { unphrasedDateColumns } = catalogPhrasesComplete();
+    expect(
+      unphrasedDateColumns,
+      `Add these to DATE_FILTER_PHRASE in report-catalog.ts: ${unphrasedDateColumns.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("points every join at a dataset that can be named", () => {
+    const { unknownJoinTargets } = catalogPhrasesComplete();
+    expect(unknownJoinTargets).toEqual([]);
+  });
+
+  it("writes a sentence, not a column name", () => {
+    for (const d of DATASETS) {
+      const phrase = dateFilterPhrase(d);
+      if (!d.dateColumn) {
+        expect(phrase).toBeNull();
+        continue;
+      }
+      expect(phrase).toMatch(/^A date range applies to .+\.$/);
+      // A column with an underscore in it is unambiguously machine-shaped, so
+      // it must never reach a reader as written. (`date` is checked by the
+      // fallback comparison below instead — it is also an English word.)
+      if (d.dateColumn.includes("_")) expect(phrase).not.toContain(d.dateColumn);
+
+      /*
+       * And the sentence must not BE the column with its underscores taken
+       * out, which is what the page used to print and what `dateFilterPhrase`
+       * still falls back to for an unmapped column. Written as "is not the
+       * fallback" rather than "does not contain the words": "when it was
+       * scheduled for" is good English that happens to contain "scheduled
+       * for", and a test that cannot tell those apart is a test that
+       * punishes the right answer.
+       */
+      const fallback = `A date range applies to ${d.dateColumn.replace(/_/g, " ")}.`;
+      expect(phrase).not.toBe(fallback);
+    }
+  });
+
+  it("names the other file rather than the key, and keeps the key", () => {
+    const members = getDataset("members")!;
+    const links = linkedDatasets(members);
+
+    expect(links.map((l) => l.label)).toEqual(["Households", "Members", "Team"]);
+
+    // A member's guardian is another member, so that link points home. The
+    // page says "other rows in this same file" rather than naming the file
+    // the reader is already looking at.
+    const self = links.find((l) => l.self);
+    expect(self?.id).toBe("members");
+
+    // The exact columns are not thrown away — they move to the hover.
+    expect(links.flatMap((l) => l.keys).sort()).toEqual([
+      "assigned_to_id",
+      "guardian_id",
+      "household_id",
+    ]);
+  });
+
+  it("groups several keys pointing at the same file into one mention", () => {
+    for (const d of DATASETS) {
+      const links = linkedDatasets(d);
+      expect(new Set(links.map((l) => l.id)).size).toBe(links.length);
+      expect(links.reduce((a, l) => a + l.keys.length, 0)).toBe(
+        (d.joins ?? []).length,
+      );
     }
   });
 });

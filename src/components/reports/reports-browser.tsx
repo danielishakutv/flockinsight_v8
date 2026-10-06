@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import {
   CATEGORIES,
+  dateFilterPhrase,
+  linkedDatasets,
   type CategoryKey,
   type Dataset,
 } from "@/lib/report-catalog";
@@ -307,6 +309,7 @@ function DatasetCard({
   qs: string;
 }) {
   const empty = count === 0;
+  const links = linkedDatasets(dataset);
   return (
     <Card className={cn(empty && "opacity-70")}>
       <CardContent className="space-y-3">
@@ -322,26 +325,38 @@ function DatasetCard({
 
         <p className="text-muted-foreground text-sm">{dataset.description}</p>
 
+        {/*
+          Both lines used to print the wiring as it is stored — "Filtered by
+          created at", "Joins to `household_id -> households.household_id`" —
+          which is a column name with the underscores taken out, not plain
+          language. The exact keys still matter to whoever is going to join the
+          files in Excel, so they have not been thrown away: they are on the
+          `title`, one hover from the person who wants them and out of the way
+          of the person who does not.
+        */}
         <div className="space-y-1">
           <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
             <Info className="mt-0.5 size-3 shrink-0" />
-            {dataset.dateColumn
-              ? `Filtered by ${dataset.dateColumn.replace(/_/g, " ")}`
-              : "Always exported in full — no date to filter on"}
+            {dateFilterPhrase(dataset) ??
+              "There is no date on these records, so a date range leaves them alone — you always get all of them."}
           </p>
-          {dataset.joins && dataset.joins.length > 0 && (
+          {links.length > 0 && (
             <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
               <Link2 className="mt-0.5 size-3 shrink-0" />
               <span>
-                Joins to{" "}
-                {dataset.joins.map((j, i) => (
-                  <span key={j.column}>
-                    {i > 0 && ", "}
-                    <code className="bg-muted rounded px-1 py-0.5 text-[11px] break-all">
-                      {j.target}
-                    </code>
+                Can be matched up with{" "}
+                {links.map((link, i) => (
+                  <span key={link.id}>
+                    {i > 0 && (i === links.length - 1 ? " and " : ", ")}
+                    <span
+                      className="decoration-muted-foreground/40 underline decoration-dotted underline-offset-2"
+                      title={`Carries ${link.keys.join(" and ")}`}
+                    >
+                      {link.self ? "other rows in this same file" : link.label}
+                    </span>
                   </span>
                 ))}
+                .
               </span>
             </p>
           )}

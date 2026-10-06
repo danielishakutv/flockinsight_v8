@@ -525,3 +525,124 @@ export function allowedDatasets(
 ): Dataset[] {
   return DATASETS.filter((d) => canDownload(d, perms, isOwner));
 }
+
+/* -------------------------------------------------------------------------
+ * Saying it in English
+ *
+ * The reports page used to print a dataset's wiring exactly as it is stored:
+ * "Filtered by created at" and "Joins to `household_id ->
+ * households.household_id`". That is the column name with the underscores
+ * taken out, which is not the same thing as plain language — the same habit
+ * that filled the summary PDF with foreign keys until a church asked why
+ * their report was technical jargon instead of real data.
+ *
+ * The two helpers below turn the stored wiring into something a church
+ * administrator can read, without throwing away what an analyst needs: the
+ * exact keys are kept on `keys` so the page can still show them on hover.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * What each date column means, said once.
+ *
+ * Keyed by column rather than by dataset because the ten columns below cover
+ * all thirty-six datasets, and a per-dataset sentence would be thirty-six
+ * chances to leave one stale.
+ */
+const DATE_FILTER_PHRASE: Record<string, string> = {
+  joined_at: "when the person joined",
+  date: "the date on the record",
+  session_date: "the date of the service",
+  start_date: "the date it started",
+  created_at: "when it was first recorded",
+  paid_on: "when it was paid",
+  occurred_at: "when it happened",
+  scheduled_for: "when it was scheduled for",
+  submitted_at: "when it was submitted",
+  day: "the day it counts towards",
+};
+
+/**
+ * "A date range applies to when the person joined", or null when the dataset
+ * has no date to filter on and is always exported whole.
+ */
+export function dateFilterPhrase(dataset: Dataset): string | null {
+  if (!dataset.dateColumn) return null;
+  /*
+   * An unmapped column falls back to the column name rather than to silence.
+   * A new dataset with an unlisted date column should read slightly awkwardly
+   * and get fixed, not disappear from the page — and `catalogPhrasesComplete`
+   * fails the build before it ever ships.
+   */
+  const phrase =
+    DATE_FILTER_PHRASE[dataset.dateColumn] ??
+    dataset.dateColumn.replace(/_/g, " ");
+  return `A date range applies to ${phrase}.`;
+}
+
+/** Another dataset this one links to, named the way the page names it. */
+export type LinkedDataset = {
+  id: string;
+  label: string;
+  /** The exact foreign keys, for whoever is going to join the files. */
+  keys: string[];
+  /** True when the link points back at this same dataset (a guardian, a parent group). */
+  self: boolean;
+};
+
+/**
+ * Which other files this one can be joined to, by label rather than by key.
+ *
+ * Several columns can point at the same dataset — members carries both a
+ * guardian and an assigned-to link — so they are grouped, and the keys travel
+ * with them rather than being dropped.
+ */
+export function linkedDatasets(dataset: Dataset): LinkedDataset[] {
+  const byTarget = new Map<string, LinkedDataset>();
+
+  for (const join of dataset.joins ?? []) {
+    const targetId = join.target.split(".")[0];
+    const existing = byTarget.get(targetId);
+    if (existing) {
+      existing.keys.push(join.column);
+      continue;
+    }
+    byTarget.set(targetId, {
+      id: targetId,
+      label: getDataset(targetId)?.label ?? targetId,
+      keys: [join.column],
+      self: targetId === dataset.id,
+    });
+  }
+
+  return [...byTarget.values()];
+}
+
+/**
+ * Every date column in the catalogue has a phrase, and every join points at a
+ * dataset that exists. Asserted by a test, so adding a dataset with a new date
+ * column or a typo'd target fails the build instead of printing `occurred_at`
+ * at a church administrator.
+ */
+export function catalogPhrasesComplete(): {
+  unphrasedDateColumns: string[];
+  unknownJoinTargets: string[];
+} {
+  const unphrasedDateColumns = [
+    ...new Set(
+      DATASETS.map((d) => d.dateColumn).filter(
+        (c): c is string => !!c && !(c in DATE_FILTER_PHRASE),
+      ),
+    ),
+  ];
+
+  const known = new Set(DATASET_IDS);
+  const unknownJoinTargets = [
+    ...new Set(
+      DATASETS.flatMap((d) => d.joins ?? [])
+        .map((j) => j.target.split(".")[0])
+        .filter((id) => !known.has(id)),
+    ),
+  ];
+
+  return { unphrasedDateColumns, unknownJoinTargets };
+}
