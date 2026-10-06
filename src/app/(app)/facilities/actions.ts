@@ -265,7 +265,24 @@ export async function saveBooking(
   }
 
   const status = willHold ? "approved" : "requested";
-  const fee = d.fee ?? feeFor(f.rate, f.hireFee, { startsAt: v.startsAt, endsAt: v.endsAt });
+
+  /*
+   * The fee is worked out on the SERVER from the facility's own rate, and a
+   * figure sent by the client is honoured only from somebody who manages
+   * facilities.
+   *
+   * This action needs `facilities.view`, because requesting a hall is
+   * something an ordinary team member should be able to do. Taking their
+   * `fee` on trust would let whoever books the hall decide what the hall
+   * costs — including nothing. A manager may still override it, which is the
+   * point of the field: what was agreed with a hirer is a negotiation, not a
+   * calculation.
+   */
+  const computed = feeFor(f.rate, f.hireFee, {
+    startsAt: v.startsAt,
+    endsAt: v.endsAt,
+  });
+  const fee = canManage && d.fee != null ? d.fee : computed;
 
   const values = {
     churchId: g.church.id,
