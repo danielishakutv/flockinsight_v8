@@ -105,7 +105,7 @@ export const DATASETS: Dataset[] = [
     id: "members",
     label: "Members",
     description:
-      "Every person on the register with their contact details, status, address, milestones and follow-up state.",
+      "Every person on the register with their contact details, status, address, milestones, follow-up state, and — for first-time worshippers — when they first visited and who invited them.",
     category: "people",
     perm: "members.view",
     grain: "One row per member",
@@ -113,6 +113,7 @@ export const DATASETS: Dataset[] = [
     joins: [
       { column: "household_id", target: "households.household_id" },
       { column: "guardian_id", target: "members.member_id" },
+      { column: "invited_by_id", target: "members.member_id" },
       { column: "assigned_to_id", target: "team.user_id" },
     ],
   },

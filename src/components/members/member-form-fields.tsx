@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { MemberInput } from "@/app/(app)/members/actions";
 import {
   COUNTRIES,
@@ -222,9 +223,21 @@ export function MemberFormFields({
   guardians = [],
   lockGuardian = false,
   households = [],
+  showFirstTimerHint = false,
 }: {
   form: MemberFormState;
   set: (patch: Partial<MemberFormState>) => void;
+  /**
+   * Point at the First-timers page when somebody is being ADDED here.
+   *
+   * This form's status defaults to Active, and a church told us plainly what
+   * that costs: "it's really making my people confused and they are messing up
+   * the thing". Registering a visitor here and missing the dropdown files them
+   * as a member, and follow-up never sees them again. The default is left
+   * alone — churches who add actual members here are right to get Active — and
+   * the people who wanted the other door are shown where it is.
+   */
+  showFirstTimerHint?: boolean;
   /** Non-minor members who can be picked as a guardian. */
   guardians?: Guardian[];
   /** Guardian is fixed (e.g. adding a child from a parent's profile). */
@@ -442,6 +455,17 @@ export function MemberFormFields({
           </Select>
         </div>
       </div>
+
+      {showFirstTimerHint && (
+        <p className="text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 text-xs">
+          Someone who has just worshipped with you for the first time?{" "}
+          <Link href="/first-timers" className="text-primary font-semibold">
+            Register them under First-timers
+          </Link>{" "}
+          instead — it is a shorter form, and it puts them straight into
+          follow-up.
+        </p>
+      )}
 
       {/* Contact — children are usually reached via their guardian, so this is
           hidden for them (any existing value is kept, never wiped). */}

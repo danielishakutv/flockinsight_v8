@@ -7,6 +7,7 @@ import { format, parseISO } from "date-fns";
 import { ChevronRight, HeartHandshake, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { setInFollowUp } from "@/app/(app)/follow-up/actions";
+import { RegisterFirstTimer } from "@/components/first-timers/register-first-timer";
 import {
   STATUS_LABEL,
   STATUS_ORDER,
@@ -67,10 +68,13 @@ function initials(name: string) {
 export function FollowUpList({
   people,
   candidates,
+  newFaceCandidates,
   canManage = true,
 }: {
   people: FollowUpPerson[];
   candidates: Candidate[];
+  /** The register, for the "who invited them" box on the first-timer form. */
+  newFaceCandidates: Candidate[];
   canManage?: boolean;
 }) {
   const t = useT();
@@ -129,7 +133,18 @@ export function FollowUpList({
           />
         ))}
         {canManage && (
-          <div className="ml-auto">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/*
+              Two different jobs, side by side.
+
+              "Register a first-timer" creates somebody who is not on the
+              register at all — the thing that previously meant opening the
+              membership form, whose status dropdown defaults to Active and
+              whose default quietly kept visitors out of this very list.
+              "Add to follow-up" takes an existing member and starts following
+              them up. Both belong here; only one of them existed.
+            */}
+            <RegisterFirstTimer members={newFaceCandidates} variant="outline" />
             <Button onClick={() => setAddOpen(true)} size="lg">
               <Plus className="size-5" />
               Add to follow-up

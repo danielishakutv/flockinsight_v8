@@ -5,17 +5,23 @@
  * dragging the whole DB layer into the bundle.
  */
 
+import { isRealCalendarDate } from "@/lib/calendar-date";
+
 /** An inclusive date window. `null` on either side means "unbounded". */
 export type ReportRange = { from: string | null; to: string | null };
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 function clean(v: string | null): string | null {
-  if (!v || !ISO_DATE.test(v)) return null;
-  // Reject a well-formed but impossible date like 2026-02-31, which Postgres
-  // would throw on rather than quietly ignore.
-  const d = new Date(`${v}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? null : v;
+  if (!v) return null;
+  /*
+   * Reject a well-formed but impossible date like 2026-02-31, which Postgres
+   * throws on rather than quietly ignoring.
+   *
+   * This used to read `Number.isNaN(new Date(v + "T00:00:00.000Z").getTime())`
+   * under that same comment, and did not do it: `Date` ROLLS OVER, so
+   * 2026-02-31 parsed happily as March the 3rd and went through. See
+   * `lib/calendar-date.ts`.
+   */
+  return isRealCalendarDate(v) ? v : null;
 }
 
 export function parseRange(params: URLSearchParams): ReportRange {

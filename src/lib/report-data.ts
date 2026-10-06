@@ -151,6 +151,9 @@ const BUILDERS: Record<string, Builder> = {
   members: async (churchId, range) => {
     const guardian = alias(member, "guardian");
     const assignee = alias(user, "assignee");
+    // Who brought them. An aliased self-join, not a correlated subquery in a
+    // raw template — see the trap in AGENTS.md.
+    const inviter = alias(member, "inviter");
     const rows = await db
       .select({
         id: member.id,
@@ -163,6 +166,11 @@ const BUILDERS: Record<string, Builder> = {
         email: member.email,
         dateOfBirth: member.dateOfBirth,
         joinedAt: member.joinedAt,
+        firstVisitDate: member.firstVisitDate,
+        invitedById: member.invitedById,
+        invitedByName: member.invitedByName,
+        inviterFirst: inviter.firstName,
+        inviterLast: inviter.lastName,
         isMinor: member.isMinor,
         guardianId: member.guardianId,
         guardianFirst: guardian.firstName,
@@ -194,6 +202,7 @@ const BUILDERS: Record<string, Builder> = {
       .leftJoin(guardian, eq(guardian.id, member.guardianId))
       .leftJoin(household, eq(household.id, member.householdId))
       .leftJoin(assignee, eq(assignee.id, member.assignedToId))
+      .leftJoin(inviter, eq(inviter.id, member.invitedById))
       .where(
         and(
           eq(member.churchId, churchId),
@@ -216,6 +225,9 @@ const BUILDERS: Record<string, Builder> = {
         "date_of_birth",
         "age",
         "joined_at",
+        "first_visit_date",
+        "invited_by_id",
+        "invited_by",
         "is_minor",
         "guardian_id",
         "guardian_name",
@@ -255,6 +267,11 @@ const BUILDERS: Record<string, Builder> = {
         m.dateOfBirth,
         ageFrom(m.dateOfBirth),
         m.joinedAt,
+        m.firstVisitDate,
+        m.invitedById,
+        m.invitedById
+          ? fullName(m.inviterFirst, null, m.inviterLast)
+          : m.invitedByName,
         bool(m.isMinor),
         m.guardianId,
         m.guardianId ? fullName(m.guardianFirst, null, m.guardianLast) : null,

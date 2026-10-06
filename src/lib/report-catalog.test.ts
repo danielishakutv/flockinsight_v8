@@ -107,7 +107,17 @@ describe("saying it in English", () => {
       "assigned_to_id",
       "guardian_id",
       "household_id",
+      "invited_by_id",
     ]);
+
+    /*
+     * Two of those point at the same file: a member's guardian and the member
+     * who invited them are both members. They are grouped into ONE mention
+     * carrying both keys, which is the whole reason linkedDatasets exists —
+     * "Can be matched up with Members, Members and Households" would be worse
+     * than the foreign keys it replaced.
+     */
+    expect(self?.keys.sort()).toEqual(["guardian_id", "invited_by_id"]);
   });
 
   it("groups several keys pointing at the same file into one mention", () => {

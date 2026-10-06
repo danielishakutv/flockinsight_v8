@@ -74,6 +74,41 @@ them (the Un-ship button, and `PATCH ... "status":"todo"` on something that was
 shipped); toggling status any other way deliberately keeps them, so a mis-tap
 cannot rewrite history with today's larger numbers.
 
+# First-timers have their own door, and it is not the membership form
+
+A church said: "Can we have registration of first-time worshippers on its own,
+not under membership, because it's really making my people confused and they
+are messing up the thing."
+
+The mess was mechanical. `MemberFormFields` defaults `status` to **active**, so
+registering a visitor through Members → Add and missing that one dropdown files
+them as a full member — and then Follow-up never sees them (it reads
+`status in ('visitor','new_convert') or in_follow_up`), the first-timer welcome
+and invite crons never fire (same filter), and the membership count is
+overstated. Nothing errors.
+
+So `/first-timers` is the way in, and `registerFirstTimer()` in
+`lib/first-timer-intake.ts` is the only function that writes one. **It takes no
+status argument.** Everything through it is `status: 'visitor'`,
+`inFollowUp: true`, `followUpStatus: 'new'`, and lands in the same `member`
+table — Members, attendance, the exports and the reports are unchanged.
+
+Three entry points, one function behind all of them:
+
+- the **First-timers page**, and the same button inside **Follow-up**
+- the public **`/welcome/<slug>`** link and QR, off by default, rate-limited,
+  honeypotted, never indexed, and unable to set a status or name an inviter by
+  id
+
+A phone or email that is already on the register never makes a second row.
+The existing person is put into follow-up and their BLANKS are filled —
+nothing with a value is ever overwritten, and their status is never changed.
+An active member who fills in a welcome card has not stopped being a member.
+
+The Members form still defaults to active, deliberately: a church adding real
+members there is right to get it. It now carries a line pointing at
+`/first-timers` instead.
+
 # Three traps that have already cost real bugs
 
 **A raw `sql` template drops the table qualifier when the query has no join.**

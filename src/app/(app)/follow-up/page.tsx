@@ -16,7 +16,7 @@ export default async function FollowUpPage() {
   await requireCan("followup.view");
   const canManage = await can("followup.manage");
 
-  const [people, counts, candidates] = await Promise.all([
+  const [people, counts, candidates, allActive] = await Promise.all([
     db
       .select({
         id: member.id,
@@ -62,6 +62,23 @@ export default async function FollowUpPage() {
         ),
       )
       .orderBy(member.firstName, member.lastName),
+    /*
+     * A second, wider list: every active member, for "who invited them" on the
+     * first-timer form. Not the same set as the one above, which deliberately
+     * excludes anyone already in follow-up — the member who brought a visitor
+     * is often being followed up themselves, and leaving them out would make
+     * the inviter unnameable.
+     */
+    db
+      .select({
+        id: member.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+      })
+      .from(member)
+      .where(and(eq(member.churchId, church.id), eq(member.status, "active")))
+      .orderBy(member.firstName, member.lastName)
+      .limit(5000),
   ]);
 
   const countMap = new Map(counts.map((c) => [c.memberId, c.c]));
@@ -91,6 +108,10 @@ export default async function FollowUpPage() {
         canManage={canManage}
         people={rows}
         candidates={candidates.map((c) => ({
+          id: c.id,
+          name: [c.firstName, c.lastName].filter(Boolean).join(" "),
+        }))}
+        newFaceCandidates={allActive.map((c) => ({
           id: c.id,
           name: [c.firstName, c.lastName].filter(Boolean).join(" "),
         }))}

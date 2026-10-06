@@ -198,6 +198,8 @@ export const en = {
     contributionsDesc: "Money a group puts together for one purpose",
     finance: "Finance",
     financeDesc: "Income, expenses & accounts",
+    firstTimers: "First-timers",
+    firstTimersDesc: "Register and welcome new faces",
     followUp: "Follow-up",
     followUpDesc: "Visitor care",
     media: "Media",

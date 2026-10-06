@@ -562,6 +562,7 @@ export function MembersList({
             set={(patch) => setForm((f) => ({ ...f, ...patch }))}
             guardians={guardians}
             households={households}
+            showFirstTimerHint
           />
           <DialogFooter>
             <Button

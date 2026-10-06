@@ -18,6 +18,7 @@ const PRIVATE = [
   "/attendance",
   "/groups",
   "/follow-up",
+  "/first-timers",
   "/analytics",
   "/media",
   "/forms",
@@ -39,6 +40,10 @@ const PRIVATE = [
   "/f/",
   "/n/",
   "/m/",
+  // A welcome card handed to somebody in a building. Indexing it would put a
+  // church's open registration form in front of strangers who were never
+  // there, which is the one thing a public write endpoint must not collect.
+  "/welcome/",
 ];
 
 /**

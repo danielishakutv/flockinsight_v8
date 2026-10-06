@@ -882,6 +882,27 @@ export const member = pgTable(
     state: text(),
     country: text(),
     notes: text(),
+    /*
+     * ----- First-time worshippers -----
+     *
+     * The day they first worshipped with this church, and who brought them.
+     *
+     * Kept apart from `joinedAt`, which means the day somebody became a
+     * member. Conflating the two is how a visitor ends up looking like a
+     * member in every count that reads `joinedAt`, and it is also the honest
+     * answer to "when did we first meet this person?" long after they have
+     * joined.
+     *
+     * `invitedById` is set when the person was picked from the register;
+     * `invitedByName` holds what was typed when they were not, or the name of
+     * someone since removed. Same pattern as giving's member/giverName pair:
+     * a name is not a key, and the record has to survive the key going away.
+     */
+    firstVisitDate: date(),
+    invitedById: uuid().references((): AnyPgColumn => member.id, {
+      onDelete: "set null",
+    }),
+    invitedByName: text(),
     // ----- Follow-up module -----
     // Visitors/new converts are followed up automatically (by status);
     // `inFollowUp` lets the team add any other member manually.
@@ -2541,6 +2562,67 @@ export const memberSignup = pgTable("member_signup", {
     .default(
       "Hi {name}, thank you for registering with {church}. We're glad to have you — see you soon!",
     ),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/* ============================================================
+ * First-time worshippers — their own front door
+ *
+ * A church asked for this in these words: "Can we have registration of
+ * first-time worshippers on its own, not under membership, because it's
+ * really making my people confused and they are messing up the thing."
+ *
+ * The mess was mechanical, not a matter of taste. Registering a first-timer
+ * meant opening Members → Add, a form of twenty-five fields whose status
+ * dropdown DEFAULTS TO ACTIVE. Miss that one field and the person is filed as
+ * a full member, which silently costs three things: they never appear in
+ * Follow-up, the first-timer welcome and invite messages never fire (both
+ * read `status in ('visitor','new_convert')`), and the membership count is
+ * overstated. Nothing errors. Nobody finds out.
+ *
+ * So first-timers get their own door, with no status field on it at all —
+ * everything through it is a visitor, in follow-up, from the first keystroke.
+ * They still land in the same `member` table, so Members, attendance, the
+ * reports and the exports are all unchanged.
+ *
+ * This table is only the PUBLIC half: the link and QR code a welcome desk can
+ * put on a card. It is deliberately not a second row in `member_signup`,
+ * whose primary key is the church and whose settings describe a very
+ * different form.
+ * ========================================================== */
+export const firstTimerSignup = pgTable("first_timer_signup", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  /** Public link half-name: /welcome/<slug>. Globally unique, like /join. */
+  slug: text().notNull().unique(),
+  /*
+   * OFF by default, unlike the member sign-up link.
+   *
+   * A public endpoint that writes rows to a church's register is not
+   * something to switch on for everybody and hope they notice. A church turns
+   * this on when it means to, having seen the page it is about to publish.
+   */
+  enabled: boolean().notNull().default(false),
+  title: text().notNull().default("Welcome! Tell us about yourself"),
+  intro: text()
+    .notNull()
+    .default(
+      "We are so glad you came. Leave your details and someone will say hello this week.",
+    ),
+  successMessage: text()
+    .notNull()
+    .default("Thank you — we are glad you came. We will be in touch soon."),
+  /** Which optional parts of the short form the public page shows. */
+  collectEmail: boolean().notNull().default(true),
+  collectAddress: boolean().notNull().default(false),
+  collectInvitedBy: boolean().notNull().default(true),
+  /** Tell the follow-up team when somebody registers themselves. */
+  notifyInApp: boolean().notNull().default(true),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true })
     .notNull()

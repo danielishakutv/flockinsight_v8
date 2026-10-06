@@ -13,6 +13,7 @@ import {
   HandCoins,
   Handshake,
   HeartHandshake,
+  UserPlus,
   LayoutDashboard,
   LifeBuoy,
   MessagesSquare,
@@ -127,6 +128,24 @@ export const mainNav: NavItem[] = [
     perm: "contributions.view",
   },
   { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view", feature: "finance" },
+  /*
+   * First-timers sits ABOVE Follow-up and nowhere near Members, on purpose.
+   *
+   * A church put it this way: "Can we have registration of first-time
+   * worshippers on its own, not under membership, because it's really making
+   * my people confused and they are messing up the thing." Registering a
+   * visitor through the membership form meant a status dropdown that defaults
+   * to Active, and missing it filed them as a member that follow-up never saw.
+   * Its own door, in the order the work actually happens: register, then
+   * follow up.
+   */
+  {
+    labelKey: "nav.firstTimers",
+    feature: "followUp",
+    href: "/first-timers",
+    icon: UserPlus,
+    perm: "followup.view",
+  },
   {
     labelKey: "nav.followUp",
     feature: "followUp",

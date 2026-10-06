@@ -666,6 +666,13 @@
       "when": 1791290047781,
       "tag": "0094_roadmap_two_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791317428585,
+      "tag": "0095_first_timer_intake",
+      "breakpoints": true
     }
   ]
 }
