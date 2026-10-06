@@ -10,7 +10,6 @@ import {
   createRoadmapItem,
   deleteRoadmapItem,
   getRoadmapItem,
-  reorderRoadmap,
   seedFromChangelog,
   setRoadmapStatus,
   unshipRoadmapItem,
@@ -19,7 +18,7 @@ import {
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-const STATUSES = ["idea", "planned", "in_progress", "shipped", "parked"] as const;
+const STATUSES = ["todo", "shipped"] as const;
 const PRIORITIES = ["critical", "high", "medium", "low"] as const;
 
 const itemSchema = z.object({
@@ -61,7 +60,7 @@ export async function addRoadmapItem(
   const row = await createRoadmapItem({
     title: d.title,
     detail: clean(d.detail),
-    status: d.status ?? "idea",
+    status: d.status ?? "todo",
     priority: d.priority ?? "medium",
     area: clean(d.area),
     targetDate: clean(d.targetDate),
@@ -121,8 +120,8 @@ const moveSchema = z.object({
 });
 
 /**
- * Move an item between columns. Landing on "shipped" is what freezes the
- * platform-size snapshot — see setRoadmapStatus.
+ * Set an item's status. Landing on "shipped" is what freezes the platform-size
+ * snapshot — see setRoadmapStatus.
  */
 export async function moveRoadmapItem(
   input: z.input<typeof moveSchema>,
@@ -150,7 +149,10 @@ export async function moveRoadmapItem(
     actorUserId: admin.id,
     actorName: admin.name,
     action: "roadmap_move",
-    summary: `Moved "${before.title}" from ${before.status} to ${status}`,
+    summary:
+      status === "shipped"
+        ? `Shipped "${before.title}"${version ? ` in v${version}` : ""}`
+        : `Moved "${before.title}" back to to do`,
   });
 
   revalidatePath("/superadmin/roadmap");
@@ -164,7 +166,7 @@ export async function unshipItem(id: string): Promise<ActionResult> {
   const before = await getRoadmapItem(id);
   if (!before) return { ok: false, error: "That item no longer exists." };
 
-  await unshipRoadmapItem(id, "in_progress");
+  await unshipRoadmapItem(id);
 
   await recordAudit({
     actorUserId: admin.id,
@@ -194,15 +196,6 @@ export async function removeRoadmapItem(id: string): Promise<ActionResult> {
 
   revalidatePath("/superadmin/roadmap");
   revalidatePath("/roadmap");
-  return { ok: true };
-}
-
-export async function reorderItems(ids: string[]): Promise<ActionResult> {
-  await requirePlatform("platform.growth.manage");
-  const parsed = z.array(z.string().uuid()).max(500).safeParse(ids);
-  if (!parsed.success) return { ok: false, error: "Invalid order" };
-  await reorderRoadmap(parsed.data);
-  revalidatePath("/superadmin/roadmap");
   return { ok: true };
 }
 

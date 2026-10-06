@@ -11,15 +11,27 @@ export type RoadmapRow = typeof roadmapItem.$inferSelect;
  * ------------------------------------------------------------------ */
 
 /**
- * Everything, ordered the way the board reads: within a status, by explicit
- * position, then newest first. Shipped items are the exception — those read
- * by ship date, because a timeline is only ever chronological.
+ * Everything, ordered the way the list reads.
+ *
+ * To-dos first, most important at the top, then by the order they were put in.
+ * Shipped items follow, newest first, because a record of what went out is
+ * only ever a timeline.
+ *
+ * Sorting happens in SQL rather than in the page so that the feed, the public
+ * page and the admin list cannot disagree about what "the top of the list"
+ * means.
  */
 export async function listRoadmap(): Promise<RoadmapRow[]> {
   return db
     .select()
     .from(roadmapItem)
     .orderBy(
+      // 'shipped' sorts after 'todo' alphabetically, which is the order we
+      // want, but say it rather than lean on it.
+      sql`case when ${roadmapItem.status} = 'shipped' then 1 else 0 end`,
+      sql`case ${roadmapItem.priority}
+            when 'critical' then 0 when 'high' then 1
+            when 'medium' then 2 else 3 end`,
       asc(roadmapItem.position),
       desc(roadmapItem.shippedAt),
       desc(roadmapItem.createdAt),
@@ -85,7 +97,7 @@ export type RoadmapInput = {
 export async function createRoadmapItem(
   input: RoadmapInput & { createdBy?: string | null },
 ): Promise<RoadmapRow> {
-  const status = input.status ?? "idea";
+  const status = input.status ?? "todo";
   // New work goes to the end of its column rather than the top: the queue is
   // an order of intent, and something just thought of shouldn't outrank
   // everything already agreed.
@@ -110,7 +122,6 @@ export async function createRoadmapItem(
       version: input.version ?? null,
       position: next,
       createdBy: input.createdBy ?? null,
-      startedAt: status === "in_progress" ? new Date() : null,
       shippedAt: shipping ? new Date() : null,
       churchesAtShip: size?.churches ?? null,
       usersAtShip: size?.users ?? null,
@@ -156,10 +167,6 @@ export async function setRoadmapStatus(
 
   const patch: Partial<typeof roadmapItem.$inferInsert> = { status };
 
-  if (status === "in_progress" && !current.startedAt) {
-    patch.startedAt = new Date();
-  }
-
   if (status === "shipped") {
     if (!current.shippedAt) {
       const size = await platformSize();
@@ -174,15 +181,19 @@ export async function setRoadmapStatus(
   await db.update(roadmapItem).set(patch).where(eq(roadmapItem.id, id));
 }
 
-/** Undo a ship: clears the date, the version and the frozen size. */
-export async function unshipRoadmapItem(
-  id: string,
-  status: RoadmapStatus = "planned",
-): Promise<void> {
+/**
+ * Undo a ship: back to to do, and the date, version and frozen size cleared.
+ *
+ * The only thing that clears them. Toggling an item out of Shipped and back
+ * in keeps whatever was stamped the first time, so a mis-tap cannot rewrite
+ * history with today's larger numbers — which matters more now that shipping
+ * is one tap away.
+ */
+export async function unshipRoadmapItem(id: string): Promise<void> {
   await db
     .update(roadmapItem)
     .set({
-      status,
+      status: "todo",
       shippedAt: null,
       version: null,
       churchesAtShip: null,
@@ -194,16 +205,6 @@ export async function unshipRoadmapItem(
 
 export async function deleteRoadmapItem(id: string): Promise<void> {
   await db.delete(roadmapItem).where(eq(roadmapItem.id, id));
-}
-
-/** Reorder within a column. Positions are rewritten to match the given order. */
-export async function reorderRoadmap(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  await Promise.all(
-    ids.map((id, i) =>
-      db.update(roadmapItem).set({ position: i + 1 }).where(eq(roadmapItem.id, id)),
-    ),
-  );
 }
 
 /* ------------------------------------------------------------------ *

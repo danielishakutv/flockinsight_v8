@@ -3406,13 +3406,19 @@ export const financeTransfer = pgTable(
  * feature landed, and a live count would erase exactly that.
  * ========================================================== */
 
-export const roadmapStatusEnum = pgEnum("roadmap_status", [
-  "idea", // captured, not committed to
-  "planned", // committed, waiting its turn
-  "in_progress",
-  "shipped",
-  "parked", // deliberately not doing, for now
-]);
+/*
+ * Two statuses, and that is the whole list.
+ *
+ * It used to be five — idea, planned, in_progress, shipped, parked — laid out
+ * as a kanban board. In practice the only move anybody ever made was "this is
+ * done now", usually from a phone, and the other four columns were a filing
+ * decision taken every time something was written down. So it is a task list:
+ * either it is still to do, or it has shipped.
+ *
+ * Migration 0094 collapsed the old values and kept each row's original one in
+ * `legacyStatus`, so nothing was lost in the trade.
+ */
+export const roadmapStatusEnum = pgEnum("roadmap_status", ["todo", "shipped"]);
 
 export const roadmapPriorityEnum = pgEnum("roadmap_priority", [
   "critical",
@@ -3428,7 +3434,15 @@ export const roadmapItem = pgTable(
     title: text().notNull(),
     /** The spec. Markdown — this is what a future build session works from. */
     detail: text(),
-    status: roadmapStatusEnum().notNull().default("idea"),
+    status: roadmapStatusEnum().notNull().default("todo"),
+    /**
+     * What this row's status was before the five became two — "idea",
+     * "planned", "in_progress", "parked". Write-once, set by migration 0094,
+     * shown nowhere. It is here so that collapsing the board did not quietly
+     * throw away a distinction somebody had made deliberately; drop it, and
+     * the `roadmap_status_legacy` type beside it, when nobody wants it back.
+     */
+    legacyStatus: text(),
     priority: roadmapPriorityEnum().notNull().default("medium"),
     /** Free text ("Training", "Finance", "Platform") — modules come and go. */
     area: text(),
@@ -3463,7 +3477,7 @@ export const roadmapItem = pgTable(
   },
   (t) => [
     index("roadmap_status_idx").on(t.status),
-    // The board reads one status at a time, in order.
+    // The list reads the to-dos in order, then the shipped ones by date.
     index("roadmap_status_position_idx").on(t.status, t.position),
     // The public feed and the shipped timeline both read newest-first.
     index("roadmap_shipped_idx").on(t.shippedAt),

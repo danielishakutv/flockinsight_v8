@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, CircleDashed, Hammer, Rocket } from "lucide-react";
+import { ArrowLeft, Hammer, Rocket } from "lucide-react";
 import { format } from "date-fns";
 import { Wordmark } from "@/components/brand";
 import { roadmapFeed } from "@/lib/roadmap";
@@ -12,20 +12,22 @@ export const metadata = {
 /** Reflects the board as soon as an item is ticked public. */
 export const dynamic = "force-dynamic";
 
+/*
+ * Two sections, because there are two statuses.
+ *
+ * This used to be three — "Building now", "Next up", "Shipped" — reading the
+ * `in_progress` and `planned` columns of a board that no longer exists. The
+ * distinction was never very honest on a public page anyway: a church reading
+ * it cannot tell "committed, waiting its turn" from "being worked on now", and
+ * both mean the same thing to them, which is "not yet".
+ */
 const SECTIONS = [
   {
-    key: "in_progress",
-    title: "Building now",
-    blurb: "Work in progress.",
+    key: "todo",
+    title: "What we're building",
+    blurb: "On the list. No dates promised.",
     icon: Hammer,
     className: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  },
-  {
-    key: "planned",
-    title: "Next up",
-    blurb: "Committed, and waiting its turn.",
-    icon: CircleDashed,
-    className: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   },
   {
     key: "shipped",
@@ -67,7 +69,8 @@ export default async function PublicRoadmapPage() {
         </h1>
         <p className="text-muted-foreground mt-2">
           What we&rsquo;re building for churches next, and what&rsquo;s already
-          live. Dates are intentions, not promises.
+          live. The top list is not in any particular order, and nothing on it
+          is a promise about when.
         </p>
 
         {sections.length === 0 ? (

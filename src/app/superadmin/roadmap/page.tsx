@@ -1,8 +1,8 @@
 import { listRoadmap, platformSize } from "@/lib/roadmap";
 import {
-  RoadmapBoard,
-  type BoardItem,
-} from "@/components/superadmin/roadmap-board";
+  RoadmapList,
+  type TaskItem,
+} from "@/components/superadmin/roadmap-list";
 import { Card, CardContent } from "@/components/ui/card";
 
 import { requirePlatform } from "@/lib/platform-access";
@@ -15,7 +15,7 @@ export default async function SuperadminRoadmapPage() {
   await requirePlatform("platform.growth.manage");
   const [rows, size] = await Promise.all([listRoadmap(), platformSize()]);
 
-  const items: BoardItem[] = rows.map((r) => ({
+  const items: TaskItem[] = rows.map((r) => ({
     id: r.id,
     title: r.title,
     detail: r.detail,
@@ -24,7 +24,7 @@ export default async function SuperadminRoadmapPage() {
     area: r.area,
     isPublic: r.isPublic,
     targetDate: r.targetDate,
-    // Dates cross to the client as strings; the board formats them there.
+    // Dates cross to the client as strings; the list formats them there.
     shippedAt: r.shippedAt ? r.shippedAt.toISOString() : null,
     version: r.version,
     churchesAtShip: r.churchesAtShip,
@@ -39,8 +39,9 @@ export default async function SuperadminRoadmapPage() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Roadmap</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          What&rsquo;s queued, what&rsquo;s being built, and what has shipped —
-          each shipped item stamped with how big the platform was that day.
+          What is still to do, and what has shipped. Tap the circle to ship
+          something — the date and the size of the platform that day are
+          stamped on it as you do.
         </p>
       </div>
 
@@ -69,19 +70,21 @@ export default async function SuperadminRoadmapPage() {
             </p>
           </div>
           <p className="text-muted-foreground min-w-[16rem] flex-1 text-xs">
-            These are the numbers frozen onto an item the moment you move it to
-            Shipped. Machine-readable at{" "}
-            <code className="bg-muted rounded px-1 py-0.5">{feedPath}</code> —
-            public items only, unless the request carries{" "}
+            These are the numbers frozen onto an item the moment it ships.
+            Readable and writable at{" "}
+            <code className="bg-muted rounded px-1 py-0.5">{feedPath}</code>{" "}
+            with{" "}
             <code className="bg-muted rounded px-1 py-0.5">
-              ?key=ROADMAP_FEED_KEY
-            </code>
-            .
+              ROADMAP_FEED_KEY
+            </code>{" "}
+            — which is how a build session adds an item, or ticks one off,
+            without anybody opening this page. Without the key the feed shows
+            only the items ticked public, and no numbers at all.
           </p>
         </CardContent>
       </Card>
 
-      <RoadmapBoard items={items} />
+      <RoadmapList items={items} />
     </div>
   );
 }

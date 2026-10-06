@@ -10,12 +10,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # The roadmap lives in the app, not in this repo
 
-What to build next is kept in the `roadmap_item` table and edited at
+What to build next is kept in the `roadmap_item` table and read at
 `/superadmin/roadmap`, so it can be added to from a phone. **Read it before
 planning work** — it is the current queue. Everything under `docs/archive/`
 is a frozen historical note, superseded by it.
 
-Fetch it as JSON:
+It is a **task list with two statuses**: `todo` and `shipped`. It used to be a
+five-column kanban board (idea / planned / in_progress / shipped / parked);
+migration 0094 collapsed those and kept each row's original value in
+`legacy_status`. The four retired names are still *read* as `todo` by
+`readStatus()`, so an old script or an old link does not break.
+
+Read it:
 
     # everything: specs, priorities, and the platform size frozen onto each
     # shipped item. Needs ROADMAP_FEED_KEY (see .env.example).
@@ -24,13 +30,38 @@ Fetch it as JSON:
     # without a key: only items ticked "public", and no metrics at all.
     curl https://flockinsight.com/api/roadmap
 
-Locally the same routes work against `http://localhost:3000`.
+**A key that is offered and refused gets a 401**, not an empty public feed. If
+you get `{"scope":"public","counts":{"total":0}}` with no key, that really is
+an empty public list; with a key you would have been told.
 
-Moving an item to **Shipped** freezes how many churches, users and members
+Write it — this is how you tick something off after shipping it, without
+anybody opening the page:
+
+    # add
+    curl -X POST https://flockinsight.com/api/roadmap \
+      -H "Authorization: Bearer $ROADMAP_FEED_KEY" \
+      -H "content-type: application/json" \
+      -d '{"title":"...","detail":"the spec","priority":"high","area":"Training"}'
+
+    # tick it off (the id comes from GET)
+    curl -X PATCH https://flockinsight.com/api/roadmap \
+      -H "Authorization: Bearer $ROADMAP_FEED_KEY" \
+      -H "content-type: application/json" \
+      -d '{"id":"<id>","status":"shipped","version":"0.69.0"}'
+
+There is deliberately **no DELETE**: everything else can be undone from the
+page, so deleting stays behind a confirmation dialog where a human can see
+what they are about to lose. Every write is recorded in the audit trail as
+"Roadmap feed key", because there is no person behind it.
+
+Locally the same routes work against your dev server.
+
+Moving an item to **shipped** freezes how many churches, users and members
 existed that day (`churchesAtShip` / `usersAtShip` / `membersAtShip`). Those are
 snapshots and are never recomputed — the point is to know how big the platform
 was when a feature landed. `unshipRoadmapItem` is the only thing that clears
-them; an ordinary move between columns deliberately keeps them, so a mis-click
+them (the Un-ship button, and `PATCH ... "status":"todo"` on something that was
+shipped); toggling status any other way deliberately keeps them, so a mis-tap
 cannot rewrite history with today's larger numbers.
 
 # Three traps that have already cost real bugs
