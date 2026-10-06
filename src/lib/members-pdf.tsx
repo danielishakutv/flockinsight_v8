@@ -10,6 +10,7 @@ import {
 import { format } from "date-fns";
 import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
 import type { ChurchBrand } from "@/lib/pdf-brand";
+import { PDF_FONT } from "@/lib/pdf-font";
 
 const C = {
   primary: "#6d28d9",
@@ -28,7 +29,7 @@ const C = {
 
 
 const styles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 9, color: C.slate700 },
+  page: { fontFamily: PDF_FONT, fontSize: 9, color: C.slate700 },
   band: {
     backgroundColor: C.primary,
     color: C.white,
@@ -48,16 +49,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  eyebrow: { fontSize: 7.5, letterSpacing: 2, color: C.whiteSoft, fontFamily: "Helvetica-Bold" },
-  churchName: { fontSize: 19, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  eyebrow: {
+    fontSize: 7.5,
+    letterSpacing: 2,
+    color: C.whiteSoft,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
+  churchName: {
+    fontSize: 19,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    marginTop: 2,
+  },
   bandRight: { alignItems: "flex-end" },
-  periodText: { fontSize: 10, fontFamily: "Helvetica-Bold" },
+  periodText: { fontSize: 10, fontFamily: PDF_FONT, fontWeight: 700 },
   bandSub: { fontSize: 8.5, color: C.whiteSoft, marginTop: 2 },
   body: { paddingHorizontal: 32, paddingTop: 20, paddingBottom: 48 },
   empty: { marginTop: 40, textAlign: "center", color: C.slate500 },
   table: { borderWidth: 1, borderColor: C.slate200, borderRadius: 8 },
   thead: { flexDirection: "row", backgroundColor: C.slate100, paddingVertical: 6, paddingHorizontal: 8 },
-  th: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: C.slate600, textTransform: "uppercase" },
+  th: {
+    fontSize: 7.5,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate600,
+    textTransform: "uppercase",
+  },
   trEven: {
     flexDirection: "row",
     paddingVertical: 5,
@@ -75,7 +93,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.slate50,
   },
   td: { fontSize: 8.5, color: C.slate600 },
-  tdName: { fontSize: 8.5, color: C.slate900, fontFamily: "Helvetica-Bold" },
+  tdName: {
+    fontSize: 8.5,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
   colName: { flexGrow: 3, flexBasis: 0 },
   colGender: { flexGrow: 1.2, flexBasis: 0 },
   colStatus: { flexGrow: 1.6, flexBasis: 0 },

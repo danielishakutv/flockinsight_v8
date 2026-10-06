@@ -11,6 +11,8 @@ import { renderAttendancePdf } from "@/lib/attendance-pdf";
 import { renderMembersPdf } from "@/lib/members-pdf";
 import { renderDatasetPdf, renderSummaryPdf } from "@/lib/report-pdf";
 import { getDataset } from "@/lib/report-catalog";
+import type { SummaryInsights } from "@/lib/report-summary";
+import { formatMoney } from "@/lib/money";
 import { renderGivingPdf } from "@/lib/giving-pdf";
 
 const brand: ChurchBrand = {
@@ -25,6 +27,84 @@ const brand: ChurchBrand = {
 
 /** A church with nothing filled in — no logo, no contact details. */
 const bare: ChurchBrand = { ...brand, logo: null, contact: null };
+
+/**
+ * A church with something in every section of the data report.
+ *
+ * Written out in full rather than cast from a partial: a fixture missing a
+ * field once made a passing test out of a document that would have thrown in
+ * production.
+ */
+const insights: SummaryInsights = {
+  givingByCategory: [
+    { name: "Tithe", entries: 180, total: 2_900_000, share: 60.2 },
+    { name: "Offering", entries: 95, total: 1_420_000, share: 29.5 },
+    { name: "Uncategorised", entries: 35, total: 500_000, share: 10.3 },
+  ],
+  attendanceByService: [
+    { name: "Sunday Service", sessions: 13, average: 182, best: 241 },
+    { name: "Midweek Service", sessions: 12, average: 64, best: 88 },
+    { name: "Watchnight", sessions: 1, average: 310, best: 310 },
+  ],
+  attendanceMix: {
+    adults: 1840,
+    teens: 320,
+    youths: 0,
+    seniors: 0,
+    children: 610,
+    firstTimers: 48,
+    newConverts: 12,
+  },
+  months: [
+    { month: "2026-01", services: 9, average: 170, newMembers: 11, giving: 1_500_000 },
+    { month: "2026-02", services: 8, average: 158, newMembers: 4, giving: 1_320_000 },
+    // A month with attendance but no giving, and none joining: the shape that
+    // the merge in report-summary has to survive.
+    { month: "2026-03", services: 9, average: 191, newMembers: 0, giving: 0 },
+  ],
+  groups: [
+    { name: "Choir", members: 42 },
+    { name: "Ushers", members: 18 },
+    // An empty group is deliberately kept — it renders as "none yet".
+    { name: "Media Team", members: 0 },
+  ],
+  statuses: [
+    { status: "active", members: 198 },
+    { status: "visitor", members: 28 },
+    { status: "new_convert", members: 9 },
+    { status: "inactive", members: 5 },
+  ],
+  channels: [
+    { channel: "sms", sends: 40, recipients: 900, reached: 870, failed: 12, skipped: 18, cost: 28_500 },
+    { channel: "email", sends: 22, recipients: 410, reached: 404, failed: 6, skipped: 0, cost: 0 },
+    { channel: "notification", sends: 60, recipients: 1400, reached: 1400, failed: 0, skipped: 0, cost: 0 },
+  ],
+  // Two categories and one group past the cut, so the report has to say so
+  // rather than quietly presenting ten rows as the whole picture.
+  omitted: { givingCategories: 2, services: 0, groups: 1, months: 0 },
+  empty: false,
+};
+
+/** The same report for a church that has recorded nothing yet. */
+const noInsights: SummaryInsights = {
+  givingByCategory: [],
+  attendanceByService: [],
+  attendanceMix: {
+    adults: 0,
+    teens: 0,
+    youths: 0,
+    seniors: 0,
+    children: 0,
+    firstTimers: 0,
+    newConverts: 0,
+  },
+  months: [],
+  groups: [],
+  statuses: [],
+  channels: [],
+  omitted: { givingCategories: 0, services: 0, groups: 0, months: 0 },
+  empty: true,
+};
 
 const isPdf = (b: Buffer) => b.subarray(0, 5).toString() === "%PDF-";
 const range = { from: "2026-01-01", to: "2026-03-31" };
@@ -138,10 +218,52 @@ describe("report centre", () => {
         firstDate: "2025-01-05",
         lastDate: "2026-03-29",
       },
+      insights,
       datasets: [dataset],
       counts: { members: 240 },
       range,
-      money: (n: number) => `NGN ${n.toLocaleString()}`,
+      // The real formatter, so the Naira sign goes through the embedded font
+      // rather than being dodged by a test that writes "NGN" instead. This is
+      // the character that rendered as a broken bar for months.
+      money: (n: number) => formatMoney(n, "NGN"),
+    });
+    expect(isPdf(pdf)).toBe(true);
+
+    /*
+     * The Naira bug, nailed down.
+     *
+     * Helvetica is WinAnsi-encoded and has no ₦, so every money figure in
+     * every PDF the platform made read `¦3,659,040.00` — a broken bar — with
+     * nothing thrown and nothing logged. Asserting the embedded font is in
+     * the file, and that no Helvetica is left anywhere in it, catches a
+     * revert far earlier than a church reading its own giving report does.
+     */
+    const raw = pdf.toString("latin1");
+    expect(raw).toContain("NotoSans");
+    expect(raw).not.toContain("Helvetica");
+  });
+
+  it("renders the summary for a church with nothing recorded yet", async () => {
+    const pdf = await renderSummaryPdf({
+      brand: bare,
+      totals: {
+        members: 0,
+        households: 0,
+        groups: 0,
+        sessions: 0,
+        avgAttendance: 0,
+        givingTotal: 0,
+        givingEntries: 0,
+        messages: 0,
+        currency: "NGN",
+        firstDate: null,
+        lastDate: null,
+      },
+      insights: noInsights,
+      datasets: [dataset],
+      counts: { members: 0 },
+      range: { from: null, to: null },
+      money: (n: number) => formatMoney(n, "NGN"),
     });
     expect(isPdf(pdf)).toBe(true);
   });

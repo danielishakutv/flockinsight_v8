@@ -11,6 +11,19 @@ import { format } from "date-fns";
 import type { DatasetResult } from "@/lib/report-data";
 import type { ChurchTotals } from "@/lib/report-data";
 import { CATEGORIES, type Dataset } from "@/lib/report-catalog";
+import { rangeLabel, type ReportRange } from "@/lib/report-range";
+import {
+  CHANNEL_LABEL,
+  monthLabel,
+  STATUS_LABEL,
+  type AttendanceByService,
+  type ChannelRow,
+  type GivingByCategory,
+  type GroupSize,
+  type MonthRow,
+  type StatusCount,
+  type SummaryInsights,
+} from "@/lib/report-summary";
 import { BrandBand, BrandFooter } from "@/lib/pdf-chrome";
 import type { ChurchBrand } from "@/lib/pdf-brand";
 import {
@@ -21,6 +34,7 @@ import {
   pdfColumns,
   short,
 } from "@/lib/report-pdf-columns";
+import { PDF_FONT } from "@/lib/pdf-font";
 
 /**
  * PDFs for the report centre: one generic table renderer that works for any
@@ -60,7 +74,7 @@ const MAX_PDF_ROWS = 1200;
 const MAX_PDF_COLS = 12;
 
 const styles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 9, color: C.slate700 },
+  page: { fontFamily: PDF_FONT, fontSize: 9, color: C.slate700 },
   band: {
     backgroundColor: C.primary,
     color: C.white,
@@ -84,11 +98,17 @@ const styles = StyleSheet.create({
     fontSize: 7,
     letterSpacing: 2,
     color: C.whiteSoft,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
   },
-  churchName: { fontSize: 17, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  churchName: {
+    fontSize: 17,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    marginTop: 2,
+  },
   bandRight: { alignItems: "flex-end" },
-  periodText: { fontSize: 10, fontFamily: "Helvetica-Bold" },
+  periodText: { fontSize: 10, fontFamily: PDF_FONT, fontWeight: 700 },
   bandSub: { fontSize: 8, color: C.whiteSoft, marginTop: 2 },
 
   body: { paddingHorizontal: 28, paddingTop: 16, paddingBottom: 44 },
@@ -107,13 +127,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   tileAccent: { borderColor: C.violet200, backgroundColor: C.violet50 },
-  tileValue: { fontSize: 15, fontFamily: "Helvetica-Bold", color: C.slate900 },
+  tileValue: {
+    fontSize: 15,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate900,
+  },
   tileValueAccent: { color: C.violet700 },
   tileLabel: {
     fontSize: 6.5,
     letterSpacing: 0.5,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     marginTop: 2,
     textTransform: "uppercase",
   },
@@ -122,7 +148,8 @@ const styles = StyleSheet.create({
     fontSize: 8,
     letterSpacing: 0.6,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     textTransform: "uppercase",
     marginTop: 14,
     marginBottom: 6,
@@ -136,7 +163,8 @@ const styles = StyleSheet.create({
   },
   th: {
     fontSize: 6.5,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate600,
     textTransform: "uppercase",
   },
@@ -159,18 +187,25 @@ const styles = StyleSheet.create({
   td: { fontSize: 7, color: C.slate600 },
   numCell: { color: C.slate400, textAlign: "right", paddingRight: 6 },
   cell: { flexGrow: 1, flexBasis: 0, paddingRight: 4 },
+  // Was italic. The embedded family ships regular and bold only, and
+  // react-pdf THROWS on an unresolvable style rather than falling back, so a
+  // stray italic would turn a download into a 500. Colour carries the aside.
   note: {
     marginTop: 8,
     fontSize: 7.5,
     color: C.slate500,
-    fontStyle: "italic",
   },
   dictRow: {
     borderTopWidth: 1,
     borderTopColor: C.slate100,
     paddingVertical: 6,
   },
-  dictName: { fontSize: 9, fontFamily: "Helvetica-Bold", color: C.slate900 },
+  dictName: {
+    fontSize: 9,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate900,
+  },
   dictMeta: { fontSize: 7.5, color: C.slate500, marginTop: 1 },
   dictJoin: { fontSize: 7.5, color: C.violet700, marginTop: 1 },
 
@@ -208,13 +243,6 @@ function Tile({
       <Text style={styles.tileLabel}>{label}</Text>
     </View>
   );
-}
-
-function rangeLabel(range: { from: string | null; to: string | null }): string {
-  if (range.from && range.to) return `${range.from} to ${range.to}`;
-  if (range.from) return `From ${range.from}`;
-  if (range.to) return `Up to ${range.to}`;
-  return "All time";
 }
 
 /** One dataset as a landscape table. */
@@ -309,30 +337,287 @@ export async function renderDatasetPdf(args: {
   return renderToBuffer(doc);
 }
 
+
+/* -------------------------------------------------------------------------
+ * The summary report
+ *
+ * Rewritten after a church asked why their report was "queries and technical
+ * jargon instead of real data". It was a fair description: the page carried
+ * four headline tiles and then three pages of data dictionary — table names,
+ * row counts, "one row per member per session", and join keys written as
+ * `household_id -> households.household_id`. That is a note from one
+ * programme to another, printed on a document a pastor hands to a board.
+ *
+ * What replaces it is the church's own figures: where the giving came from,
+ * who turned up and to what, how each month moved, who is on the register,
+ * which groups are biggest, what the messages cost. The dictionary is gone.
+ * What survives of it is one plain list at the back answering the only
+ * question it was ever good for — which modules have anything in them.
+ * ---------------------------------------------------------------------- */
+
+const sum = StyleSheet.create({
+  /** A plain two-line intro under a section heading. */
+  caption: { fontSize: 7.5, color: C.slate500, marginBottom: 5, lineHeight: 1.35 },
+
+  tableHead: {
+    flexDirection: "row",
+    backgroundColor: C.slate100,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+  },
+  row: {
+    flexDirection: "row",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.slate100,
+  },
+  rowAlt: { backgroundColor: C.slate50 },
+  rowTotal: {
+    flexDirection: "row",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.slate300,
+    backgroundColor: C.violet50,
+  },
+  frame: { borderWidth: 1, borderColor: C.slate200, borderRadius: 6 },
+
+  head: {
+    fontSize: 6.5,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate600,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  cellText: { fontSize: 8, color: C.slate700 },
+  cellName: {
+    fontSize: 8,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
+  cellStrong: {
+    fontSize: 8,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
+  right: { textAlign: "right" },
+
+  /** The "what came" line under the attendance table. */
+  mix: {
+    marginTop: 6,
+    fontSize: 7.5,
+    color: C.slate600,
+    lineHeight: 1.45,
+  },
+
+  /** One module in the closing list. */
+  holding: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+    borderTopWidth: 1,
+    borderTopColor: C.slate100,
+  },
+  holdingName: { fontSize: 8, color: C.slate700, flexGrow: 1, flexBasis: 0, paddingRight: 8 },
+  holdingCount: {
+    fontSize: 8,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
+  holdingEmpty: { fontSize: 8, color: C.slate400 },
+  holdingGroup: {
+    fontSize: 7,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate500,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginTop: 9,
+    marginBottom: 1,
+  },
+
+  note: {
+    marginTop: 5,
+    fontSize: 7,
+    color: C.slate500,
+    lineHeight: 1.4,
+  },
+
+  nothing: {
+    borderWidth: 1,
+    borderColor: C.slate200,
+    borderRadius: 6,
+    padding: 12,
+    fontSize: 8,
+    color: C.slate500,
+    lineHeight: 1.45,
+  },
+});
+
+/** A column: what to print, how wide, and whether it reads right-to-left. */
+type Column<T> = {
+  head: string;
+  width: number;
+  align?: "right";
+  /** Bold, for the name column and for a figure the eye should land on. */
+  strong?: boolean;
+  value: (row: T) => string;
+};
+
 /**
- * The cover report: headline numbers, what each category holds, and the data
- * dictionary. This is the thing you hand to a board; the CSVs are the thing
- * you hand to whoever does the analysis.
+ * One table. Deliberately dumb — no sorting, no totals of its own — because
+ * every caller already has its rows in the order it wants them and a total it
+ * can state more precisely than a generic sum could.
+ */
+function Table<T>({
+  columns,
+  rows,
+  total,
+}: {
+  columns: Column<T>[];
+  rows: T[];
+  /** An optional closing row, already formatted, cell for cell. */
+  total?: string[];
+}) {
+  return (
+    <View style={sum.frame}>
+      <View style={sum.tableHead}>
+        {columns.map((c, i) => (
+          <View key={i} style={[styles.cell, { flexGrow: c.width }]}>
+            <Text style={c.align === "right" ? [sum.head, sum.right] : sum.head}>
+              {c.head}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {rows.map((row, r) => (
+        <View key={r} style={r % 2 ? [sum.row, sum.rowAlt] : sum.row} wrap={false}>
+          {columns.map((c, i) => {
+            const base = c.strong ? sum.cellStrong : sum.cellText;
+            return (
+              <View key={i} style={[styles.cell, { flexGrow: c.width }]}>
+                <Text style={c.align === "right" ? [base, sum.right] : base}>
+                  {c.value(row)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ))}
+      {total && (
+        <View style={sum.rowTotal} wrap={false}>
+          {total.map((cell, i) => (
+            <View key={i} style={[styles.cell, { flexGrow: columns[i]?.width ?? 1 }]}>
+              <Text
+                style={
+                  columns[i]?.align === "right"
+                    ? [sum.cellStrong, sum.right]
+                    : sum.cellStrong
+                }
+              >
+                {cell}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** A heading, an optional line of explanation, and whatever follows. */
+function Section({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {caption && <Text style={sum.caption}>{caption}</Text>}
+      {children}
+    </View>
+  );
+}
+
+/**
+ * The line under a table that was cut short.
+ *
+ * Ten rows with nothing said about an eleventh reads as the whole truth. A
+ * church with fourteen giving categories would see four disappear and have no
+ * way to tell that from four nobody ever recorded — the same "one rendered
+ * state meaning two different things" that this report was full of.
+ */
+function Omitted({ count, noun }: { count: number; noun: string }) {
+  if (count <= 0) return null;
+  // "category" pluralises to "categories", not "categorys". The only four
+  // nouns this is called with are category, service, month and group.
+  const plural = noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`;
+  return (
+    <Text style={sum.note}>
+      {count === 1
+        ? `One more ${noun} is not shown here.`
+        : `${count.toLocaleString()} more ${plural} are not shown here.`}{" "}
+      The spreadsheet on the reports page has all of them.
+    </Text>
+  );
+}
+
+const whole = (n: number) => Math.round(n).toLocaleString();
+
+/**
+ * The report a church actually reads: its own numbers, in its own words.
+ *
+ * The CSVs beside it are still the artefact for analysis — this one is for the
+ * people in the room.
  */
 export async function renderSummaryPdf(args: {
   brand: ChurchBrand;
   totals: ChurchTotals;
+  insights: SummaryInsights;
   datasets: Dataset[];
   counts: Record<string, number>;
-  range: { from: string | null; to: string | null };
+  range: ReportRange;
   money: (n: number) => string;
 }): Promise<Buffer> {
-  const { brand, totals, datasets, counts, range, money } = args;
+  const { brand, totals, insights, datasets, counts, range, money } = args;
   const churchName = brand.name;
   const generated = format(new Date(), "MMM d, yyyy 'at' h:mm a");
   const totalRows = Object.values(counts).reduce((a, b) => a + b, 0);
-
   const ranged = !!(range.from || range.to);
+  const period = ranged ? rangeLabel(range) : "all time";
 
   const byCategory = CATEGORIES.map((cat) => ({
     ...cat,
     items: datasets.filter((d) => d.category === cat.key),
   })).filter((c) => c.items.length > 0);
+
+  const { attendanceMix: mixed } = insights;
+  /*
+   * Only name the age bands the church actually records. Youths and seniors
+   * are off by default and a church that has never turned them on should not
+   * read "0 youths" and wonder what it did wrong; a church that HAS turned
+   * them on and genuinely counted none should still see the zero, which is
+   * why this tests the recorded figure rather than a settings flag.
+   */
+  const mixParts = [
+    mixed.adults > 0 ? `${whole(mixed.adults)} adults` : null,
+    mixed.youths > 0 ? `${whole(mixed.youths)} youths` : null,
+    mixed.teens > 0 ? `${whole(mixed.teens)} teenagers` : null,
+    mixed.children > 0 ? `${whole(mixed.children)} children` : null,
+    mixed.seniors > 0 ? `${whole(mixed.seniors)} senior members` : null,
+  ].filter(Boolean) as string[];
 
   const doc = (
     <Document title={`${churchName} — Data report`} author={churchName}>
@@ -341,14 +626,14 @@ export async function renderSummaryPdf(args: {
           brand={brand}
           label="Data report"
           right={rangeLabel(range)}
-          rightSub={`${totalRows.toLocaleString()} rows across ${datasets.length} datasets`}
+          rightSub={`${totalRows.toLocaleString()} records in all`}
         />
         <View style={styles.body}>
           <Text style={styles.lead}>
-            Everything recorded for {churchName}, grouped by subject. Each
-            dataset below is downloadable as a spreadsheet; every row carries its own
-            id and the keys that link it to the others, so the files can be joined
-            back together for analysis.
+            What {churchName} recorded, {ranged ? `between ${period}` : "since it started"}.
+            Every figure here is counted from your own records. The spreadsheets
+            in the reports centre hold the same information row by row, for
+            anyone who wants to work with it in Excel.
           </Text>
 
           {/*
@@ -363,14 +648,11 @@ export async function renderSummaryPdf(args: {
             <Tile label="Members" value={totals.members.toLocaleString()} accent />
             <Tile label="Households" value={totals.households.toLocaleString()} />
             <Tile label="Groups" value={totals.groups.toLocaleString()} />
-            <Tile
-              label="Recorded since"
-              value={totals.firstDate ?? "—"}
-            />
+            <Tile label="Recorded since" value={totals.firstDate ?? "—"} />
           </View>
 
           <Text style={styles.sectionTitle}>
-            {ranged ? `Activity · ${rangeLabel(range)}` : "Activity · all time"}
+            {ranged ? `Activity · ${period}` : "Activity · all time"}
           </Text>
           <View style={styles.tileRow}>
             <Tile label="Services recorded" value={totals.sessions.toLocaleString()} />
@@ -379,36 +661,288 @@ export async function renderSummaryPdf(args: {
             <Tile label="Messages sent" value={totals.messages.toLocaleString()} />
           </View>
 
-          <Text style={styles.sectionTitle}>What is in your records</Text>
-          <Text style={styles.lead}>
-            Row counts below are for all time, whatever range this report
-            covers — they answer whether a module has anything in it at all.
-            Download any dataset to get its rows for a particular period.
-          </Text>
+          {insights.empty && (
+            <Text style={sum.nothing}>
+              There is nothing recorded for this period yet. Once services,
+              giving and members are entered, this report fills itself in — and
+              a wider date range, or no range at all, will usually show the
+              records that are already there.
+            </Text>
+          )}
 
-          {byCategory.map((cat) => (
-            <View key={cat.key}>
-              <Text style={styles.sectionTitle}>
-                {cat.label} — {cat.description}
-              </Text>
-              {cat.items.map((d) => (
-                <View key={d.id} style={styles.dictRow} wrap={false}>
-                  <Text style={styles.dictName}>
-                    {d.label} · {(counts[d.id] ?? 0).toLocaleString()}{" "}
-                    {(counts[d.id] ?? 0) === 1 ? "row" : "rows"}
-                  </Text>
-                  <Text style={styles.dictMeta}>
-                    {d.grain}. {d.description}
-                  </Text>
-                  {d.joins && d.joins.length > 0 && (
-                    <Text style={styles.dictJoin}>
-                      Joins: {d.joins.map((j) => `${j.column} → ${j.target}`).join("   ·   ")}
-                    </Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          ))}
+          {insights.givingByCategory.length > 0 && (
+            <Section
+              title="Where the giving came from"
+              caption={`Every gift recorded ${ranged ? `between ${period}` : "so far"}, grouped by what it was given for.`}
+            >
+              <Table
+                columns={[
+                  {
+                    head: "Category",
+                    width: 7,
+                    strong: true,
+                    value: (r: GivingByCategory) => r.name,
+                  },
+                  {
+                    head: "Gifts",
+                    width: 3,
+                    align: "right",
+                    value: (r) => r.entries.toLocaleString(),
+                  },
+                  {
+                    head: "Total",
+                    width: 5,
+                    align: "right",
+                    strong: true,
+                    value: (r) => money(r.total),
+                  },
+                  {
+                    head: "Share",
+                    width: 3,
+                    align: "right",
+                    value: (r) => `${r.share.toFixed(1)}%`,
+                  },
+                ]}
+                rows={insights.givingByCategory}
+                total={[
+                  "All giving",
+                  totals.givingEntries.toLocaleString(),
+                  money(totals.givingTotal),
+                  "100%",
+                ]}
+              />
+              <Omitted count={insights.omitted.givingCategories} noun="category" />
+            </Section>
+          )}
+
+          {insights.attendanceByService.length > 0 && (
+            <Section
+              title="Who turned up"
+              caption="Each service you recorded a headcount for, how many times it met, and what it averaged."
+            >
+              <Table
+                columns={[
+                  {
+                    head: "Service",
+                    width: 8,
+                    strong: true,
+                    value: (r: AttendanceByService) => r.name,
+                  },
+                  {
+                    head: "Times recorded",
+                    width: 4,
+                    align: "right",
+                    value: (r) => r.sessions.toLocaleString(),
+                  },
+                  {
+                    head: "Average",
+                    width: 3,
+                    align: "right",
+                    strong: true,
+                    value: (r) => whole(r.average),
+                  },
+                  {
+                    head: "Best",
+                    width: 3,
+                    align: "right",
+                    value: (r) => whole(r.best),
+                  },
+                ]}
+                rows={insights.attendanceByService}
+              />
+              <Omitted count={insights.omitted.services} noun="service" />
+              {(mixParts.length > 0 || mixed.firstTimers > 0 || mixed.newConverts > 0) && (
+                <Text style={sum.mix}>
+                  {mixParts.length > 0 && `Counted across every headcount: ${mixParts.join(", ")}.`}
+                  {mixed.firstTimers > 0 &&
+                    ` ${whole(mixed.firstTimers)} ${mixed.firstTimers === 1 ? "person came" : "people came"} for the first time.`}
+                  {mixed.newConverts > 0 &&
+                    ` ${whole(mixed.newConverts)} new ${mixed.newConverts === 1 ? "convert was" : "converts were"} recorded.`}
+                </Text>
+              )}
+            </Section>
+          )}
+
+          {insights.months.length > 0 && (
+            <Section
+              title="Month by month"
+              caption="The same figures again, split by month, so a run of quiet weeks is visible rather than averaged away."
+            >
+              <Table
+                columns={[
+                  {
+                    head: "Month",
+                    width: 4,
+                    strong: true,
+                    value: (r: MonthRow) => monthLabel(r.month),
+                  },
+                  {
+                    head: "Services",
+                    width: 3,
+                    align: "right",
+                    value: (r) => r.services.toLocaleString(),
+                  },
+                  {
+                    head: "Average attendance",
+                    width: 4,
+                    align: "right",
+                    value: (r) => (r.services > 0 ? whole(r.average) : "—"),
+                  },
+                  {
+                    head: "New members",
+                    width: 3,
+                    align: "right",
+                    value: (r) => (r.newMembers > 0 ? r.newMembers.toLocaleString() : "—"),
+                  },
+                  {
+                    head: "Giving",
+                    width: 5,
+                    align: "right",
+                    strong: true,
+                    value: (r) => (r.giving > 0 ? money(r.giving) : "—"),
+                  },
+                ]}
+                rows={insights.months}
+              />
+              <Omitted count={insights.omitted.months} noun="month" />
+            </Section>
+          )}
+
+          {insights.statuses.length > 0 && (
+            <Section
+              title="The register today"
+              caption="Not filtered by date: this is who is on the roll now, however long ago they joined."
+            >
+              <Table
+                columns={[
+                  {
+                    head: "Standing",
+                    width: 8,
+                    strong: true,
+                    value: (r: StatusCount) => STATUS_LABEL[r.status] ?? r.status,
+                  },
+                  {
+                    head: "People",
+                    width: 3,
+                    align: "right",
+                    strong: true,
+                    value: (r) => r.members.toLocaleString(),
+                  },
+                  {
+                    head: "Share of the roll",
+                    width: 4,
+                    align: "right",
+                    value: (r) =>
+                      totals.members > 0
+                        ? `${((r.members / totals.members) * 100).toFixed(1)}%`
+                        : "—",
+                  },
+                ]}
+                rows={insights.statuses}
+              />
+            </Section>
+          )}
+
+          {insights.groups.length > 0 && (
+            <Section
+              title="Groups and ministries"
+              caption="Your largest groups by membership, as they stand today. A group with nobody in it still appears — that is usually the point."
+            >
+              <Table
+                columns={[
+                  {
+                    head: "Group",
+                    width: 9,
+                    strong: true,
+                    value: (r: GroupSize) => r.name,
+                  },
+                  {
+                    head: "Members",
+                    width: 3,
+                    align: "right",
+                    strong: true,
+                    value: (r) => (r.members > 0 ? r.members.toLocaleString() : "none yet"),
+                  },
+                ]}
+                rows={insights.groups}
+              />
+              <Omitted count={insights.omitted.groups} noun="group" />
+            </Section>
+          )}
+
+          {insights.channels.length > 0 && (
+            <Section
+              title="Messages"
+              caption={`What you sent ${ranged ? `between ${period}` : "so far"}, and what reached a person. "Not delivered" counts both the sends that failed and the people who had no number or address on file.`}
+            >
+              <Table
+                columns={[
+                  {
+                    head: "How",
+                    width: 4,
+                    strong: true,
+                    value: (r: ChannelRow) => CHANNEL_LABEL[r.channel] ?? r.channel,
+                  },
+                  {
+                    head: "Sends",
+                    width: 3,
+                    align: "right",
+                    value: (r) => r.sends.toLocaleString(),
+                  },
+                  {
+                    head: "People reached",
+                    width: 4,
+                    align: "right",
+                    strong: true,
+                    value: (r) => r.reached.toLocaleString(),
+                  },
+                  {
+                    head: "Not delivered",
+                    width: 4,
+                    align: "right",
+                    value: (r) => (r.failed + r.skipped).toLocaleString(),
+                  },
+                  {
+                    head: "Cost",
+                    width: 4,
+                    align: "right",
+                    value: (r) => (r.cost > 0 ? money(r.cost) : "—"),
+                  },
+                ]}
+                rows={insights.channels}
+              />
+            </Section>
+          )}
+
+          {/*
+            What is left of the old data dictionary.
+            It answered one question worth answering — "has this module got
+            anything in it at all?" — so that question survives, in words,
+            with the row counts and without the foreign keys. The counts are
+            all-time on purpose: whether a module is empty should not change
+            as someone adjusts the date pickers.
+          */}
+          <Section
+            title="What else is in your records"
+            caption="Everything the platform is holding for you, counted for all time rather than for this period. Each line can be downloaded as a spreadsheet from the reports page."
+          >
+            {byCategory.map((cat) => (
+              <View key={cat.key} wrap={false}>
+                <Text style={sum.holdingGroup}>{cat.label}</Text>
+                {cat.items.map((d) => {
+                  const n = counts[d.id] ?? 0;
+                  return (
+                    <View key={d.id} style={sum.holding}>
+                      <Text style={sum.holdingName}>{d.label}</Text>
+                      <Text style={n > 0 ? sum.holdingCount : sum.holdingEmpty}>
+                        {n > 0 ? n.toLocaleString() : "nothing recorded"}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </Section>
         </View>
         <BrandFooter brand={brand} generated={generated} />
       </Page>

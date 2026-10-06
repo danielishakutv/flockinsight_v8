@@ -33,7 +33,7 @@ was when a feature landed. `unshipRoadmapItem` is the only thing that clears
 them; an ordinary move between columns deliberately keeps them, so a mis-click
 cannot rewrite history with today's larger numbers.
 
-# Two traps that have already cost real bugs
+# Three traps that have already cost real bugs
 
 **A raw `sql` template drops the table qualifier when the query has no join.**
 So a correlated subquery like
@@ -51,3 +51,11 @@ fixed` descendants.** A `fixed inset-0` drawer rendered inside the
 `backdrop-blur` admin header resolved against the 56px header instead of the
 viewport, so the menu opened as an empty sliver. Render overlays through a
 portal to `document.body` (see `components/superadmin/superadmin-nav.tsx`).
+
+**A PDF's built-in fonts cannot draw ₦.** Helvetica and the other thirteen
+standard fonts are WinAnsi-encoded — 256 characters, no Naira sign — so every
+money figure in every PDF the platform made read `¦3,659,040.00` for months.
+Nothing threw and nothing was logged; the glyph simply was not there. The PDFs
+now embed Noto Sans (`src/lib/pdf-font.ts`, registered once from
+`lib/pdf-chrome`), which also has no arrows: `→` draws an empty box the same
+silent way. `src/lib/pdf-font.test.ts` reads the .ttf files and fails on both.

@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import type { ChurchBrand } from "@/lib/pdf-brand";
+import { PDF_FONT, registerPdfFonts } from "@/lib/pdf-font";
 
 /**
  * The header and footer every FlockInsight PDF wears.
@@ -18,6 +19,16 @@ import type { ChurchBrand } from "@/lib/pdf-brand";
  * appears once, small, at the bottom. These get printed and handed to trustees
  * — they are the church's paperwork, not ours.
  */
+
+/*
+ * Register the embedded font here, at module load.
+ *
+ * Every PDF the platform renders imports BrandBand and BrandFooter from this
+ * file — it is the one thing they all have in common — so doing it here means
+ * no renderer can forget and quietly fall back to Helvetica, which is the
+ * encoding that ate the Naira sign. See lib/pdf-font.ts.
+ */
+registerPdfFonts();
 
 export const PDF_COLORS = {
   white: "#ffffff",
@@ -65,20 +76,23 @@ const s = StyleSheet.create({
   logoImage: { width: 38, height: 38, objectFit: "contain" },
   churchName: {
     fontSize: 17,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: PDF_COLORS.white,
   },
   eyebrow: {
     fontSize: 7,
     letterSpacing: 2,
     color: PDF_COLORS.whiteSoft,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     marginTop: 3,
   },
   bandRight: { alignItems: "flex-end", maxWidth: "30%" },
   bandRightMain: {
     fontSize: 10,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: PDF_COLORS.white,
     textAlign: "right",
   },
@@ -112,7 +126,8 @@ const s = StyleSheet.create({
     fontSize: 6,
     color: PDF_COLORS.slate500,
     textDecoration: "none",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
   },
 });
 

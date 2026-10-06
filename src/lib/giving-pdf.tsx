@@ -11,6 +11,7 @@ import { format, parseISO } from "date-fns";
 import { BrandBand, BrandFooter, PDF_COLORS as C } from "@/lib/pdf-chrome";
 import type { ChurchBrand } from "@/lib/pdf-brand";
 import { formatMoney } from "@/lib/money";
+import { PDF_FONT } from "@/lib/pdf-font";
 
 /**
  * The giving statement: who gave, toward what, and how much came in.
@@ -47,7 +48,7 @@ export type GivingPdfArgs = {
 
 const s = StyleSheet.create({
   page: {
-    fontFamily: "Helvetica",
+    fontFamily: PDF_FONT,
     fontSize: 9,
     color: C.slate700,
     paddingBottom: 46,
@@ -55,7 +56,8 @@ const s = StyleSheet.create({
   body: { paddingHorizontal: 28, paddingTop: 18 },
   sectionTitle: {
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate900,
     marginBottom: 8,
     marginTop: 14,
@@ -71,11 +73,13 @@ const s = StyleSheet.create({
     fontSize: 7,
     letterSpacing: 1,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
   },
   headlineValue: {
     fontSize: 18,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate900,
     marginTop: 4,
   },
@@ -84,7 +88,8 @@ const s = StyleSheet.create({
   row: { flexDirection: "row" },
   th: {
     fontSize: 7,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate600,
     letterSpacing: 0.6,
     paddingVertical: 6,
@@ -99,7 +104,7 @@ const s = StyleSheet.create({
   bodyRow: { borderBottomWidth: 0.5, borderBottomColor: C.slate200 },
   totalRow: { borderTopWidth: 1, borderTopColor: C.slate300 },
   right: { textAlign: "right" },
-  bold: { fontFamily: "Helvetica-Bold" },
+  bold: { fontFamily: PDF_FONT, fontWeight: 700 },
   muted: { color: C.slate500 },
   note: { fontSize: 7.5, color: C.slate500, marginTop: 10 },
   empty: {

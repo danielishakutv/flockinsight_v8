@@ -14,6 +14,7 @@ import type {
   AttendanceExportRow,
   AttendanceSummary,
 } from "@/lib/attendance-export";
+import { PDF_FONT } from "@/lib/pdf-font";
 
 // Brand palette (kept in sync with the on-screen report).
 const C = {
@@ -37,7 +38,7 @@ const C = {
 // lucide "church" glyph, drawn white inside the header monogram.
 
 const styles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 9, color: C.slate700 },
+  page: { fontFamily: PDF_FONT, fontSize: 9, color: C.slate700 },
 
   band: {
     backgroundColor: C.primary,
@@ -62,11 +63,17 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     letterSpacing: 2,
     color: C.whiteSoft,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
   },
-  churchName: { fontSize: 19, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  churchName: {
+    fontSize: 19,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    marginTop: 2,
+  },
   bandRight: { alignItems: "flex-end" },
-  periodText: { fontSize: 10, fontFamily: "Helvetica-Bold" },
+  periodText: { fontSize: 10, fontFamily: PDF_FONT, fontWeight: 700 },
   bandSub: { fontSize: 8.5, color: C.whiteSoft, marginTop: 2 },
 
   body: { paddingHorizontal: 32, paddingTop: 20, paddingBottom: 48 },
@@ -84,13 +91,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   tileAccent: { borderColor: C.violet200, backgroundColor: C.violet50 },
-  tileValue: { fontSize: 16, fontFamily: "Helvetica-Bold", color: C.slate900 },
+  tileValue: {
+    fontSize: 16,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate900,
+  },
   tileValueAccent: { color: C.violet700 },
   tileLabel: {
     fontSize: 6.5,
     letterSpacing: 0.5,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     marginTop: 2,
     textTransform: "uppercase",
   },
@@ -99,7 +112,8 @@ const styles = StyleSheet.create({
     fontSize: 8,
     letterSpacing: 0.6,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     textTransform: "uppercase",
     marginTop: 14,
     marginBottom: 6,
@@ -111,7 +125,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
-  th: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: C.slate600, textTransform: "uppercase" },
+  th: {
+    fontSize: 7.5,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate600,
+    textTransform: "uppercase",
+  },
   trEven: {
     flexDirection: "row",
     paddingVertical: 5,
@@ -129,9 +149,20 @@ const styles = StyleSheet.create({
     backgroundColor: C.slate50,
   },
   td: { fontSize: 8.5, color: C.slate600 },
-  tdName: { fontSize: 8.5, color: C.slate900, fontFamily: "Helvetica-Bold" },
+  tdName: {
+    fontSize: 8.5,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+  },
   tdNum: { fontSize: 8.5, color: C.slate700, textAlign: "right" },
-  tdTotal: { fontSize: 8.5, color: C.slate900, fontFamily: "Helvetica-Bold", textAlign: "right" },
+  tdTotal: {
+    fontSize: 8.5,
+    color: C.slate900,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    textAlign: "right",
+  },
   tfoot: {
     flexDirection: "row",
     paddingVertical: 6,
@@ -140,7 +171,12 @@ const styles = StyleSheet.create({
     borderTopColor: C.slate300,
     backgroundColor: C.slate100,
   },
-  tfootCell: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: C.slate900 },
+  tfootCell: {
+    fontSize: 8.5,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    color: C.slate900,
+  },
 
   colDate: { flexGrow: 2.4, flexBasis: 0 },
   colName: { flexGrow: 3.6, flexBasis: 0 },

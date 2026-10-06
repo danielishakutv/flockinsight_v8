@@ -17,6 +17,7 @@ import type {
   FinanceSummary,
   FinanceTransactionRow,
 } from "@/lib/finance-data";
+import { PDF_FONT } from "@/lib/pdf-font";
 
 /**
  * The finance statement: what came in, what went out, and what each account
@@ -29,7 +30,7 @@ const MAX_ROWS = 900;
 
 const s = StyleSheet.create({
   page: {
-    fontFamily: "Helvetica",
+    fontFamily: PDF_FONT,
     fontSize: 9,
     color: C.slate700,
     paddingBottom: 46,
@@ -38,7 +39,8 @@ const s = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate900,
     marginBottom: 8,
     marginTop: 14,
@@ -56,15 +58,22 @@ const s = StyleSheet.create({
     fontSize: 7,
     letterSpacing: 1,
     color: C.slate500,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
   },
-  cardValue: { fontSize: 13, fontFamily: "Helvetica-Bold", marginTop: 4 },
+  cardValue: {
+    fontSize: 13,
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
+    marginTop: 4,
+  },
   cardHint: { fontSize: 6.5, color: C.slate500, marginTop: 2 },
 
   row: { flexDirection: "row" },
   th: {
     fontSize: 7,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: PDF_FONT,
+    fontWeight: 700,
     color: C.slate600,
     letterSpacing: 0.6,
     paddingVertical: 6,
@@ -78,7 +87,7 @@ const s = StyleSheet.create({
   },
   bodyRow: { borderBottomWidth: 0.5, borderBottomColor: C.slate200 },
   right: { textAlign: "right" },
-  bold: { fontFamily: "Helvetica-Bold" },
+  bold: { fontFamily: PDF_FONT, fontWeight: 700 },
   muted: { color: C.slate500 },
   note: { fontSize: 7.5, color: C.slate500, marginTop: 10 },
   empty: {
