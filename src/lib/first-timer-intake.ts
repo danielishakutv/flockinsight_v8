@@ -258,8 +258,20 @@ export async function registerFirstTimer(opts: {
       .where(and(eq(member.id, invitedById), eq(member.churchId, opts.churchId)))
       .limit(1);
     if (!inv) {
+      /*
+       * Recovered by re-cleaning the ORIGINAL input without the id, not by
+       * reading `d.invitedByName` — `cleanIntake` deliberately nulls the typed
+       * name whenever an id is present, so by this point it is already gone.
+       * Re-running the same rules is the one way to get it back that cannot
+       * drift from how a typed name is normally handled.
+       *
+       * Caught by `first-timer-intake.db-check.ts`, which is the only reason
+       * this is right: the security half of the check passed all along, and
+       * the lost name would have gone unnoticed.
+       */
       invitedById = null;
-      invitedByName = d.invitedByName ?? null;
+      const retry = cleanIntake({ ...opts.intake, invitedById: null });
+      invitedByName = retry.ok ? retry.value.invitedByName : null;
     }
   }
 
