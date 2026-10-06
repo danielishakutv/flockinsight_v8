@@ -41,24 +41,40 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-function suppliedKey(req: Request): string | null {
-  const url = new URL(req.url);
-  return (
-    url.searchParams.get("key") ??
+/**
+ * The key, and where it came from.
+ *
+ * Where matters. A key in the query string is convenient for pasting into a
+ * browser to read the feed, and it is also written into every access log, the
+ * browser history and any Referer the page later sends. That is an acceptable
+ * trade for a read and a bad one for a write, so writes take it from a header
+ * only — see `refuseWriteWithoutKey`.
+ */
+function suppliedKey(req: Request): { key: string | null; fromHeader: boolean } {
+  const header =
     req.headers.get("x-roadmap-key") ??
     // Also accept `Authorization: Bearer <key>`, which is what most HTTP
-    // clients reach for and keeps the key out of server access logs.
+    // clients reach for.
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    null
-  );
+    null;
+  if (header) return { key: header, fromHeader: true };
+
+  const query = new URL(req.url).searchParams.get("key");
+  return { key: query, fromHeader: false };
 }
 
 type Access =
-  | { ok: true; full: boolean; via: "key" | "superadmin" | "anonymous" }
+  | {
+      ok: true;
+      full: boolean;
+      via: "key" | "superadmin" | "anonymous";
+      /** Whether the key arrived in a header rather than the query string. */
+      keyFromHeader: boolean;
+    }
   | { ok: false; response: NextResponse };
 
 async function authorise(req: Request): Promise<Access> {
-  const supplied = suppliedKey(req);
+  const { key: supplied, fromHeader } = suppliedKey(req);
   const keyAccepted = hasFeedKey(supplied);
   const isSuperAdmin = await getIsSuperAdmin();
 
@@ -87,32 +103,90 @@ async function authorise(req: Request): Promise<Access> {
     };
   }
 
-  if (keyAccepted) return { ok: true, full: true, via: "key" };
-  if (isSuperAdmin) return { ok: true, full: true, via: "superadmin" };
-  return { ok: true, full: false, via: "anonymous" };
+  if (keyAccepted)
+    return { ok: true, full: true, via: "key", keyFromHeader: fromHeader };
+  if (isSuperAdmin)
+    return { ok: true, full: true, via: "superadmin", keyFromHeader: false };
+  return { ok: true, full: false, via: "anonymous", keyFromHeader: false };
 }
 
-/** Writes need the key or a superadmin session. Never anonymous. */
-function refuseAnonymousWrite(access: Extract<Access, { ok: true }>) {
-  if (access.full) return null;
+/**
+ * Writes need the KEY. A superadmin session is not enough, and that is the
+ * point rather than an oversight.
+ *
+ * A session lives in a cookie, and a browser attaches a cookie to a
+ * cross-site request without being asked. A POST carrying
+ * `content-type: text/plain` is a "simple request" — no CORS preflight — and
+ * `req.json()` will happily parse a text/plain body, so a signed-in
+ * superadmin visiting a hostile page could have had items written to this
+ * list under their own credential. They could not read the reply, but the
+ * write would have landed.
+ *
+ * A key sent in a header cannot be attached by a cross-site page: setting
+ * `Authorization` forces a preflight, which this route does not answer. So
+ * requiring it removes the whole class of problem rather than guarding
+ * against one shape of it. Nothing is lost — a superadmin writes through the
+ * page, whose server actions Next.js already checks the origin of; the key is
+ * for the build session that has no page to click.
+ */
+function refuseWriteWithoutKey(access: Extract<Access, { ok: true }>) {
+  if (access.via === "key" && access.keyFromHeader) return null;
   return NextResponse.json(
     {
       error: "roadmap_key_required",
       message:
-        "Changing the list needs ROADMAP_FEED_KEY, as ?key=, x-roadmap-key, " +
-        "or an Authorization: Bearer header.",
+        "Changing the list needs ROADMAP_FEED_KEY in a header — x-roadmap-key, " +
+        "or Authorization: Bearer. ?key= is accepted for reading only, because " +
+        "a key in a URL ends up in access logs and browser history. A signed-in " +
+        "session is deliberately not enough either — use the page for that.",
     },
     { status: 401, headers: NO_STORE },
   );
 }
 
-function actorFor(via: "key" | "superadmin" | "anonymous") {
-  // A key-authenticated write has no session behind it. Name it as what it is
-  // rather than letting the audit trail imply a person was at a keyboard.
-  return via === "key"
-    ? { actorUserId: null, actorName: "Roadmap feed key" }
-    : {};
+/**
+ * Read the body, or say why not.
+ *
+ * The content-type check is not politeness. Without it, `req.json()` parses
+ * whatever arrives, including the `text/plain` body of a cross-site form post
+ * that never had to clear a preflight. Demanding JSON is the second lock on
+ * the door that `refuseWriteWithoutKey` already bolted.
+ */
+async function readJsonBody(
+  req: Request,
+): Promise<{ ok: true; body: unknown } | { ok: false; response: NextResponse }> {
+  if (!req.headers.get("content-type")?.includes("application/json")) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: "unsupported_media_type",
+          message: "Send content-type: application/json.",
+        },
+        { status: 415, headers: NO_STORE },
+      ),
+    };
+  }
+
+  try {
+    return { ok: true, body: await req.json() };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "bad_json", message: "Send a JSON body." },
+        { status: 400, headers: NO_STORE },
+      ),
+    };
+  }
 }
+
+/**
+ * Every write here is key-authenticated, so there is never a person behind it.
+ * Name it as what it is rather than leaving the audit trail to imply somebody
+ * was at a keyboard.
+ */
+const FEED_ACTOR = { actorUserId: null, actorName: "Roadmap feed key" };
 
 function refreshPages() {
   revalidatePath("/superadmin/roadmap");
@@ -164,18 +238,12 @@ const createSchema = z.object({
 export async function POST(req: Request) {
   const access = await authorise(req);
   if (!access.ok) return access.response;
-  const refused = refuseAnonymousWrite(access);
+  const refused = refuseWriteWithoutKey(access);
   if (refused) return refused;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "bad_json", message: "Send a JSON body." },
-      { status: 400, headers: NO_STORE },
-    );
-  }
+  const read = await readJsonBody(req);
+  if (!read.ok) return read.response;
+  const body = read.body;
 
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -208,7 +276,7 @@ export async function POST(req: Request) {
   });
 
   await recordAudit({
-    ...actorFor(access.via),
+    ...FEED_ACTOR,
     action: "roadmap_add",
     summary: `Added "${row.title}" to the roadmap via the feed`,
     targetType: "roadmap_item",
@@ -237,18 +305,12 @@ const patchSchema = z.object({
 export async function PATCH(req: Request) {
   const access = await authorise(req);
   if (!access.ok) return access.response;
-  const refused = refuseAnonymousWrite(access);
+  const refused = refuseWriteWithoutKey(access);
   if (refused) return refused;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "bad_json", message: "Send a JSON body." },
-      { status: 400, headers: NO_STORE },
-    );
-  }
+  const read = await readJsonBody(req);
+  if (!read.ok) return read.response;
+  const body = read.body;
 
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -326,7 +388,7 @@ export async function PATCH(req: Request) {
   const after = await getRoadmapItem(d.id);
 
   await recordAudit({
-    ...actorFor(access.via),
+    ...FEED_ACTOR,
     action: status === "shipped" ? "roadmap_move" : "roadmap_edit",
     summary:
       status === "shipped"

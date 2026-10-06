@@ -49,6 +49,16 @@ anybody opening the page:
       -H "content-type: application/json" \
       -d '{"id":"<id>","status":"shipped","version":"0.69.0"}'
 
+Writes take the key **in a header only** — `x-roadmap-key` or
+`Authorization: Bearer`. `?key=` reads but cannot write, because a key in a URL
+ends up in access logs and browser history. A signed-in superadmin session does
+not write here either: a cookie rides along on a cross-site request, and a POST
+with `content-type: text/plain` is a simple request that never clears a
+preflight, so a session-authorised write was a CSRF hole. Superadmins write
+through the page, whose server actions Next.js origin-checks. Writes also
+require `content-type: application/json` (415 otherwise), which is the second
+lock on the same door.
+
 There is deliberately **no DELETE**: everything else can be undone from the
 page, so deleting stays behind a confirmation dialog where a human can see
 what they are about to lose. Every write is recorded in the audit trail as
