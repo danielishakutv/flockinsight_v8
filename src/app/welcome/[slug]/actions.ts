@@ -66,13 +66,32 @@ export async function submitWelcome(
     intake: {
       ...intake,
       /*
-       * Dropped, whatever was sent. A stranger naming a member id would be
-       * writing a foreign key into somebody else's record; the typed name is
-       * kept instead, which is all the welcome team needs.
+       * Three fields are stripped here regardless of what arrived, because
+       * the public form does not offer them and a crafted request is not the
+       * public form. The server never trusts that the client left a field out.
+       *
+       *  - `invitedById`: a stranger naming a member by id would be writing a
+       *    foreign key into somebody else's record. The typed name survives,
+       *    which is all the welcome team actually needs.
+       *  - `notes`: the church's own words about a person, not the person's.
+       *  - `firstVisitDate`: it is today by definition; letting it be set
+       *    would allow backdating somebody into a Sunday they never attended.
        */
       invitedById: null,
+      notes: null,
+      firstVisitDate: null,
     },
     createdBy: null,
+    /*
+     * The important one.
+     *
+     * Matching is on phone number and email, and neither is a secret. Without
+     * this, anybody who knows a member's phone number could type it into this
+     * form and have their own email and address written into that member's
+     * record wherever the church had left a blank. A match here now does one
+     * thing only: flags the person for follow-up, so a human looks.
+     */
+    allowPatchExisting: false,
   });
 
   if (!res.ok) return { ok: false, error: res.error };

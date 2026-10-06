@@ -199,10 +199,30 @@ const BUILDERS: Record<string, Builder> = {
         updatedAt: member.updatedAt,
       })
       .from(member)
-      .leftJoin(guardian, eq(guardian.id, member.guardianId))
+      /*
+       * Both self-joins are scoped to the same church, not just matched on id.
+       * `guardian_id` and `invited_by_id` both reference `member.id` globally,
+       * so an id from another church would otherwise print that church's
+       * member name into this church's export. The guardian join has been
+       * unscoped since it was written; it is fixed here alongside the inviter
+       * because it is the same bug.
+       */
+      .leftJoin(
+        guardian,
+        and(
+          eq(guardian.id, member.guardianId),
+          eq(guardian.churchId, member.churchId),
+        ),
+      )
       .leftJoin(household, eq(household.id, member.householdId))
       .leftJoin(assignee, eq(assignee.id, member.assignedToId))
-      .leftJoin(inviter, eq(inviter.id, member.invitedById))
+      .leftJoin(
+        inviter,
+        and(
+          eq(inviter.id, member.invitedById),
+          eq(inviter.churchId, member.churchId),
+        ),
+      )
       .where(
         and(
           eq(member.churchId, churchId),

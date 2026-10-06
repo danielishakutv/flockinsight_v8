@@ -101,9 +101,22 @@ Three entry points, one function behind all of them:
   id
 
 A phone or email that is already on the register never makes a second row.
-The existing person is put into follow-up and their BLANKS are filled —
-nothing with a value is ever overwritten, and their status is never changed.
-An active member who fills in a welcome card has not stopped being a member.
+Their status is never changed — an active member who fills in a welcome card
+has not stopped being a member — and **whether their blanks get filled depends
+on who is asking**:
+
+- a signed-in member of staff may fill a blank, and never overwrite a value;
+- the public link may not, and does exactly one thing to a match: flags them
+  for follow-up. `allowPatchExisting: false`. Matching is on phone number and
+  email and neither is a secret, so without that flag anybody who knew a
+  member's number could write their own email and address into that member's
+  record. The reply is identical either way, so the form is not an oracle for
+  "is this number a member here?".
+
+**`invited_by_id` and `guardian_id` both reference `member.id` globally**, so
+every write checks the target belongs to the same church and every read joins
+with `eq(x.churchId, member.churchId)`. Without both, one church's member name
+prints on another church's page and in its CSV export.
 
 The Members form still defaults to active, deliberately: a church adding real
 members there is right to get it. It now carries a line pointing at

@@ -216,10 +216,52 @@ export async function registerFirstTimer(opts: {
   intake: FirstTimerIntake;
   /** Who keyed it in. Null for the public link. */
   createdBy?: string | null;
+  /**
+   * May this fill in blanks on somebody who is ALREADY on the register?
+   *
+   * True for a signed-in member of staff, who is trusted and accountable.
+   * FALSE for the public link, and that difference is load-bearing: matching
+   * is done on phone number and email, neither of which is a secret. Without
+   * this flag a stranger could type a member's phone number into a church's
+   * public welcome form and have their own email, address and notes written
+   * into that member's record wherever the church had left a field blank —
+   * an unauthenticated write to somebody else's data.
+   *
+   * With it false, a match does exactly one thing: flags the person for
+   * follow-up. Somebody did just ask to be contacted, and a human will look.
+   */
+  allowPatchExisting?: boolean;
 }): Promise<{ ok: true; result: IntakeOutcome } | { ok: false; error: string }> {
   const parsed = cleanIntake(opts.intake);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const d = parsed.value;
+  const allowPatch = opts.allowPatchExisting !== false;
+
+  /*
+   * The inviter must be a member of THIS church.
+   *
+   * `cleanIntake` only checks the shape of the id; a uuid from another
+   * church's register is still a uuid. The foreign key on `invited_by_id`
+   * points at `member.id` globally, so without this a staff member could
+   * write a cross-tenant reference — and the joins that read it back would
+   * then print another church's member name on this church's page and in its
+   * CSV export. Dropped rather than refused, falling back to the typed name,
+   * because for every legitimate user the id came from their own datalist and
+   * a mismatch means a bug or an attack, not a correction worth stopping for.
+   */
+  let invitedById = d.invitedById;
+  let invitedByName = d.invitedByName;
+  if (invitedById) {
+    const [inv] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.id, invitedById), eq(member.churchId, opts.churchId)))
+      .limit(1);
+    if (!inv) {
+      invitedById = null;
+      invitedByName = d.invitedByName ?? null;
+    }
+  }
 
   const phoneNorm = d.phone ? normalizePhone(d.phone) : null;
   const emailNorm = d.email ? d.email.toLowerCase() : null;
@@ -246,20 +288,29 @@ export async function registerFirstTimer(opts: {
       .where(eq(member.id, existing.id))
       .limit(1);
 
-    // `??=` in spirit: only ever writes where there is nothing already.
     const patch: Partial<typeof member.$inferInsert> = {};
-    if (!current?.firstVisitDate) patch.firstVisitDate = d.firstVisitDate;
-    if (!current?.gender && d.gender) patch.gender = d.gender;
-    if (!current?.email && d.email) patch.email = d.email;
-    if (!current?.phone && d.phone) patch.phone = d.phone;
-    if (!current?.address && d.address) patch.address = d.address;
-    if (!current?.city && d.city) patch.city = d.city;
-    if (!current?.state && d.state) patch.state = d.state;
-    if (!current?.invitedById && !current?.invitedByName) {
-      if (d.invitedById) patch.invitedById = d.invitedById;
-      if (d.invitedByName) patch.invitedByName = d.invitedByName;
+
+    /*
+     * Everything in this block is personal data belonging to somebody already
+     * on the register, so none of it happens on the public path. See
+     * `allowPatchExisting`.
+     *
+     * `??=` in spirit: only ever writes where there is nothing already.
+     */
+    if (allowPatch) {
+      if (!current?.firstVisitDate) patch.firstVisitDate = d.firstVisitDate;
+      if (!current?.gender && d.gender) patch.gender = d.gender;
+      if (!current?.email && d.email) patch.email = d.email;
+      if (!current?.phone && d.phone) patch.phone = d.phone;
+      if (!current?.address && d.address) patch.address = d.address;
+      if (!current?.city && d.city) patch.city = d.city;
+      if (!current?.state && d.state) patch.state = d.state;
+      if (!current?.invitedById && !current?.invitedByName) {
+        if (invitedById) patch.invitedById = invitedById;
+        if (invitedByName) patch.invitedByName = invitedByName;
+      }
+      if (!current?.notes && d.notes) patch.notes = d.notes;
     }
-    if (!current?.notes && d.notes) patch.notes = d.notes;
 
     const alreadyInFollowUp = current?.inFollowUp === true;
     if (!alreadyInFollowUp) {
@@ -291,8 +342,8 @@ export async function registerFirstTimer(opts: {
       state: d.state,
       notes: d.notes,
       firstVisitDate: d.firstVisitDate,
-      invitedById: d.invitedById,
-      invitedByName: d.invitedByName,
+      invitedById,
+      invitedByName,
       /*
        * The three fields this whole module exists to get right, and none of
        * them is a question anybody is asked.
@@ -345,7 +396,20 @@ export async function listFirstTimers(churchId: string, limit = 200) {
       inviterLastName: inviter.lastName,
     })
     .from(member)
-    .leftJoin(inviter, eq(inviter.id, member.invitedById))
+    /*
+     * Scoped to the same church, not just matched on id.
+     *
+     * Belt and braces with the check in `registerFirstTimer`: a row written
+     * before that check existed, or by some future path that forgets it,
+     * still cannot surface another church's member name on this page.
+     */
+    .leftJoin(
+      inviter,
+      and(
+        eq(inviter.id, member.invitedById),
+        eq(inviter.churchId, member.churchId),
+      ),
+    )
     .where(
       and(
         eq(member.churchId, churchId),
