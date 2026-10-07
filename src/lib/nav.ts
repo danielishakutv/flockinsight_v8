@@ -1,5 +1,11 @@
 import type { TKey } from "@/lib/i18n/translate";
-import { isPilot, pilotAllows, type FeatureKey } from "@/lib/entitlements";
+import {
+  PILOT_ONLY,
+  isPilot,
+  pilotAllows,
+  type FeatureKey,
+  type PilotMap,
+} from "@/lib/entitlements";
 import {
   BarChart3,
   Bell,
@@ -90,10 +96,12 @@ export function navVisible(
   perms: string[],
   isOwner: boolean,
   churchSlug: string | null | undefined,
+  /** Injectable so this stays tested when nothing is being piloted. */
+  pilots: PilotMap = PILOT_ONLY,
 ): boolean {
   if (!navAllowed(item.perm, perms, isOwner)) return false;
-  if (item.feature && isPilot(item.feature)) {
-    return pilotAllows(item.feature, churchSlug);
+  if (item.feature && isPilot(item.feature, pilots)) {
+    return pilotAllows(item.feature, churchSlug, pilots);
   }
   return true;
 }
@@ -179,9 +187,10 @@ export const mainNav: NavItem[] = [
     perm: "followup.view",
   },
   /*
-   * Piloted at one church — `PILOT_ONLY` in lib/entitlements hides this entry
-   * everywhere else, rather than showing a "Pro" chip for a module that paying
-   * for Pro would not currently unlock.
+   * Open to every church on Pro since 2026-10-07. It was piloted at one church
+   * for a day through `PILOT_ONLY`; `beta` stays because the module is new and
+   * has not yet been used at scale, which is a different claim from "you
+   * cannot have it".
    */
   {
     labelKey: "nav.facilities",

@@ -341,12 +341,18 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
  * already right.
  * ========================================================== */
 
-/** Features restricted to named church slugs, whatever their plan says. */
-export const PILOT_ONLY: Partial<Record<FeatureKey, readonly string[]>> = {
-  // Facilities ships to the team's own church first. Remove this line to open
-  // it to every church on Pro and above.
-  facilities: ["flockinsight-church"],
-};
+export type PilotMap = Partial<Record<FeatureKey, readonly string[]>>;
+
+/**
+ * Features restricted to named church slugs, whatever their plan says.
+ *
+ * EMPTY is the normal state. Facilities sat here from 2026-10-06 while it was
+ * tried at the team's own church, and was opened to every church on Pro the
+ * following day by deleting its line — which is the whole design: a pilot ends
+ * by removing one entry, and the tier, the nav entry, the permission and the
+ * upgrade prompt were already right.
+ */
+export const PILOT_ONLY: PilotMap = {};
 
 /**
  * Whether a pilot lets this church in.
@@ -359,15 +365,25 @@ export const PILOT_ONLY: Partial<Record<FeatureKey, readonly string[]>> = {
 export function pilotAllows(
   feature: FeatureKey,
   churchSlug: string | null | undefined,
+  /*
+   * Injectable so the mechanism stays tested when nothing is being piloted,
+   * which is most of the time. Without this, emptying PILOT_ONLY would quietly
+   * delete the coverage of the gate along with the pilot, and the next person
+   * to use it would be relying on code nothing has exercised in months.
+   */
+  pilots: PilotMap = PILOT_ONLY,
 ): boolean {
-  const allowed = PILOT_ONLY[feature];
+  const allowed = pilots[feature];
   if (!allowed) return true;
   return !!churchSlug && allowed.includes(churchSlug);
 }
 
 /** True when this feature is being piloted rather than generally available. */
-export function isPilot(feature: FeatureKey): boolean {
-  return !!PILOT_ONLY[feature];
+export function isPilot(
+  feature: FeatureKey,
+  pilots: PilotMap = PILOT_ONLY,
+): boolean {
+  return !!pilots[feature];
 }
 
 /**
@@ -381,8 +397,9 @@ export function churchHasFeature(
   plan: string | null | undefined,
   churchSlug: string | null | undefined,
   feature: FeatureKey,
+  pilots: PilotMap = PILOT_ONLY,
 ): boolean {
-  return planIncludes(plan, feature) && pilotAllows(feature, churchSlug);
+  return planIncludes(plan, feature) && pilotAllows(feature, churchSlug, pilots);
 }
 
 /** The lowest plan that includes a feature. */

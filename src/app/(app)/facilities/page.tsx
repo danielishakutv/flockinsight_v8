@@ -27,9 +27,9 @@ export const dynamic = "force-dynamic";
 /**
  * Facilities: what the church owns, and who has it when.
  *
- * Piloted at one church (`PILOT_ONLY` in lib/entitlements). The nav entry is
- * hidden elsewhere and every write is refused on the server, so reaching this
- * URL from another church shows the upgrade gate rather than the module.
+ * A Pro feature, open to every church on that plan. `PlanGate` marks the page
+ * for anyone below it and every write is refused on the server, so reaching
+ * this URL on Starter shows the upgrade prompt rather than the module.
  */
 export default async function FacilitiesPage() {
   const { church } = await requireChurch();
