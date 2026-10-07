@@ -6,6 +6,7 @@ import { chooseTip, markShown, markVisit, turnTipsOff } from "@/lib/shortcut-tip
 import { MNEMONICS } from "@/lib/shortcut-mnemonics";
 import type { Shortcut } from "@/lib/shortcuts";
 import { useHasKeyboard, useTipState } from "@/lib/use-shortcut-tips";
+import { TEACH_EVENT } from "@/lib/shortcut-teach";
 import { useT } from "@/components/i18n-provider";
 import { useIsMac } from "@/lib/use-is-mac";
 import { Keys } from "@/components/app/shortcut-sheet";
@@ -41,7 +42,7 @@ export function ShortcutTip({
   onOpenSheet: () => void;
 }) {
   const hasKeyboard = useHasKeyboard();
-  const { update } = useTipState();
+  const { update, read } = useTipState();
   const [candidate, setCandidate] = useState<Shortcut | null>(null);
 
   /*
@@ -54,6 +55,22 @@ export function ShortcutTip({
    * threshold without going anywhere.
    */
   const countedRef = useRef<string | null>(null);
+
+  /*
+   * What the `teach` listener needs. It is attached once, with no
+   * dependencies, so that a click never races a re-subscribe — everything it
+   * reads comes through these, synced in an effect that is declared first.
+   */
+  const pathnameRef = useRef(pathname);
+  const availableRef = useRef(available);
+  const keyboardRef = useRef(hasKeyboard);
+  const readRef = useRef(read);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+    availableRef.current = available;
+    keyboardRef.current = hasKeyboard;
+    readRef.current = read;
+  });
 
   useEffect(() => {
     if (countedRef.current === pathname) return;
@@ -70,6 +87,40 @@ export function ShortcutTip({
       }),
     );
   }, [pathname, hasKeyboard, available, update]);
+
+  /*
+   * The other way a tip arrives: somebody just did by hand a thing that has a
+   * key. See `lib/shortcut-teach.ts`.
+   *
+   * The same `chooseTip` decides, so every rule still holds — this only names
+   * which shortcut goes to the front of the queue. A `prefer` the person has
+   * already learned returns null, so a click on a button whose key they know
+   * is met with silence rather than a tip about something else.
+   */
+  useEffect(() => {
+    function onTaught(e: Event) {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id !== "string") return;
+      setCandidate((current) =>
+        /*
+         * Never interrupts a tip already on its way up. Two cards fighting
+         * over the same corner is worse than missing one, and the one already
+         * queued was chosen for a reason too.
+         */
+        current ??
+        chooseTip({
+          pathname: pathnameRef.current,
+          state: readRef.current(),
+          now: Date.now(),
+          available: availableRef.current,
+          hasKeyboard: keyboardRef.current,
+          prefer: id,
+        }),
+      );
+    }
+    window.addEventListener(TEACH_EVENT, onTaught);
+    return () => window.removeEventListener(TEACH_EVENT, onTaught);
+  }, []);
 
   if (!candidate) return null;
 

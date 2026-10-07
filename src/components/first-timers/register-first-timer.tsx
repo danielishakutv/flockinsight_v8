@@ -23,6 +23,7 @@ import {
   type MemberOption,
 } from "@/components/first-timers/first-timer-fields";
 import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
+import { teach } from "@/lib/shortcut-teach";
 
 /**
  * "Register a first-timer", wherever it is needed.
@@ -59,6 +60,16 @@ export function RegisterFirstTimer({
     setOpen(true);
   });
 
+  /*
+   * Opening it with the button is the moment to mention `n v`. Reported only
+   * when the dialog OPENS — reporting on close would teach a key to somebody
+   * who has just cancelled.
+   */
+  function onOpenChange(next: boolean) {
+    if (next) teach("new-first-timer");
+    setOpen(next);
+  }
+
   function set(patch: Partial<FirstTimerFormState>) {
     setForm((f) => ({ ...f, ...patch }));
   }
@@ -92,7 +103,7 @@ export function RegisterFirstTimer({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button variant={variant} size="sm">
           <UserPlus className="size-4" />

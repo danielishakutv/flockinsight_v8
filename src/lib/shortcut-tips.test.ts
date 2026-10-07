@@ -211,6 +211,81 @@ describe("which tip, and when", () => {
   });
 });
 
+describe("when they have just done it by hand", () => {
+  /*
+   * The strongest teaching moment in the app: somebody clicked "Add member"
+   * instead of pressing `n m`. See `prefer` in TipContext.
+   */
+
+  it("teaches the key for the thing they just clicked", () => {
+    const tip = chooseTip(ctx({ prefer: "new-member" }));
+    expect(tip?.id).toBe("new-member");
+  });
+
+  it("outranks the palette, which would otherwise come first", () => {
+    // Teaching the general thing at the moment the specific thing happened is
+    // how a tip becomes wallpaper.
+    expect(chooseTip(ctx())?.id).toBe("palette");
+    expect(chooseTip(ctx({ prefer: "new-first-timer" }))?.id).toBe(
+      "new-first-timer",
+    );
+  });
+
+  it("outranks the page they are standing on", () => {
+    const tip = chooseTip(ctx({ pathname: "/members", prefer: "new-member" }));
+    expect(tip?.id).toBe("new-member");
+  });
+
+  it("says nothing at all when they already know that one", () => {
+    /*
+     * Rather than substituting an unrelated tip onto the back of their click.
+     * A card about bookings appearing because they added a member would be
+     * the feature talking to itself.
+     */
+    const state = settled({ learned: ["new-member"] });
+    expect(chooseTip(ctx({ state, prefer: "new-member" }))).toBeNull();
+  });
+
+  it("says nothing when the named shortcut is not theirs to use", () => {
+    const usherOnly = ALL.filter((s) => !s.perm || s.perm === "attendance.manage");
+    expect(
+      chooseTip(ctx({ available: usherOnly, prefer: "new-member" })),
+    ).toBeNull();
+  });
+
+  it("says nothing for an id that no longer exists", () => {
+    // A call site left behind by a renamed shortcut goes quiet, not wrong.
+    expect(chooseTip(ctx({ prefer: "new-something-removed" }))).toBeNull();
+  });
+
+  it("still obeys every rule that means silence", () => {
+    const now = 1_700_000_000_000;
+    for (const [why, patch] of [
+      ["no keyboard", { hasKeyboard: false }],
+      ["tips off", { state: settled({ off: true }) }],
+      ["brand new user", { state: { ...EMPTY_TIP_STATE, visits: 1 } }],
+      ["six already shown", { state: settled({ shown: ALL.slice(0, MAX_TIPS).map((s) => s.id) }) }],
+      ["one shown an hour ago", { state: settled({ lastShownAt: now - 3600_000 }) }],
+    ] as const) {
+      expect(
+        chooseTip(ctx({ ...patch, now, prefer: "new-member" })),
+        `a click should not override: ${why}`,
+      ).toBeNull();
+    }
+  });
+
+  it("does not count towards being taught twice", () => {
+    // Shown once by click, it is in `shown`, so a later click is silent.
+    let state = settled();
+    const first = chooseTip(ctx({ state, prefer: "new-member" }));
+    expect(first?.id).toBe("new-member");
+    state = markShown(state, first!.id, Date.now());
+    expect(
+      chooseTip(ctx({ state, now: Date.now() + TIP_COOLDOWN_MS * 2, prefer: "new-member" })),
+    ).toBeNull();
+  });
+});
+
 describe("the page a shortcut belongs to", () => {
   it("matches exactly", () => {
     expect(samePage("/members", "/members")).toBe(true);

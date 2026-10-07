@@ -175,14 +175,18 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
         blocks: [
           {
             kind: "text",
-            text: "Once in a while a small card appears in the bottom-left corner of a computer screen suggesting one shortcut — usually for the page you have just opened the long way round. It goes away by itself after a few seconds.",
+            text: "Once in a while a small card appears in the bottom-left corner of a computer screen suggesting one shortcut. It goes away by itself after a few seconds.",
+          },
+          {
+            kind: "text",
+            text: "It picks its moment rather than its moment picking you. Usually it is the key for the page you have just opened the long way round — and sometimes it is the key for the thing you have just clicked, so pressing Add member once may be answered with “next time, press N then M”.",
           },
           {
             kind: "bullets",
             items: [
               "One at a time, and never more than two days apart.",
               "Six in total, ever. Then they stop by themselves.",
-              "Once you have actually used a shortcut, you are never shown a tip about that one again.",
+              "Once you have actually used a shortcut, you are never shown a tip about that one again. Using the key is how the app knows to stop mentioning it.",
               "They only appear on a computer. There is nothing to teach on a phone, so there is nothing to see there.",
               "“No more tips” on the card stops them for good, and Settings → General can turn them back on.",
             ],

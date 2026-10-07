@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/components/i18n-provider";
+import { teach } from "@/lib/shortcut-teach";
 
 export type MemberRow = {
   id: string;
@@ -330,6 +331,18 @@ export function MembersList({
   // /members?new=1. Same door as the button beside the search box.
   useOpenOnShortcut(openAdd);
 
+  /**
+   * The button, as opposed to the key.
+   *
+   * Opening this form by hand is the best moment in the app to mention that
+   * `n m` exists, so it says so — once, subject to every rule in
+   * `lib/shortcut-tips.ts`, and never again once the key has been used.
+   */
+  function openAddByHand() {
+    teach("new-member");
+    openAdd();
+  }
+
   function save() {
     startTransition(async () => {
       const res = await saveMember(memberFormToInput(form));
@@ -392,7 +405,7 @@ export function MembersList({
             </Button>
           )}
           {canManage && (
-            <Button onClick={openAdd} size="lg" className="flex-1 sm:flex-none">
+            <Button onClick={openAddByHand} size="lg" className="flex-1 sm:flex-none">
               <Plus className="size-5" />
               Add member
             </Button>

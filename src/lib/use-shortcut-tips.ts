@@ -37,10 +37,23 @@ import {
  */
 export function useTipState(): {
   state: TipState;
+  /** What is in storage right now, for a handler that must not use a closure. */
+  read: () => TipState;
   update: (fn: (s: TipState) => TipState) => TipState;
 } {
   const raw = useStoredValue(TIP_STORAGE_KEY);
   const state = parseTipState(raw);
+
+  const read = useCallback((): TipState => {
+    try {
+      return parseTipState(localStorage.getItem(TIP_STORAGE_KEY));
+    } catch {
+      // Private mode, or storage blocked. A fresh state means the rules see
+      // zero visits, so nothing is ever shown — which is the right answer
+      // when we cannot remember having shown it.
+      return parseTipState(null);
+    }
+  }, []);
 
   const update = useCallback((fn: (s: TipState) => TipState): TipState => {
     // Read through, not from the render's closure.
@@ -59,7 +72,7 @@ export function useTipState(): {
     return next;
   }, []);
 
-  return { state, update };
+  return { state, read, update };
 }
 
 /* ------------------------------------------------------------------ *

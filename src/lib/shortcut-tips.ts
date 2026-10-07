@@ -127,6 +127,17 @@ export type TipContext = {
   available: readonly Shortcut[];
   /** False on a touch-only device. Rule 1. */
   hasKeyboard: boolean;
+  /**
+   * The id of a shortcut they have JUST done by hand — clicked "Add member"
+   * rather than pressing `n m`.
+   *
+   * The best moment there is to teach a key, and the only signal strong enough
+   * to outrank the palette, because the person has just demonstrated exactly
+   * what the key is for. Everything else still applies: a shortcut they have
+   * used, or tips they have turned off, or a tip two hours ago, all still mean
+   * silence.
+   */
+  prefer?: string;
 };
 
 /** The shortcut to teach right now, or `null` — which is the usual answer. */
@@ -155,7 +166,25 @@ export function chooseTip(ctx: TipContext): Shortcut | null {
   if (teachable.length === 0) return null;
 
   /*
-   * The palette first, before anything about the current page.
+   * What they have just done by hand, if anything. See `prefer`.
+   *
+   * Ahead of the palette on purpose: somebody who has this second clicked
+   * "Add member" is being shown `n m`, not ⌘K. Teaching the general thing at
+   * the moment the specific thing happened is how a tip becomes wallpaper.
+   */
+  if (ctx.prefer) {
+    const asked = teachable.find((s) => s.id === ctx.prefer);
+    if (asked) return asked;
+    /*
+     * Named something they already know, or cannot use. That is an answer in
+     * itself — stay quiet rather than substituting an unrelated tip onto the
+     * back of their click.
+     */
+    return null;
+  }
+
+  /*
+   * Otherwise the palette first, before anything about the current page.
    *
    * ⌘K is the only shortcut worth knowing on its own: it reaches every module,
    * including the fifteen with no key of their own, so somebody who learns
