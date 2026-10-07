@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { mobileMenuSections } from "@/lib/nav";
+import { mobileMenuSections, navVisible } from "@/lib/nav";
 
 /**
  * A module with no way to reach it.
@@ -39,6 +39,63 @@ describe("the navigation", () => {
       const top = href.replace(/^\//, "").split("/")[0];
       expect(dirs.includes(top), `${href} has no page under app/(app)`).toBe(true);
     }
+  });
+});
+
+/**
+ * What the sidebar would actually render.
+ *
+ * The structural tests above would have caught the original bug, but only
+ * because the entry was in the wrong list. This models the real render path —
+ * the sidebar and the mobile menu both do exactly this: take
+ * `mobileMenuSections` and filter each item through `navVisible` — so a module
+ * lost to a permission typo, a pilot nobody remembers, or a feature key that
+ * does not match also fails here.
+ *
+ * Checking that a route merely BUILDS is what let three modules ship
+ * invisible. A route can build perfectly and still be unreachable.
+ */
+function whatTheSidebarShows(
+  perms: string[],
+  isOwner: boolean,
+  churchSlug: string | null,
+): string[] {
+  return mobileMenuSections
+    .map((s) => s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)))
+    .flat()
+    .map((i) => i.href);
+}
+
+describe("what an owner actually sees", () => {
+  const shown = whatTheSidebarShows([], true, "any-church");
+
+  for (const href of ["/facilities", "/first-timers", "/livestreams"]) {
+    it(`renders ${href}`, () => {
+      expect(
+        shown.includes(href),
+        `${href} does not survive the sidebar's own filter, so it is invisible ` +
+          `in the app however well the route builds.`,
+      ).toBe(true);
+    });
+  }
+
+  it("renders every module, for an owner of any church", () => {
+    for (const href of MODULES_THAT_NEED_A_LINK) {
+      expect(shown.includes(href), href).toBe(true);
+    }
+  });
+});
+
+describe("what a limited team member sees", () => {
+  it("shows Facilities to somebody with facilities.view and nothing else", () => {
+    const shown = whatTheSidebarShows(["facilities.view"], false, "any-church");
+    expect(shown).toContain("/facilities");
+  });
+
+  it("hides it from somebody without that permission", () => {
+    const shown = whatTheSidebarShows(["members.view"], false, "any-church");
+    expect(shown).not.toContain("/facilities");
+    expect(shown).toContain("/members");
   });
 });
 
