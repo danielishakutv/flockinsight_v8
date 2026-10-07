@@ -90,6 +90,7 @@ export const PLANS: Plan[] = [
       "Group contributions with receipts, two-signature checks and a record of where the money went",
       "First-timer follow-up & visitor care",
       "Short links — flockinsight.com/l/give on a poster or read from the front, and you can change where it goes afterwards without reprinting anything. With a count of how many followed it and whether they scanned or typed it",
+      "Link pages — one address that holds all the others, like flockinsight.com/hub/yourchurch. Choose a style, add your own giving pages, forms, livestream and events from a list, or any other link, and change what is on it without touching your bio again",
       "Forms with a shareable link & QR code, and answers matched to the member who sent them",
       "Devotionals & newsletters your members can subscribe to",
       "Automatic service reminders by email",

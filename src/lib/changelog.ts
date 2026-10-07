@@ -29,6 +29,29 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.70.0",
+    date: "2026-10-07",
+    summary:
+      "Instagram gives you one link. Your church has eight. A link page is one short address that holds all of them — and you add your own giving pages, forms, livestream and events from a list, instead of typing addresses.",
+    changes: {
+      Added: [
+        "Link pages. One address, flockinsight.com/hub/yourchurch, with everything on it: the giving page, this Sunday's form, the livestream, the WhatsApp group. Put it in your bio once and never edit the bio again — change what is on the page instead.",
+        "“Add one of our pages” lists everything your church already has a public link for, with a dropdown to narrow it by type and a search box beside it. Pick the name you already use and the address comes with it; you never type /give/grace-building-fund again.",
+        "Only things that are actually live are offered — no draft forms, no switched-off giving pages, no welcome link you have not turned on. A button in a bio that leads to a “not found” page is worse than no button, because nobody checks a bio link again after the day they set it.",
+        "Five styles and three layouts, chosen from two rows of buttons, with a live preview that is the real page rather than a drawing of it. There is no colour picker on purpose: your colour is already set in your church theme, so a style only decides light or dark, flat or gradient, filled buttons or plain rules. Change the theme and every link page follows.",
+        "Up and down arrows rather than dragging, which is far easier on a phone. A switch beside each link hides it from the page without losing the wording — for the things that come back, like a carol service form.",
+        "A page stays a draft until you publish it, and the address shows nothing at all until then. How many times it has been opened is shown on the page's own screen and beside it in the list.",
+      ],
+      Changed: [
+        "Links & QR codes now has three sections, with link pages at the top — it is the one most churches want, and it is the only one that can hold the other two: a link page can carry your short links, and is itself worth a printed QR code.",
+      ],
+      Security: [
+        "A link's address is checked before it is stored, and only web addresses, email addresses and phone numbers are allowed. A script address in a button would have run in the browser of everybody who opened that church's public page.",
+        "Every link page is scoped to the church that owns it on both read and write, so a page id from somewhere else is a “not found” rather than somebody else's page. A draft and an address nobody has taken give exactly the same answer, so the address of an unpublished page cannot be confirmed from outside. A suspended church's link pages go dark with it.",
+      ],
+    },
+  },
+  {
     version: "0.69.0",
     date: "2026-10-07",
     summary:

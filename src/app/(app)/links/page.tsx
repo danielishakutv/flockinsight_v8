@@ -6,11 +6,13 @@ import { hasFeatures } from "@/lib/entitlements-server";
 import { upgradeMessage } from "@/lib/entitlements";
 import { siteUrl } from "@/lib/site";
 import { churchLinkStats, listLinks } from "@/lib/links";
+import { listLinkPages } from "@/lib/link-pages";
 import { listQrCodes } from "@/lib/qr-codes";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { LinksList } from "@/components/links/links-list";
 import { QrCodeList } from "@/components/links/qr-list";
+import { LinkPagesList } from "@/components/links/link-pages-list";
 import { getT } from "@/lib/i18n/server";
 
 export const metadata = { title: "Links & QR codes" };
@@ -32,13 +34,14 @@ export default async function LinksPage() {
 
   const [canManage, features] = await Promise.all([
     can("links.manage"),
-    hasFeatures("shortLinks", "qrCodes"),
+    hasFeatures("shortLinks", "qrCodes", "linkPages"),
   ]);
 
-  const [links, codes, stats] = await Promise.all([
+  const [links, codes, stats, pages] = await Promise.all([
     listLinks(church.id),
     listQrCodes(church.id),
     churchLinkStats(church.id, 30),
+    listLinkPages(church.id),
   ]);
 
   const base = siteUrl();
@@ -84,6 +87,26 @@ export default async function LinksPage() {
       )}
 
       <div className="space-y-8">
+        {/*
+          First, because it is the one a church is most likely to want and the
+          only one that holds the other two: a link page can carry short links
+          and is itself worth a QR code.
+        */}
+        <LinkPagesList
+          pages={pages.map((p) => ({
+            id: p.id,
+            slug: p.slug,
+            title: p.title,
+            status: p.status,
+            viewCount: p.viewCount,
+            itemCount: p.itemCount,
+          }))}
+          baseUrl={base}
+          canManage={canManage}
+          locked={!features.linkPages}
+          lockedMessage={upgradeMessage("linkPages")}
+        />
+
         <QrCodeList
           codes={codes.map((c) => ({
             id: c.id,

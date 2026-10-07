@@ -5167,12 +5167,128 @@ export const qrCode = pgTable(
   ],
 );
 
+/* ============================================================
+ * FlockInsight domain — link pages
+ *
+ * One address that holds all the others: `/hub/<slug>` with the giving page,
+ * this Sunday's form, the livestream and the WhatsApp group on it. The thing a
+ * church means by "the link in our bio".
+ *
+ * Two tables rather than a JSON column of items, because the items are rows a
+ * church reorders, switches off and will eventually want a click count
+ * against. A jsonb array would make each of those a read-modify-write of the
+ * whole page, and would make "which of our pages is this button pointing at"
+ * unqueryable.
+ * ========================================================== */
+
+export const linkPage = pgTable(
+  "link_page",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * The half-name in /hub/<slug>.
+     *
+     * Globally unique, like a short link code and for the same reason: the
+     * address has no church in it, so there is one namespace and one owner per
+     * word. See `lib/link-page-shared.ts` for what makes a usable one.
+     */
+    slug: text().notNull().unique(),
+    title: text().notNull().default("Our links"),
+    /** A line under the title. Who this is and what they will find here. */
+    tagline: text(),
+    /**
+     * `draft` or `published` — see `isPubliclyVisible`.
+     *
+     * Text rather than an enum on purpose. Migration 0094 had to rename an
+     * enum type to add a value, which broke the additive-only rule the deploy
+     * script relies on; a text column with the valid values in a tested pure
+     * function adds a status without a migration at all.
+     */
+    status: text().notNull().default("draft"),
+    /** One of LINK_PAGE_STYLES. Unknown values fall back to the default. */
+    style: text().notNull().default("classic"),
+    /** One of LINK_PAGE_LAYOUTS. */
+    layout: text().notNull().default("buttons"),
+    showLogo: boolean().notNull().default(true),
+    showChurchName: boolean().notNull().default(true),
+    /** How many times the public page has been opened. */
+    viewCount: integer().notNull().default(0),
+    lastViewAt: timestamp({ withTimezone: true }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("link_page_church_idx").on(t.churchId),
+    index("link_page_status_idx").on(t.churchId, t.status),
+  ],
+);
+
+export const linkPageItem = pgTable(
+  "link_page_item",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    pageId: uuid()
+      .notNull()
+      .references(() => linkPage.id, { onDelete: "cascade" }),
+    /**
+     * Denormalised from the page.
+     *
+     * Every read is already scoped by church, and carrying it here means a
+     * tenancy check on an item never has to join through the page to find out
+     * whose it is — which is exactly the join somebody forgets.
+     */
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    label: text().notNull(),
+    /**
+     * Where it goes: an absolute http/https/mailto/tel address, or a path on
+     * this site for one of the church's own pages.
+     *
+     * Written ONLY through `cleanItemUrl`, which refuses `javascript:` and
+     * `data:`. This string becomes an href on a page anybody can open, so a
+     * script address here would be a stored XSS reached through an ordinary
+     * form field.
+     */
+    url: text().notNull(),
+    /** One of ITEM_KINDS — which of the church's pages it is, or "external". */
+    kind: text().notNull().default("external"),
+    /** An optional line under the label, shown by the "cards" layout. */
+    description: text(),
+    /** Ascending. Renumbered from zero on every move; see `reorder`. */
+    position: integer().notNull().default(0),
+    isActive: boolean().notNull().default(true),
+    clickCount: integer().notNull().default(0),
+    lastClickAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("link_page_item_page_idx").on(t.pageId, t.position),
+    index("link_page_item_church_idx").on(t.churchId),
+  ],
+);
+
 export type ShortLink = typeof shortLink.$inferSelect;
 export type NewShortLink = typeof shortLink.$inferInsert;
 export type ShortLinkDestination = typeof shortLinkDestination.$inferSelect;
 export type ShortLinkStat = typeof shortLinkStat.$inferSelect;
 export type QrCode = typeof qrCode.$inferSelect;
 export type NewQrCode = typeof qrCode.$inferInsert;
+export type LinkPage = typeof linkPage.$inferSelect;
+export type NewLinkPage = typeof linkPage.$inferInsert;
+export type LinkPageItem = typeof linkPageItem.$inferSelect;
+export type NewLinkPageItem = typeof linkPageItem.$inferInsert;
 
 /* ============================================================
  * FlockInsight domain — facilities

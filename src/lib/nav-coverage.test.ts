@@ -122,6 +122,7 @@ const MODULES_THAT_NEED_A_LINK = [
   "/meetings",
   "/media",
   "/forms",
+  "/links",
   "/devotionals",
   "/communication",
   "/reports",

@@ -84,6 +84,7 @@ export type FeatureKey =
   | "dataExport"
   | "onlineGiving"
   | "shortLinks"
+  | "linkPages"
   // --- Pro ---
   | "meetings.repeat"
   | "meetings.record"
@@ -209,6 +210,22 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     label: "Short links",
     blurb:
       "Short, memorable links for a poster or a pulpit announcement \u2014 and you can change where each one goes afterwards, without reprinting anything. With a count of how many followed it, and whether they scanned or typed it.",
+  },
+  /*
+   * Beside the shortener, and a tier up from QR codes, for the same honest
+   * reason: this is a page WE serve, on our domain, every time somebody opens
+   * the link in a church's Instagram bio. A drawing costs us nothing; a hosted
+   * public page with a support surface is not free.
+   *
+   * It is also what makes the shortener worth more than a shortener: one
+   * address that holds all the others, and whose contents can change without
+   * the bio ever being edited again.
+   */
+  linkPages: {
+    plan: "growth",
+    label: "Link pages",
+    blurb:
+      "One address for all your links — flockinsight.com/hub/yourchurch with your giving page, this Sunday's form, the livestream and your WhatsApp group on it. Pick a style, drop in your own pages from a list, and change what is on it whenever you like.",
   },
   onlineGiving: {
     plan: "growth",
