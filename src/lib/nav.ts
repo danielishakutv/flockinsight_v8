@@ -132,109 +132,20 @@ const REPORT_PERMS = [
 ];
 
 /** Full navigation (desktop sidebar). */
-export const mainNav: NavItem[] = [
-  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  {
-    labelKey: "nav.attendance",
-    href: "/attendance",
-    icon: ClipboardCheck,
-    perm: "attendance.view",
-  },
-  { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, perm: "analytics.view", feature: "analytics" },
-  { labelKey: "nav.members", href: "/members", icon: Users, perm: "members.view" },
-  { labelKey: "nav.groups", href: "/groups", icon: UsersRound, perm: "groups.view" },
-  { labelKey: "nav.celebrations", href: "/celebrations", icon: PartyPopper, perm: "members.view" },
-  {
-    labelKey: "nav.training",
-    feature: "training",
-    href: "/training",
-    icon: GraduationCap,
-    perm: "training.view",
-  },
-  { labelKey: "nav.meetings", href: "/meetings", icon: Video, perm: "meetings.view", beta: true, feature: "meetings" },
-  { labelKey: "nav.livestreams", href: "/livestreams", icon: Radio, perm: "meetings.view", feature: "livestreams" },
-  { labelKey: "nav.giving", href: "/giving", icon: HandCoins, perm: "giving.view" },
-  {
-    labelKey: "nav.contributions",
-    href: "/contributions",
-    icon: Handshake,
-    perm: "contributions.view",
-  },
-  { labelKey: "nav.finance", href: "/finance", icon: Wallet, perm: "finance.view", feature: "finance" },
-  /*
-   * First-timers sits ABOVE Follow-up and nowhere near Members, on purpose.
-   *
-   * A church put it this way: "Can we have registration of first-time
-   * worshippers on its own, not under membership, because it's really making
-   * my people confused and they are messing up the thing." Registering a
-   * visitor through the membership form meant a status dropdown that defaults
-   * to Active, and missing it filed them as a member that follow-up never saw.
-   * Its own door, in the order the work actually happens: register, then
-   * follow up.
-   */
-  {
-    labelKey: "nav.firstTimers",
-    feature: "followUp",
-    href: "/first-timers",
-    icon: UserPlus,
-    perm: "followup.view",
-  },
-  {
-    labelKey: "nav.followUp",
-    feature: "followUp",
-    href: "/follow-up",
-    icon: HeartHandshake,
-    perm: "followup.view",
-  },
-  /*
-   * Open to every church on Pro since 2026-10-07. It was piloted at one church
-   * for a day through `PILOT_ONLY`; `beta` stays because the module is new and
-   * has not yet been used at scale, which is a different claim from "you
-   * cannot have it".
-   */
-  {
-    labelKey: "nav.facilities",
-    feature: "facilities",
-    href: "/facilities",
-    icon: Building2,
-    perm: "facilities.view",
-    beta: true,
-  },
-  { labelKey: "nav.media", href: "/media", icon: FolderOpen, perm: "media.view" },
-  {
-    labelKey: "nav.studio",
-    href: "/studio",
-    icon: Wand2,
-    perm: "media.view",
-  },
-  { labelKey: "nav.forms", href: "/forms", icon: FileText, perm: "forms.view", feature: "forms" },
-  /*
-   * No `feature` key, deliberately, although the module has two.
-   *
-   * The QR half is on Starter and the shortener is on Growth, so there is no
-   * single entitlement that describes this entry. Naming the shortener's would
-   * put a "Growth" chip beside a page every church can already use in full;
-   * naming nothing shows the item to everybody, which is right, and the page
-   * itself gates its own two halves.
-   */
-  { labelKey: "nav.links", href: "/links", icon: QrCode, perm: "links.view" },
-  {
-    labelKey: "nav.devotionals",
-    feature: "devotionals",
-    href: "/devotionals",
-    icon: BookOpen,
-    perm: "devotionals.view",
-  },
-  {
-    labelKey: "nav.branches",
-    feature: "branches",
-    href: "/branches",
-    icon: Network,
-    perm: ["settings.manage", "analytics.view"],
-  },
-  { labelKey: "nav.reports", href: "/reports", icon: Database, perm: REPORT_PERMS, feature: "reports" },
-  { labelKey: "nav.settings", href: "/settings", icon: Settings, perm: SETTINGS_PERMS },
-];
+/*
+ * `mainNav` used to live here: a second, parallel list of every module, read
+ * by nothing at all.
+ *
+ * It cost three modules. Facilities, First-timers and Livestreams were each
+ * added to it and so appeared nowhere in the app — no error, no empty page,
+ * just a feature that was not there. Two of them were built, tested, deployed
+ * and verified in that state, and the feature flag took the blame.
+ *
+ * `mobileMenuSections` below is the only list. The sidebar and the mobile menu
+ * both render it. `nav-coverage.test.ts` now fails the build if a module has
+ * no way to reach it.
+ */
+
 
 /** The primary fast action — needs permission to record attendance. */
 export const recordAction: NavItem = {
@@ -339,6 +250,16 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         perm: "settings.manage",
       },
       {
+        labelKey: "nav.facilities",
+        feature: "facilities",
+        href: "/facilities",
+        icon: Building2,
+        descriptionKey: "nav.facilitiesDesc",
+        tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        perm: "facilities.view",
+        beta: true,
+      },
+      {
         labelKey: "nav.media",
         href: "/media",
         icon: FolderOpen,
@@ -427,6 +348,24 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
         perm: "meetings.view",
         beta: true,
+      },
+      {
+        labelKey: "nav.livestreams",
+        feature: "livestreams",
+        href: "/livestreams",
+        icon: Radio,
+        descriptionKey: "nav.livestreamsDesc",
+        tile: "bg-red-500/15 text-red-600 dark:text-red-400",
+        perm: "meetings.view",
+      },
+      {
+        labelKey: "nav.firstTimers",
+        feature: "followUp",
+        href: "/first-timers",
+        icon: UserPlus,
+        descriptionKey: "nav.firstTimersDesc",
+        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+        perm: "followup.view",
       },
       {
         labelKey: "nav.followUp",
