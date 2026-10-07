@@ -7,6 +7,9 @@ import {
   sectionBlocks,
 } from "@/lib/help-guides";
 import { HELP_ICONS } from "@/components/help/icons";
+import { SHORTCUTS, keysLabel } from "@/lib/shortcuts";
+import { MNEMONICS } from "@/lib/shortcut-mnemonics";
+import { en } from "@/lib/i18n/dictionaries/en";
 
 /**
  * The help guides are pure data, which means every mistake in them is silent.
@@ -146,3 +149,131 @@ describe("the contributions guide", () => {
     expect(text).toContain("handed to the church");
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * The keyboard shortcuts guide
+ * ------------------------------------------------------------------ */
+
+describe("the keyboard shortcuts guide", () => {
+  const guide = getGuide("keyboard-shortcuts");
+
+  /** Every "Press" cell in the guide's tables. */
+  const printedKeys = (() => {
+    const out: string[] = [];
+    for (const s of guide?.sections ?? []) {
+      for (const b of sectionBlocks(s)) {
+        if (b.kind !== "table") continue;
+        if (b.headers[0] !== "Press") continue;
+        for (const r of b.rows) out.push(r[0]);
+      }
+    }
+    return out;
+  })();
+
+  it("exists at the slug the app links to", () => {
+    /*
+     * The `?` sheet, the tip card and the settings panel all link to
+     * /help/keyboard-shortcuts. A renamed slug makes all three dead links,
+     * and nothing else would notice.
+     */
+    expect(guide, "the sheet, the tip and Settings all link here").toBeDefined();
+    expect(guide!.slug).toBe("keyboard-shortcuts");
+  });
+
+  it("documents every shortcut in the registry", () => {
+    // A shortcut nobody wrote down is one nobody will find.
+    for (const s of SHORTCUTS) {
+      expect(
+        printedKeys.includes(keysLabel(s.keys, false)),
+        `${s.id} ("${keysLabel(s.keys, false)}") is not in any table in the guide`,
+      ).toBe(true);
+    }
+  });
+
+  it("prints exactly the keys the app would print", () => {
+    /*
+     * The tables are generated from the registry, so this is really a test
+     * that they still are. The failure it guards against is somebody "fixing"
+     * a table by hand: the guide would then tell four hundred churches to
+     * press a key the app does not listen for, and the in-app sheet — which
+     * generates itself — would quietly disagree with it.
+     */
+    const fromRegistry = SHORTCUTS.map((s) => keysLabel(s.keys, false)).sort();
+    expect([...printedKeys].sort()).toEqual(fromRegistry);
+  });
+
+  it("writes Ctrl rather than ⌘, since a written page cannot know the machine", () => {
+    const text = JSON.stringify(guide);
+    expect(printedKeys).toContain("Ctrl K");
+    // The prose may mention ⌘ in passing; the TABLES must not.
+    expect(printedKeys.some((k) => k.includes("⌘"))).toBe(false);
+    expect(text).toContain("Mac");
+  });
+
+  it("explains the three letters that are not first letters", () => {
+    const text = JSON.stringify(guide).toLowerCase();
+    for (const word of ["bookings", "visitors", "g-r-oups"]) {
+      expect(text, `the guide should say where the letter came from: ${word}`).toContain(
+        word,
+      );
+    }
+  });
+
+  it("says the tips can be turned off, and where", () => {
+    const text = JSON.stringify(guide).toLowerCase();
+    expect(text).toContain("no more tips");
+    expect(text).toContain("settings");
+  });
+
+  it("can be found by the words somebody would actually search", () => {
+    const hay = [
+      guide!.title,
+      guide!.summary,
+      ...(guide!.keywords ?? []),
+    ]
+      .join(" ")
+      .toLowerCase();
+    for (const term of ["keyboard", "shortcut", "ctrl k", "command palette"]) {
+      expect(hay, term).toContain(term);
+    }
+  });
+});
+
+describe("the mnemonics", () => {
+  it("name real shortcuts", () => {
+    for (const id of Object.keys(MNEMONICS)) {
+      expect(
+        SHORTCUTS.some((s) => s.id === id),
+        `MNEMONICS has "${id}", which is not a shortcut`,
+      ).toBe(true);
+    }
+  });
+
+  it("explain every letter that is not the first letter of its label", () => {
+    /*
+     * The rule the sheet relies on: if the key cannot be worked out from the
+     * words on screen, it must say where it came from. Otherwise it is a thing
+     * to memorise, and nobody memorises it.
+     */
+    for (const s of SHORTCUTS) {
+      if (s.group !== "go") continue;
+      const letter = s.keys[1];
+      if (!letter) continue;
+      const label = englishLabel(s.labelKey).toLowerCase();
+      if (label.startsWith(letter)) continue;
+      expect(
+        MNEMONICS[s.id],
+        `"${s.keys.join(" ")}" → ${label}: the letter is not obvious, so the sheet must explain it`,
+      ).toBeDefined();
+    }
+  });
+});
+
+function englishLabel(key: string): string {
+  let node: unknown = en;
+  for (const part of key.split(".")) {
+    if (node === null || typeof node !== "object") return key;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return typeof node === "string" ? node : key;
+}

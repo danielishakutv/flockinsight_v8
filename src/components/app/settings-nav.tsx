@@ -37,11 +37,28 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import type { TKey } from "@/lib/i18n/translate";
 
-type Need = "settings" | "team" | "finance" | "giving";
-type Item = { labelKey: TKey; href: string; need: Need; icon: LucideIcon };
-type Group = { titleKey: TKey; items: Item[] };
+export type Need = "settings" | "team" | "finance" | "giving";
+export type SettingsItem = {
+  labelKey: TKey;
+  href: string;
+  need: Need;
+  icon: LucideIcon;
+};
+type Group = { titleKey: TKey; items: SettingsItem[] };
 
-const GROUPS: Group[] = [
+/**
+ * Exported so the ⌘K palette can offer these pages too.
+ *
+ * "Where do I change the service times?" is one of the most common things
+ * support gets asked, and the answer is four clicks deep in Settings. The
+ * palette can answer it in three keystrokes — but only by reading this list,
+ * rather than keeping a second copy of twenty-one addresses that would drift
+ * the first time one of them moved.
+ *
+ * Pure data: the icons are references, so there is no JSX here and nothing
+ * stops a server-rendered caller importing it.
+ */
+export const SETTINGS_GROUPS: Group[] = [
   {
     titleKey: "settings.sectionChurch",
     items: [
@@ -109,7 +126,7 @@ export function SettingsNav({
         : need === "giving"
           ? canGiving
           : canFinance;
-  const groups = GROUPS.map((g) => ({
+  const groups = SETTINGS_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => allow(i.need)),
   })).filter((g) => g.items.length > 0);

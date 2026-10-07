@@ -2645,6 +2645,78 @@ export const en = {
     clearSearch: "Clear search",
   },
 
+  /* ============================================================
+   * Keyboard shortcuts
+   *
+   * The labels live here and not in `lib/shortcuts.ts` for the same reason the
+   * sidebar's do not live in `lib/nav.ts`: a church reading the app in Hausa
+   * should get the cheat sheet in Hausa too.
+   *
+   * "then" is a word in a sentence ("press G then M"), so it is a key rather
+   * than a hard-coded join — in some languages it is not a word that can sit
+   * between two letters in that order.
+   * ========================================================== */
+  shortcuts: {
+    /* The four the app performs itself */
+    palette: "Search and jump anywhere",
+    searchPage: "Jump to the search box on this page",
+    sheet: "Show this list of shortcuts",
+    close: "Close whatever is open",
+
+    /* The things you can make */
+    newMember: "Add a member",
+    newFirstTimer: "Register a first-timer",
+    newAttendance: "Record attendance",
+    newGiving: "Record giving",
+    newGroup: "Create a group",
+    newBooking: "Book a facility",
+
+    /* The sheet */
+    title: "Keyboard shortcuts",
+    subtitle:
+      "Two keys, pressed one after the other. They work from anywhere in the app except while you are typing.",
+    groupFind: "Find things",
+    groupGo: "Go to",
+    groupDo: "Do",
+    groupHelp: "Help",
+    then: "then",
+    openSheet: "Keyboard shortcuts",
+
+    /* Where a letter came from, when it is not the first one */
+    mnemonicGroups: "g for go, r from groups",
+    mnemonicFirstTimers: "v for visitors",
+    mnemonicFacilities: "b for bookings",
+    mnemonicNew: "n for new",
+
+    /* The palette */
+    palettePlaceholder: "Search for a page, or something to do…",
+    paletteEmpty: "Nothing matches that.",
+    paletteHintGo: "Go to",
+    paletteHintDo: "Do",
+    paletteFooter: "to choose",
+    paletteNavigate: "to move",
+
+    /* The occasional tip */
+    tipEyebrow: "Shortcut",
+    tipLead: "Next time, press",
+    tipGotIt: "Got it",
+    tipTurnOff: "No more tips",
+    tipSeeAll: "See all shortcuts",
+    tipTurnedOff: "Tips are off. You can turn them back on in Settings.",
+    tipAriaLabel: "Keyboard shortcut tip",
+
+    /* Settings */
+    settingsTitle: "Shortcut tips",
+    settingsBlurb:
+      "Shows one keyboard shortcut at a time, at most six in total, and never again once you have used it. Shortcuts themselves keep working either way.",
+    settingsOn: "Show me the occasional tip",
+    settingsReset: "Teach them to me again",
+    settingsResetDone: "Tips reset.",
+    settingsLearned: "You have used {count} of {total} shortcuts.",
+    settingsNoKeyboard:
+      "Tips only appear on a computer with a keyboard, so you will not see them on this device.",
+  },
+
 
   links: {
     /* The maker panel — the four choices and the preview beside them. */

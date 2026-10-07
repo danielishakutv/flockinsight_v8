@@ -5,6 +5,7 @@ import { getPlanPrice } from "@/lib/pricing";
 import { planPriceLabelFor, priceForCountry } from "@/lib/plan-price";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AboutSoftware } from "@/components/settings/about-software";
+import { ShortcutTipsSettings } from "@/components/settings/shortcut-tips-settings";
 
 export const metadata = { title: "Settings" };
 
@@ -36,6 +37,8 @@ export default async function GeneralSettingsPage() {
         plan={church.plan}
         planPriceLabel={planPrice}
       />
+      {/* Per-browser, so it sits here rather than in the church profile. */}
+      <ShortcutTipsSettings />
       <AboutSoftware churchName={church.name} />
     </div>
   );

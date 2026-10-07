@@ -29,6 +29,37 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.69.0",
+    date: "2026-10-07",
+    summary:
+      "First-time worshippers get their own form, instead of the membership one. The halls, rooms and the bus are on one calendar that refuses a double booking. And on a computer, you can reach any page or start any of the common jobs without the mouse — press ? to see how.",
+    changes: {
+      Added: [
+        "First-timers has its own page and its own form. Registering a visitor through Members → Add and missing the status dropdown filed them as a full member, which meant follow-up never saw them and the welcome messages never went out. The new form cannot make that mistake: everything through it is a visitor, in follow-up, and still on the members register.",
+        "A public welcome link and QR code for your church, off by default, that a first-timer can fill in themselves. It cannot change anybody's status and it cannot overwrite a thing — somebody who is already on the register is simply flagged for follow-up.",
+        "Facilities: the halls, rooms, grounds, the bus and the canopies, on one calendar. Requests, approvals, hire fees and outside hirers, plus closures for repainting and repairs that carry what the work cost. Nothing can be booked over something already approved, and a hall that needs an hour to clear away is not offered an hour too soon. Pro plan.",
+        "Keyboard shortcuts, on a computer. Ctrl K (⌘K on a Mac) opens a search box that reaches every page and all twenty-one setting pages. G then M goes to Members, G then A to Attendance, and so on; N then M opens the Add member form from anywhere, N then V registers a first-timer. Press ? for the list of the ones your role can use.",
+        "The search box in the top bar is the same thing as Ctrl K, so nobody has to know the shortcut to use it.",
+        "Shortcut tips: once in a while, on a computer, a small card suggests one shortcut — usually for the page you have just opened the long way round. Six in total, ever, two days apart, and never again for one you have actually used. Settings → General turns them off, or back on.",
+      ],
+      Fixed: [
+        "Every money figure in every PDF the platform makes read “¦3,659,040.00” instead of “₦3,659,040.00”, and had done for months. The built-in PDF fonts have no Naira sign at all; the reports now carry a font that does.",
+        "The data report printed the names of database columns and a page of query notes where the figures should have been. It now prints the figures — giving by category, attendance by service, the month-by-month series — in plain words.",
+        "Facilities, First-timers and Livestreams were each added to a menu list that nothing rendered, so they appeared nowhere in the app however well they worked. All three are now in the one list the sidebar and the mobile menu both read, that list is the only one, and the build now fails if a module has no way to reach it. Livestreams had been unreachable from the menu for far longer than the other two.",
+      ],
+      Changed: [
+        "The roadmap is a task list with two states — to do, and shipped — instead of a five-column board. The four retired names are still read as “to do”, so nothing that pointed at them broke.",
+        "The Members form still defaults to a full member, deliberately, since a church adding real members there is right to get it. It now carries a line pointing at First-timers for anyone who is not one yet.",
+      ],
+      Security: [
+        "The public welcome form could fill in the blank fields of an existing member if you knew their phone number. Matching is on a phone number and an email address, neither of which is a secret, so the public form now does exactly one thing to somebody it recognises: flags them for follow-up. A signed-in member of staff may still fill a blank, and still cannot overwrite a value.",
+        "Whoever books a hall no longer decides what the hall costs. The fee is worked out on the server, and a figure sent from the browser is honoured only from somebody who can manage facilities.",
+        "“Who invited them” and “guardian” both point at a member by id, with nothing to say which church that member belongs to. One church's member name could be printed on another church's page and in its CSV export. Every write now checks the church, and both reads are scoped to it.",
+        "A signed-in session can no longer write to the roadmap feed. A cookie rides along on a request from another site, so that was a way to add or tick off items from anywhere; writes now need the key in a header, and the right content type.",
+      ],
+    },
+  },
+  {
     version: "0.68.1",
     date: "2026-10-05",
     summary:

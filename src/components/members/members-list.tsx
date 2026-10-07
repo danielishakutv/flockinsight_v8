@@ -45,6 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 import {
   Dialog,
   DialogContent,
@@ -325,6 +326,10 @@ export function MembersList({
     setOpen(true);
   }
 
+  // `n m` from anywhere, and the palette's "Add a member", both arrive as
+  // /members?new=1. Same door as the button beside the search box.
+  useOpenOnShortcut(openAdd);
+
   function save() {
     startTransition(async () => {
       const res = await saveMember(memberFormToInput(form));
@@ -361,6 +366,7 @@ export function MembersList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            data-page-search
             placeholder={t("members.searchByNamePhoneOr")}
             className="pl-9"
           />

@@ -176,6 +176,7 @@ export function GivingFilters({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            data-page-search
             placeholder={t("giving.searchGiverNoteAmount")}
             className="pl-9"
             aria-label={t("giving.searchGivingRecords")}

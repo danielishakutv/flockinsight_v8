@@ -11,6 +11,7 @@
  */
 import { readingMinutes, type Guide } from "./help/types";
 import { START_GUIDES } from "./help/start";
+import { SHORTCUT_GUIDES } from "./help/shortcuts";
 import { PEOPLE_GUIDES } from "./help/people";
 import { TRAINING_GUIDES } from "./help/training";
 import { MEETING_GUIDES } from "./help/meetings";
@@ -47,6 +48,7 @@ export const GUIDE_CATEGORIES: { key: string; title: string }[] = [
 
 const ALL: Omit<Guide, "minutes">[] = [
   ...START_GUIDES,
+  ...SHORTCUT_GUIDES,
   ...PEOPLE_GUIDES,
   ...TRAINING_GUIDES,
   ...MEETING_GUIDES,

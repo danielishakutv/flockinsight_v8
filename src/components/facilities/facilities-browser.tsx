@@ -40,6 +40,7 @@ import {
 } from "@/components/facilities/book-dialog";
 import { FacilityEditor } from "@/components/facilities/facility-editor";
 import { CloseFacilityDialog } from "@/components/facilities/close-facility-dialog";
+import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 
 export type FacilityCard = BookableFacility & {
   kind: string;
@@ -111,6 +112,18 @@ export function FacilitiesBrowser({
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<"calendar" | "places" | "bookings">("calendar");
   const [booking, setBooking] = useState<{ day?: string; facilityId?: string } | null>(null);
+
+  /*
+   * `n b` from anywhere, and the palette's "Book a facility".
+   *
+   * An empty object rather than a day or a facility: arriving by shortcut
+   * means nothing has been picked yet, which is exactly the state the form
+   * starts in when the Book button is pressed with no cell selected.
+   */
+  useOpenOnShortcut(() => {
+    setTab("calendar");
+    setBooking({});
+  });
   const [editing, setEditing] = useState<FacilityCard | null | "new">(null);
   const [closing, setClosing] = useState<FacilityCard | null>(null);
   const [declining, setDeclining] = useState<BookingRow | null>(null);

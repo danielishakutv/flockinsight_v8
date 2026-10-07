@@ -107,7 +107,8 @@ export function ActivityLog({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("settings.searchWhatHappenedOrWho")}
+              data-page-search
+            placeholder={t("settings.searchWhatHappenedOrWho")}
               className="pl-9"
               aria-label={t("settings.searchTheActivityLog")}
             />

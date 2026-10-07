@@ -83,7 +83,8 @@ export function HelpBrowser({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={t("help.searchGuidesEGSms")}
+          data-page-search
+            placeholder={t("help.searchGuidesEGSms")}
           className="bg-background h-12 w-full rounded-xl border pl-11 pr-4 text-base shadow-sm outline-none focus:ring-2 focus:ring-primary"
         />
       </div>

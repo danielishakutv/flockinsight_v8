@@ -27,6 +27,7 @@ import {
   BadgeCheck,
   Database,
   GraduationCap,
+  Keyboard,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +63,7 @@ export const HELP_ICONS: Record<string, LucideIcon> = {
   reports: Database,
   training: GraduationCap,
   meetings: Video,
+  shortcuts: Keyboard,
   default: BookOpen,
 };
 

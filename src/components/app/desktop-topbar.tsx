@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { DateTime } from "@/components/app/date-time";
+import { PaletteHint } from "@/components/app/palette-hint";
 import { LanguageMenu } from "@/components/app/language-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { LiveNotificationBell } from "@/components/notifications/live-notification-bell";
 import { Button } from "@/components/ui/button";
 
-/** Desktop-only top bar: live date/time on the left, bell + theme + the
- *  primary "Record attendance" action on the right. */
+/** Desktop-only top bar: live date/time and the search box on the left, bell +
+ *  theme + the primary "Record attendance" action on the right. */
 export function DesktopTopbar({
   unread = 0,
   canRecord = false,
@@ -17,7 +18,11 @@ export function DesktopTopbar({
 }) {
   return (
     <header className="bg-background/80 sticky top-[env(safe-area-inset-top)] z-30 hidden h-16 items-center justify-between gap-4 border-b px-6 backdrop-blur lg:flex">
-      <DateTime />
+      <div className="flex min-w-0 items-center gap-4">
+        <DateTime />
+        {/* The one place anybody discovers the shortcuts exist. */}
+        <PaletteHint />
+      </div>
       <div className="flex items-center gap-1.5">
         <LiveNotificationBell initial={unread} />
         <LanguageMenu />

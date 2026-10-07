@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/components/i18n-provider";
+import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 
 export type GroupRow = {
   id: string;
@@ -57,6 +58,9 @@ export function GroupsList({
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<GroupType | "all">("all");
   const [addOpen, setAddOpen] = useState(false);
+
+  // `n r` from anywhere, and the palette's "Create a group".
+  useOpenOnShortcut(() => setAddOpen(true));
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const presentTypes = useMemo(() => {
@@ -97,6 +101,7 @@ export function GroupsList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            data-page-search
             placeholder={t("groups.searchGroupsMinistriesOrLeaders")}
             className="pl-9"
           />

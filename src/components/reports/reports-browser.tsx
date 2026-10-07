@@ -215,6 +215,7 @@ export function ReportsBrowser({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            data-page-search
             placeholder={t("reports.searchReports")}
             className="pl-9"
           />

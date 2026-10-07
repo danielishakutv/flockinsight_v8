@@ -78,7 +78,8 @@ export function FirstTimersList({ rows }: { rows: FirstTimerRow[] }) {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, phone or who invited them"
+          data-page-search
+            placeholder="Search by name, phone or who invited them"
           className="pl-9"
         />
       </div>

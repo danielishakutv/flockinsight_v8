@@ -123,6 +123,7 @@ export function FinanceFilters({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            data-page-search
             placeholder={t("finance.searchPayeeReferenceNoteOr")}
             className="pl-9"
             aria-label={t("finance.searchFinanceRecords")}

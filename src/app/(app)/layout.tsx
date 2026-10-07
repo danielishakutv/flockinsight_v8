@@ -24,6 +24,7 @@ import { OfflineIndicator } from "@/components/pwa/offline-indicator";
 import { UploadProvider } from "@/components/media/upload-provider";
 import { RecordingUploader } from "@/components/meetings/recording-uploader";
 import { WhatsNewBanner } from "@/components/app/whats-new-banner";
+import { ShortcutsProvider } from "@/components/app/shortcuts-provider";
 import { PageTracker } from "@/components/analytics/page-tracker";
 import { TranslationPrompt } from "@/components/app/translation-prompt";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
@@ -167,6 +168,17 @@ export default async function AppLayout({
           churchSlug={church.slug}
         />
       </div>
+      {/*
+        Keyboard shortcuts: the global key handler, the ⌘K palette, the `?`
+        cheat sheet and the occasional tip. In the shell rather than on a page
+        because "go to Members" has to work from wherever you are.
+      */}
+      <ShortcutsProvider
+        perms={perms}
+        isOwner={access.isOwner}
+        churchSlug={church.slug}
+        plan={church.plan}
+      />
       <Toaster />
       <SplashScreen />
       <InstallPrompt />

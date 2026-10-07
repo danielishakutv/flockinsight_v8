@@ -92,6 +92,7 @@ export function HistoryFilters({
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
+            data-page-search
             placeholder={t("communication.searchMessageSubjectOrAudience")}
             className="pl-9"
           />

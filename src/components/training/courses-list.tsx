@@ -106,6 +106,7 @@ export function CoursesList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            data-page-search
             placeholder={t("training.searchCourses")}
             className="pl-9"
           />

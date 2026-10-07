@@ -58,6 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/components/i18n-provider";
+import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 
 export type GivingMethod =
   | "cash"
@@ -203,6 +204,9 @@ export function GivingClient({
       router.push(`/giving${qs ? `?${qs}` : ""}`);
     });
   }
+
+  // `n g` from anywhere, and the palette's "Record giving".
+  useOpenOnShortcut(() => openAdd());
 
   function openAdd() {
     setForm(emptyForm());

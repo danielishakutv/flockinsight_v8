@@ -22,6 +22,7 @@ import {
   type FirstTimerFormState,
   type MemberOption,
 } from "@/components/first-timers/first-timer-fields";
+import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 
 /**
  * "Register a first-timer", wherever it is needed.
@@ -43,6 +44,20 @@ export function RegisterFirstTimer({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FirstTimerFormState>(emptyFirstTimer());
+
+  /*
+   * `n v` from anywhere, and the palette's "Register a first-timer".
+   *
+   * This component renders in two places — the First-timers page and inside
+   * Follow-up — and the shortcut sends you to /first-timers, so only the one
+   * on that page ever sees the parameter. The other reads nothing and does
+   * nothing, which is why this can live in the shared component rather than
+   * being threaded down as a prop from two different pages.
+   */
+  useOpenOnShortcut(() => {
+    setForm(emptyFirstTimer());
+    setOpen(true);
+  });
 
   function set(patch: Partial<FirstTimerFormState>) {
     setForm((f) => ({ ...f, ...patch }));
