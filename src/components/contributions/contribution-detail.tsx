@@ -23,6 +23,7 @@ import {
   Trash2,
   Undo2,
   Users,
+  UserX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,6 +36,8 @@ import {
   removeContributor,
   reopenEntry,
   setContributionStatus,
+  setContributorAnonymous,
+  setPotHideNames,
   voteOnEntry,
   voteOnPayout,
   withdrawVote,
@@ -44,6 +47,7 @@ import type {
   ContributorRow,
   EntryRow,
   PayoutRow,
+  PublicContribution,
 } from "@/lib/contributions";
 import {
   contributionUrl,
@@ -60,6 +64,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -111,6 +116,7 @@ export function ContributionDetail({
   staff,
   canManageManagers,
   currentUserId,
+  publicView,
 }: {
   pot: Detail;
   currency: string;
@@ -125,6 +131,15 @@ export function ContributionDetail({
   /** Owner or administrator — the only people who may change who runs it. */
   canManageManagers: boolean;
   currentUserId: string;
+  /**
+   * Exactly what the public link shows, read on the server.
+   *
+   * The share tab composes its message from this and never from `pot`, so the
+   * message cannot name somebody the page hides. Null for a draft or a
+   * collection whose link is turned off — both of which the share tab already
+   * answers with a different card.
+   */
+  publicView: PublicContribution | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -406,6 +421,7 @@ export function ContributionDetail({
       {tab === "share" && (
         <SharePanel
           pot={pot}
+          publicView={publicView}
           currency={currency}
           today={today}
           url={publicUrl}
@@ -531,6 +547,7 @@ function toFormValues(pot: Detail): PotFormValues {
     showOutstanding: pot.showOutstanding,
     showPayouts: pot.showPayouts,
     showNotes: pot.showNotes,
+    hideNames: pot.hideNames,
     allowSelfReport: pot.allowSelfReport,
     askForProof: pot.askForProof,
     confirmationsRequired: pot.confirmationsRequired,
@@ -1193,6 +1210,58 @@ function PeoplePanel({
         )}
       </div>
 
+      {/*
+        Names on the public page, where the names are.
+
+        The same switch is in the settings dialog, and both write the same
+        column. It is repeated here because the moment somebody asks for the
+        list to come down is the moment a leader is looking at the list, and
+        sending them to a dialog to find it is how a request gets forgotten.
+      */}
+      {canManage && pot.visibility === "detailed" && (
+        <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3 sm:p-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <UserX
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {t("contributions.hideNames")}
+              </p>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {pot.hideNames
+                  ? t("contributions.hideNamesOnNote")
+                  : t("contributions.hideNamesOffNote", {
+                      count: pot.contributors.filter((c) => c.isAnonymous).length,
+                    })}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={pot.hideNames}
+            disabled={pending}
+            aria-label={t("contributions.hideNames")}
+            onCheckedChange={(next) =>
+              start(async () => {
+                const res = await setPotHideNames({
+                  contributionId: pot.id,
+                  hideNames: next,
+                });
+                if (res.ok) {
+                  toast.success(
+                    next
+                      ? t("contributions.namesNowHidden")
+                      : t("contributions.namesNowShown"),
+                  );
+                  router.refresh();
+                } else toast.error(res.error);
+              })
+            }
+          />
+        </div>
+      )}
+
       {unlinked > 0 && canManage && (
         <p className="text-muted-foreground text-sm">
           {t("contributions.notOnRegisterYet", { count: unlinked })}{" "}
@@ -1306,6 +1375,45 @@ function PeoplePanel({
                                 <Pencil className="size-4" aria-hidden />{" "}
                                 {t("common.edit")}
                               </DropdownMenuItem>
+                              {/*
+                                One tap, because this is asked for in the
+                                thirty seconds after a service and not at a
+                                desk. Hidden from the menu when the whole pot
+                                is already anonymous: the switch above wins,
+                                and offering a per-person choice that changes
+                                nothing visible is a control that lies.
+                              */}
+                              {!pot.hideNames && (
+                                <DropdownMenuItem
+                                  disabled={pending}
+                                  onClick={() =>
+                                    start(async () => {
+                                      const res = await setContributorAnonymous({
+                                        contributionId: pot.id,
+                                        contributorId: c.id,
+                                        anonymous: !c.isAnonymous,
+                                      });
+                                      if (res.ok) {
+                                        toast.success(
+                                          c.isAnonymous
+                                            ? t("contributions.nameShownAgain", {
+                                                name: c.name,
+                                              })
+                                            : t("contributions.nameNowHidden", {
+                                                name: c.name,
+                                              }),
+                                        );
+                                        router.refresh();
+                                      } else toast.error(res.error);
+                                    })
+                                  }
+                                >
+                                  <UserX className="size-4" aria-hidden />{" "}
+                                  {c.isAnonymous
+                                    ? t("contributions.showThisName")
+                                    : t("contributions.hideThisName")}
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 variant="destructive"
                                 disabled={pending}

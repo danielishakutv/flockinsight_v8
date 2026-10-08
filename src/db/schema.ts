@@ -4643,6 +4643,19 @@ export const contribution = pgTable(
     showPayouts: boolean().notNull().default(true),
     /** Show the one-line notes people leave with a gift. */
     showNotes: boolean().notNull().default(true),
+    /**
+     * Publish the amounts, but not a single name.
+     *
+     * Separate from `summary` visibility, which hides the whole list. This one
+     * keeps the list — every payment, every figure, in order — and replaces the
+     * names with "Anonymous". A bereavement collection, a levy inside a small
+     * department, a staff gift: the arithmetic still has to be checkable by
+     * everyone, and who gave what does not.
+     *
+     * It overrides the per-contributor flag rather than merging with it, so a
+     * leader who turns it on cannot leave one person named by accident.
+     */
+    hideNames: boolean().notNull().default(false),
     /** Let anyone with the link record their own payment, pending confirmation. */
     allowSelfReport: boolean().notNull().default(true),
     /** Ask self-reporters for a receipt. Never blocks them if they have none. */

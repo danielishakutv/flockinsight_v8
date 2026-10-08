@@ -18,9 +18,12 @@ import {
 } from "@/db/schema";
 import { randomSuffix, slugify } from "@/lib/slug";
 import {
+  ANONYMOUS_LABEL,
   effectiveTarget,
+  everyNameHidden,
   expectedFor,
   potTotals,
+  publicNames,
   summarisePerson,
   type ApprovalDecision,
   type ContributionKind,
@@ -597,6 +600,8 @@ export type ContributionDetail = {
   showOutstanding: boolean;
   showPayouts: boolean;
   showNotes: boolean;
+  /** Every name on the public page replaced by "Anonymous". */
+  hideNames: boolean;
   allowSelfReport: boolean;
   askForProof: boolean;
   confirmationsRequired: number;
@@ -876,6 +881,7 @@ export async function getContribution(
     showOutstanding: p.showOutstanding,
     showPayouts: p.showPayouts,
     showNotes: p.showNotes,
+    hideNames: p.hideNames,
     allowSelfReport: p.allowSelfReport,
     askForProof: p.askForProof,
     confirmationsRequired: p.confirmationsRequired,
@@ -918,6 +924,16 @@ export type PublicLedgerRow = {
   id: string;
   /** "Anonymous" when the contributor asked for it. Never the real name. */
   name: string;
+  /**
+   * This name is hidden.
+   *
+   * Carried as a flag rather than left for a screen to spot by comparing the
+   * name to the word "Anonymous" — which is what it used to do, and which was
+   * wrong twice over: a contributor actually called Anonymous was styled as
+   * hidden, and the moment the label is translated or numbered the comparison
+   * stops matching at all.
+   */
+  anonymous: boolean;
   amount: number | null;
   paidOn: string;
   status: EntryStatus;
@@ -959,6 +975,14 @@ export type PublicContribution = {
   showNotes: boolean;
   showPayouts: boolean;
   showOutstanding: boolean;
+  /** The pot's "hide every name" setting, for the wording on the page. */
+  hideNames: boolean;
+  /**
+   * Nobody on this page is named — either the setting is on, or every single
+   * person asked for it. "Find my name" cannot work in that case, so the page
+   * has to say so instead of searching an anonymous list and finding nothing.
+   */
+  allNamesHidden: boolean;
   perPersonAmount: number | null;
   target: number | null;
   raised: number;
@@ -973,7 +997,7 @@ export type PublicContribution = {
   /** Only present at `detailed` visibility. */
   ledger: PublicLedgerRow[];
   /** Only present when `showOutstanding`. Names, no amounts beyond what is due. */
-  stillToGive: { name: string; outstanding: number }[];
+  stillToGive: { name: string; outstanding: number; anonymous: boolean }[];
   payouts: PublicPayoutRow[];
   updatedAt: string;
 };
@@ -1067,7 +1091,15 @@ export async function getPublicContribution(
     paidOut = Number(out?.total ?? 0);
   }
 
-  // The roster, needed for the goal and for "who is still to give".
+  /*
+   * The roster, needed for the goal, for "who is still to give", and for the
+   * public names.
+   *
+   * Ordered, and the order matters: `publicNames` numbers hidden people by
+   * their place in this list, so an unordered read would hand the same person
+   * a different number on every page load and make the message disagree with
+   * the page it links to.
+   */
   const roster = await db
     .select({
       id: contributionContributor.id,
@@ -1076,7 +1108,12 @@ export async function getPublicContribution(
       expectedAmount: contributionContributor.expectedAmount,
     })
     .from(contributionContributor)
-    .where(eq(contributionContributor.contributionId, p.id));
+    .where(eq(contributionContributor.contributionId, p.id))
+    .orderBy(asc(contributionContributor.createdAt), asc(contributionContributor.id));
+
+  // One rule for every name the public sees, shared with the WhatsApp message.
+  const names = publicNames({ roster, hideNames: p.hideNames });
+  const allNamesHidden = everyNameHidden({ hideNames: p.hideNames, roster });
 
   const expectedTotal = roster.reduce(
     (a, c) => a + (expectedFor(c.expectedAmount, p.perPersonAmount) ?? 0),
@@ -1084,15 +1121,15 @@ export async function getPublicContribution(
   );
 
   let ledger: PublicLedgerRow[] = [];
-  let stillToGive: { name: string; outstanding: number }[] = [];
+  let stillToGive: PublicContribution["stillToGive"] = [];
 
   if (detailed || p.showOutstanding) {
     const rows = await db
       .select({
         row: contributionEntry,
+        // The name itself is not read here: it comes from the roster's
+        // `publicNames` map, which is the only thing allowed to decide it.
         contributorId: contributionContributor.id,
-        contributorName: contributionContributor.name,
-        isAnonymous: contributionContributor.isAnonymous,
       })
       .from(contributionEntry)
       .innerJoin(
@@ -1110,7 +1147,13 @@ export async function getPublicContribution(
         .filter((r) => r.row.status !== "rejected")
         .map((r) => ({
           id: r.row.id,
-          name: r.isAnonymous ? "Anonymous" : r.contributorName,
+          /*
+           * Falls back to hidden, not to the typed name. A contributor whose
+           * row is missing from the map is a bug, and the safe answer to a bug
+           * on a public page is the one that publishes less.
+           */
+          name: names.get(r.contributorId)?.name ?? ANONYMOUS_LABEL,
+          anonymous: names.get(r.contributorId)?.anonymous ?? true,
           amount: r.row.amount,
           paidOn: r.row.paidOn,
           status: r.row.status as EntryStatus,
@@ -1134,7 +1177,8 @@ export async function getPublicContribution(
           const expected = expectedFor(c.expectedAmount, p.perPersonAmount);
           const paid = paidByContributor.get(c.id) ?? 0;
           return {
-            name: c.isAnonymous ? "Anonymous" : c.name,
+            name: names.get(c.id)?.name ?? ANONYMOUS_LABEL,
+            anonymous: names.get(c.id)?.anonymous ?? true,
             outstanding: expected === null ? 0 : Math.max(0, expected - paid),
           };
         })
@@ -1164,6 +1208,8 @@ export async function getPublicContribution(
     showNotes: p.showNotes,
     showPayouts: p.showPayouts,
     showOutstanding: p.showOutstanding,
+    hideNames: p.hideNames,
+    allNamesHidden,
     perPersonAmount: p.perPersonAmount,
     target: effectiveTarget({
       targetAmount: p.targetAmount,

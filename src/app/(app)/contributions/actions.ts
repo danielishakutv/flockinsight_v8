@@ -147,6 +147,7 @@ const potSchema = z.object({
   showOutstanding: z.boolean(),
   showPayouts: z.boolean(),
   showNotes: z.boolean(),
+  hideNames: z.boolean(),
   allowSelfReport: z.boolean(),
   askForProof: z.boolean(),
   confirmationsRequired: z.coerce.number().int().min(1).max(5),
@@ -213,6 +214,7 @@ export async function saveContribution(
       showOutstanding: d.showOutstanding,
       showPayouts: d.showPayouts,
       showNotes: d.showNotes,
+      hideNames: d.hideNames,
       allowSelfReport: d.allowSelfReport,
       askForProof: d.askForProof,
       confirmationsRequired: d.confirmationsRequired,
@@ -284,6 +286,7 @@ export async function saveContribution(
       showOutstanding: d.showOutstanding,
       showPayouts: d.showPayouts,
       showNotes: d.showNotes,
+      hideNames: d.hideNames,
       allowSelfReport: d.allowSelfReport,
       askForProof: d.askForProof,
       confirmationsRequired: d.confirmationsRequired,
@@ -861,6 +864,117 @@ export async function saveContributor(
   refresh(pot.id);
   refreshPublic(pot.slug);
   return ok({ id: created.id });
+}
+
+/**
+ * Hide or show one person's name on the public page.
+ *
+ * A separate action from `saveContributor` on purpose. Hiding a name is the one
+ * thing on this screen somebody does in a hurry — a woman leans over after
+ * service and asks for her name to come off the list — and routing it through
+ * the full edit form means opening a dialog, finding a switch among six fields
+ * and pressing Save. One tap, and the public page is revalidated in the same
+ * breath, so she can refresh the link and see that it worked.
+ *
+ * It is recorded in the audit trail either way. Taking somebody's name off a
+ * money list is exactly the kind of change that gets questioned later, and the
+ * answer should not depend on anybody's memory.
+ */
+export async function setContributorAnonymous(opts: {
+  contributionId: string;
+  contributorId: string;
+  anonymous: boolean;
+}): Promise<ActionResult> {
+  const guard = await guardPot(opts.contributionId);
+  if (!guard) return fail("You can't change this collection.");
+  const pot = await loadPot(guard.church.id, opts.contributionId);
+  if (!pot) return fail("That collection no longer exists.");
+
+  /*
+   * Scoped to the pot the caller was authorised for, not just to the id in the
+   * request. Without the second condition a manager of one collection could
+   * anonymise a name on any other collection in any church, because a uuid in
+   * a payload is not a permission.
+   */
+  const [person] = await db
+    .select({
+      id: contributionContributor.id,
+      name: contributionContributor.name,
+      isAnonymous: contributionContributor.isAnonymous,
+    })
+    .from(contributionContributor)
+    .where(
+      and(
+        eq(contributionContributor.id, opts.contributorId),
+        eq(contributionContributor.contributionId, opts.contributionId),
+      ),
+    )
+    .limit(1);
+  if (!person) return fail("That person isn't on this list.");
+
+  if (person.isAnonymous === opts.anonymous) return ok({ id: person.id });
+
+  await db
+    .update(contributionContributor)
+    .set({ isAnonymous: opts.anonymous })
+    .where(eq(contributionContributor.id, person.id));
+
+  await audit({
+    churchId: guard.church.id,
+    action: "contributions.person.anonymity",
+    summary: opts.anonymous
+      ? `Hid ${person.name}'s name on the public page for "${pot.title}"`
+      : `Showed ${person.name}'s name again on the public page for "${pot.title}"`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { contributorId: person.id, anonymous: opts.anonymous },
+  });
+
+  refresh(pot.id);
+  refreshPublic(pot.slug);
+  return ok({ id: person.id });
+}
+
+/**
+ * Hide, or stop hiding, every name at once.
+ *
+ * The pot-level switch lives in the settings dialog as well, but a leader whose
+ * list has just gone public and who has been asked to take the names down
+ * should not have to find it there. This is the same column, from the People
+ * tab, so the two cannot disagree.
+ */
+export async function setPotHideNames(opts: {
+  contributionId: string;
+  hideNames: boolean;
+}): Promise<ActionResult> {
+  const guard = await guardPot(opts.contributionId);
+  if (!guard) return fail("You can't change this collection.");
+  const pot = await loadPot(guard.church.id, opts.contributionId);
+  if (!pot) return fail("That collection no longer exists.");
+
+  if (pot.hideNames === opts.hideNames) return ok({ id: pot.id });
+
+  await db
+    .update(contribution)
+    .set({ hideNames: opts.hideNames })
+    .where(eq(contribution.id, pot.id));
+
+  await audit({
+    churchId: guard.church.id,
+    action: "contributions.contribution.anonymity",
+    summary: opts.hideNames
+      ? `Hid every name on the public page for "${pot.title}"`
+      : `Showed names again on the public page for "${pot.title}"`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { hideNames: opts.hideNames },
+  });
+
+  refresh(pot.id);
+  refreshPublic(pot.slug);
+  return ok({ id: pot.id });
 }
 
 /**

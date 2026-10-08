@@ -768,6 +768,22 @@ export const en = {
     showPayouts: "Show where the money went",
     showPayoutsBlurb: "Every naira out, listed. This is the part people remember.",
     showNotes: "Show the notes people leave",
+    hideNames: "Hide everyone’s name",
+    hideNamesBlurb:
+      "Every payment and every figure still shows — the names read “Anonymous” instead. For a bereavement collection, or a levy inside a small department.",
+    hideNamesOnNote:
+      "Names read “Anonymous” on the public page and in the WhatsApp message. Your team still sees everyone here.",
+    hideNamesOffNote: {
+      one: "Names show on the public page. 1 person is hidden by their own choice.",
+      other:
+        "Names show on the public page. {count} people are hidden by their own choice.",
+    },
+    namesNowHidden: "Names are now hidden on the public page",
+    namesNowShown: "Names show on the public page again",
+    hideThisName: "Hide this name publicly",
+    showThisName: "Show this name publicly",
+    nameNowHidden: "{name} now reads “Anonymous” publicly",
+    nameShownAgain: "{name}’s name shows publicly again",
     allowSelfReport: "Let people record their own payment",
     allowSelfReportBlurb:
       "They fill in a short form; it shows as awaiting confirmation until you check it. Nothing they do changes a total.",
@@ -885,9 +901,43 @@ export const en = {
     linkCopied: "Link copied",
     couldntCopy: "Couldn't copy — select the link and copy it by hand.",
     openPublicPage: "Open the public page",
+    shareShape: "What to send",
+    shareFull: "The full update",
+    shareShort: "Just the link",
+    shareFullBlurb:
+      "The figures, who has given, what is left and how to pay — as a message, so nobody has to open anything to read it.",
+    shareShortBlurb:
+      "One line and the link. Shorter, but everything is behind a tap.",
     publishToShare: "Start collecting to make the link live",
     linkTurnedOff: "The public link is turned off for this collection.",
     previewMessage: "The message people will get",
+
+    /*
+     * The WhatsApp message, word by word.
+     *
+     * Braces are left for `shareText` to fill, so a translator moves {raised}
+     * and {target} around the sentence rather than retyping the arithmetic.
+     * The one-person wording is a separate entry because the composer picks
+     * between them instead of applying plural rules itself.
+     */
+    msgRaisedOf: "{raised} of {target}",
+    msgRaised: "{raised} so far",
+    msgFromPeople: "From {count} people",
+    msgFromOnePerson: "From 1 person",
+    msgFromPeopleOf: "From {count} of {total} people",
+    msgWhoHasGiven: "Who has given",
+    msgStillToGive: "Still to give",
+    msgWhereItWent: "Where the money went",
+    msgLeftInPot: "Left in the pot: {amount}",
+    msgHowToPay: "How to pay",
+    msgAwaiting: "awaiting",
+    msgAndMore: "…and {count} more on the page",
+    msgClosed: "Closed — no longer collecting.",
+    msgSettled: "Settled — every figure accounted for.",
+    msgGoalReached: "We have reached the goal.",
+    msgSeeAndRecord: "See everything, and record yours:",
+    msgSeeEverything: "See everything:",
+    msgForPerson: "For {name}",
 
     startCollecting: "Start collecting",
     closeCollection: "Close it",
@@ -919,6 +969,8 @@ export const en = {
     publicOut: "Out",
     publicRemaining: "Remaining",
     publicStillToGive: "Still to give",
+    publicNamesHidden:
+      "Names are hidden on this collection, so there is nothing to search for. Every amount is listed below. If you cannot see your payment, ask whoever is collecting — they can see your name.",
     publicNoLedger: "Who gave what is shown to the group's team only.",
     publicClosed: "This collection is closed.",
     publicSettled: "Settled — every naira is accounted for.",
@@ -941,6 +993,9 @@ export const en = {
     selfMethod: "How did you pay?",
     selfReference: "Reference or teller number",
     selfNote: "A note (optional)",
+    selfHideName: "Don’t show my name",
+    selfHideNameHint:
+      "Your payment is listed as “Anonymous” on this page. Whoever is collecting still sees your name, because somebody has to confirm it.",
     selfProof: "Receipt (optional)",
     selfSubmit: "Submit",
     selfSubmitting: "Sending…",
@@ -1029,6 +1084,12 @@ export const en = {
     seeEveryone:
       "Every contributor and every amount — except anybody marked anonymous.",
     seeNoNames: "No names and no individual amounts.",
+    seeAmountsNoNames:
+      "Every amount, with no names — every line reads “Anonymous”.",
+    seeSomeHidden: {
+      one: "1 person is hidden by their own choice.",
+      other: "{count} people are hidden by their own choice.",
+    },
     seePayouts: "Every payment out of the collection.",
     seeOutstanding: "Who has not finished paying, and how much they still owe.",
     seeSelfReport: "A form to record their own payment, which you then confirm.",

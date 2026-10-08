@@ -20,7 +20,11 @@ import {
   potTotals,
   progressPct,
   proofRejection,
+  publicNames,
+  everyNameHidden,
   shareMessage,
+  shareText,
+  SHARE_MAX_CHARS,
   splitName,
   summarisePerson,
   type EntryLike,
@@ -520,5 +524,339 @@ describe("the WhatsApp message", () => {
     });
     expect(msg).toContain("₦10,000 so far — from 1 person.");
     expect(msg).not.toContain("undefined");
+  });
+});
+
+/* ============================================================
+ * Anonymity
+ * ========================================================== */
+
+const ROSTER = [
+  { id: "a", name: "Grace Udo", isAnonymous: false },
+  { id: "b", name: "Musa Bala", isAnonymous: true },
+  { id: "c", name: "Esther Okon", isAnonymous: false },
+  { id: "d", name: "Sunday Eze", isAnonymous: true },
+];
+
+describe("publicNames", () => {
+  it("leaves a named person named, and hides the ones who asked", () => {
+    const names = publicNames({ roster: ROSTER, hideNames: false });
+    expect(names.get("a")).toEqual({ name: "Grace Udo", anonymous: false });
+    expect(names.get("c")).toEqual({ name: "Esther Okon", anonymous: false });
+    expect(names.get("b")!.anonymous).toBe(true);
+    expect(names.get("d")!.anonymous).toBe(true);
+  });
+
+  it("never lets a hidden person's real name through", () => {
+    const names = publicNames({ roster: ROSTER, hideNames: false });
+    const published = [...names.values()].map((v) => v.name).join(" ");
+    expect(published).not.toContain("Musa");
+    expect(published).not.toContain("Sunday");
+  });
+
+  it("hides EVERY name when the pot says so, overriding each person's own flag", () => {
+    /*
+     * The failure this guards is specific and bad: a merge of the two settings
+     * that left one person named because their own flag was off. The single
+     * visible name in an otherwise anonymous list is more exposed than they
+     * were before anybody touched the setting.
+     */
+    const names = publicNames({ roster: ROSTER, hideNames: true });
+    for (const v of names.values()) expect(v.anonymous).toBe(true);
+    const published = [...names.values()].map((v) => v.name).join(" ");
+    expect(published).not.toContain("Grace");
+    expect(published).not.toContain("Esther");
+  });
+
+  it("numbers hidden people so a long list can still be read and checked", () => {
+    const names = publicNames({ roster: ROSTER, hideNames: true });
+    expect([...names.values()].map((v) => v.name)).toEqual([
+      "Anonymous 1",
+      "Anonymous 2",
+      "Anonymous 3",
+      "Anonymous 4",
+    ]);
+  });
+
+  it("does not number a single hidden person", () => {
+    // A number on its own invites the question of who 1 is, and answers
+    // nothing: there is no second row to tell it apart from.
+    const names = publicNames({
+      roster: [
+        { id: "a", name: "Grace Udo", isAnonymous: false },
+        { id: "b", name: "Musa Bala", isAnonymous: true },
+      ],
+      hideNames: false,
+    });
+    expect(names.get("b")!.name).toBe("Anonymous");
+  });
+
+  it("numbers in roster order, so the page and the message agree", () => {
+    const names = publicNames({ roster: ROSTER, hideNames: false });
+    expect(names.get("b")!.name).toBe("Anonymous 1");
+    expect(names.get("d")!.name).toBe("Anonymous 2");
+  });
+
+  it("takes a translated label", () => {
+    const names = publicNames({
+      roster: ROSTER,
+      hideNames: true,
+      label: "Ba a sani ba",
+    });
+    expect(names.get("a")!.name).toBe("Ba a sani ba 1");
+  });
+});
+
+describe("everyNameHidden", () => {
+  it("is true when the setting is on", () => {
+    expect(everyNameHidden({ hideNames: true, roster: ROSTER })).toBe(true);
+  });
+
+  it("is true when every single person chose it, setting or not", () => {
+    expect(
+      everyNameHidden({
+        hideNames: false,
+        roster: [
+          { isAnonymous: true },
+          { isAnonymous: true },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false while one name still shows", () => {
+    expect(everyNameHidden({ hideNames: false, roster: ROSTER })).toBe(false);
+  });
+
+  it("is false on an empty roster, not vacuously true", () => {
+    /*
+     * An empty list has no names to hide, and treating it as hidden would make
+     * a brand new collection drop its "find my name" box for the first person
+     * to open the link — exactly when they most need it.
+     */
+    expect(everyNameHidden({ hideNames: false, roster: [] })).toBe(false);
+  });
+});
+
+/* ============================================================
+ * The full WhatsApp update
+ * ========================================================== */
+
+function view(over: Partial<Parameters<typeof shareText>[0]> = {}) {
+  return {
+    title: "Choir uniform levy",
+    churchName: "Grace Chapel",
+    groupName: "Choir",
+    purpose: "New uniforms for the harvest service",
+    honoureeName: null,
+    status: "open" as const,
+    currency: "NGN",
+    raised: 145_000,
+    target: 200_000,
+    paidOut: 0,
+    balance: 145_000,
+    givers: 23,
+    people: 30,
+    goalReached: false,
+    dueLabel: "6 days left",
+    payInstructions: "GTBank 0123456789 — Grace Chapel Choir",
+    allowSelfReport: true,
+    showPayouts: true,
+    showOutstanding: false,
+    ledger: [
+      { name: "Grace Udo", amount: 10_000, status: "confirmed" as const },
+      { name: "Anonymous 1", amount: 5_000, status: "confirmed" as const },
+      { name: "Musa Bala", amount: 5_000, status: "pending" as const },
+    ],
+    stillToGive: [] as { name: string; outstanding: number }[],
+    payouts: [] as {
+      label: string;
+      amount: number;
+      status: "pending" | "approved" | "rejected";
+    }[],
+    url: "https://flockinsight.com/p/choir-uniform-levy-ab12c",
+    ...over,
+  };
+}
+
+describe("shareText", () => {
+  it("sends the answer, not a link to the answer", () => {
+    const msg = shareText(view());
+    expect(msg).toContain("*Choir uniform levy*");
+    expect(msg).toContain("Grace Chapel · Choir");
+    expect(msg).toContain("From 23 of 30 people · 6 days left");
+    expect(msg).toContain("Who has given");
+    expect(msg).toContain("Grace Udo");
+    expect(msg).toContain("How to pay");
+    expect(msg).toContain("https://flockinsight.com/p/choir-uniform-levy-ab12c");
+  });
+
+  it("draws a bar whose length matches the percentage", () => {
+    const msg = shareText(view());
+    // 145,000 of 200,000 is 73%, which rounds to seven blocks of ten.
+    expect(msg).toContain("▓▓▓▓▓▓▓░░░ 73%");
+  });
+
+  it("draws no bar when nobody set a goal", () => {
+    const msg = shareText(view({ target: null, raised: 40_000 }));
+    expect(msg).not.toContain("░");
+    expect(msg).not.toContain("%");
+  });
+
+  it("marks money nobody has confirmed, so the lines add up to the total", () => {
+    const msg = shareText(view());
+    const line = msg.split("\n").find((l) => l.startsWith("Musa Bala"));
+    expect(line).toContain("(awaiting)");
+    const confirmed = msg.split("\n").find((l) => l.startsWith("Grace Udo"));
+    expect(confirmed).not.toContain("awaiting");
+  });
+
+  it("never names anybody the page is hiding", () => {
+    /*
+     * The real protection is upstream — `publicNames` has already replaced the
+     * names before they reach here, and a `summary` pot arrives with an empty
+     * ledger. This is the assertion that the composer adds nothing back.
+     */
+    const msg = shareText(
+      view({
+        ledger: [
+          { name: "Anonymous 1", amount: 10_000, status: "confirmed" },
+          { name: "Anonymous 2", amount: 5_000, status: "confirmed" },
+        ],
+      }),
+    );
+    expect(msg).not.toContain("Grace Udo");
+    expect(msg).toContain("Anonymous 1");
+    expect(msg).toContain("Anonymous 2");
+  });
+
+  it("has no list at all when the pot publishes none", () => {
+    // What `summary` visibility hands it: totals, no rows.
+    const msg = shareText(view({ ledger: [] }));
+    expect(msg).not.toContain("Who has given");
+    expect(msg).toContain("From 23 of 30 people");
+  });
+
+  it("leaves out who still owes unless the church published it", () => {
+    const owing = [{ name: "Esther Okon", outstanding: 2_000 }];
+    expect(shareText(view({ stillToGive: owing }))).not.toContain("Esther Okon");
+    expect(
+      shareText(view({ stillToGive: owing, showOutstanding: true })),
+    ).toContain("Esther Okon");
+  });
+
+  it("lists only approved money out, and says what is left", () => {
+    const msg = shareText(
+      view({
+        paidOut: 40_000,
+        balance: 105_000,
+        payouts: [
+          { label: "Fabric deposit", amount: 40_000, status: "approved" },
+          { label: "Tailor, not yet agreed", amount: 15_000, status: "pending" },
+        ],
+      }),
+    );
+    expect(msg).toContain("Where the money went");
+    expect(msg).toContain("Fabric deposit");
+    expect(msg).not.toContain("not yet agreed");
+    expect(msg).toContain("Left in the pot: ₦105,000");
+  });
+
+  it("drops the whole money-out section when the church turned it off", () => {
+    const msg = shareText(
+      view({
+        showPayouts: false,
+        paidOut: 40_000,
+        payouts: [{ label: "Fabric deposit", amount: 40_000, status: "approved" }],
+      }),
+    );
+    expect(msg).not.toContain("Where the money went");
+    expect(msg).not.toContain("Fabric deposit");
+  });
+
+  it("says to record yours only when the form is open", () => {
+    expect(shareText(view())).toContain("record yours");
+    expect(shareText(view({ allowSelfReport: false }))).not.toContain(
+      "record yours",
+    );
+  });
+
+  it("names a gift's honouree", () => {
+    const msg = shareText(view({ honoureeName: "Pastor Mrs Udo" }));
+    expect(msg).toContain("For Pastor Mrs Udo");
+  });
+
+  it("reads correctly for one giver and no roster", () => {
+    const msg = shareText(view({ givers: 1, people: 0 }));
+    expect(msg).toContain("From 1 person");
+    expect(msg).not.toContain("1 people");
+  });
+
+  it("stays inside a URL's budget, and says how many rows it left out", () => {
+    /*
+     * The message is percent-encoded into a wa.me URL, which roughly triples
+     * it. Trimming here is visible; trimming in the browser cuts a name in
+     * half and tells nobody.
+     */
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      name: `Contributor with quite a long name number ${i}`,
+      amount: 5_000,
+      status: "confirmed" as const,
+    }));
+    const msg = shareText(view({ ledger: many }));
+    expect(msg.length).toBeLessThanOrEqual(SHARE_MAX_CHARS);
+    expect(msg).toMatch(/and \d+ more on the page/);
+    // The link survives the trimming, because without it the message is a dead end.
+    expect(msg).toContain("https://flockinsight.com/p/choir-uniform-levy-ab12c");
+    expect(msg).toContain("How to pay");
+  });
+
+  it("drops a trailing .00 but never drops real kobo", () => {
+    /*
+     * Eight lines of "₦10,000.00" is noise around the figure that matters, and
+     * rounding 1,500.50 to 1,501 would make the lines stop adding up to the
+     * total above them.
+     */
+    const msg = shareText(
+      view({
+        raised: 10_000,
+        target: 20_000,
+        ledger: [
+          { name: "Grace Udo", amount: 8_499.5, status: "confirmed" },
+          { name: "Musa Bala", amount: 1_500.5, status: "confirmed" },
+        ],
+      }),
+    );
+    expect(msg).toContain("₦10,000 of ₦20,000");
+    expect(msg).toContain("₦8,499.50");
+    expect(msg).toContain("₦1,500.50");
+  });
+
+  it("flattens a multi-line pay instruction into the message", () => {
+    const msg = shareText(
+      view({ payInstructions: "GTBank\n0123456789\nGrace Chapel Choir" }),
+    );
+    expect(msg).toContain("GTBank 0123456789 Grace Chapel Choir");
+  });
+
+  it("says when a collection has closed or settled", () => {
+    expect(shareText(view({ status: "closed" }))).toContain("no longer collecting");
+    expect(shareText(view({ status: "settled" }))).toContain("Settled");
+  });
+
+  it("takes every word from the caller, so it can be sent in any language", () => {
+    const msg = shareText(view(), {
+      whoHasGiven: "Wanda ya bayar",
+      seeAndRecord: "Duba komai:",
+    });
+    expect(msg).toContain("*Wanda ya bayar*");
+    expect(msg).toContain("Duba komai:");
+    expect(msg).not.toContain("Who has given");
+  });
+
+  it("never leaves a placeholder or an undefined showing", () => {
+    const msg = shareText(view());
+    expect(msg).not.toContain("undefined");
+    expect(msg).not.toMatch(/\{\w+\}/);
   });
 });

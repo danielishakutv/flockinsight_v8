@@ -87,6 +87,39 @@ export function formatMoney(
 }
 
 /** Compact format for stat cards, e.g. "₦1.2M". Falls back to full format. */
+/**
+ * Money for a sentence, rather than for a column.
+ *
+ * `formatMoney` always draws two decimal places, which is right in a table
+ * where figures line up under each other and wrong in a WhatsApp message,
+ * where eight lines of "₦10,000.00" read as noise around the number that
+ * matters.
+ *
+ * The kobo are kept whenever there are any. Rounding them away would make the
+ * lines of a money message stop adding up to its own total, which is the one
+ * thing a message about money may never do.
+ */
+export function formatMoneyPlain(
+  amount: number,
+  currency: string = DEFAULT_CURRENCY,
+): string {
+  const whole = Number.isInteger(amount);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currencySymbol(currency)}${amount.toLocaleString(undefined, {
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+}
+
 export function formatMoneyCompact(
   amount: number,
   currency: string = DEFAULT_CURRENCY,

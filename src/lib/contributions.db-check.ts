@@ -20,7 +20,7 @@
  *   - The public projection leaking what a church asked to keep private.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -62,6 +62,8 @@ let emekaContributorId = "";
 let payoutId = "";
 const memberIds: string[] = [];
 const potIds: string[] = [];
+/** Accounts this file created, removed at the end so the team list is as it was. */
+const createdUserIds: string[] = [];
 
 /** Recompute an entry's stored status the way the server action does. */
 async function recompute(entryId: string, required: number) {
@@ -83,8 +85,52 @@ async function recompute(entryId: string, required: number) {
 }
 
 beforeAll(async () => {
-  const [c] = await db.select({ id: church.id }).from(church).limit(1);
+  /*
+   * A church with a team, chosen in a fixed order.
+   *
+   * This used to be `select().from(church).limit(1)` with no ORDER BY, which
+   * Postgres is free to answer with whichever row it reaches first — and that
+   * changes as rows are written and vacuumed. So the suite attached itself to
+   * a different church between runs, and the two tests that read the team
+   * passed or failed depending on whether that week's first church happened to
+   * have staff. It was reported as flakiness under parallel load. It was an
+   * unordered LIMIT 1.
+   *
+   * Ordering fixes which church, and the staff member below fixes that it has
+   * a team at all, so neither test depends on what else is in the database.
+   */
+  const [c] = await db
+    .select({ id: church.id })
+    .from(church)
+    .orderBy(asc(church.id))
+    .limit(1);
   churchId = c.id;
+
+  const existingStaff = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(and(eq(staff.organizationId, churchId), eq(staff.temp, false)))
+    .limit(1);
+  if (existingStaff.length === 0) {
+    const [u] = await db
+      .insert(user)
+      .values({
+        id: `zz-staff-${stamp}`,
+        name: `ZZ Team Member ${stamp}`,
+        email: `zz-staff-${stamp}@example.com`,
+        emailVerified: false,
+      })
+      .returning({ id: user.id });
+    await db.insert(staff).values({
+      id: `zz-staff-row-${stamp}`,
+      organizationId: churchId,
+      userId: u.id,
+      role: "admin",
+      temp: false,
+    });
+    // The staff row goes with the user by cascade.
+    createdUserIds.push(u.id);
+  }
 
   // A member who will later be matched to a typed-in name.
   const [grace] = await db
@@ -232,6 +278,8 @@ afterAll(async () => {
     await db.delete(contribution).where(inArray(contribution.id, potIds));
   if (memberIds.length > 0)
     await db.delete(member).where(inArray(member.id, memberIds));
+  if (createdUserIds.length > 0)
+    await db.delete(user).where(inArray(user.id, createdUserIds));
 });
 
 describe("the figures on a collection", () => {
@@ -471,6 +519,93 @@ describe("the public page", () => {
       .update(contributionContributor)
       .set({ isAnonymous: false })
       .where(eq(contributionContributor.id, graceContributorId));
+  });
+
+  it("hides EVERY name when the collection says so, whatever each person chose", async () => {
+    /*
+     * The dangerous version of this feature is the one that merges the two
+     * settings: "hide everyone" that leaves one person named because their own
+     * flag was off. That single visible name in an otherwise anonymous list is
+     * more exposed than they were before anybody touched anything, and it would
+     * be the leader's own name often as not — they are usually row one.
+     */
+    const [row] = await db
+      .update(contribution)
+      .set({ hideNames: true })
+      .where(eq(contribution.id, potId))
+      .returning({ slug: contribution.slug });
+
+    const pub = await getPublicContribution(row.slug);
+    expect(pub).not.toBeNull();
+    expect(pub!.hideNames).toBe(true);
+    expect(pub!.allNamesHidden).toBe(true);
+
+    // Every row hidden, and not one real name anywhere in the payload.
+    expect(pub!.ledger.length).toBeGreaterThan(0);
+    expect(pub!.ledger.every((r) => r.anonymous)).toBe(true);
+    expect(JSON.stringify(pub!.ledger)).not.toContain("ZZ");
+    expect(JSON.stringify(pub!.stillToGive)).not.toContain("ZZ");
+
+    // Numbered, so a long list is still readable and its arithmetic checkable.
+    expect(pub!.ledger.every((r) => /^Anonymous( \d+)?$/.test(r.name))).toBe(true);
+
+    // The amounts are untouched: this hides who, never how much.
+    const named = await getPublicContribution(row.slug);
+    await db
+      .update(contribution)
+      .set({ hideNames: false })
+      .where(eq(contribution.id, potId));
+    const after = await getPublicContribution(row.slug);
+    expect(after!.raised).toBe(named!.raised);
+    expect(after!.ledger.map((r) => r.amount)).toEqual(
+      named!.ledger.map((r) => r.amount),
+    );
+    expect(after!.allNamesHidden).toBe(false);
+  });
+
+  it("gives the same person the same number on every read", async () => {
+    /*
+     * The numbers are derived, not stored, so the only thing keeping them
+     * stable is the ordered roster read. Without that ordering somebody is
+     * "Anonymous 2" on the page and "Anonymous 5" in the WhatsApp message
+     * composed from the same data a second later.
+     */
+    const [row] = await db
+      .update(contribution)
+      .set({ hideNames: true })
+      .where(eq(contribution.id, potId))
+      .returning({ slug: contribution.slug });
+
+    const first = await getPublicContribution(row.slug);
+    const second = await getPublicContribution(row.slug);
+    expect(second!.ledger.map((r) => `${r.id}:${r.name}`)).toEqual(
+      first!.ledger.map((r) => `${r.id}:${r.name}`),
+    );
+
+    await db
+      .update(contribution)
+      .set({ hideNames: false })
+      .where(eq(contribution.id, potId));
+  });
+
+  it("still keeps every real name inside the church while the page hides them", async () => {
+    // The point of the feature is privacy from the group chat, not from the
+    // treasurer — somebody has to confirm the money.
+    await db
+      .update(contribution)
+      .set({ hideNames: true })
+      .where(eq(contribution.id, potId));
+
+    const pot = await getContribution(churchId, potId);
+    expect(
+      pot!.contributors.find((c) => c.id === graceContributorId)!.name,
+    ).toContain("ZZGrace");
+    expect(pot!.hideNames).toBe(true);
+
+    await db
+      .update(contribution)
+      .set({ hideNames: false })
+      .where(eq(contribution.id, potId));
   });
 });
 
@@ -713,6 +848,8 @@ describe("who runs a collection", () => {
 
   it("offers only real, non-temporary team members as candidates", async () => {
     const team = await staffCandidates(churchId);
+    // There is at least one, because the setup makes sure of it rather than
+    // hoping the church it picked already had a team.
     expect(team.length).toBeGreaterThan(0);
     const temps = await db
       .select({ userId: staff.userId })

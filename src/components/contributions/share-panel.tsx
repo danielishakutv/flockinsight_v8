@@ -3,16 +3,19 @@
 import { useState } from "react";
 import { Copy, ExternalLink, Eye, EyeOff, Link2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import type { ContributionDetail } from "@/lib/contributions";
+import type { ContributionDetail, PublicContribution } from "@/lib/contributions";
 import {
   dueLabel,
   shareMessage,
+  shareText,
   whatsappShareUrl,
 } from "@/lib/contributions-shared";
 import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/i18n-provider";
 import { QrButton } from "@/components/links/qr-button";
+import { shareLabels } from "@/lib/contributions-share-labels";
 
 /**
  * The share tab.
@@ -23,12 +26,24 @@ import { QrButton } from "@/components/links/qr-button";
  * it is sent, rather than left to whatever the OS share sheet composes. People
  * paste what they can see.
  *
+ * **The full update is the default, and sending a bare link is the option.**
+ * That is the right way round. A link asks somebody to leave the chat, on a
+ * phone with no data left, to find out a figure that would have fitted in the
+ * message. Most of them never do, so the treasurer still gets asked "how much
+ * have we raised" in the same group the link was posted in. The message that
+ * answers it already is the one that stops the asking.
+ *
+ * The text is composed from `publicView` — what the link itself serves — and
+ * never from the church's own detail, so the message can never name somebody
+ * the page hides.
+ *
  * The copy button only claims success once the clipboard write resolves. An
  * unconditional "Copied!" toast is a lie on any browser that refuses the
  * permission, and this is a link somebody is about to send to their department.
  */
 export function SharePanel({
   pot,
+  publicView,
   currency,
   today,
   url,
@@ -36,6 +51,8 @@ export function SharePanel({
   onPublish,
 }: {
   pot: ContributionDetail;
+  /** Exactly what the link serves. Null for a draft or a link that is off. */
+  publicView: PublicContribution | null;
   currency: string;
   today: string;
   url: string;
@@ -44,8 +61,9 @@ export function SharePanel({
 }) {
   const t = useT();
   const [showPreview, setShowPreview] = useState(true);
+  const [shape, setShape] = useState<"full" | "short">("full");
 
-  const message = shareMessage({
+  const short = shareMessage({
     title: pot.title,
     raised: formatMoney(pot.raised, currency),
     target: pot.target ? formatMoney(pot.target, currency) : null,
@@ -53,6 +71,45 @@ export function SharePanel({
     url,
     dueLabel: dueLabel(pot.dueDate, today),
   });
+
+  /*
+   * Every word of the message comes through the dictionary, so a church
+   * collecting in Hausa sends a Hausa message. The arrangement — what is bold,
+   * what order the sections come in, where the bar goes — stays in the pure
+   * function, which is where it is tested.
+   */
+  const full = publicView
+    ? shareText(
+        {
+          title: publicView.title,
+          churchName: publicView.churchName,
+          groupName: publicView.groupName,
+          purpose: publicView.purpose,
+          honoureeName: publicView.honoureeName,
+          status: publicView.status,
+          currency: publicView.currency,
+          raised: publicView.raised,
+          target: publicView.target,
+          paidOut: publicView.paidOut,
+          balance: publicView.balance,
+          givers: publicView.givers,
+          people: publicView.people,
+          goalReached: publicView.goalReached,
+          dueLabel: dueLabel(publicView.dueDate, today),
+          payInstructions: publicView.payInstructions,
+          allowSelfReport: publicView.allowSelfReport,
+          showPayouts: publicView.showPayouts,
+          showOutstanding: publicView.showOutstanding,
+          ledger: publicView.ledger,
+          stillToGive: publicView.stillToGive,
+          payouts: publicView.payouts,
+          url,
+        },
+        shareLabels(t),
+      )
+    : short;
+
+  const message = shape === "full" ? full : short;
 
   function copy(text: string, success: string) {
     navigator.clipboard
@@ -116,6 +173,41 @@ export function SharePanel({
             <Copy className="size-4" />
           </Button>
         </div>
+
+        {/*
+          Two shapes, named for what they do rather than for how long they are.
+          Shown even when there is nothing extra to say, so the control does not
+          appear and disappear as a collection fills up.
+        */}
+        <div
+          className="bg-muted/50 mt-4 flex gap-1 rounded-xl border p-1"
+          role="group"
+          aria-label={t("contributions.shareShape")}
+        >
+          {(["full", "short"] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={shape === id}
+              onClick={() => setShape(id)}
+              className={cn(
+                "min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold transition-colors",
+                shape === id
+                  ? "bg-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {id === "full"
+                ? t("contributions.shareFull")
+                : t("contributions.shareShort")}
+            </button>
+          ))}
+        </div>
+        <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+          {shape === "full"
+            ? t("contributions.shareFullBlurb")
+            : t("contributions.shareShortBlurb")}
+        </p>
 
         <div className="mt-3 flex flex-wrap gap-2">
           <Button asChild>
@@ -181,10 +273,22 @@ export function SharePanel({
           <li>• {t("contributions.seeTotals")}</li>
           <li>
             •{" "}
-            {pot.visibility === "detailed"
-              ? t("contributions.seeEveryone")
-              : t("contributions.seeNoNames")}
+            {pot.visibility !== "detailed"
+              ? t("contributions.seeNoNames")
+              : pot.hideNames
+                ? t("contributions.seeAmountsNoNames")
+                : t("contributions.seeEveryone")}
           </li>
+          {pot.visibility === "detailed" &&
+            !pot.hideNames &&
+            pot.contributors.some((c) => c.isAnonymous) && (
+              <li>
+                •{" "}
+                {t("contributions.seeSomeHidden", {
+                  count: pot.contributors.filter((c) => c.isAnonymous).length,
+                })}
+              </li>
+            )}
           {pot.showPayouts && <li>• {t("contributions.seePayouts")}</li>}
           {pot.showOutstanding && (
             <li className="text-warning">• {t("contributions.seeOutstanding")}</li>

@@ -92,7 +92,13 @@ export function LinkPagesList({
           <Lock className="text-muted-foreground mt-0.5 size-5 shrink-0" />
           <div>
             <p className="text-sm font-semibold">Link pages are on Growth</p>
-            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+            {/*
+              `wrap-anywhere`: the plan copy carries a bare address
+              (flockinsight.com/hub/yourchurch), which is one unbreakable word
+              as far as CSS is concerned and runs off the right edge of a 320px
+              phone. The audit script flags exactly this shape.
+            */}
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed wrap-anywhere">
               {lockedMessage ??
                 "One address that holds all your links, with your own pages on it."}
             </p>

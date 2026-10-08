@@ -8,6 +8,7 @@ import {
   canManageContribution,
   canManageManagers,
   getContribution,
+  getPublicContribution,
   groupOptions,
   memberOptions,
   staffCandidates,
@@ -67,7 +68,17 @@ export default async function ContributionPage({
     hasModulePermission,
   });
 
-  const [members, groups, accounts, staff] = await Promise.all([
+  /*
+   * What the link actually shows, read here rather than derived in the browser.
+   *
+   * The share tab builds its WhatsApp message from this, so the message and the
+   * page are the same thing twice — hide a name and both lose it. Deriving the
+   * published view a second time from the church's own detail would be two
+   * copies of the visibility rules, and the copy that drifts is the one that
+   * publishes somebody who asked not to be. Null for a draft or a link that is
+   * turned off, which the share tab answers with its own card.
+   */
+  const [members, groups, accounts, staff, publicView] = await Promise.all([
     canManage ? memberOptions(church.id) : Promise.resolve([]),
     canManage ? groupOptions(church.id) : Promise.resolve([]),
     canPostToFinance
@@ -83,6 +94,7 @@ export default async function ContributionPage({
           .orderBy(asc(financeAccount.name))
       : Promise.resolve([]),
     canManage ? staffCandidates(church.id) : Promise.resolve([]),
+    getPublicContribution(pot.slug),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -102,6 +114,7 @@ export default async function ContributionPage({
         staff={staff}
         canManageManagers={mayManageManagers}
         currentUserId={user.id}
+        publicView={publicView}
       />
     </PageContainer>
   );

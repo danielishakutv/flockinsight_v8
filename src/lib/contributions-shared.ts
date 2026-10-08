@@ -10,6 +10,7 @@
  * Safe to import from a client component, a server action, a cron job and a
  * test, which is the point — one implementation of each rule.
  */
+import { formatMoneyPlain } from "@/lib/money";
 
 export type ContributionKind = "equal" | "open" | "gift";
 export type ContributionStatus = "draft" | "open" | "closed" | "settled";
@@ -560,6 +561,85 @@ export function proofRejection(file: { type: string; size: number }): string | n
 export const PROOF_RETENTION_DAYS = 365;
 
 /* ============================================================
+ * Anonymity — one rule for what a name reads as in public
+ * ========================================================== */
+
+/** What a hidden contributor is called. Overridable so it can be translated. */
+export const ANONYMOUS_LABEL = "Anonymous";
+
+export type PublicName = {
+  /** What the world reads. Either the real name or the anonymous label. */
+  name: string;
+  /** Hidden, so a screen can style it and a share message can trust it. */
+  anonymous: boolean;
+};
+
+/**
+ * The public name of every person on a pot's roster.
+ *
+ * One function, called by the public query and by the share message, because
+ * the two must never disagree: a leader who hides the names and then pastes a
+ * message naming everybody has been told a lie by the settings screen.
+ *
+ * Two decisions worth stating.
+ *
+ * **The pot-level switch overrides the per-person flag, it does not merge with
+ * it.** "Hide everyone" that left one person named because their own flag was
+ * off would be the worst possible outcome — the one visible name in an
+ * otherwise anonymous list is more exposed than they were before.
+ *
+ * **Hidden people are numbered, but only when there is more than one.** A
+ * twenty-row list of the identical word "Anonymous" is a list nobody can read
+ * and nobody can check: you cannot tell twenty people giving once from one
+ * person giving twenty times, which is exactly the arithmetic this page exists
+ * to make checkable. A single hidden person among named ones needs no number,
+ * and giving them one would only invite the question of who 1 is.
+ *
+ * The numbers run in roster order, so "Anonymous 3" is the same person on the
+ * page and in the message. They are not identifiers: removing somebody earlier
+ * in the roster renumbers those after them, which is the honest trade for not
+ * storing a public pseudonym that would then have to be kept for ever.
+ */
+export function publicNames(opts: {
+  /** The roster, in a stable order — the caller sorts, so numbers do not jump. */
+  roster: readonly { id: string; name: string; isAnonymous: boolean }[];
+  /** The pot's "hide every name" setting. */
+  hideNames: boolean;
+  label?: string;
+}): Map<string, PublicName> {
+  const label = opts.label ?? ANONYMOUS_LABEL;
+  const hiddenCount = opts.roster.filter(
+    (c) => opts.hideNames || c.isAnonymous,
+  ).length;
+  const numbered = hiddenCount > 1;
+
+  const out = new Map<string, PublicName>();
+  let n = 0;
+  for (const c of opts.roster) {
+    if (!opts.hideNames && !c.isAnonymous) {
+      out.set(c.id, { name: c.name, anonymous: false });
+      continue;
+    }
+    n += 1;
+    out.set(c.id, {
+      name: numbered ? `${label} ${n}` : label,
+      anonymous: true,
+    });
+  }
+  return out;
+}
+
+/** Is every single name on this pot hidden? Decides whether "find my name" can work at all. */
+export function everyNameHidden(opts: {
+  hideNames: boolean;
+  roster: readonly { isAnonymous: boolean }[];
+}): boolean {
+  if (opts.hideNames) return true;
+  if (opts.roster.length === 0) return false;
+  return opts.roster.every((c) => c.isAnonymous);
+}
+
+/* ============================================================
  * Sharing
  * ========================================================== */
 
@@ -589,6 +669,267 @@ export function shareMessage(opts: {
   lines.push("");
   lines.push(`See every contribution, and record yours: ${opts.url}`);
   return lines.join("\n");
+}
+
+/* ------------------------------------------------------------
+ * The full update — the collection itself, as a message
+ * ---------------------------------------------------------- */
+
+/**
+ * How long the message may get.
+ *
+ * Not a WhatsApp limit — it accepts far more. It is a `wa.me` limit: the text
+ * is percent-encoded into a URL, which roughly triples it, and a very long one
+ * is silently truncated or refused by some in-app browsers. Trimming here is
+ * deliberate and visible ("and 6 more"); trimming in the browser would cut the
+ * message off mid-name with no sign that anything was lost.
+ */
+export const SHARE_MAX_CHARS = 2500;
+const SHARE_MAX_ROWS = 15;
+const SHARE_MIN_ROWS = 3;
+const SHARE_MAX_OUTSTANDING = 10;
+const SHARE_MAX_PAYOUTS = 6;
+
+/** Every word the message is built from, so it can be sent in the church's language. */
+export type ShareLabels = {
+  raisedOf: string;
+  raised: string;
+  fromPeople: string;
+  /**
+   * The one-person wording, as its own label.
+   *
+   * Cheaper and clearer than plural rules inside this function: the caller
+   * fetches both from the dictionary, which already knows how the language it
+   * is in counts, and the composer only has to pick. "From 1 people" is the
+   * kind of mistake a reader notices before they notice the total.
+   */
+  fromOnePerson: string;
+  fromPeopleOf: string;
+  whoHasGiven: string;
+  stillToGive: string;
+  whereItWent: string;
+  leftInPot: string;
+  howToPay: string;
+  awaiting: string;
+  andMore: string;
+  closed: string;
+  settled: string;
+  goalReached: string;
+  seeAndRecord: string;
+  seeEverything: string;
+  forPerson: string;
+};
+
+const SHARE_LABELS: ShareLabels = {
+  raisedOf: "{raised} of {target}",
+  raised: "{raised} so far",
+  fromPeople: "From {count} people",
+  fromOnePerson: "From 1 person",
+  fromPeopleOf: "From {count} of {total} people",
+  whoHasGiven: "Who has given",
+  stillToGive: "Still to give",
+  whereItWent: "Where the money went",
+  leftInPot: "Left in the pot: {amount}",
+  howToPay: "How to pay",
+  awaiting: "awaiting",
+  andMore: "…and {count} more on the page",
+  closed: "Closed — no longer collecting.",
+  settled: "Settled — every figure accounted for.",
+  goalReached: "We have reached the goal.",
+  seeAndRecord: "See everything, and record yours:",
+  seeEverything: "See everything:",
+  forPerson: "For {name}",
+};
+
+function fill(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (whole, key: string) =>
+    key in values ? String(values[key]) : whole,
+  );
+}
+
+/**
+ * Ten blocks of progress.
+ *
+ * Block characters rather than a run of emoji, because they are a single width
+ * in every font WhatsApp uses, so the bar is the same length on an iPhone, an
+ * Android and WhatsApp Web. Emoji squares are wider than a space and wrap onto
+ * a second line at phone width, which turns the neatest line in the message
+ * into the untidiest.
+ */
+export function shareBar(pct: number): string {
+  const filled = Math.max(0, Math.min(10, Math.round(pct / 10)));
+  return "▓".repeat(filled) + "░".repeat(10 - filled);
+}
+
+export type ShareView = {
+  title: string;
+  churchName: string;
+  groupName: string | null;
+  purpose: string | null;
+  honoureeName: string | null;
+  status: ContributionStatus;
+  currency: string;
+  raised: number;
+  target: number | null;
+  paidOut: number;
+  balance: number;
+  /** People with at least one confirmed payment. */
+  givers: number;
+  /** People expected, where there is a roster. 0 when there is none. */
+  people: number;
+  goalReached: boolean;
+  dueLabel: string | null;
+  payInstructions: string | null;
+  allowSelfReport: boolean;
+  showPayouts: boolean;
+  showOutstanding: boolean;
+  /** Empty at `summary` visibility, exactly as the page has it. */
+  ledger: readonly {
+    name: string;
+    amount: number | null;
+    status: EntryStatus;
+  }[];
+  stillToGive: readonly { name: string; outstanding: number }[];
+  payouts: readonly { label: string; amount: number; status: PayoutStatus }[];
+  url: string;
+};
+
+/**
+ * The whole collection as one WhatsApp message.
+ *
+ * The short version — a figure and a link — asks somebody to leave the chat to
+ * find out anything at all. Most of them do not, and the ones who do are on a
+ * phone with no data left. So this sends the answer instead of the question:
+ * the figure, the bar, who has given, what is still owed, where the money went
+ * and how to pay, set in the only three kinds of emphasis WhatsApp has.
+ *
+ * **It is built from the public view, never from the church's own screen.**
+ * That is why this takes a `ShareView` shaped like the published page rather
+ * than the full detail: whatever the link does not show, the message cannot
+ * show either. A pot set to `summary` arrives here with an empty ledger, and
+ * hidden names have already been replaced by `publicNames` upstream — so there
+ * is no path by which a message names somebody the page protects.
+ *
+ * Trimming is visible. If the list is too long for a URL the message says how
+ * many rows it left out rather than ending mid-sentence.
+ */
+export function shareText(view: ShareView, labels?: Partial<ShareLabels>): string {
+  const L = { ...SHARE_LABELS, ...labels };
+  // Plain, not the two-decimal form the tables use: a message is a sentence.
+  const money = (n: number) => formatMoneyPlain(n, view.currency);
+
+  function compose(maxRows: number): string {
+    const out: string[] = [];
+
+    // ----- The header: what this is, and whose -----
+    out.push(`*${view.title}*`);
+    const who = [view.churchName, view.groupName].filter(Boolean).join(" · ");
+    if (who) out.push(who);
+    if (view.honoureeName) out.push(fill(L.forPerson, { name: view.honoureeName }));
+    if (view.purpose) out.push(`_${oneLine(view.purpose, 140)}_`);
+
+    // ----- The figure, which is what the message is opened for -----
+    out.push("");
+    out.push(
+      view.target
+        ? `*${fill(L.raisedOf, {
+            raised: money(view.raised),
+            target: money(view.target),
+          })}*`
+        : `*${fill(L.raised, { raised: money(view.raised) })}*`,
+    );
+    const pct = progressPct(view.raised, view.target);
+    // No target, no bar. A bar that is always full says nothing, and a bar
+    // drawn against a goal nobody set would be inventing one.
+    if (pct !== null) out.push(`${shareBar(pct)} ${pct}%`);
+
+    const counts =
+      view.people > 0
+        ? fill(L.fromPeopleOf, { count: view.givers, total: view.people })
+        : view.givers === 1
+          ? L.fromOnePerson
+          : fill(L.fromPeople, { count: view.givers });
+    out.push([counts, view.dueLabel].filter(Boolean).join(" · "));
+
+    if (view.goalReached) out.push(L.goalReached);
+    if (view.status === "closed") out.push(L.closed);
+    if (view.status === "settled") out.push(L.settled);
+
+    // ----- Who has given. Already empty when the page does not show it. -----
+    if (view.ledger.length > 0) {
+      out.push("");
+      out.push(`*${L.whoHasGiven}*`);
+      for (const r of view.ledger.slice(0, maxRows)) {
+        const amount = r.amount === null ? "" : ` — ${money(r.amount)}`;
+        /*
+         * Only confirmed money is in the figure at the top, so a claim nobody
+         * has checked has to be marked here. Without the mark the lines do not
+         * add up to the total, and a message whose arithmetic fails is worse
+         * than no message — it is the argument it was sent to prevent.
+         */
+        const mark = r.status === "confirmed" ? "" : ` (${L.awaiting})`;
+        out.push(`${oneLine(r.name, 40)}${amount}${mark}`);
+      }
+      const left = view.ledger.length - maxRows;
+      if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
+    }
+
+    // ----- Still to give. Only when the church chose to publish it. -----
+    if (view.showOutstanding && view.stillToGive.length > 0) {
+      out.push("");
+      out.push(`*${L.stillToGive}*`);
+      for (const s of view.stillToGive.slice(0, SHARE_MAX_OUTSTANDING))
+        out.push(`${oneLine(s.name, 40)} — ${money(s.outstanding)}`);
+      const left = view.stillToGive.length - SHARE_MAX_OUTSTANDING;
+      if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
+    }
+
+    // ----- Where it went. The question that splits departments. -----
+    if (view.showPayouts) {
+      const paid = view.payouts.filter((p) => p.status === "approved");
+      if (paid.length > 0) {
+        out.push("");
+        out.push(`*${L.whereItWent}*`);
+        for (const p of paid.slice(0, SHARE_MAX_PAYOUTS))
+          out.push(`${oneLine(p.label, 40)} — ${money(p.amount)}`);
+        const left = paid.length - SHARE_MAX_PAYOUTS;
+        if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
+        if (view.paidOut > 0)
+          out.push(fill(L.leftInPot, { amount: money(view.balance) }));
+      }
+    }
+
+    if (view.payInstructions) {
+      out.push("");
+      out.push(`*${L.howToPay}*`);
+      out.push(oneLine(view.payInstructions, 200));
+    }
+
+    out.push("");
+    out.push(view.allowSelfReport ? L.seeAndRecord : L.seeEverything);
+    out.push(view.url);
+
+    return out.join("\n");
+  }
+
+  /*
+   * Compose, then shorten the one list that can grow without limit until the
+   * whole thing fits a URL. Nothing else is trimmed: the totals, the deadline
+   * and the pay instructions are the reason the message was sent.
+   */
+  let rows = SHARE_MAX_ROWS;
+  let text = compose(rows);
+  while (text.length > SHARE_MAX_CHARS && rows > SHARE_MIN_ROWS) {
+    rows -= 1;
+    text = compose(rows);
+  }
+  return text;
+}
+
+/** Newlines flattened, length capped — a textarea field has to become one line here. */
+function oneLine(input: string, max: number): string {
+  const flat = input.replace(/\s+/g, " ").trim();
+  return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
 }
 
 export function whatsappShareUrl(message: string): string {

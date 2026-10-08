@@ -29,6 +29,35 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.71.0",
+    date: "2026-10-08",
+    summary:
+      "A group collection now goes into a WhatsApp chat as the whole update, not just a link — the figure, who has given, what is still owed and how to pay, in one tidy message. And names can be hidden, one person or everybody, without hiding a single figure.",
+    changes: {
+      Added: [
+        "Share a collection as a message, not a link. The figure, a progress bar, who has given, what is still to come, where the money went and how to pay — formatted for WhatsApp and shown to you before you send it. A link asks people to leave the chat to find out a number that would have fitted in the message; most of them never do, and you get asked anyway.",
+        "“Just the link” is still there, one tap away, for when the group is large or the list is long.",
+        "Anybody who opens the link can forward the same update on, from the Share button on the page itself. It is built from what that page shows, so a forwarded message can never say more than the person forwarding it could see.",
+        "Hide one person’s name: the ⋮ beside them on the People tab → Hide this name publicly. One tap, because this gets asked for in the thirty seconds after a service, not at a desk.",
+        "Hide everybody’s name: one switch at the top of the People tab, or in the collection’s settings. Every line reads “Anonymous”, numbered when there is more than one so the list can still be read and its arithmetic still checked.",
+        "Somebody filling in the “I have paid” form can ask for their own name to be left off, if they are new to the list.",
+      ],
+      Improved: [
+        "Hiding names hides who, never how much. Every amount, the total and every naira that went out stay exactly where they were — which is what makes it usable for a bereavement collection, where the money must be accounted for and the giving must not be compared.",
+        "Money in a WhatsApp message now reads ₦10,000 rather than ₦10,000.00, while keeping the kobo whenever there are any. Eight lines of trailing zeros is noise around the figure that matters.",
+      ],
+      Security: [
+        "“Hide everyone” overrides each person’s own setting rather than merging with it, so it cannot leave one person named in an otherwise anonymous list — which would expose them more than before it was switched on.",
+        "The WhatsApp message is composed from the published page, never from the church’s own screen, so it cannot name somebody the page hides.",
+        "The “I have paid” form can only set its own anonymity for a person new to the list. The names on that page are not secret, so without that rule anyone could type a member’s name and put it back on the list after they asked for it to come off.",
+      ],
+      Fixed: [
+        "With every name hidden, “Find my record” is replaced by a line explaining why instead of searching an anonymous list and finding nothing — which reads as “my payment is missing”, the worst thing that page can say to somebody who has paid.",
+        "A contributor genuinely called Anonymous is no longer styled as though they were hiding.",
+      ],
+    },
+  },
+  {
     version: "0.70.0",
     date: "2026-10-07",
     summary:

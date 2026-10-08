@@ -24,9 +24,10 @@ import {
   peopleStillNeeded,
   phoneKey,
   progressPct,
-  shareMessage,
+  shareText,
   whatsappShareUrl,
 } from "@/lib/contributions-shared";
+import { shareLabels } from "@/lib/contributions-share-labels";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -279,16 +280,47 @@ export function PublicContributionPage({
               </Button>
             )}
             <Button asChild variant="outline" size="lg">
+              {/*
+                The whole update, not a link.
+
+                This button is pressed by somebody who already opened the link
+                and is passing it on to the group — a brother who was asked
+                "how far with the levy?" So the thing he forwards should
+                answer it, not ask the next person to tap through too. It is
+                the same text the church's own share tab composes, from the
+                same data this page is drawn from, so nothing he forwards can
+                say more than what he can see.
+              */}
               <a
                 href={whatsappShareUrl(
-                  shareMessage({
-                    title: pot.title,
-                    raised: formatMoney(pot.raised, pot.currency),
-                    target: pot.target ? formatMoney(pot.target, pot.currency) : null,
-                    contributors: pot.givers,
-                    url,
-                    dueLabel: due,
-                  }),
+                  shareText(
+                    {
+                      title: pot.title,
+                      churchName: pot.churchName,
+                      groupName: pot.groupName,
+                      purpose: pot.purpose,
+                      honoureeName: pot.honoureeName,
+                      status: pot.status,
+                      currency: pot.currency,
+                      raised: pot.raised,
+                      target: pot.target,
+                      paidOut: pot.paidOut,
+                      balance: pot.balance,
+                      givers: pot.givers,
+                      people: pot.people,
+                      goalReached: pot.goalReached,
+                      dueLabel: due,
+                      payInstructions: pot.payInstructions,
+                      allowSelfReport: pot.allowSelfReport,
+                      showPayouts: pot.showPayouts,
+                      showOutstanding: pot.showOutstanding,
+                      ledger: pot.ledger,
+                      stillToGive: pot.stillToGive,
+                      payouts: pot.payouts,
+                      url,
+                    },
+                    shareLabels(t),
+                  ),
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -311,6 +343,9 @@ export function PublicContributionPage({
               currency={pot.currency}
               today={new Date().toISOString().slice(0, 10)}
               askForProof={pot.askForProof}
+              canAskToHide={
+                pot.visibility === "detailed" && !pot.allNamesHidden
+              }
             />
           </div>
         )}
@@ -412,20 +447,35 @@ export function PublicContributionPage({
               </h2>
             </div>
 
-            <div className="relative mt-3">
-              <Search
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                aria-hidden
-              />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("contributions.findYourName")}
-                aria-label={t("contributions.publicFindMeHint")}
-                className="pl-9"
-                autoComplete="name"
-              />
-            </div>
+            {/*
+              No search box when there are no names to search.
+
+              A list where every row reads "Anonymous" would return nothing for
+              every name typed into it, which reads as "my payment is missing"
+              — the single worst thing this page can say to somebody who has
+              paid. One sentence that explains why is the honest answer, and it
+              names who to ask instead.
+            */}
+            {pot.allNamesHidden ? (
+              <p className="bg-muted/40 text-muted-foreground mt-3 rounded-xl border p-3 text-sm leading-relaxed">
+                {t("contributions.publicNamesHidden")}
+              </p>
+            ) : (
+              <div className="relative mt-3">
+                <Search
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                  aria-hidden
+                />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("contributions.findYourName")}
+                  aria-label={t("contributions.publicFindMeHint")}
+                  className="pl-9"
+                  autoComplete="name"
+                />
+              </div>
+            )}
 
             {mine && mine.rows.length > 0 && (
               <div className="bg-primary/5 border-primary/20 mt-3 rounded-xl border p-3">
@@ -492,8 +542,7 @@ export function PublicContributionPage({
                             <span
                               className={cn(
                                 "font-medium",
-                                r.name === "Anonymous" &&
-                                  "text-muted-foreground italic",
+                                r.anonymous && "text-muted-foreground italic",
                               )}
                             >
                               {r.name}

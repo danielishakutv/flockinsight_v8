@@ -80,6 +80,14 @@ const schema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
     z.string().uuid().nullable(),
   ),
+  /**
+   * "Don't show my name on the page."
+   *
+   * Honoured only when this form CREATES the roster row — see below. It is a
+   * request about their own entry, and it cannot be used to reach anybody
+   * else's.
+   */
+  anonymous: z.boolean().optional(),
   /** Honeypot. Humans never see it; scripts fill everything. */
   hp: z.string().optional(),
 });
@@ -203,6 +211,20 @@ export async function recordMyPayment(
     const patch: { phone?: string; email?: string } = {};
     if (found && !found.phone && d.phone) patch.phone = d.phone;
     if (found && !found.email && d.email) patch.email = d.email;
+    /*
+     * `anonymous` is deliberately NOT applied here.
+     *
+     * Matching is on a phone number, an email address or a name, and none of
+     * those is a secret — the names are printed on the page this form is on.
+     * So anybody could type a member's name, tick the box and either take that
+     * member's name off the public list or, worse, put it back on after they
+     * asked for it to come off. Hiding a name is a request the church grants,
+     * from the People tab, where whoever did it is recorded.
+     *
+     * A person new to the roster is a different case: they are asking about a
+     * row that does not exist yet, so there is nobody else's wishes to
+     * overwrite. That is the branch below.
+     */
     if (Object.keys(patch).length > 0) {
       await db
         .update(contributionContributor)
@@ -218,6 +240,9 @@ export async function recordMyPayment(
         name: d.name.slice(0, 160),
         phone: d.phone,
         email: d.email,
+        // Their own new row, so their own choice. The church can still see
+        // the name inside the app; it is the public page that will not.
+        isAnonymous: d.anonymous === true,
       })
       .returning({ id: contributionContributor.id });
     contributorId = created?.id ?? null;

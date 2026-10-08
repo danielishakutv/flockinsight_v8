@@ -157,7 +157,17 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
               {
                 title: "Share tab → Share on WhatsApp",
                 detail:
-                  "The message is written for you and leads with the figure, because that is what people open the message for.",
+                  "The message is written for you, and it sends the whole update rather than a bare link: the figure, the bar, who has given, what is still owed, where the money went and how to pay.",
+              },
+              {
+                title: "Or choose “Just the link”",
+                detail:
+                  "One line and the address, if the group is large or the list is long. Everything is then behind a tap.",
+              },
+              {
+                title: "Read it before you send it",
+                detail:
+                  "The message is shown on the same screen, exactly as it will arrive. You are pasting it into a chat of forty people; it is worth the ten seconds.",
               },
               {
                 title: "Or copy the link",
@@ -169,6 +179,10 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
           {
             kind: "text",
             text: "The Share tab also lists, in plain words, exactly what people will see — so you know before you send it to forty people.",
+          },
+          {
+            kind: "note",
+            text: "The full update is the default on purpose. A link asks somebody to leave the chat, on a phone with no data left, to find out a figure that would have fitted in the message — so most of them do not, and you get asked “how much have we raised?” in the same group you posted the link in. The message that already answers it is the one that stops the asking. Anybody who opens the link can forward the same update on, from the Share button on the page itself.",
           },
           {
             kind: "table",
@@ -195,6 +209,59 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
           {
             kind: "warning",
             text: "“Show who has not given yet” is off by default, and it is worth leaving off. A public list of who still owes is right for six adults on a committee and can do real pastoral harm anywhere larger.",
+          },
+        ],
+      },
+      {
+        title: "Hiding names, one person or everybody",
+        blocks: [
+          {
+            kind: "text",
+            text: "Somebody will ask for their name to come off the list, and they will ask after the link has already gone out. Both answers are one tap, and neither of them hides any money — the amounts, the total and what went out all stay exactly as they were. It is who, not how much.",
+          },
+          {
+            kind: "table",
+            headers: ["What you want", "Where"],
+            rows: [
+              [
+                "One person off the list",
+                "People tab → the ⋮ beside their name → Hide this name publicly. Their line reads “Anonymous”.",
+              ],
+              [
+                "Everybody off the list",
+                "The switch at the top of the People tab, or “Hide everyone’s name” in the collection’s settings. Every line reads “Anonymous”.",
+              ],
+              [
+                "No list at all",
+                "Set the link to “Totals only”. Then there are no rows to read, just the figures.",
+              ],
+            ],
+          },
+          {
+            kind: "note",
+            text: "When more than one person is hidden the lines are numbered — Anonymous 1, Anonymous 2 — and the same person keeps the same number on the page and in the WhatsApp message. Twenty lines all reading the same word would be a list nobody can check: you could not tell twenty people giving once from one person giving twenty times, which is the arithmetic the page exists to settle.",
+          },
+          {
+            kind: "text",
+            text: "“Hide everyone” wins over each person’s own setting. That is deliberate: a version that mixed the two could leave one person named in an otherwise anonymous list, and that one visible name is more exposed than they were before anybody touched the setting.",
+          },
+          {
+            kind: "warning",
+            text: "With every name hidden, “Find my record” disappears from the page, because there is nothing left to search for. Somebody who wants to check their own payment has to ask whoever is collecting — who can still see every real name. That is the honest cost of hiding them, and the page says so rather than searching an anonymous list and finding nothing.",
+          },
+          {
+            kind: "note",
+            text: "Your own team always sees real names, in the app, in the CSV and in Reports. This is privacy from the group chat, not from the treasurer — somebody has to confirm the money.",
+          },
+          {
+            kind: "example",
+            title: "A bereavement collection",
+            lines: [
+              "The collection is set up as normal and the link goes into the family's group chat.",
+              "“Hide everyone’s name” is turned on before it is sent, so every line reads Anonymous 1, Anonymous 2 and so on.",
+              "The total, every amount and every naira that goes out are all still public. Nobody can say the money was not accounted for.",
+              "What nobody can say is who gave 200,000 and who gave 1,000 — which in a bereavement is the entire point.",
+            ],
           },
         ],
       },
@@ -363,7 +430,7 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
       },
       {
         q: "Someone gave but does not want their name shown. Can I hide it?",
-        a: "Yes. Edit them on the People tab and turn on “Show as Anonymous”. The public link shows Anonymous; your team still sees the real name.",
+        a: "Yes, two ways. For one person: the ⋮ beside their name on the People tab → Hide this name publicly. For everybody: the switch at the top of that tab. Either way the amounts stay on the page and your team still sees the real names. Somebody filling in the “I have paid” form can also tick “Don’t show my name” for themselves — though only if they are new to the list, because the names on that page are not secret and a tickbox must not be able to change a row that already belongs to somebody else.",
       },
     ],
     links: [
@@ -406,6 +473,12 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
       "payout",
       "handover",
       "anonymous",
+      "hide names",
+      "hide name",
+      "privacy",
+      "share on whatsapp",
+      "whatsapp message",
+      "send as text",
     ],
   },
 ];

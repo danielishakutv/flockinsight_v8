@@ -792,8 +792,17 @@ function ExternalLinkDialog({
           </div>
           <div>
             <Label htmlFor="ex-url">Where it goes</Label>
+            {/*
+              type="url" for the keyboard, which is the whole reason: a phone
+              shows a layout with "/" and "." on it. It does not validate
+              anything here — there is no form element around this field, so no
+              native bubble can refuse "chat.whatsapp.com/abc", which is a
+              perfectly good thing to type and which `cleanItemUrl` completes
+              on the server.
+            */}
             <Input
               id="ex-url"
+              type="url"
               value={url}
               placeholder="chat.whatsapp.com/..."
               onChange={(e) => setUrl(e.target.value)}

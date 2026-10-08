@@ -1,0 +1,1 @@
+ALTER TABLE "contribution" ADD COLUMN "hide_names" boolean DEFAULT false NOT NULL;

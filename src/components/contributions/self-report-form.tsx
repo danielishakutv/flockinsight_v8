@@ -43,12 +43,22 @@ export function SelfReportForm({
   currency,
   today,
   askForProof,
+  canAskToHide,
   onDone,
 }: {
   slug: string;
   currency: string;
   today: string;
   askForProof: boolean;
+  /**
+   * Whether "don't show my name" is worth offering.
+   *
+   * False when the page already hides every name, or shows no list at all.
+   * A tickbox that changes nothing visible is a promise the page did not need
+   * to make, and somebody would tick it and then wonder which one of the two
+   * settings had been honoured.
+   */
+  canAskToHide: boolean;
   onDone?: () => void;
 }) {
   const t = useT();
@@ -62,6 +72,7 @@ export function SelfReportForm({
   const [method, setMethod] = useState("transfer");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
+  const [anonymous, setAnonymous] = useState(false);
   const [proof, setProof] = useState<ProofValue>(null);
   const [hp, setHp] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +93,13 @@ export function SelfReportForm({
       method,
       reference,
       note,
+      /*
+       * Only sent when the page could honour it. The server honours it only
+       * for somebody new to the roster — see the comment in the action: the
+       * names on this page are not secrets, so a tickbox must not be able to
+       * reach into a row that already belongs to somebody else.
+       */
+      anonymous: canAskToHide ? anonymous : false,
       proofMediaId: proof?.mediaId ?? null,
       hp,
     };
@@ -254,6 +272,25 @@ export function SelfReportForm({
             maxLength={400}
           />
         </Field>
+
+        {canAskToHide && (
+          <label className="bg-muted/40 flex cursor-pointer items-start gap-3 rounded-xl border p-3">
+            <input
+              type="checkbox"
+              checked={anonymous}
+              onChange={(e) => setAnonymous(e.target.checked)}
+              className="accent-primary mt-0.5 size-4 shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">
+                {t("contributions.selfHideName")}
+              </span>
+              <span className="text-muted-foreground block text-xs leading-relaxed">
+                {t("contributions.selfHideNameHint")}
+              </span>
+            </span>
+          </label>
+        )}
 
         {askForProof && (
           <Field label={t("contributions.selfProof")}>

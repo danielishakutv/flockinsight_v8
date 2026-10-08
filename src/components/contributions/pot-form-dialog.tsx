@@ -53,6 +53,7 @@ export type PotFormValues = {
   showOutstanding: boolean;
   showPayouts: boolean;
   showNotes: boolean;
+  hideNames: boolean;
   allowSelfReport: boolean;
   askForProof: boolean;
   confirmationsRequired: number;
@@ -77,6 +78,7 @@ export function blankPot(today: string): PotFormValues {
     showOutstanding: false,
     showPayouts: true,
     showNotes: true,
+    hideNames: false,
     allowSelfReport: true,
     askForProof: true,
     confirmationsRequired: 1,
@@ -159,6 +161,7 @@ export function PotFormDialog({
       showOutstanding: v.showOutstanding,
       showPayouts: v.showPayouts,
       showNotes: v.showNotes,
+      hideNames: v.hideNames,
       allowSelfReport: v.allowSelfReport,
       askForProof: v.askForProof,
       confirmationsRequired: v.confirmationsRequired,
@@ -493,12 +496,26 @@ export function PotFormDialog({
                   />
                 )}
                 {v.visibility === "detailed" && (
-                  <Toggle
-                    label={t("contributions.showNotes")}
-                    checked={v.showNotes}
-                    onChange={(next) => set("showNotes", next)}
-                    id="pot-show-notes"
-                  />
+                  <>
+                    <Toggle
+                      label={t("contributions.showNotes")}
+                      checked={v.showNotes}
+                      onChange={(next) => set("showNotes", next)}
+                      id="pot-show-notes"
+                    />
+                    {/*
+                      Only offered at `detailed`, because it is the only
+                      visibility that publishes a name at all — on `summary`
+                      there is no list to take the names off.
+                    */}
+                    <Toggle
+                      label={t("contributions.hideNames")}
+                      hint={t("contributions.hideNamesBlurb")}
+                      checked={v.hideNames}
+                      onChange={(next) => set("hideNames", next)}
+                      id="pot-hide-names"
+                    />
+                  </>
                 )}
                 <Toggle
                   label={t("contributions.showOutstanding")}
