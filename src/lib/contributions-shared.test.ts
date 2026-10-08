@@ -568,33 +568,20 @@ describe("publicNames", () => {
     expect(published).not.toContain("Esther");
   });
 
-  it("numbers hidden people so a long list can still be read and checked", () => {
+  it("calls every hidden person exactly Anonymous, with no number after it", () => {
+    /*
+     * The lists are numbered by line now, on the page and in the message, so a
+     * second number inside the name would put two of them on one row —
+     * "2. Anonymous 1 — ₦5,000" — which is the one thing that makes a numbered
+     * list unreadable.
+     */
     const names = publicNames({ roster: ROSTER, hideNames: true });
     expect([...names.values()].map((v) => v.name)).toEqual([
-      "Anonymous 1",
-      "Anonymous 2",
-      "Anonymous 3",
-      "Anonymous 4",
+      "Anonymous",
+      "Anonymous",
+      "Anonymous",
+      "Anonymous",
     ]);
-  });
-
-  it("does not number a single hidden person", () => {
-    // A number on its own invites the question of who 1 is, and answers
-    // nothing: there is no second row to tell it apart from.
-    const names = publicNames({
-      roster: [
-        { id: "a", name: "Grace Udo", isAnonymous: false },
-        { id: "b", name: "Musa Bala", isAnonymous: true },
-      ],
-      hideNames: false,
-    });
-    expect(names.get("b")!.name).toBe("Anonymous");
-  });
-
-  it("numbers in roster order, so the page and the message agree", () => {
-    const names = publicNames({ roster: ROSTER, hideNames: false });
-    expect(names.get("b")!.name).toBe("Anonymous 1");
-    expect(names.get("d")!.name).toBe("Anonymous 2");
   });
 
   it("takes a translated label", () => {
@@ -603,7 +590,7 @@ describe("publicNames", () => {
       hideNames: true,
       label: "Ba a sani ba",
     });
-    expect(names.get("a")!.name).toBe("Ba a sani ba 1");
+    expect(names.get("a")!.name).toBe("Ba a sani ba");
   });
 });
 
@@ -665,7 +652,7 @@ function view(over: Partial<Parameters<typeof shareText>[0]> = {}) {
     showOutstanding: false,
     ledger: [
       { name: "Grace Udo", amount: 10_000, status: "confirmed" as const },
-      { name: "Anonymous 1", amount: 5_000, status: "confirmed" as const },
+      { name: "Anonymous", amount: 5_000, status: "confirmed" as const },
       { name: "Musa Bala", amount: 5_000, status: "pending" as const },
     ],
     stillToGive: [] as { name: string; outstanding: number }[],
@@ -691,6 +678,71 @@ describe("shareText", () => {
     expect(msg).toContain("https://flockinsight.com/p/choir-uniform-levy-ab12c");
   });
 
+  it("numbers every list, so one row can be referred to in the reply", () => {
+    /*
+     * The reason the numbers exist: the next thing somebody types in the group
+     * is about one line of this message — "number 4 has not paid", "number 2
+     * is me". Naming the row instead is impossible when the names are hidden
+     * and awkward when two sisters share a surname.
+     */
+    const msg = shareText(
+      view({
+        showOutstanding: true,
+        stillToGive: [
+          { name: "Esther Okon", outstanding: 5_000 },
+          { name: "Sunday Eze", outstanding: 2_000 },
+        ],
+        paidOut: 40_000,
+        payouts: [
+          { label: "Fabric deposit", amount: 30_000, status: "approved" as const },
+          { label: "Tailor", amount: 10_000, status: "approved" as const },
+        ],
+      }),
+    );
+    expect(msg).toContain("1. Grace Udo — ₦10,000");
+    expect(msg).toContain("2. Anonymous — ₦5,000");
+    expect(msg).toContain("3. Musa Bala — ₦5,000 (awaiting)");
+    // Each list counts from 1 again, because each answers its own question.
+    expect(msg).toContain("1. Esther Okon — ₦5,000");
+    expect(msg).toContain("2. Sunday Eze — ₦2,000");
+    expect(msg).toContain("1. Fabric deposit — ₦30,000");
+    expect(msg).toContain("2. Tailor — ₦10,000");
+  });
+
+  it("never puts two numbers on one line", () => {
+    // A hidden person is "Anonymous", never "Anonymous 2" — the line number is
+    // the only number on the row.
+    const msg = shareText(
+      view({
+        ledger: [
+          { name: "Anonymous", amount: 10_000, status: "confirmed" },
+          { name: "Anonymous", amount: 5_000, status: "confirmed" },
+        ],
+      }),
+    );
+    expect(msg).toContain("1. Anonymous — ₦10,000");
+    expect(msg).toContain("2. Anonymous — ₦5,000");
+    expect(msg).not.toMatch(/\d+\. Anonymous \d/);
+  });
+
+  it("counts the numbers downward from 1 without a gap", () => {
+    const msg = shareText(
+      view({
+        ledger: Array.from({ length: 9 }, (_, i) => ({
+          name: `Person ${i}`,
+          amount: 1_000,
+          status: "confirmed" as const,
+        })),
+      }),
+    );
+    const numbers = msg
+      .split("\n")
+      .map((l) => /^(\d+)\. Person /.exec(l))
+      .filter(Boolean)
+      .map((m) => Number(m![1]));
+    expect(numbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
   it("draws a bar whose length matches the percentage", () => {
     const msg = shareText(view());
     // 145,000 of 200,000 is 73%, which rounds to seven blocks of ten.
@@ -705,9 +757,9 @@ describe("shareText", () => {
 
   it("marks money nobody has confirmed, so the lines add up to the total", () => {
     const msg = shareText(view());
-    const line = msg.split("\n").find((l) => l.startsWith("Musa Bala"));
+    const line = msg.split("\n").find((l) => l.includes("Musa Bala"));
     expect(line).toContain("(awaiting)");
-    const confirmed = msg.split("\n").find((l) => l.startsWith("Grace Udo"));
+    const confirmed = msg.split("\n").find((l) => l.includes("Grace Udo"));
     expect(confirmed).not.toContain("awaiting");
   });
 
@@ -720,14 +772,16 @@ describe("shareText", () => {
     const msg = shareText(
       view({
         ledger: [
-          { name: "Anonymous 1", amount: 10_000, status: "confirmed" },
-          { name: "Anonymous 2", amount: 5_000, status: "confirmed" },
+          { name: "Anonymous", amount: 10_000, status: "confirmed" },
+          { name: "Anonymous", amount: 5_000, status: "confirmed" },
         ],
       }),
     );
     expect(msg).not.toContain("Grace Udo");
-    expect(msg).toContain("Anonymous 1");
-    expect(msg).toContain("Anonymous 2");
+    expect(msg).not.toContain("Musa Bala");
+    // Still two distinguishable rows, by their line numbers.
+    expect(msg).toContain("1. Anonymous");
+    expect(msg).toContain("2. Anonymous");
   });
 
   it("has no list at all when the pot publishes none", () => {
@@ -806,6 +860,9 @@ describe("shareText", () => {
     const msg = shareText(view({ ledger: many }));
     expect(msg.length).toBeLessThanOrEqual(SHARE_MAX_CHARS);
     expect(msg).toMatch(/and \d+ more on the page/);
+    // Trimming does not disturb the numbering of what is left.
+    expect(msg).toMatch(/^1\. Contributor with quite a long name/m);
+    expect(msg).toMatch(/^15\. Contributor with quite a long name/m);
     // The link survives the trimming, because without it the message is a dead end.
     expect(msg).toContain("https://flockinsight.com/p/choir-uniform-levy-ab12c");
     expect(msg).toContain("How to pay");

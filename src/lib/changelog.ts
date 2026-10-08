@@ -29,6 +29,21 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.72.0",
+    date: "2026-10-08",
+    summary:
+      "Every list on a collection is numbered now — on the page and in the WhatsApp message, from the same list in the same order. So “number 4 has not paid” means one row, whichever of the two somebody is looking at.",
+    changes: {
+      Added: [
+        "Numbered lists on a group collection: who has given, who is still to give, and where the money went. The numbers appear on the public page and in the WhatsApp message, counted from the same list in the same order, so a reply in the group chat can point at one row.",
+        "It is what a group chat does next. Somebody reads the message and replies about one line of it — and without a number the only way to say which line is to repeat a name, which is impossible when the names are hidden and awkward when two sisters share a surname.",
+      ],
+      Changed: [
+        "A hidden person now reads simply “Anonymous”. Earlier today they were numbered inside the name — “Anonymous 1”, “Anonymous 2” — which would have put two different numbers on one line beside the new list numbers, and two numbers on a row is the one thing that makes a numbered list unreadable. The line number does the same job, and does it for named people too.",
+      ],
+    },
+  },
+  {
     version: "0.71.0",
     date: "2026-10-08",
     summary:
@@ -39,7 +54,7 @@ export const releases: Release[] = [
         "“Just the link” is still there, one tap away, for when the group is large or the list is long.",
         "Anybody who opens the link can forward the same update on, from the Share button on the page itself. It is built from what that page shows, so a forwarded message can never say more than the person forwarding it could see.",
         "Hide one person’s name: the ⋮ beside them on the People tab → Hide this name publicly. One tap, because this gets asked for in the thirty seconds after a service, not at a desk.",
-        "Hide everybody’s name: one switch at the top of the People tab, or in the collection’s settings. Every line reads “Anonymous”, numbered when there is more than one so the list can still be read and its arithmetic still checked.",
+        "Hide everybody’s name: one switch at the top of the People tab, or in the collection’s settings. Every line reads “Anonymous”.",
         "Somebody filling in the “I have paid” form can ask for their own name to be left off, if they are new to the list.",
       ],
       Improved: [

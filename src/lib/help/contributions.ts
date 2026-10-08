@@ -213,6 +213,27 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
         ],
       },
       {
+        title: "The numbers beside each line",
+        blocks: [
+          {
+            kind: "text",
+            text: "Every list is numbered — who has given, who is still to give, and where the money went — on the page and in the WhatsApp message alike, from the same list in the same order. So “number 4 has not paid” and “check number 7, that is mine” mean one row, whichever of the two the person is looking at.",
+          },
+          {
+            kind: "text",
+            text: "It is the thing a group chat does next. Somebody reads the message and replies about one line of it, and without a number the only way to say which line is to repeat a name — impossible when the names are hidden, and awkward when two sisters share a surname.",
+          },
+          {
+            kind: "note",
+            text: "Each list counts from 1 again, because each one answers its own question. “Number 2” under “Still to give” is not “number 2” under “Who has given”, so say which list you mean if both are on the message.",
+          },
+          {
+            kind: "warning",
+            text: "The numbers are positions in the list as it stands, not permanent labels. Record a payment tomorrow and it goes to the top, pushing the rest down by one. So quote them from the message you have just sent — that message keeps its own numbering in the chat for as long as the chat does — rather than writing them down somewhere to use next month.",
+          },
+        ],
+      },
+      {
         title: "Hiding names, one person or everybody",
         blocks: [
           {
@@ -239,7 +260,7 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
           },
           {
             kind: "note",
-            text: "When more than one person is hidden the lines are numbered — Anonymous 1, Anonymous 2 — and the same person keeps the same number on the page and in the WhatsApp message. Twenty lines all reading the same word would be a list nobody can check: you could not tell twenty people giving once from one person giving twenty times, which is the arithmetic the page exists to settle.",
+            text: "Every hidden line reads simply “Anonymous” — and because every list is numbered, you can still point at one of them. “Number 4, that is me” works whether the names are showing or not.",
           },
           {
             kind: "text",

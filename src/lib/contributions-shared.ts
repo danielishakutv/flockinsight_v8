@@ -581,49 +581,32 @@ export type PublicName = {
  * the two must never disagree: a leader who hides the names and then pastes a
  * message naming everybody has been told a lie by the settings screen.
  *
- * Two decisions worth stating.
- *
  * **The pot-level switch overrides the per-person flag, it does not merge with
  * it.** "Hide everyone" that left one person named because their own flag was
  * off would be the worst possible outcome — the one visible name in an
  * otherwise anonymous list is more exposed than they were before.
  *
- * **Hidden people are numbered, but only when there is more than one.** A
- * twenty-row list of the identical word "Anonymous" is a list nobody can read
- * and nobody can check: you cannot tell twenty people giving once from one
- * person giving twenty times, which is exactly the arithmetic this page exists
- * to make checkable. A single hidden person among named ones needs no number,
- * and giving them one would only invite the question of who 1 is.
- *
- * The numbers run in roster order, so "Anonymous 3" is the same person on the
- * page and in the message. They are not identifiers: removing somebody earlier
- * in the roster renumbers those after them, which is the honest trade for not
- * storing a public pseudonym that would then have to be kept for ever.
+ * A hidden person is called exactly "Anonymous", with no number after it. An
+ * earlier version numbered them in roster order so that a long anonymous list
+ * could still be read; the lists are now numbered by line instead, on the page
+ * and in the message alike, which does that job better and does it for named
+ * people too. Keeping both would put two different numbers on one line —
+ * "2. Anonymous 1 — ₦5,000" — which is the one thing that makes a numbered
+ * list unreadable.
  */
 export function publicNames(opts: {
-  /** The roster, in a stable order — the caller sorts, so numbers do not jump. */
   roster: readonly { id: string; name: string; isAnonymous: boolean }[];
   /** The pot's "hide every name" setting. */
   hideNames: boolean;
   label?: string;
 }): Map<string, PublicName> {
   const label = opts.label ?? ANONYMOUS_LABEL;
-  const hiddenCount = opts.roster.filter(
-    (c) => opts.hideNames || c.isAnonymous,
-  ).length;
-  const numbered = hiddenCount > 1;
-
   const out = new Map<string, PublicName>();
-  let n = 0;
   for (const c of opts.roster) {
-    if (!opts.hideNames && !c.isAnonymous) {
-      out.set(c.id, { name: c.name, anonymous: false });
-      continue;
-    }
-    n += 1;
+    const hidden = opts.hideNames || c.isAnonymous;
     out.set(c.id, {
-      name: numbered ? `${label} ${n}` : label,
-      anonymous: true,
+      name: hidden ? label : c.name,
+      anonymous: hidden,
     });
   }
   return out;
@@ -859,7 +842,7 @@ export function shareText(view: ShareView, labels?: Partial<ShareLabels>): strin
     if (view.ledger.length > 0) {
       out.push("");
       out.push(`*${L.whoHasGiven}*`);
-      for (const r of view.ledger.slice(0, maxRows)) {
+      view.ledger.slice(0, maxRows).forEach((r, i) => {
         const amount = r.amount === null ? "" : ` — ${money(r.amount)}`;
         /*
          * Only confirmed money is in the figure at the top, so a claim nobody
@@ -868,8 +851,8 @@ export function shareText(view: ShareView, labels?: Partial<ShareLabels>): strin
          * than no message — it is the argument it was sent to prevent.
          */
         const mark = r.status === "confirmed" ? "" : ` (${L.awaiting})`;
-        out.push(`${oneLine(r.name, 40)}${amount}${mark}`);
-      }
+        out.push(numbered(i + 1, `${oneLine(r.name, 40)}${amount}${mark}`));
+      });
       const left = view.ledger.length - maxRows;
       if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
     }
@@ -878,8 +861,13 @@ export function shareText(view: ShareView, labels?: Partial<ShareLabels>): strin
     if (view.showOutstanding && view.stillToGive.length > 0) {
       out.push("");
       out.push(`*${L.stillToGive}*`);
-      for (const s of view.stillToGive.slice(0, SHARE_MAX_OUTSTANDING))
-        out.push(`${oneLine(s.name, 40)} — ${money(s.outstanding)}`);
+      view.stillToGive
+        .slice(0, SHARE_MAX_OUTSTANDING)
+        .forEach((s, i) =>
+          out.push(
+            numbered(i + 1, `${oneLine(s.name, 40)} — ${money(s.outstanding)}`),
+          ),
+        );
       const left = view.stillToGive.length - SHARE_MAX_OUTSTANDING;
       if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
     }
@@ -890,8 +878,13 @@ export function shareText(view: ShareView, labels?: Partial<ShareLabels>): strin
       if (paid.length > 0) {
         out.push("");
         out.push(`*${L.whereItWent}*`);
-        for (const p of paid.slice(0, SHARE_MAX_PAYOUTS))
-          out.push(`${oneLine(p.label, 40)} — ${money(p.amount)}`);
+        paid
+          .slice(0, SHARE_MAX_PAYOUTS)
+          .forEach((p, i) =>
+            out.push(
+              numbered(i + 1, `${oneLine(p.label, 40)} — ${money(p.amount)}`),
+            ),
+          );
         const left = paid.length - SHARE_MAX_PAYOUTS;
         if (left > 0) out.push(`_${fill(L.andMore, { count: left })}_`);
         if (view.paidOut > 0)
@@ -924,6 +917,27 @@ export function shareText(view: ShareView, labels?: Partial<ShareLabels>): strin
     text = compose(rows);
   }
   return text;
+}
+
+/**
+ * A numbered line.
+ *
+ * Every list in the message is numbered, because the message is read in a group
+ * chat where the next thing somebody types is about one row of it: "number 4
+ * has not paid", "check number 7, that is me". Without a number there is no way
+ * to say which line you mean except by repeating a name — which is impossible
+ * on a list whose names are hidden, and awkward on one where two sisters share
+ * a surname.
+ *
+ * The numbers are positions in the list as it stands, counted downward from 1,
+ * and the public page prints the same ones from the same arrays. They are not
+ * permanent: a payment recorded tomorrow goes to the top and pushes the rest
+ * down. That is why the numbers are quoted from the message somebody just sent
+ * rather than kept anywhere — the message in the chat holds its own numbering
+ * for as long as the chat does.
+ */
+function numbered(n: number, text: string): string {
+  return `${n}. ${text}`;
 }
 
 /** Newlines flattened, length capped — a textarea field has to become one line here. */

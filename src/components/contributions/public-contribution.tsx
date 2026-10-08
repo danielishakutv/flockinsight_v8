@@ -122,6 +122,21 @@ export function PublicContributionPage({
 
   const visible = mine?.rows ?? pot.ledger;
 
+  /*
+   * The number printed beside each payment, and the same one the WhatsApp
+   * message prints — both count down the same array from 1, so "number 4" is
+   * one row whichever of the two somebody is looking at.
+   *
+   * Keyed by row id and taken from the WHOLE ledger, never from `visible`.
+   * Numbering the filtered view instead would renumber the list as somebody
+   * types in the search box, so the row they found would not be the number
+   * they were told.
+   */
+  const lineOf = useMemo(
+    () => new Map(pot.ledger.map((r, i) => [r.id, i + 1])),
+    [pot.ledger],
+  );
+
   function copyLink() {
     navigator.clipboard
       .writeText(url)
@@ -539,6 +554,15 @@ export function PublicContributionPage({
                       {visible.map((r) => (
                         <tr key={r.id} className="border-b last:border-0">
                           <td className="py-2.5 pr-3">
+                            {/*
+                              Inline rather than a fifth column: the table is
+                              already four columns inside 288px of content on
+                              the narrowest phone, and a column of its own
+                              would push the status badge out of reach.
+                            */}
+                            <span className="text-muted-foreground mr-1.5 text-xs tabular-nums">
+                              {lineOf.get(r.id)}.
+                            </span>
                             <span
                               className={cn(
                                 "font-medium",
@@ -603,6 +627,9 @@ export function PublicContributionPage({
               {pot.stillToGive.map((s, i) => (
                 <li key={`${s.name}-${i}`}>
                   <Badge variant="outline" className="font-medium">
+                    <span className="text-muted-foreground tabular-nums">
+                      {i + 1}.
+                    </span>{" "}
                     {s.name} · {formatMoneyCompact(s.outstanding, pot.currency)}
                   </Badge>
                 </li>

@@ -546,8 +546,12 @@ describe("the public page", () => {
     expect(JSON.stringify(pub!.ledger)).not.toContain("ZZ");
     expect(JSON.stringify(pub!.stillToGive)).not.toContain("ZZ");
 
-    // Numbered, so a long list is still readable and its arithmetic checkable.
-    expect(pub!.ledger.every((r) => /^Anonymous( \d+)?$/.test(r.name))).toBe(true);
+    /*
+     * Exactly "Anonymous", with nothing after it. The lists are numbered by
+     * line now — on the page and in the WhatsApp message, from the same arrays
+     * — so a number inside the name would put two of them on one row.
+     */
+    expect(pub!.ledger.every((r) => r.name === "Anonymous")).toBe(true);
 
     // The amounts are untouched: this hides who, never how much.
     const named = await getPublicContribution(row.slug);
@@ -563,12 +567,12 @@ describe("the public page", () => {
     expect(after!.allNamesHidden).toBe(false);
   });
 
-  it("gives the same person the same number on every read", async () => {
+  it("hands back the same rows in the same order on every read", async () => {
     /*
-     * The numbers are derived, not stored, so the only thing keeping them
-     * stable is the ordered roster read. Without that ordering somebody is
-     * "Anonymous 2" on the page and "Anonymous 5" in the WhatsApp message
-     * composed from the same data a second later.
+     * The line numbers the page and the message print are positions in this
+     * array, so an unordered read would number the same payment differently in
+     * the two places — and "number 4" is what somebody types into the group
+     * chat. The ordering is in the query; this is what says so.
      */
     const [row] = await db
       .update(contribution)
