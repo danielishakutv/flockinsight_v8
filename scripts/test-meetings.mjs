@@ -212,6 +212,27 @@ const note = await post(`/api/meet/${meeting.code}/action`, {
 ok("a host can put a note on the screen", note.json?.ok === true, note.json?.error ?? "");
 ok("the stage is versioned", (note.json?.stage?.rev ?? 0) > 0);
 
+/*
+ * The sharer has to be able to see what they shared, without waiting.
+ *
+ * A host's own long-poll never receives their own broadcast — `readSignals`
+ * filters it out, which is right for an ICE candidate and wrong for the shared
+ * screen — so it sat out the twelve-second hold and then returned the stage in
+ * the response body. Everybody else had it instantly. The reply to the action
+ * is what closes that gap, so it has to carry both the new stage and the time
+ * the server believed it; without the timestamp a slower reply already in
+ * flight can take the verse back off the screen.
+ */
+ok(
+  "the reply carries the new stage, so the sharer need not wait for a poll",
+  note.json?.stage?.kind === "text" && note.json?.stage?.body?.includes("Hymn 214"),
+);
+ok(
+  "and says when, so a slower answer cannot undo it",
+  typeof note.json?.at === "string" && Number.isFinite(Date.parse(note.json.at)),
+  note.json?.at,
+);
+
 const verse = await post(`/api/meet/${meeting.code}/action`, {
   peer: A.peerId,
   secret: A.secret,

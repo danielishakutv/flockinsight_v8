@@ -129,7 +129,15 @@ export type PeerDiagnostics = {
 
 export type MeetingClientEvents = {
   onRoster?: (roster: RosterEntry[]) => void;
-  onStage?: (stage: Stage) => void;
+  /**
+   * What is on the shared screen, and when the server said so.
+   *
+   * The timestamp is not decoration. A host puts a verse up through /action
+   * and applies it from that reply, so they see it as fast as the room does —
+   * and a sync response that was already in flight when they did would
+   * otherwise arrive carrying the previous screen and take it back down.
+   */
+  onStage?: (stage: Stage, at: string) => void;
   onMedia?: (media: Map<string, RemoteMedia>) => void;
   onLocalState?: (state: LocalState) => void;
   onChat?: (msg: {
@@ -147,7 +155,7 @@ export type MeetingClientEvents = {
    * so the room reacts at once, and on every poll, so somebody joining late
    * or reconnecting lands on the same screen as everybody else.
    */
-  onSpotlight?: (peerId: string | null) => void;
+  onSpotlight?: (peerId: string | null, at: string) => void;
   onControl?: (payload: Record<string, unknown>) => void;
   onRecording?: (payload: Record<string, unknown>) => void;
   onEnded?: (reason: string) => void;
@@ -695,6 +703,9 @@ export class MeetingClient {
     signals?: SignalEnvelope[];
     roster?: RosterEntry[];
     stage?: Stage;
+    /** The server's clock when this answer was built. Orders room state. */
+    serverTime?: string;
+    spotlightPeerId?: string | null;
     ended?: boolean;
     removed?: boolean;
     waitingForHost?: boolean;
@@ -710,11 +721,19 @@ export class MeetingClient {
       this.shutdown("This meeting has ended.");
       return;
     }
-    if (data.stage) this.events.onStage?.(data.stage);
+    /*
+     * The server's clock, or this instant if an older server did not send one.
+     * Falling back to "now" keeps the ordering guard from rejecting
+     * everything, which would freeze the shared screen rather than merely
+     * leave it unordered.
+     */
+    const at = data.serverTime ?? new Date().toISOString();
+    if (data.stage) this.events.onStage?.(data.stage, at);
     // Always, including when it is null: clearing has to travel too.
     if ("spotlightPeerId" in data) {
       this.events.onSpotlight?.(
         typeof data.spotlightPeerId === "string" ? data.spotlightPeerId : null,
+        at,
       );
     }
     if (data.roster) {
@@ -997,7 +1016,7 @@ export class MeetingClient {
         this.events.onReaction?.(s.fromPeer, String(s.payload.emoji ?? "👍"));
         return;
       case "stage":
-        this.events.onStage?.(s.payload as unknown as Stage);
+        this.events.onStage?.(s.payload as unknown as Stage, s.at);
         return;
       case "recording":
         this.events.onRecording?.(s.payload);
@@ -1018,6 +1037,7 @@ export class MeetingClient {
     if (action === "spotlight") {
       this.events.onSpotlight?.(
         typeof s.payload.peerId === "string" ? s.payload.peerId : null,
+        s.at,
       );
       return;
     }

@@ -88,6 +88,17 @@ export async function POST(
   const broadcast = (type: Parameters<typeof postSignals>[2][number]["type"], payload: Record<string, unknown>) =>
     postSignals(m.id, peer.peerId, [{ toPeer: null, type, payload }]);
 
+  /*
+   * When this answer was true, by the server's own clock.
+   *
+   * Everything that changes what the whole room is looking at carries it, so
+   * the caller can apply the change at once instead of waiting to be told
+   * about it — and so a slower reply that was already in flight cannot undo
+   * it. See `applyRoomState` in meeting-room.tsx; the sync route has sent
+   * `serverTime` for the same reason since it was written.
+   */
+  const at = () => new Date().toISOString();
+
   const log = async (opts: {
     action: string;
     summary: string;
@@ -158,7 +169,7 @@ export async function POST(
           ? `Put ${name} on the main screen in "${m.title}"`
           : `Cleared the main screen in "${m.title}"`,
       });
-      return json({ ok: true, spotlightPeerId: wanted });
+      return json({ ok: true, spotlightPeerId: wanted, at: at() });
     }
 
     /* --------------------------------------------------------- stage */
@@ -194,7 +205,7 @@ export async function POST(
         summary: `Put ${stage.reference} on the screen in "${m.title}"`,
         meta: { kind: "verse", reference: stage.reference, translation: usedTranslation },
       });
-      return json({ ok: true, stage });
+      return json({ ok: true, stage, at: at() });
     }
 
     case "stage.text": {
@@ -214,7 +225,7 @@ export async function POST(
         summary: `Put a note on the screen in "${m.title}"`,
         meta: { kind: "text", title: stage.title },
       });
-      return json({ ok: true, stage });
+      return json({ ok: true, stage, at: at() });
     }
 
     case "stage.slides": {
@@ -255,7 +266,7 @@ export async function POST(
         summary: `Started sharing ${ordered.length} slide${ordered.length === 1 ? "" : "s"} in "${m.title}"`,
         meta: { kind: "slide", count: ordered.length },
       });
-      return json({ ok: true, stage });
+      return json({ ok: true, stage, at: at() });
     }
 
     case "stage.slide": {
@@ -269,7 +280,7 @@ export async function POST(
       const stage: Stage = { ...current, index, rev: current.rev + 1 };
       await setStage(m.id, stage);
       await broadcast("stage", stage as unknown as Record<string, unknown>);
-      return json({ ok: true, stage });
+      return json({ ok: true, stage, at: at() });
     }
 
     case "stage.clear": {
@@ -277,7 +288,7 @@ export async function POST(
       const stage: Stage = { kind: "none", rev: (await getStage(m.id)).rev + 1 };
       await setStage(m.id, stage);
       await broadcast("stage", stage as unknown as Record<string, unknown>);
-      return json({ ok: true, stage });
+      return json({ ok: true, stage, at: at() });
     }
 
     /* ------------------------------------------------- host controls */

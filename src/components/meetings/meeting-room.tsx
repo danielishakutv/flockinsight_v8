@@ -242,6 +242,58 @@ export function MeetingRoom(props: {
   const screenShareable = shareCapable && !shareRefused;
   /** What the host has put on the main screen for the whole room. */
   const [spotlight, setSpotlight] = useState<string | null>(null);
+  /**
+   * The server's clock at the moment the shared screen last changed, as this
+   * browser understands it.
+   *
+   * There are three ways a change arrives — a broadcast signal, the body of a
+   * poll, and the reply to the host's own action — and they do not arrive in
+   * the order they happened. This keeps the newest one.
+   */
+  const roomStateAt = useRef(0);
+
+  /**
+   * Apply a change to what the whole room is looking at — once, and only if it
+   * is newer than what is already on screen.
+   *
+   * This exists because of a real complaint: everybody else saw a verse appear
+   * the instant it was shared, and the person who shared it waited up to five
+   * seconds. The cause is in the signalling, and it is not a slow network.
+   *
+   * A host puts a verse up through /action. The server writes it and
+   * broadcasts a `stage` signal, which wakes everyone's long-poll — and
+   * `readSignals` filters out signals from the peer asking, which is correct
+   * for an offer or an ICE candidate and exactly wrong here. So the host's own
+   * poll is woken, finds nothing addressed to it, and goes back to waiting:
+   * three seconds at a time, up to the twelve-second hold, until it gives up
+   * and returns the fresh stage in the response body. The host watched their
+   * own sermon slide arrive on a timer.
+   *
+   * The reply to the action already contained the new stage. It was thrown
+   * away. Now it is applied, which is the same thing the chat has always done
+   * — see `sendChat` — and it makes the person who shared it the FIRST to see
+   * it rather than the last.
+   *
+   * The timestamp is the other half. Applying the reply early means a poll
+   * that was already in flight can land a moment later carrying the previous
+   * screen, and take the verse back down for three seconds. So every path
+   * states when the server believed it, and an older answer is ignored. The
+   * stage's own `rev` could order two stage changes, but not a stage against a
+   * spotlight, and both ride in the same response.
+   */
+  const applyRoomState = useCallback(
+    (
+      at: string | undefined,
+      next: { stage?: unknown; spotlightPeerId?: string | null },
+    ) => {
+      const when = at ? Date.parse(at) : Date.now();
+      if (!Number.isFinite(when) || when < roomStateAt.current) return;
+      roomStateAt.current = when;
+      if (next.stage !== undefined) setStage(parseStage(next.stage));
+      if (next.spotlightPeerId !== undefined) setSpotlight(next.spotlightPeerId);
+    },
+    [],
+  );
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [busyStage, setBusyStage] = useState(false);
@@ -519,7 +571,7 @@ export function MeetingRoom(props: {
           transport: data.meeting.transport === "sfu" ? "sfu" : "mesh",
           events: {
             onRoster: setRoster,
-            onStage: (s) => setStage(parseStage(s)),
+            onStage: (next, at) => applyRoomState(at, { stage: next }),
             onMedia: setMedia,
             onLocalState: (s) => {
               setLocal(s);
@@ -534,7 +586,7 @@ export function MeetingRoom(props: {
               if (msg.kind === "chat") setUnread((u) => u + 1);
             },
             onReaction: (peer, emoji) => addFloater(emoji, nameForPeer(peer)),
-            onSpotlight: setSpotlight,
+            onSpotlight: (peerId, at) => applyRoomState(at, { spotlightPeerId: peerId }),
             onControl: (payload) => handleControl(payload),
             onRecording: (payload) => {
               if (payload.state === "started")
@@ -610,7 +662,7 @@ export function MeetingRoom(props: {
         setJoining(false);
       }
     },
-    [props.code, props.hostKey, t, reportMediaFault, nameForPeer, closeOut],
+    [props.code, props.hostKey, t, reportMediaFault, nameForPeer, closeOut, applyRoomState],
   );
 
   /* ============================================================
@@ -1008,9 +1060,29 @@ export function MeetingRoom(props: {
       const res = await c.action(action, payload);
       setBusyStage(false);
       if (!res.ok && res.error) toast.error(res.error);
+
+      /*
+       * See it the moment it is true, rather than on the next poll.
+       *
+       * The reply to a stage or spotlight action already carries the new state
+       * and the time the server believed it — so the person who just shared a
+       * verse is the first to see it, not the last. `applyRoomState` keeps a
+       * slower reply from undoing it.
+       */
+      if (res.ok) {
+        applyRoomState(typeof res.at === "string" ? res.at : undefined, {
+          ...(res.stage !== undefined ? { stage: res.stage } : {}),
+          ...("spotlightPeerId" in res
+            ? {
+                spotlightPeerId:
+                  typeof res.spotlightPeerId === "string" ? res.spotlightPeerId : null,
+              }
+            : {}),
+        });
+      }
       return res;
     },
-    [],
+    [applyRoomState],
   );
 
   /**
