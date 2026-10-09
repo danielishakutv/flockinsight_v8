@@ -29,6 +29,32 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.73.0",
+    date: "2026-10-09",
+    summary:
+      "Meetings hold on to the voice. Data Saver now makes the sound lighter as well as turning the camera off, the connection is judged by what you HEAR rather than only by what you send, and a microphone that drops out mid-call is reconnected instead of failing quietly. A meeting can also be set so that only its leaders can be heard and seen \u2014 a service, a class, a board meeting.",
+    changes: {
+      Added: [
+        "A meeting can take the microphone and camera buttons away from everyone except the hosts. Not muted on arrival \u2014 gone, so there is nothing for forty people to tap by mistake. Both are under \u201cShow more settings\u201d when you create or edit a meeting.",
+        "\u201cLet them speak\u201d, in the People panel. Somebody raises their hand, you tap their name, and their microphone and camera come back at once \u2014 no rejoining, and no other powers: they cannot end the meeting or remove anybody. \u201cStop them speaking\u201d puts it back.",
+        "Turning the cameras off for everyone but the preacher is now also the biggest single saving available on a large meeting, and nobody has to remember to choose Data Saver.",
+        "The People panel reports the voice as well as the picture: how much was lost, how much the phone had to invent, how gusty the line is and how much sound is being held back. Those numbers tell apart three problems that sound identical in a meeting \u2014 a weak network, an uneven one, and a microphone that has stopped working.",
+      ],
+      Improved: [
+        "Data Saver makes the voice lighter, not just the picture. It used to turn the camera off and leave the microphone costing exactly what it did before, so it saved less than it promised. The voice now uses about half the data and is narrowed to the range speech actually sits in: slightly less rich, no harder to understand.",
+        "The voice is protected when the connection starts struggling. Every packet begins carrying a copy of the one before it, so one lost on the way is no longer a gap you can hear \u2014 paid for out of what Data Saver just saved.",
+        "A little more sound is held back before being played, which is what stops a voice cutting in and out when a phone's signal arrives in gusts rather than steadily. It is set from the start now rather than after the damage has been heard.",
+        "The voice outranks the pictures. Somebody switching a camera on can no longer take the speech down with it on a thin connection.",
+        "A meeting now judges the connection by what you are hearing, not only by what you are sending. A phone with a fine upload and an uneven download used to rate itself perfectly healthy while the voices broke up in its ear.",
+        "Large meetings held on the media server were not judging their connection at all. They do now, so the same protections reach the rooms that need them most.",
+      ],
+      Fixed: [
+        "A microphone that stops working mid-call is reconnected, and you are told. A headset unplugged, Bluetooth handing over, or a phone call arriving ends the microphone with no error anywhere \u2014 so people went on talking into nothing until somebody thought to mention it. If it cannot be recovered, that is now said plainly instead of being silent.",
+        "Nobody joining a meeting where they cannot use a microphone or camera is asked for permission to use one. A permission request for a device that cannot be used is a question that can only be answered wrongly.",
+      ],
+    },
+  },
+  {
     version: "0.72.0",
     date: "2026-10-08",
     summary:

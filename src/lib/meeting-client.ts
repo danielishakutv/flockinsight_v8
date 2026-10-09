@@ -243,14 +243,23 @@ type PeerState = {
   /** The concealment share from the last sample, for the link verdict. */
   lastConcealedPct: number;
   /**
-   * When this peer was last re-offered purely to change the audio shape.
+   * When this peer was last re-offered purely to change the audio shape, and
+   * which shape that offer actually carried.
    *
    * Turning RED on or off needs a new offer, and a link that flaps between
    * "fair" and "good" would otherwise renegotiate every few seconds — which
    * costs more than the redundancy is worth and risks a glare storm in a room
-   * where everybody's link is flapping at once.
+   * where everybody's link is flapping at once. So there is a cooldown.
+   *
+   * Both are PER PEER, and that is the whole point. A single "the room is
+   * now using RED" flag plus a cooldown was wrong in a way that was easy to
+   * miss: the flag would be set, the cooldown would skip the offer, and the
+   * shape would then count as applied to a peer that had never been told
+   * about it — silently, for the rest of the call. Somebody toggling Data
+   * Saver within half a minute of joining hit exactly that.
    */
   audioOfferedAt: number;
+  audioShape: string;
   /** The last reading, kept so the panel never has to await `getStats`. */
   diagnostics: PeerDiagnostics | null;
   /**
@@ -357,8 +366,7 @@ export class MeetingClient {
 
   /** What this room allows an ordinary attendee. See `mediaRights`. */
   private readonly room: { allowAttendeeMic: boolean; allowAttendeeCamera: boolean };
-  /** The audio shape every peer was last negotiated with. */
-  private audioShape: string;
+
   /** How many times the microphone has been re-opened after dying. */
   private micRecoveries = 0;
   /** Whether this browser has been found to refuse a jitter buffer hint. */
@@ -384,7 +392,6 @@ export class MeetingClient {
     this.room = init.room ?? { allowAttendeeMic: true, allowAttendeeCamera: true };
     const role = init.role ?? "attendee";
     const profile = profileFor({ peers: 1, lowData: init.lowData });
-    this.audioShape = audioShapeKey(profile.audio);
     this.state = {
       micOn: false,
       cameraOn: false,
@@ -850,7 +857,14 @@ export class MeetingClient {
       lastBytes: null,
       lastAudio: null,
       lastConcealedPct: 0,
+      /*
+       * Dated to now and seeded with the shape this connection is about to
+       * negotiate with: its first offer carries the current profile, so there
+       * is nothing to change yet, and the cooldown starts from the moment the
+       * peer exists rather than from 1970.
+       */
       audioOfferedAt: Date.now(),
+      audioShape: audioShapeKey(this.state.profile.audio),
       diagnostics: null,
       published: null,
       publishedScreen: null,
@@ -1714,14 +1728,16 @@ export class MeetingClient {
   private renegotiateAudioIfNeeded(): void {
     if (this.transport !== "mesh") return;
     const shape = audioShapeKey(this.state.profile.audio);
-    if (shape === this.audioShape) return;
-    this.audioShape = shape;
 
     const now = Date.now();
     for (const [peerId, p] of this.peers) {
+      if (p.audioShape === shape) continue;
       if (p.pc.signalingState !== "stable") continue;
+      // Not marked until the offer is actually made, so a peer skipped by the
+      // cooldown is tried again on the next tick rather than written off.
       if (now - p.audioOfferedAt < AUDIO_REOFFER_MS) continue;
       p.audioOfferedAt = now;
+      p.audioShape = shape;
       void this.makeOffer(peerId, p);
     }
   }
