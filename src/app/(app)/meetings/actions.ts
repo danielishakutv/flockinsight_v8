@@ -85,6 +85,9 @@ const meetingSchema = z.object({
   allowReactions: z.boolean().default(true),
   allowScreenShare: z.boolean().default(true),
   allowRecording: z.boolean().default(true),
+  /** Whether ordinary attendees may be heard and seen at all. */
+  allowAttendeeMic: z.boolean().default(true),
+  allowAttendeeCamera: z.boolean().default(true),
   lowDataDefault: z.boolean().default(false),
   /** "none" | "daily" | "weekly" | "fortnightly" | "monthly" | "monthly-weekday". */
   repeat: z
@@ -199,6 +202,8 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     allowReactions: v.allowReactions,
     allowScreenShare: v.allowScreenShare,
     allowRecording: v.allowRecording,
+    allowAttendeeMic: v.allowAttendeeMic,
+    allowAttendeeCamera: v.allowAttendeeCamera,
     lowDataDefault: v.lowDataDefault,
     repeat,
     repeatUntil,
@@ -672,6 +677,8 @@ export async function duplicateMeeting(id: string): Promise<ActionResult> {
       allowReactions: m.allowReactions,
       allowScreenShare: m.allowScreenShare,
       allowRecording: m.allowRecording,
+      allowAttendeeMic: m.allowAttendeeMic,
+      allowAttendeeCamera: m.allowAttendeeCamera,
       lowDataDefault: m.lowDataDefault,
       serviceId: m.serviceId,
       groupId: m.groupId,

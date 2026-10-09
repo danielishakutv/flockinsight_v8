@@ -1407,6 +1407,26 @@ export const en = {
     allowReactions: "Allow reactions",
     letAnyoneShareTheirScreen: "Let anyone share their screen",
     allowRecording: "Allow recording",
+    letAnyoneUnmute: "Let anyone unmute themselves",
+    letAnyoneTurnOnTheirCamera: "Let anyone turn on their camera",
+    platformAlwaysCan:
+      "Hosts, co-hosts and anyone made a speaker always can. Turn this off for a service or a class, where the room is there to listen.",
+    onlyTheHostSpeaks: "Only hosts and speakers can be heard",
+    onlyTheHostIsSeen: "Only hosts and speakers can be seen",
+    micLockedHint:
+      "The host is the only one who can speak in this meeting. Raise your hand and they can let you.",
+    cameraLockedHint: "Only the host's camera is on in this meeting.",
+    micLocked: "Your microphone is off for this meeting",
+    micRecovered: "Your microphone dropped out and we've reconnected it.",
+    micLost:
+      "We've lost your microphone. Check nothing else is using it, then reload the page.",
+    diagVoice: "voice",
+    diagInvented: "invented",
+    diagHeld: "held",
+    diagProtected: "protected",
+    letThemSpeak: "Let them speak",
+    stopThemSpeaking: "Stop them speaking",
+
     details: "Details",
     linkCopiedShareItWith: "Link copied — share it with whoever should join.",
     copyTheLink: "Copy the link",

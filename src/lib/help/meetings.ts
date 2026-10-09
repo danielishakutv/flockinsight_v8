@@ -120,7 +120,7 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
         blocks: [
           {
             kind: "text",
-            text: "Low data mode turns off video in both directions and keeps the voices. It uses roughly a tenth of the data, and on a weak or expensive connection it is the difference between taking part and giving up.",
+            text: "Low data mode turns off video in both directions and makes the voice itself lighter. It uses roughly a tenth of the data, and on a weak or expensive connection it is the difference between taking part and giving up.",
           },
           {
             kind: "bullets",
@@ -129,7 +129,16 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
               "It is also offered on the screen before you join, before a camera has ever been opened.",
               "Set it as the default on any meeting where most people will be on mobile data — a midweek prayer meeting, say.",
               "It does not affect anyone else. One person on low data still hears and is heard by everybody.",
+              "The voice drops to about half the data of a normal call and is narrowed to the range a person's speech actually sits in. It sounds slightly less rich and is no harder to understand.",
             ],
+          },
+          {
+            kind: "text",
+            text: "If the connection starts struggling, the meeting spends some of that saving on protecting the voice instead: every packet starts carrying a copy of the one before it, so a packet lost on the way is not a gap you can hear. It also holds a little more sound back before playing it, which is what stops a voice cutting in and out when a phone's signal comes in gusts rather than steadily.",
+          },
+          {
+            kind: "text",
+            text: "None of that is a setting, and there is nothing to turn on. It follows the connection on its own, and it is doing it for every meeting, not only the ones in low data mode.",
           },
           {
             kind: "example",
@@ -140,6 +149,39 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
               "The pastor turns their own camera on; everyone else stays on voice.",
               "Data used over 45 minutes: about 7MB each, instead of about 90MB.",
             ],
+          },
+        ],
+      },
+      {
+        title: "A meeting where only the leaders speak",
+        blocks: [
+          {
+            kind: "text",
+            text: "For a service, a class or a board meeting, you can take the microphone and camera buttons away from everybody except the hosts. Not muted on arrival — gone, so there is nothing for forty people to tap by mistake.",
+          },
+          {
+            kind: "bullets",
+            items: [
+              "Both are under 'Show more settings' when you create or edit a meeting: 'Let anyone unmute themselves' and 'Let anyone turn on their camera'.",
+              "Hosts and co-hosts are never affected.",
+              "When somebody raises their hand, open the People panel, tap their name and choose 'Let them speak'. Their microphone and camera come back at once, with no reload, and they get no other powers — they cannot end the meeting or remove anybody.",
+              "'Stop them speaking' puts it back. If they were in the middle of talking, their microphone switches off as soon as it reaches them.",
+              "Turning the cameras off for everyone but the preacher is also the single biggest saving available on a large meeting, and nobody has to remember to choose low data mode.",
+            ],
+          },
+          {
+            kind: "example",
+            title: "Sunday service, 120 people",
+            lines: [
+              "Cameras off for everyone, microphones off for everyone.",
+              "The pastor and the worship leader are hosts, so both are live.",
+              "Someone gives a testimony: the pastor taps their name and 'Let them speak'.",
+              "Afterwards, 'Stop them speaking'. Nobody reloaded anything.",
+            ],
+          },
+          {
+            kind: "warning",
+            text: "People joining a meeting like this are not asked for permission to use a microphone or a camera at all, which is deliberate — a permission dialog for a device that cannot be used is a question that can only be answered wrongly. If you turn the setting back on mid-meeting, they will be asked the first time they tap the button.",
           },
         ],
       },
@@ -297,6 +339,10 @@ export const MEETING_GUIDES: Omit<Guide, "minutes">[] = [
       "bible study online",
       "webinar",
       "low data",
+      "mute everyone",
+      "only the host can speak",
+      "audio quality",
+      "sound cutting out",
       "recurring meeting",
       "repeat",
       "every week",

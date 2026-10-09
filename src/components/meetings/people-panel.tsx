@@ -2,6 +2,7 @@
 
 import {
   Hand,
+  Mic,
   MicOff,
   MoreVertical,
   ShieldCheck,
@@ -18,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { initialsOf, type RosterEntry } from "@/lib/meetings-shared";
+import { initialsOf, isOnPlatform, type RosterEntry } from "@/lib/meetings-shared";
 import type { PeerDiagnostics } from "@/lib/meeting-client";
 import { useT } from "@/components/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -43,8 +44,19 @@ export function PeoplePanel({
   onMuteAll,
   onLowerHands,
   diagnostics,
+  attendeeMediaLocked,
 }: {
   roster: RosterEntry[];
+  /**
+   * Whether this room has taken the microphone or the camera away from
+   * ordinary attendees.
+   *
+   * It changes what the host's menu needs to offer: in a locked room, "let
+   * them speak" is the action somebody is looking for when a hand goes up,
+   * and without it the only way to answer a raised hand is to make the person
+   * a co-host — which hands them the power to end the meeting.
+   */
+  attendeeMediaLocked: boolean;
   /**
    * What each peer connection is actually doing, keyed by peer id.
    *
@@ -60,7 +72,10 @@ export function PeoplePanel({
   canHost: boolean;
   onMute: (participantId: string) => void;
   onRemove: (participantId: string) => void;
-  onPromote: (participantId: string, role: "cohost" | "attendee") => void;
+  onPromote: (
+    participantId: string,
+    role: "cohost" | "speaker" | "attendee",
+  ) => void;
   onAdmit: (participantId: string) => void;
   onDeny: (participantId: string) => void;
   onMuteAll: () => void;
@@ -111,6 +126,7 @@ export function PeoplePanel({
                 onRemove={onRemove}
                 onPromote={onPromote}
                 link={diagnostics?.get(p.peerId)}
+                attendeeMediaLocked={attendeeMediaLocked}
               />
             ))}
           </Section>
@@ -126,6 +142,7 @@ export function PeoplePanel({
               onRemove={onRemove}
               onPromote={onPromote}
               link={diagnostics?.get(p.peerId)}
+              attendeeMediaLocked={attendeeMediaLocked}
             />
           ))}
         </Section>
@@ -214,6 +231,37 @@ function LinkLine({ link, cameraOn }: { link: PeerDiagnostics; cameraOn: boolean
         </span>
       )}
       {/*
+        The voice, which is what people actually complain about and what this
+        panel could not previously say a word about.
+
+        Three numbers because they separate three causes that sound identical
+        from a seat in the meeting. `invented` is the share of audio the
+        browser had to make up because nothing arrived in time to play — that
+        IS "the sound keeps cutting", measured. Loss with low invented means
+        the redundancy is doing its job and nothing needs fixing. Low loss
+        with high invented is jitter, and the held figure is what to look at:
+        if it is already at the target and still breaking up, the target is
+        too low. Both low with nobody audible is a microphone at the other
+        end, and no amount of bandwidth will touch it.
+
+        Shown whenever a voice is arriving, not only when it is going wrong:
+        knowing what a healthy line reads is what makes an unhealthy one
+        recognisable.
+      */}
+      {link.audioInKbps > 0 && (
+        <span
+          className={cn(
+            "block",
+            link.audioConcealedPct >= 5 && "text-amber-400",
+            link.audioConcealedPct >= 15 && "text-rose-400",
+          )}
+        >
+          {`${t("meetings.diagVoice")} ${link.audioLossPct}% lost · ${link.audioConcealedPct}% ${t("meetings.diagInvented")}`}
+          {` · ${link.audioJitterMs}ms jitter · ${link.audioJitterBufferMs}ms ${t("meetings.diagHeld")}`}
+          {link.audioRedundancy ? ` · ${t("meetings.diagProtected")}` : ""}
+        </span>
+      )}
+      {/*
         The last link in the chain, and the one `getStats` cannot see. Frames
         can decode perfectly into an element that is paused, or that was never
         given the stream at all — which is precisely what happened here.
@@ -242,14 +290,16 @@ function Row({
   onRemove,
   onPromote,
   link,
+  attendeeMediaLocked,
 }: {
   person: RosterEntry;
   isSelf: boolean;
   canHost: boolean;
   onMute: (id: string) => void;
   onRemove: (id: string) => void;
-  onPromote: (id: string, role: "cohost" | "attendee") => void;
+  onPromote: (id: string, role: "cohost" | "speaker" | "attendee") => void;
   link?: PeerDiagnostics;
+  attendeeMediaLocked: boolean;
 }) {
   const t = useT();
   const isHost = person.role === "host" || person.role === "cohost";
@@ -275,6 +325,16 @@ function Row({
         {person.lowData && (
           <span className="block text-[11px] text-slate-500">
             {t("meetings.audioOnlyCameraStays")}
+          </span>
+        )}
+        {/*
+          Why this person's microphone icon is off, when it is not their
+          choice. Without it a host looking at forty crossed-out microphones
+          cannot tell who muted themselves from who was never able to unmute.
+        */}
+        {attendeeMediaLocked && !isOnPlatform(person.role) && (
+          <span className="block text-[11px] text-amber-500/80">
+            {t("meetings.onlyTheHostSpeaks")}
           </span>
         )}
         {link && <LinkLine link={link} cameraOn={person.cameraOn} />}
@@ -306,7 +366,23 @@ function Row({
             <DropdownMenuItem onClick={() => onMute(person.id)} disabled={!person.micOn}>
               <MicOff className="size-4" /> {t("meetings.mute")}
             </DropdownMenuItem>
-            {person.role === "attendee" ? (
+            {/*
+              The answer to a raised hand in a room where only the platform
+              may speak. A speaker can be heard and seen and can do nothing
+              else — it is not a co-host, and that distinction is the whole
+              reason the role exists.
+            */}
+            {attendeeMediaLocked && person.role === "attendee" && (
+              <DropdownMenuItem onClick={() => onPromote(person.id, "speaker")}>
+                <Mic className="size-4" /> {t("meetings.letThemSpeak")}
+              </DropdownMenuItem>
+            )}
+            {attendeeMediaLocked && person.role === "speaker" && (
+              <DropdownMenuItem onClick={() => onPromote(person.id, "attendee")}>
+                <MicOff className="size-4" /> {t("meetings.stopThemSpeaking")}
+              </DropdownMenuItem>
+            )}
+            {person.role === "attendee" || person.role === "speaker" ? (
               <DropdownMenuItem onClick={() => onPromote(person.id, "cohost")}>
                 <UserPlus className="size-4" /> {t("meetings.makeCohost")}
               </DropdownMenuItem>

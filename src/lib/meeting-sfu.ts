@@ -1,5 +1,8 @@
 import {
+  audioWireBitrate,
   TRACK_NAMES,
+  tuneOpus,
+  type AudioProfile,
   type RosterEntry,
 } from "@/lib/meetings-shared";
 
@@ -45,6 +48,18 @@ type Api = (action: string, body: Record<string, unknown>) => Promise<Record<str
 
 type PulledTrack = { peerId: string; name: string };
 
+/** One person's connection, as the subscriber sees it. */
+export type SfuPeerReading = {
+  videoInKbps: number;
+  framesDecoded: number;
+  ice: RTCIceConnectionState;
+  audioInKbps: number;
+  audioLossPct: number;
+  audioConcealedPct: number;
+  audioJitterMs: number;
+  audioJitterBufferMs: number;
+};
+
 /** What we are currently sending, so a change can be compared against it. */
 type Published = { mic?: string; cam?: string; screen?: string };
 
@@ -69,6 +84,23 @@ export class SfuTransport {
 
   /** Previous byte totals per peer, for turning them into a rate. */
   private lastVideoBytes = new Map<string, { at: number; bytes: number }>();
+  /**
+   * Previous audio counters per peer, so loss and concealment can be reported
+   * for the window just gone rather than for the whole call.
+   */
+  private lastAudio = new Map<
+    string,
+    {
+      at: number;
+      bytes: number;
+      packetsReceived: number;
+      packetsLost: number;
+      concealedSamples: number;
+      totalSamples: number;
+    }
+  >();
+  /** Whether this browser has been found to refuse a jitter buffer hint. */
+  private jitterBufferRefused = false;
 
   /**
    * Whose PICTURES are wanted right now — the people on screen.
@@ -91,8 +123,69 @@ export class SfuTransport {
   constructor(
     private readonly api: Api,
     private readonly iceServers: RTCIceServer[],
+    /**
+     * The voice settings in force right now, read rather than held.
+     *
+     * A function because the profile follows the measured link and this object
+     * may negotiate at any point after it was built. An SFU room gets the Opus
+     * tuning, the sender priority and the jitter buffer; it does not get RED,
+     * because toggling that means renegotiating a Cloudflare session over a
+     * codec preference and the three it does get are most of the benefit.
+     */
+    private readonly audio: () => AudioProfile,
     private readonly events: SfuEvents,
   ) {}
+
+  /** The shape this transport negotiates with: never redundant. See above. */
+  private audioShape(): AudioProfile {
+    return { ...this.audio(), redundancy: false };
+  }
+
+  /**
+   * Hold some audio back before playing it, and let the voice outrank the
+   * pictures on the way out.
+   *
+   * The same two things the mesh path does, for the same reason — a player
+   * with an empty buffer invents every gap in a gusty link, and a camera that
+   * is allowed to compete with a microphone for a thin uplink wins. Neither
+   * costs any bandwidth. See `tuneAudioReceiver` in meeting-client.ts.
+   */
+  tuneAudio(): void {
+    const target = this.audioShape().jitterBufferMs;
+
+    for (const tr of this.subscriber?.getTransceivers() ?? []) {
+      const who = tr.mid ? this.incoming.get(tr.mid) : undefined;
+      if (who && who.name !== TRACK_NAMES.mic) continue;
+      const r = tr.receiver as RTCRtpReceiver & {
+        jitterBufferTarget?: number | null;
+        playoutDelayHint?: number | null;
+      };
+      try {
+        if ("jitterBufferTarget" in r) r.jitterBufferTarget = target;
+        if ("playoutDelayHint" in r) r.playoutDelayHint = target / 1000;
+      } catch (e) {
+        if (!this.jitterBufferRefused) {
+          this.jitterBufferRefused = true;
+          console.warn("[sfu] this browser refused a jitter buffer hint", e);
+        }
+      }
+    }
+
+    const mic = this.senders.get(TRACK_NAMES.mic)?.sender;
+    if (!mic) return;
+    try {
+      const params = mic.getParameters();
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      params.encodings[0].maxBitrate = audioWireBitrate(this.audioShape());
+      params.encodings[0].priority = "high";
+      params.encodings[0].networkPriority = "high";
+      void mic.setParameters(params).catch((e) => {
+        console.warn("[sfu] microphone parameters refused", e);
+      });
+    } catch (e) {
+      console.warn("[sfu] microphone parameters could not be read", e);
+    }
+  }
 
   /**
    * Serialise every mutation of a session.
@@ -190,6 +283,9 @@ export class SfuTransport {
       if (fresh.length === 0) return;
 
       const offer = await this.publisher.createOffer();
+      // Our own description is what this end sends with, so the voice is tuned
+      // here or not at all.
+      if (offer.sdp) offer.sdp = tuneOpus(offer.sdp, this.audioShape());
       await this.publisher.setLocalDescription(offer);
       await this.gathered(this.publisher);
 
@@ -213,6 +309,7 @@ export class SfuTransport {
 
       const answer = res.sessionDescription as RTCSessionDescriptionInit | undefined;
       if (answer?.sdp) await this.publisher.setRemoteDescription(answer);
+      this.tuneAudio();
     });
   }
 
@@ -378,6 +475,7 @@ export class SfuTransport {
 
       await this.subscriber.setRemoteDescription(offer);
       const answer = await this.subscriber.createAnswer();
+      if (answer.sdp) answer.sdp = tuneOpus(answer.sdp, this.audioShape());
       await this.subscriber.setLocalDescription(answer);
       await this.gathered(this.subscriber);
 
@@ -388,6 +486,7 @@ export class SfuTransport {
           sdp: this.subscriber.localDescription?.sdp ?? "",
         },
       });
+      this.tuneAudio();
     });
   }
 
@@ -476,6 +575,9 @@ export class SfuTransport {
       stream: new MediaStream(bundle.stream.getTracks()),
       screen: new MediaStream(bundle.screen.getTracks()),
     });
+
+    // Before the first packet is played, not after the first gap is heard.
+    if (who.name === TRACK_NAMES.mic) this.tuneAudio();
   }
 
   private async session(): Promise<string> {
@@ -525,46 +627,134 @@ export class SfuTransport {
    * question. `mid` is the join: the SFU told us which mid each person's track
    * landed on when we pulled it.
    */
-  async diagnose(): Promise<
-    Map<string, { videoInKbps: number; framesDecoded: number; ice: RTCIceConnectionState }>
-  > {
-    const out = new Map<
-      string,
-      { videoInKbps: number; framesDecoded: number; ice: RTCIceConnectionState }
-    >();
+  async diagnose(): Promise<Map<string, SfuPeerReading>> {
+    const out = new Map<string, SfuPeerReading>();
     const sub = this.subscriber;
     if (!sub) return out;
 
     const now = Date.now();
     const ice = sub.iceConnectionState;
 
+    const blank = (): SfuPeerReading => ({
+      videoInKbps: 0,
+      framesDecoded: 0,
+      ice,
+      audioInKbps: 0,
+      audioLossPct: 0,
+      audioConcealedPct: 0,
+      audioJitterMs: 0,
+      audioJitterBufferMs: 0,
+    });
+
     for (const tr of sub.getTransceivers()) {
       const who = tr.mid ? this.incoming.get(tr.mid) : undefined;
-      if (!who || who.name !== TRACK_NAMES.camera) continue;
+      if (!who) continue;
+      if (who.name !== TRACK_NAMES.camera && who.name !== TRACK_NAMES.mic) continue;
 
+      const row = out.get(who.peerId) ?? blank();
+
+      if (who.name === TRACK_NAMES.camera) {
+        let bytes = 0;
+        let frames = 0;
+        try {
+          const report = await tr.receiver.getStats();
+          report.forEach((r) => {
+            const x = r as unknown as Record<string, number | string>;
+            if (x.type !== "inbound-rtp" || x.kind !== "video") return;
+            bytes += Number(x.bytesReceived ?? 0);
+            frames += Number(x.framesDecoded ?? 0);
+          });
+        } catch {
+          continue;
+        }
+
+        const previous = this.lastVideoBytes.get(who.peerId);
+        const seconds = previous ? (now - previous.at) / 1000 : 0;
+        row.videoInKbps =
+          seconds > 0
+            ? Math.max(0, Math.round(((bytes - previous!.bytes) * 8) / seconds / 1000))
+            : 0;
+        row.framesDecoded = frames;
+        this.lastVideoBytes.set(who.peerId, { at: now, bytes });
+        out.set(who.peerId, row);
+        continue;
+      }
+
+      /*
+       * The voice. Exactly the figures the mesh path reports, so the People
+       * panel reads the same on both transports — a diagnostic that works on
+       * one and goes blank on the other is how a blind spot gets built, and
+       * the SFU rooms are the big ones where somebody not being heard matters
+       * most.
+       */
       let bytes = 0;
-      let frames = 0;
+      let packetsReceived = 0;
+      let packetsLost = 0;
+      let concealed = 0;
+      let total = 0;
+      let jitterMs = 0;
+      let bufferMs = 0;
       try {
         const report = await tr.receiver.getStats();
         report.forEach((r) => {
           const x = r as unknown as Record<string, number | string>;
-          if (x.type !== "inbound-rtp" || x.kind !== "video") return;
+          if (x.type !== "inbound-rtp" || x.kind !== "audio") return;
           bytes += Number(x.bytesReceived ?? 0);
-          frames += Number(x.framesDecoded ?? 0);
+          packetsReceived += Number(x.packetsReceived ?? 0);
+          packetsLost += Number(x.packetsLost ?? 0);
+          /*
+           * Silence subtracted. DTX means a listener sends nothing at all
+           * while nobody speaks, and the player fills that with synthesised
+           * silence, which the browser counts as concealment — so a healthy
+           * quiet room would otherwise read as almost entirely broken.
+           */
+          concealed +=
+            Number(x.concealedSamples ?? 0) - Number(x.silentConcealedSamples ?? 0);
+          total += Number(x.totalSamplesReceived ?? 0);
+          jitterMs = Math.max(jitterMs, Number(x.jitter ?? 0) * 1000);
+          const delay = Number(x.jitterBufferDelay ?? 0);
+          const emitted = Number(x.jitterBufferEmittedCount ?? 0);
+          if (emitted > 0) bufferMs = Math.max(bufferMs, (delay / emitted) * 1000);
         });
       } catch {
         continue;
       }
 
-      const previous = this.lastVideoBytes.get(who.peerId);
-      const seconds = previous ? (now - previous.at) / 1000 : 0;
-      const kbps =
-        seconds > 0
-          ? Math.max(0, Math.round(((bytes - previous!.bytes) * 8) / seconds / 1000))
-          : 0;
-      this.lastVideoBytes.set(who.peerId, { at: now, bytes });
+      const was = this.lastAudio.get(who.peerId);
+      const seconds = was ? (now - was.at) / 1000 : 0;
+      const share = (curr: number, before: number, overCurr: number, overBefore: number) => {
+        const top = Math.max(0, curr - before);
+        const bottom = Math.max(0, overCurr - overBefore);
+        return bottom > 0 ? Math.round((top / bottom) * 1000) / 10 : 0;
+      };
 
-      out.set(who.peerId, { videoInKbps: kbps, framesDecoded: frames, ice });
+      row.audioInKbps =
+        seconds > 0
+          ? Math.max(0, Math.round(((bytes - was!.bytes) * 8) / seconds / 1000))
+          : 0;
+      row.audioLossPct = was
+        ? share(
+            packetsLost,
+            was.packetsLost,
+            packetsLost + packetsReceived,
+            was.packetsLost + was.packetsReceived,
+          )
+        : 0;
+      row.audioConcealedPct = was
+        ? share(concealed, was.concealedSamples, total, was.totalSamples)
+        : 0;
+      row.audioJitterMs = Math.round(jitterMs);
+      row.audioJitterBufferMs = Math.round(bufferMs);
+
+      this.lastAudio.set(who.peerId, {
+        at: now,
+        bytes,
+        packetsReceived,
+        packetsLost,
+        concealedSamples: concealed,
+        totalSamples: total,
+      });
+      out.set(who.peerId, row);
     }
 
     return out;
@@ -585,5 +775,7 @@ export class SfuTransport {
     this.incoming.clear();
     this.pulled.clear();
     this.senders.clear();
+    this.lastAudio.clear();
+    this.lastVideoBytes.clear();
   }
 }

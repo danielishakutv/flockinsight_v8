@@ -167,8 +167,15 @@ describe("Data Saver never asks for a camera", () => {
     await engine.setCamera(true);
 
     expect(getUserMedia).toHaveBeenCalledTimes(1);
+    // One channel, asked for explicitly: a stereo microphone doubles what the
+    // encoder is handed for no benefit to a voice.
     expect(getUserMedia.mock.calls[0][0]).toEqual({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
     });
     expect(engine.currentState().cameraOn).toBe(false);
     expect(errors).toHaveLength(1);

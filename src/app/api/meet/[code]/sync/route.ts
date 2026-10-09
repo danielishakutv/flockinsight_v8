@@ -10,7 +10,12 @@ import {
   signalCursor,
   waitForRoom,
 } from "@/lib/meetings";
-import { parseStage, SIGNAL_TYPES, type SignalType } from "@/lib/meetings-shared";
+import {
+  mediaRights,
+  parseStage,
+  SIGNAL_TYPES,
+  type SignalType,
+} from "@/lib/meetings-shared";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +81,11 @@ function parseSignals(raw: unknown): OutgoingSignal[] {
   return out;
 }
 
-function parseState(raw: Record<string, unknown> | undefined) {
+function parseState(
+  raw: Record<string, unknown> | undefined,
+  /** What this peer is allowed to have on. See `mediaRights`. */
+  rights: { mic: boolean; camera: boolean },
+) {
   if (!raw) return null;
   const bool = (k: string) => (typeof raw[k] === "boolean" ? (raw[k] as boolean) : undefined);
   const quality =
@@ -93,11 +102,29 @@ function parseState(raw: Record<string, unknown> | undefined) {
     return Math.min(Math.floor(v), 1_000_000_000_000);
   };
 
+  /*
+   * A room where only the platform may speak does not record anybody else as
+   * unmuted, whatever their browser says.
+   *
+   * The browser refuses to open the microphone and the control is dead in the
+   * interface, so reaching this line means a stale page, a second tab or
+   * somebody who has just been demoted from speaker — all of which are
+   * ordinary, and none of which should leave a live microphone icon beside
+   * their name for the whole room. Clamped rather than rejected: the rest of
+   * the state in the same push is honest and worth keeping.
+   */
+  const micOn = rights.mic ? bool("micOn") : bool("micOn") === undefined ? undefined : false;
+  const cameraOn = rights.camera
+    ? bool("cameraOn")
+    : bool("cameraOn") === undefined
+      ? undefined
+      : false;
+
   const state = {
     bytesReceived: num("bytesReceived"),
     bytesSent: num("bytesSent"),
-    micOn: bool("micOn"),
-    cameraOn: bool("cameraOn"),
+    micOn,
+    cameraOn,
     sharing: bool("sharing"),
     handRaised: bool("handRaised"),
     lowData: bool("lowData"),
@@ -153,7 +180,7 @@ export async function POST(
 
   const cursor = Number.isFinite(Number(body?.cursor)) ? Number(body?.cursor) : 0;
   const wait = body?.wait === true;
-  const state = parseState(body?.state);
+  const state = parseState(body?.state, mediaRights(peer.role, m));
 
   await heartbeat(peer.id, state ?? undefined);
 

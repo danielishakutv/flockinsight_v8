@@ -57,6 +57,8 @@ export type MeetingFormValues = {
   allowReactions: boolean;
   allowScreenShare: boolean;
   allowRecording: boolean;
+  allowAttendeeMic: boolean;
+  allowAttendeeCamera: boolean;
   lowDataDefault: boolean;
   repeat: MeetingRepeat;
   /** A local date, "2027-03-31", or blank for a series with no end. */
@@ -78,6 +80,8 @@ export const BLANK_MEETING: MeetingFormValues = {
   allowReactions: true,
   allowScreenShare: true,
   allowRecording: true,
+  allowAttendeeMic: true,
+  allowAttendeeCamera: true,
   lowDataDefault: false,
   repeat: "none",
   repeatUntil: "",
@@ -440,6 +444,26 @@ export function MeetingDialog({
                 hint={t("meetings.onlyAHostCanStart")}
                 checked={values.allowRecording}
                 onChange={(v) => set("allowRecording", v)}
+              />
+
+              {/*
+                Not "mute on arrival", which is two toggles above this and is a
+                starting position anybody can undo. These take the control
+                away. Phrased as what is allowed rather than what is blocked,
+                and on by default, so a church that reads neither line gets an
+                ordinary meeting.
+              */}
+              <Toggle
+                label={t("meetings.letAnyoneUnmute")}
+                hint={t("meetings.platformAlwaysCan")}
+                checked={values.allowAttendeeMic}
+                onChange={(v) => set("allowAttendeeMic", v)}
+              />
+              <Toggle
+                label={t("meetings.letAnyoneTurnOnTheirCamera")}
+                hint={t("meetings.platformAlwaysCan")}
+                checked={values.allowAttendeeCamera}
+                onChange={(v) => set("allowAttendeeCamera", v)}
               />
             </div>
           )}

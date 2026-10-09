@@ -3909,6 +3909,28 @@ export const meeting = pgTable(
     allowScreenShare: boolean().notNull().default(true),
     allowRecording: boolean().notNull().default(true),
     /**
+     * Whether ordinary attendees may turn a microphone or a camera on at all.
+     *
+     * Not "muted on arrival", which is a starting position anybody can undo —
+     * this is the control being gone, the same way the camera button is dead
+     * in Data Saver. A Sunday service streamed to two hundred people, a board
+     * meeting where only the chair speaks, a class where the room listens:
+     * each of those is a room where an attendee unmuting is a mistake rather
+     * than a choice, and asking forty people to remember not to is not a
+     * design.
+     *
+     * Two columns rather than one mode, because the useful combinations are
+     * not on a line. "Everyone may speak, nobody may show a camera" is the
+     * shape of most meetings held on Nigerian mobile data, and it halves what
+     * the room costs without anybody having to keep choosing Data Saver.
+     *
+     * Hosts, co-hosts and speakers are never affected — see `mediaRights`. A
+     * host hands one person the microphone by making them a speaker, which is
+     * a role that already existed and had no use until now.
+     */
+    allowAttendeeMic: boolean().notNull().default(true),
+    allowAttendeeCamera: boolean().notNull().default(true),
+    /**
      * Start everyone audio-only. The right default for a mid-week prayer
      * meeting on mobile data, and it can be turned on mid-call by anyone.
      */

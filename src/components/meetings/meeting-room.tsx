@@ -105,6 +105,8 @@ type JoinResponse = {
     allowScreenShare: boolean;
     transport?: string;
     allowRecording: boolean;
+    allowAttendeeMic?: boolean;
+    allowAttendeeCamera?: boolean;
     churchName: string;
     churchLogo: string | null;
   };
@@ -161,6 +163,16 @@ export function MeetingRoom(props: {
   signedIn: boolean;
   defaultName: string;
   lowDataDefault: boolean;
+  /**
+   * Whether this visitor will be allowed a microphone and a camera.
+   *
+   * Worked out on the server, where the host link, the signed-in session and
+   * the church's staff list are all known — the pre-join screen cannot decide
+   * it and must not guess, because showing somebody a camera preview and then
+   * taking the control away the second they walk in is worse than telling them
+   * at the door.
+   */
+  mediaLocked: { mic: boolean; camera: boolean };
   /** From ?h= — proves to the server that this is the host, link in hand. */
   hostKey?: string | null;
   signInHref: string;
@@ -491,6 +503,17 @@ export function MeetingRoom(props: {
           iceServers: data.ice.iceServers,
           iceTransportPolicy: data.ice.iceTransportPolicy,
           lowData: data.me.lowData,
+          role: (data.me.role ?? "attendee") as RosterEntry["role"],
+          /*
+           * Defaulted open rather than closed. If this field ever fails to
+           * arrive — an older server, a response shape that changed — the
+           * failure must be "a room is less locked down than its host asked
+           * for", not "nobody in the church can speak".
+           */
+          room: {
+            allowAttendeeMic: data.meeting.allowAttendeeMic !== false,
+            allowAttendeeCamera: data.meeting.allowAttendeeCamera !== false,
+          },
           // Decided by the server before anybody joined. Everyone in a room
           // uses the same one; see the note on `meeting.transport`.
           transport: data.meeting.transport === "sfu" ? "sfu" : "mesh",
@@ -547,6 +570,17 @@ export function MeetingRoom(props: {
             },
             onError: (message) => toast.error(message),
             onMediaFault: (fault, device) => reportMediaFault(fault, device),
+            /*
+             * A microphone that died and came back is worth one line, because
+             * the person was talking into nothing for a second or two and is
+             * owed the explanation. One that could not be recovered is worth
+             * saying loudly: until now this was the silent failure behind
+             * "my audio cut out and never came back".
+             */
+            onMicInterrupted: (outcome) => {
+              if (outcome === "recovered") toast.info(t("meetings.micRecovered"));
+              else toast.error(t("meetings.micLost"), { duration: 12000 });
+            },
             onShareUnsupported: () => {
               setShareRefused(true);
               toast.error(t("meetings.screenShareUnsupported"), { duration: 9000 });
@@ -823,19 +857,35 @@ export function MeetingRoom(props: {
    * Controls
    * ========================================================== */
 
+  /*
+   * The engine refuses a locked microphone too, and says so — but in English,
+   * because it has no dictionary. Checked here as well so the sentence arrives
+   * in the reader's own language, which on this product is eight of them and
+   * lands on exactly the person least able to work out what went wrong.
+   */
   const toggleMic = useCallback(() => {
     const c = clientRef.current;
     if (!c) return;
-    void c.setMic(!c.currentState().micOn);
-  }, []);
+    const state = c.currentState();
+    if (!state.micOn && !state.rights.mic) {
+      toast.info(t("meetings.micLockedHint"));
+      return;
+    }
+    void c.setMic(!state.micOn);
+  }, [t]);
 
   const toggleCamera = useCallback(() => {
     const c = clientRef.current;
     if (!c) return;
-    void c.setCamera(!c.currentState().cameraOn).then(() =>
+    const state = c.currentState();
+    if (!state.cameraOn && !state.rights.camera) {
+      toast.info(t("meetings.cameraLockedHint"));
+      return;
+    }
+    void c.setCamera(!state.cameraOn).then(() =>
       setLocalStream(c.localStreams().camera),
     );
-  }, []);
+  }, [t]);
 
   const toggleScreenShare = useCallback(() => {
     const c = clientRef.current;
@@ -1325,6 +1375,7 @@ export function MeetingRoom(props: {
           needsPasscode={props.needsPasscode}
           needsSignIn={props.membersOnly && !props.signedIn}
           lowDataDefault={props.lowDataDefault}
+          mediaLocked={props.mediaLocked}
           error={joinError}
           joining={joining}
           onJoin={join}
@@ -1586,6 +1637,18 @@ export function MeetingRoom(props: {
                 <span className="text-emerald-400">{t("meetings.lowData")}</span>
               </>
             )}
+            {/*
+              Said in the room, not only at the door. Somebody who joined an
+              hour ago and now wants to say something needs to know why the
+              button is dead, and the alternative is them tapping it and
+              nothing happening.
+            */}
+            {local && !local.rights.mic && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="text-amber-400">{t("meetings.micLocked")}</span>
+              </>
+            )}
           </p>
         </div>
 
@@ -1761,10 +1824,23 @@ export function MeetingRoom(props: {
       {/* Controls */}
       <footer className="shrink-0 border-t border-white/10 px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+          {/*
+            A locked microphone is a dead button with a reason on it, exactly
+            as the camera is in Data Saver — not a live button that refuses.
+            `danger` comes off it too: red means "you are muted and could
+            unmute", and there is nothing here to act on.
+          */}
           <ControlButton
             active={!!local?.micOn}
-            danger={!local?.micOn}
-            label={local?.micOn ? t("meetings.mute") : t("meetings.unmute")}
+            danger={!local?.micOn && local?.rights.mic !== false}
+            disabled={local?.rights.mic === false}
+            label={
+              local?.rights.mic === false
+                ? t("meetings.micLockedHint")
+                : local?.micOn
+                  ? t("meetings.mute")
+                  : t("meetings.unmute")
+            }
             shortcut="M"
             onClick={toggleMic}
           >
@@ -1773,12 +1849,14 @@ export function MeetingRoom(props: {
 
           <ControlButton
             active={!!local?.cameraOn}
-            danger={!local?.cameraOn}
-            disabled={local?.lowData}
+            danger={!local?.cameraOn && local?.rights.camera !== false}
+            disabled={local?.lowData || local?.rights.camera === false}
             label={
-              local?.cameraOn
-                ? t("meetings.cameraOff2")
-                : t("meetings.cameraOn2")
+              local?.rights.camera === false
+                ? t("meetings.cameraLockedHint")
+                : local?.cameraOn
+                  ? t("meetings.cameraOff2")
+                  : t("meetings.cameraOn2")
             }
             shortcut="V"
             onClick={toggleCamera}
@@ -2001,6 +2079,10 @@ export function MeetingRoom(props: {
           onMuteAll={() => void runAction("mute")}
           onLowerHands={() => void runAction("lower-hands")}
           diagnostics={diagnostics}
+          attendeeMediaLocked={
+            meeting?.allowAttendeeMic === false ||
+            meeting?.allowAttendeeCamera === false
+          }
         />
       );
     if (panel === "share" && me)

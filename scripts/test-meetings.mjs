@@ -264,6 +264,127 @@ const muteAll = await post(`/api/meet/${meeting.code}/action`, {
 });
 ok("a host can mute the room", muteAll.json?.ok === true, `${muteAll.json?.muted ?? 0} muted`);
 
+/* ------------------------------------------------- only the platform speaks */
+
+/*
+ * A room locked down to its leaders, tested through the real API.
+ *
+ * The browser refuses to open the microphone and the button is dead, but none
+ * of that is enforcement — this is. The server must not record an attendee as
+ * unmuted however insistently their client claims to be, because the roster it
+ * produces is what draws a live microphone beside somebody's name for the
+ * whole room.
+ */
+const lockedCode = `zzz-lock-${Date.now().toString(36).slice(-3)}`.slice(0, 20);
+const { rows: lockedMade } = await client.query(
+  `insert into meeting (church_id, code, title, kind, status, access, allow_chat, max_participants,
+                        host_key, allow_attendee_mic, allow_attendee_camera)
+   values ($1, $2, 'Smoke test service', 'service', 'scheduled', 'open', true, 12, $3, false, false)
+   returning id, code`,
+  [church.id, lockedCode, hostKey],
+);
+const locked = lockedMade[0];
+
+const listener = await post(`/api/meet/${locked.code}/join`, {
+  name: "Blessing Eze",
+  micOn: true,
+  cameraOn: true,
+  lowData: false,
+});
+ok(
+  "an attendee is refused a microphone in a locked room",
+  listener.json?.me?.micOn === false && listener.json?.me?.canUseMic === false,
+  `micOn=${listener.json?.me?.micOn} canUseMic=${listener.json?.me?.canUseMic}`,
+);
+ok(
+  "and a camera",
+  listener.json?.me?.cameraOn === false && listener.json?.me?.canUseCamera === false,
+);
+ok(
+  "the room's own rules travel to the browser",
+  listener.json?.meeting?.allowAttendeeMic === false &&
+    listener.json?.meeting?.allowAttendeeCamera === false,
+);
+
+const leader = await post(`/api/meet/${locked.code}/join`, {
+  name: "Pastor Ada",
+  micOn: true,
+  cameraOn: true,
+  lowData: false,
+  hostKey,
+});
+ok(
+  "the host is not affected by their own lock",
+  leader.json?.me?.micOn === true && leader.json?.me?.canUseMic === true,
+  `micOn=${leader.json?.me?.micOn}`,
+);
+
+// A client insisting it is unmuted. This is the whole point of the server half.
+await post(`/api/meet/${locked.code}/sync`, {
+  peer: listener.json.me.peerId,
+  secret: listener.json.me.secret,
+  cursor: 0,
+  wait: false,
+  state: { micOn: true, cameraOn: true, handRaised: true },
+});
+const lockedRoster = await post(`/api/meet/${locked.code}/sync`, {
+  peer: leader.json.me.peerId,
+  secret: leader.json.me.secret,
+  cursor: 0,
+  wait: false,
+});
+const theListener = (lockedRoster.json?.roster ?? []).find(
+  (r) => r.peerId === listener.json.me.peerId,
+);
+ok(
+  "a client that claims to be unmuted is not believed",
+  theListener?.micOn === false && theListener?.cameraOn === false,
+  `micOn=${theListener?.micOn} cameraOn=${theListener?.cameraOn}`,
+);
+ok(
+  "the rest of the same push is still honoured",
+  theListener?.handRaised === true,
+  "a raised hand is how they ask to speak",
+);
+
+// The host hands them the microphone.
+const promoted = await post(`/api/meet/${locked.code}/action`, {
+  peer: leader.json.me.peerId,
+  secret: leader.json.me.secret,
+  action: "promote",
+  participantId: theListener?.id,
+  role: "speaker",
+});
+ok("a host can make somebody a speaker", promoted.json?.ok === true, promoted.json?.error ?? "");
+
+await post(`/api/meet/${locked.code}/sync`, {
+  peer: listener.json.me.peerId,
+  secret: listener.json.me.secret,
+  cursor: 0,
+  wait: false,
+  state: { micOn: true },
+});
+const afterPromotion = await post(`/api/meet/${locked.code}/sync`, {
+  peer: leader.json.me.peerId,
+  secret: leader.json.me.secret,
+  cursor: 0,
+  wait: false,
+});
+const nowSpeaking = (afterPromotion.json?.roster ?? []).find(
+  (r) => r.peerId === listener.json.me.peerId,
+);
+ok(
+  "and then they can be heard, with no rejoin",
+  nowSpeaking?.role === "speaker" && nowSpeaking?.micOn === true,
+  `role=${nowSpeaking?.role} micOn=${nowSpeaking?.micOn}`,
+);
+
+await post(`/api/meet/${locked.code}/action`, {
+  peer: leader.json.me.peerId,
+  secret: leader.json.me.secret,
+  action: "end",
+});
+
 /* -------------------------------------------------------------- leave */
 
 const left = await post(`/api/meet/${meeting.code}/leave`, {

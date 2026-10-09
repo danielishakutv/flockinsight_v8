@@ -57,6 +57,8 @@ export default async function MeetingsPage() {
       allowChat: meeting.allowChat,
       allowReactions: meeting.allowReactions,
       allowScreenShare: meeting.allowScreenShare,
+      allowAttendeeMic: meeting.allowAttendeeMic,
+      allowAttendeeCamera: meeting.allowAttendeeCamera,
       allowRecording: meeting.allowRecording,
       lowDataDefault: meeting.lowDataDefault,
       repeat: meeting.repeat,

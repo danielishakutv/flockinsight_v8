@@ -694,6 +694,13 @@
       "when": 1791451930884,
       "tag": "0098_contribution_hide_names",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791580975859,
+      "tag": "0099_meeting_attendee_media",
+      "breakpoints": true
     }
   ]
 }

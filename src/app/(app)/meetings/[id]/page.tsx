@@ -316,6 +316,15 @@ export default async function MeetingDetailPage({
                 <Row label={t("meetings.roomLimit")} value={`${m.maxParticipants} people`} />
                 {m.lobby && <Row label={t("meetings.lobby")} value="On — you let people in" />}
                 {m.lowDataDefault && <Row label={t("meetings.lowData")} value="On by default" />}
+                {!m.allowAttendeeMic && (
+                  <Row label={t("meetings.unmute")} value={t("meetings.onlyTheHostSpeaks")} />
+                )}
+                {!m.allowAttendeeCamera && (
+                  <Row
+                    label={t("meetings.cameraOn2")}
+                    value={t("meetings.onlyTheHostIsSeen")}
+                  />
+                )}
                 <Row label={t("meetings.recording")} value={m.allowRecording ? "Allowed" : "Off"} />
               </dl>
 

@@ -939,6 +939,8 @@ const SERIES_FIELDS = [
   "allowReactions",
   "allowScreenShare",
   "allowRecording",
+  "allowAttendeeMic",
+  "allowAttendeeCamera",
   "lowDataDefault",
   "recordAttendance",
   "transport",

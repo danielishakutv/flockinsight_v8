@@ -74,6 +74,8 @@ export type MeetingRow = {
   allowChat: boolean;
   allowReactions: boolean;
   allowScreenShare: boolean;
+  allowAttendeeMic: boolean;
+  allowAttendeeCamera: boolean;
   allowRecording: boolean;
   lowDataDefault: boolean;
   repeat: string;
@@ -130,6 +132,8 @@ export function MeetingsList({
       allowChat: m.allowChat,
       allowReactions: m.allowReactions,
       allowScreenShare: m.allowScreenShare,
+      allowAttendeeMic: m.allowAttendeeMic,
+      allowAttendeeCamera: m.allowAttendeeCamera,
       allowRecording: m.allowRecording,
       lowDataDefault: m.lowDataDefault,
       repeat: (m.repeat as MeetingRepeat) ?? "none",

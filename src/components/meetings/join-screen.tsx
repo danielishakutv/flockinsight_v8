@@ -89,6 +89,7 @@ export function JoinScreen({
   needsPasscode,
   needsSignIn,
   lowDataDefault,
+  mediaLocked,
   error,
   joining,
   onJoin,
@@ -101,6 +102,16 @@ export function JoinScreen({
   needsPasscode: boolean;
   needsSignIn: boolean;
   lowDataDefault: boolean;
+  /**
+   * Whether this room will refuse this visitor a microphone or a camera.
+   *
+   * Decided on the server, where the host link and the signed-in session are
+   * both known. It is here rather than only in the room because the honest
+   * place to say "you are joining to listen" is the door: asking for a
+   * microphone, opening a preview and then handing somebody a dead button is
+   * three disappointments where one sentence would have done.
+   */
+  mediaLocked: { mic: boolean; camera: boolean };
   error: string | null;
   joining: boolean;
   onJoin: (values: JoinValues) => void;
@@ -108,8 +119,8 @@ export function JoinScreen({
 }) {
   const t = useT();
   const [name, setName] = useState(defaultName);
-  const [micOn, setMicOn] = useState(true);
-  const [cameraOn, setCameraOn] = useState(!lowDataDefault);
+  const [micOn, setMicOn] = useState(!mediaLocked.mic);
+  const [cameraOn, setCameraOn] = useState(!lowDataDefault && !mediaLocked.camera);
   const [lowData, setLowData] = useState(lowDataDefault);
   const [passcode, setPasscode] = useState("");
   /**
@@ -122,8 +133,15 @@ export function JoinScreen({
    */
   const [micFault, setMicFault] = useState<MediaFault | null>(null);
   const [camFault, setCamFault] = useState<MediaFault | null>(null);
-  /** false while the browser's own dialog is up — nothing else should render yet. */
-  const [asked, setAsked] = useState(false);
+  /**
+   * false while the browser's own dialog is up — nothing else should render
+   * yet. Seeded true in a room that will ask for nothing at all, because then
+   * there is no dialog and never will be: "waiting to be allowed" is not a
+   * state somebody joining a service to listen should ever be shown.
+   */
+  const [asked, setAsked] = useState(
+    () => mediaLocked.mic && (lowDataDefault || mediaLocked.camera),
+  );
   /** While a camera dialog this screen asked for a second time is up. */
   const [askingCamera, setAskingCamera] = useState(false);
 
@@ -176,7 +194,19 @@ export function JoinScreen({
   useEffect(() => {
     let cancelled = false;
     // Read once: this runs on mount only, and `lowData` changes afterwards.
-    const wantsCamera = !lowDataDefault;
+    const wantsCamera = !lowDataDefault && !mediaLocked.camera;
+    const wantsMic = !mediaLocked.mic;
+
+    /*
+     * Do not ask for a device this room will never let this person use.
+     *
+     * A permission dialog for a microphone that cannot be turned on is a
+     * dialog that can only be answered wrongly, and on a phone it is the
+     * scariest thing on the screen. Somebody joining a service to listen is
+     * asked for nothing at all — and `asked` was seeded true for them, so
+     * there is no state to set here and nothing to clean up.
+     */
+    if (!wantsMic && !wantsCamera) return;
 
     void (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -190,18 +220,32 @@ export function JoinScreen({
         return;
       }
 
+      /*
+       * Ask for exactly what this room will let them use, and nothing else.
+       *
+       * A room that allows cameras but no microphones is unusual and perfectly
+       * legal — a silent class watching a demonstration — and asking that
+       * person for a microphone is asking for a device whose button is
+       * already dead.
+       */
+      const wanted: MediaStreamConstraints = {
+        ...(wantsMic ? { audio: AUDIO_WANTED } : {}),
+        ...(wantsCamera ? { video: VIDEO_WANTED } : {}),
+      };
+
       let stream: MediaStream | null = null;
       try {
-        stream = await navigator.mediaDevices.getUserMedia(
-          wantsCamera
-            ? { audio: AUDIO_WANTED, video: VIDEO_WANTED }
-            : { audio: AUDIO_WANTED },
-        );
+        stream = await navigator.mediaDevices.getUserMedia(wanted);
       } catch (first) {
-        if (!wantsCamera) {
+        if (!wantsCamera || !wantsMic) {
           if (!cancelled) {
-            setMicFault(mediaFault(first));
-            setMicOn(false);
+            if (wantsMic) {
+              setMicFault(mediaFault(first));
+              setMicOn(false);
+            } else {
+              setCamFault(mediaFault(first));
+              setCameraOn(false);
+            }
             setAsked(true);
           }
           return;
@@ -258,7 +302,10 @@ export function JoinScreen({
       camRef.current?.getTracks().forEach((track) => track.stop());
       camRef.current = null;
     };
-  }, [lowDataDefault]);
+    // The two booleans rather than the object they arrived in: `mediaLocked`
+    // is a fresh object on every render, and this effect must run exactly
+    // once — it is the one that opens the devices.
+  }, [lowDataDefault, mediaLocked.mic, mediaLocked.camera]);
 
   /**
    * Open the camera, now, because somebody has just asked for it.
@@ -303,14 +350,14 @@ export function JoinScreen({
 
   /** The camera button. Off releases the device; on takes it, asking if need be. */
   const toggleCamera = useCallback(async () => {
-    if (lowData) return;
+    if (lowData || mediaLocked.camera) return;
     if (cameraOn) {
       setCameraOn(false);
       releaseCamera();
       return;
     }
     if (await requestCamera()) setCameraOn(true);
-  }, [cameraOn, lowData, releaseCamera, requestCamera]);
+  }, [cameraOn, lowData, mediaLocked.camera, releaseCamera, requestCamera]);
 
   /*
    * Show the preview only while the camera is actually wanted.
@@ -359,11 +406,11 @@ export function JoinScreen({
     releaseCamera();
     onJoin({
       name: name.trim() || "Guest",
-      micOn: micOn && micFault === null,
+      micOn: micOn && micFault === null && !mediaLocked.mic,
       // Only if a camera was actually opened here. Saying yes to one we never
       // got would have the room ask for it again, in front of everybody, which
       // is the dialog this screen exists to take care of.
-      cameraOn: cameraOn && !lowData && cam !== null,
+      cameraOn: cameraOn && !lowData && !mediaLocked.camera && cam !== null,
       lowData,
       passcode,
     });
@@ -427,7 +474,12 @@ export function JoinScreen({
                   {initialsOf(name || "Guest")}
                 </div>
                 <p className="text-center text-sm text-balance text-slate-400">
-                  {!asked
+                  {mediaLocked.mic && mediaLocked.camera
+                    ? // Nothing was asked for and nothing will be. Say what
+                      // kind of meeting this is instead of describing a
+                      // camera that was never going to open.
+                      t("meetings.micLockedHint")
+                    : !asked
                     ? // While the browser's own dialog is up. Without this the
                       // screen says "your camera is off", which reads as a
                       // setting rather than as a question waiting to be
@@ -449,20 +501,31 @@ export function JoinScreen({
 
             <div className="absolute inset-x-0 bottom-0 flex justify-center gap-3 p-4">
               <RoundToggle
-                on={micOn}
+                on={micOn && !mediaLocked.mic}
+                disabled={mediaLocked.mic}
                 onClick={() => setMicOn((v) => !v)}
                 onIcon={<Mic className="size-5" />}
                 offIcon={<MicOff className="size-5" />}
-                label={micOn ? t("meetings.mute") : t("meetings.unmute")}
+                label={
+                  mediaLocked.mic
+                    ? t("meetings.onlyTheHostSpeaks")
+                    : micOn
+                      ? t("meetings.mute")
+                      : t("meetings.unmute")
+                }
               />
               <RoundToggle
-                on={cameraOn && !lowData}
-                disabled={lowData || askingCamera}
+                on={cameraOn && !lowData && !mediaLocked.camera}
+                disabled={lowData || askingCamera || mediaLocked.camera}
                 onClick={() => void toggleCamera()}
                 onIcon={<Camera className="size-5" />}
                 offIcon={<CameraOff className="size-5" />}
                 label={
-                  cameraOn ? t("meetings.cameraOff2") : t("meetings.cameraOn2")
+                  mediaLocked.camera
+                    ? t("meetings.onlyTheHostIsSeen")
+                    : cameraOn
+                      ? t("meetings.cameraOff2")
+                      : t("meetings.cameraOn2")
                 }
               />
             </div>

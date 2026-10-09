@@ -16,7 +16,7 @@ import {
   standingInChurch,
   HEARTBEAT_MS,
 } from "@/lib/meetings";
-import { parseStage } from "@/lib/meetings-shared";
+import { mediaRights, parseStage } from "@/lib/meetings-shared";
 import {
   cleanDisplayName,
   clearRateLimit,
@@ -109,8 +109,23 @@ export async function POST(
   // host arrive unmuted — they are the one who has to say "good morning".
   const isHost = verdict.role === "host" || verdict.role === "cohost";
   const lowData = body.lowData === true || (body.lowData !== false && m.lowDataDefault);
-  const micOn = body.micOn === true && (isHost || !m.muteOnEntry);
-  const cameraOn = body.cameraOn === true && !lowData && (isHost || !m.cameraOffOnEntry);
+
+  /*
+   * What this room lets this person turn on at all, which is a different
+   * question from what they arrive with. "Muted on arrival" is a starting
+   * position; this is the control not existing. Settled here because the
+   * browser asked for a microphone before it knew either answer, and because
+   * the roster this produces is what every other participant renders from —
+   * an attendee recorded as unmuted in a room where only the platform may
+   * speak would show a live microphone beside their name for everybody.
+   */
+  const rights = mediaRights(verdict.role, m);
+  const micOn = body.micOn === true && rights.mic && (isHost || !m.muteOnEntry);
+  const cameraOn =
+    body.cameraOn === true &&
+    rights.camera &&
+    !lowData &&
+    (isHost || !m.cameraOffOnEntry);
 
   const me = await joinMeeting({
     meetingId: m.id,
@@ -208,6 +223,14 @@ export async function POST(
       allowReactions: m.allowReactions,
       allowScreenShare: m.allowScreenShare || isHost,
       allowRecording: m.allowRecording,
+      /*
+       * The room's own rules, sent as they are rather than already applied to
+       * this person. The engine recomputes the answer from these and the role
+       * on every poll, because a host can make somebody a speaker halfway
+       * through and the right to speak has to follow.
+       */
+      allowAttendeeMic: m.allowAttendeeMic,
+      allowAttendeeCamera: m.allowAttendeeCamera,
       maxParticipants: m.maxParticipants,
       lowDataDefault: m.lowDataDefault,
       /*
@@ -233,6 +256,9 @@ export async function POST(
       micOn,
       cameraOn,
       lowData,
+      /** What this person may turn on, as of right now. See `mediaRights`. */
+      canUseMic: rights.mic,
+      canUseCamera: rights.camera,
       isStaff: standing.isStaff,
     },
     ice: await resolveIceConfig(`m-${m.code}`),

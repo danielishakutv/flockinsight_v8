@@ -155,6 +155,16 @@ export default async function MeetPage({
       signedIn={!!userId}
       defaultName={session?.user?.name ?? ""}
       lowDataDefault={m.lowDataDefault}
+      /*
+       * Worked out here, where the host link, the signed-in session and the
+       * church's staff list are all known. The pre-join screen cannot decide
+       * this and must not guess: a camera preview followed by a dead button is
+       * a worse welcome than a sentence at the door.
+       */
+      mediaLocked={{
+        mic: !m.allowAttendeeMic && !isHost,
+        camera: !m.allowAttendeeCamera && !isHost,
+      }}
       hostKey={hostKey}
         signInHref={`/login?next=${encodeURIComponent(`/meet/${m.code}`)}`}
         manageHref={isHost ? `/meetings` : null}

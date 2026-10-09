@@ -15,15 +15,20 @@
  */
 
 import {
+  audioShapeKey,
+  audioWireBitrate,
   canShareScreen,
   isPolite,
   isPortrait,
+  mediaRights,
   profileFor,
   rateLink,
   shouldInitiate,
   tuneOpus,
+  type AudioProfile,
   type BandwidthProfile,
   type MeetingQuality,
+  type MeetingRole,
   type RosterEntry,
   type SignalEnvelope,
   type SignalType,
@@ -52,6 +57,18 @@ export type LocalState = {
   profile: BandwidthProfile;
   /** Which camera is in use, so the flip button knows where it is. */
   facing: "user" | "environment";
+  /**
+   * What this room lets this person turn on at all.
+   *
+   * Carried in the state the UI already renders from, so a locked microphone
+   * is a dead button with a reason beside it rather than a button that
+   * silently refuses. Recomputed from the roster on every poll, because a host
+   * can promote somebody to speaker mid-meeting and the roster is the only
+   * place that is authoritative about it.
+   */
+  rights: { mic: boolean; camera: boolean };
+  /** This person's role in the room, as the server last reported it. */
+  role: MeetingRole;
 };
 
 /** What one peer connection is actually doing, for the diagnostics panel. */
@@ -82,6 +99,25 @@ export type PeerDiagnostics = {
    */
   framesDecoded: number;
   framesDropped: number;
+  /**
+   * The voice, measured rather than guessed at.
+   *
+   * `audioConcealedPct` is the one that matters and the one nothing else
+   * reports: the share of audio the browser had to invent because it had
+   * nothing to play. That IS the complaint — "the sound keeps cutting" is a
+   * concealment rate, and it tells three causes apart that look identical from
+   * a seat in the meeting. High loss with low concealment is a network the
+   * redundancy is already covering. Low loss with high concealment is jitter,
+   * and the jitter buffer is the answer. Both low with silence on the line is
+   * a microphone, not a network, and no amount of bandwidth will fix it.
+   */
+  audioLossPct: number;
+  audioJitterMs: number;
+  audioConcealedPct: number;
+  /** How much audio the player is holding, ms. Rises as a link gets gusty. */
+  audioJitterBufferMs: number;
+  /** Whether RED is carrying a second copy of every packet to this peer. */
+  audioRedundancy: boolean;
   /**
    * What the `<video>` element showing this peer is doing, reported back by
    * the tile. The last link in the chain, and the only one `getStats` cannot
@@ -121,6 +157,18 @@ export type MeetingClientEvents = {
    * UI has the translator and this needs saying in the reader's language.
    */
   onMediaFault?: (fault: MediaFault, device: "microphone" | "camera") => void;
+  /**
+   * The microphone died mid-call and was re-opened, or could not be.
+   *
+   * A local track ends on its own more often than anybody expects: a headset
+   * unplugged, Bluetooth handing over, Android giving the microphone to an
+   * incoming call, a browser reclaiming a backgrounded tab's devices. Nothing
+   * throws, no event reaches the UI, and the person goes on talking into a
+   * track that no longer exists — which is exactly what "my audio cut out and
+   * never came back" is. It is reported either way so that it can never again
+   * be silent.
+   */
+  onMicInterrupted?: (outcome: "recovered" | "lost") => void;
   /** Transport health, so the UI can say "reconnecting" honestly. */
   onTransport?: (state: "online" | "retrying" | "offline") => void;
   /**
@@ -139,6 +187,15 @@ export type MeetingClientInit = {
   iceServers: RTCIceServer[];
   iceTransportPolicy?: RTCIceTransportPolicy;
   lowData: boolean;
+  /** This person's role as the server granted it at join. */
+  role?: MeetingRole;
+  /**
+   * Whether ordinary attendees may use a microphone and a camera in this room.
+   *
+   * Passed in from the join response rather than assumed, and defaulted open
+   * so that an older server or a failed field cannot silently gag a room.
+   */
+  room?: { allowAttendeeMic: boolean; allowAttendeeCamera: boolean };
   /**
    * How media travels in this room. Fixed for the meeting — see the note on
    * `meeting.transport` in the schema for why it can never change mid-call.
@@ -172,6 +229,28 @@ type PeerState = {
     videoIn: number;
     audioIn: number;
   } | null;
+  /**
+   * The previous audio sample, for the same reason: concealment and loss are
+   * cumulative counters, and a call that was rough for its first ten seconds
+   * must not read as rough for the next hour.
+   */
+  lastAudio: {
+    packetsReceived: number;
+    packetsLost: number;
+    concealedSamples: number;
+    totalSamples: number;
+  } | null;
+  /** The concealment share from the last sample, for the link verdict. */
+  lastConcealedPct: number;
+  /**
+   * When this peer was last re-offered purely to change the audio shape.
+   *
+   * Turning RED on or off needs a new offer, and a link that flaps between
+   * "fair" and "good" would otherwise renegotiate every few seconds — which
+   * costs more than the redundancy is worth and risks a glare storm in a room
+   * where everybody's link is flapping at once.
+   */
+  audioOfferedAt: number;
   /** The last reading, kept so the panel never has to await `getStats`. */
   diagnostics: PeerDiagnostics | null;
   /**
@@ -185,6 +264,10 @@ type PeerState = {
 
 const SEND_DEBOUNCE_MS = 40;
 const STATS_INTERVAL_MS = 4000;
+/** The least time between two offers made only to change the audio shape. */
+const AUDIO_REOFFER_MS = 30_000;
+/** How many times a microphone that dies mid-call will be re-opened. */
+const MIC_RECOVERY_LIMIT = 6;
 /** How long to wait before another long-poll after a failed one. Backs off. */
 const RETRY_BASE_MS = 800;
 const RETRY_MAX_MS = 8000;
@@ -272,6 +355,16 @@ export class MeetingClient {
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private retryDelay = RETRY_BASE_MS;
 
+  /** What this room allows an ordinary attendee. See `mediaRights`. */
+  private readonly room: { allowAttendeeMic: boolean; allowAttendeeCamera: boolean };
+  /** The audio shape every peer was last negotiated with. */
+  private audioShape: string;
+  /** How many times the microphone has been re-opened after dying. */
+  private micRecoveries = 0;
+  /** Whether this browser has been found to refuse a jitter buffer hint. */
+  private jitterBufferRefused = false;
+  private onDeviceChange: (() => void) | null = null;
+
   constructor(init: MeetingClientInit) {
     this.code = init.code;
     this.peerId = init.peerId;
@@ -288,14 +381,20 @@ export class MeetingClient {
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
     };
+    this.room = init.room ?? { allowAttendeeMic: true, allowAttendeeCamera: true };
+    const role = init.role ?? "attendee";
+    const profile = profileFor({ peers: 1, lowData: init.lowData });
+    this.audioShape = audioShapeKey(profile.audio);
     this.state = {
       micOn: false,
       cameraOn: false,
       sharing: false,
       lowData: init.lowData,
       quality: "good",
-      profile: profileFor({ peers: 1, lowData: init.lowData }),
+      profile,
       facing: "user",
+      role,
+      rights: mediaRights(role, this.room),
     };
   }
 
@@ -329,6 +428,10 @@ export class MeetingClient {
         return data;
       },
       this.rtcConfig.iceServers ?? [],
+      // Read through a function rather than passed by value: the profile
+      // changes as the link is measured, and the transport asks for whatever
+      // is current at the moment it negotiates.
+      () => this.state.profile.audio,
       {
         onMedia: (peerId, bundle) => {
           const screen = bundle.screen.getVideoTracks().length > 0;
@@ -362,6 +465,17 @@ export class MeetingClient {
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.onVisibility);
     }
+
+    /*
+     * A headset being unplugged, or Bluetooth handing back to the earpiece,
+     * ends the microphone track without any error anywhere. Checked here as
+     * well as on the track's own `ended` event because on some Android
+     * builds only one of the two fires.
+     */
+    if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+      this.onDeviceChange = () => this.checkMicAlive();
+      navigator.mediaDevices.addEventListener("devicechange", this.onDeviceChange);
+    }
   }
 
   /**
@@ -383,6 +497,10 @@ export class MeetingClient {
 
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.onVisibility);
+    }
+    if (this.onDeviceChange && typeof navigator !== "undefined") {
+      navigator.mediaDevices?.removeEventListener("devicechange", this.onDeviceChange);
+      this.onDeviceChange = null;
     }
     if (this.statsTimer) clearInterval(this.statsTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
@@ -594,6 +712,7 @@ export class MeetingClient {
     }
     if (data.roster) {
       this.rosterCache = data.roster;
+      this.applyMyRole(data.roster);
       this.events.onRoster?.(data.roster);
       this.reconcilePeers(data.roster);
     }
@@ -610,6 +729,39 @@ export class MeetingClient {
    * and leave events, so a missed event self-heals on the next poll instead of
    * leaving a permanent black tile.
    */
+  /**
+   * Read this person's own role back off the roster, and act on it.
+   *
+   * The role is not fixed for the call: a host can make somebody a speaker so
+   * they can give their testimony, and make them an attendee again afterwards.
+   * Taken from the roster rather than from the `control` signal that announces
+   * it, for the reason the rest of this file already settles on — a signal can
+   * be missed and is then missed for ever, while the roster arrives on every
+   * poll and repairs anything that went astray within seconds.
+   *
+   * Losing the right to speak takes the microphone with it. Not doing that
+   * would leave somebody live in a room that believes it has silenced them,
+   * which is the worst of the available outcomes.
+   */
+  private applyMyRole(roster: RosterEntry[]): void {
+    const mine = roster.find((r) => r.peerId === this.peerId);
+    if (!mine) return;
+
+    const rights = mediaRights(mine.role, this.room);
+    const changed =
+      mine.role !== this.state.role ||
+      rights.mic !== this.state.rights.mic ||
+      rights.camera !== this.state.rights.camera;
+    if (!changed) return;
+
+    this.state.role = mine.role;
+    this.state.rights = rights;
+
+    if (!rights.mic && this.state.micOn) void this.setMic(false);
+    if (!rights.camera && this.state.cameraOn) void this.setCamera(false);
+    this.events.onLocalState?.({ ...this.state });
+  }
+
   private reconcilePeers(roster: RosterEntry[]): void {
     if (this.transport === "sfu") {
       // No peers to dial. The roster says who is publishing and where, and the
@@ -696,6 +848,9 @@ export class MeetingClient {
       lastStats: { at: 0, packetsSent: 0, packetsLost: 0 },
       peerId,
       lastBytes: null,
+      lastAudio: null,
+      lastConcealedPct: 0,
+      audioOfferedAt: Date.now(),
       diagnostics: null,
       published: null,
       publishedScreen: null,
@@ -753,7 +908,7 @@ export class MeetingClient {
     try {
       p.makingOffer = true;
       const offer = await p.pc.createOffer();
-      if (offer.sdp) offer.sdp = tuneOpus(offer.sdp, this.state.profile.audioBitrate);
+      if (offer.sdp) offer.sdp = tuneOpus(offer.sdp, this.state.profile.audio);
       await p.pc.setLocalDescription(offer);
       this.send("offer", { sdp: p.pc.localDescription?.toJSON() }, peerId);
     } catch (e) {
@@ -891,7 +1046,7 @@ export class MeetingClient {
 
       if (raw.type === "offer") {
         const answer = await p.pc.createAnswer();
-        if (answer.sdp) answer.sdp = tuneOpus(answer.sdp, this.state.profile.audioBitrate);
+        if (answer.sdp) answer.sdp = tuneOpus(answer.sdp, this.state.profile.audio);
         await p.pc.setLocalDescription(answer);
         this.send("answer", { sdp: p.pc.localDescription?.toJSON() }, s.fromPeer);
       }
@@ -1063,11 +1218,41 @@ export class MeetingClient {
       }
     }
 
-    const audio = p.stream.getAudioTracks().some((t) => !t.muted);
-    const camera = p.stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted);
+    /*
+     * Do not play what this room does not allow this person to send.
+     *
+     * On a mesh there is no server in the media path, so "only the platform
+     * may speak" cannot be enforced by refusing to relay — the packets arrive
+     * directly. The server refuses to RECORD an attendee as unmuted and the
+     * sending browser refuses to turn the microphone on, which covers every
+     * ordinary case; this covers the rest, and it is what makes the setting a
+     * rule rather than a convention.
+     *
+     * Fails open on purpose. An unknown peer, or a roster that has not arrived
+     * yet, is treated as allowed: muting somebody who should be heard is a
+     * worse mistake than briefly hearing somebody who should not be, and a
+     * promotion to speaker heals here within one poll because this runs again
+     * on every stats tick.
+     */
+    const allowed = theirs ? mediaRights(theirs.role, this.room) : { mic: true, camera: true };
+
+    const audio =
+      allowed.mic && p.stream.getAudioTracks().some((t) => !t.muted);
+    const camera =
+      allowed.camera &&
+      p.stream.getVideoTracks().some((t) => t.readyState === "live" && !t.muted);
     const screen = p.screenStream
       .getVideoTracks()
       .some((t) => t.readyState === "live" && !t.muted);
+
+    /*
+     * And silence it for real. `hasAudio: false` only stops the UI drawing a
+     * speaking ring; the track is still attached to an element somewhere and
+     * still audible. Disabling it is local, reversible on the next tick, and
+     * the only thing that actually stops the sound.
+     */
+    for (const t of p.stream.getAudioTracks()) t.enabled = allowed.mic;
+    for (const t of p.stream.getVideoTracks()) t.enabled = allowed.camera;
 
     p.published = this.publishable(p.stream, p.published);
     p.publishedScreen = this.publishable(p.screenStream, p.publishedScreen);
@@ -1175,18 +1360,21 @@ export class MeetingClient {
   }
 
   async setMic(on: boolean): Promise<void> {
-    if (on && !this.micStream) {
-      this.micStream = await this.capture(
-        {
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        },
-        { audio: true },
-        "microphone",
+    /*
+     * A room can be set so that only the platform may be heard. Refused here
+     * as well as on the server, and with a reason rather than silently: the
+     * button is already dead in the interface, so arriving at this line means
+     * a keyboard shortcut or a stale page, and either deserves the sentence.
+     */
+    if (on && !this.state.rights.mic) {
+      this.events.onError?.(
+        "Only the host can turn a microphone on in this meeting.",
       );
+      return;
+    }
+
+    if (on && !this.micStream) {
+      this.micStream = await this.openMic();
       if (!this.micStream) return;
     }
     this.micStream?.getAudioTracks().forEach((t) => (t.enabled = on));
@@ -1195,8 +1383,115 @@ export class MeetingClient {
     this.pushState();
   }
 
+  /**
+   * Open the microphone, and watch it for the rest of the call.
+   *
+   * The constraints are the usual three. The watching is the part that was
+   * missing: a local audio track ends on its own far more often than anybody
+   * expects — a headset unplugged, Bluetooth handing over, Android giving the
+   * microphone to an incoming call, a browser reclaiming a backgrounded tab's
+   * devices — and when it does, absolutely nothing happens. No error, no
+   * event out of this module, no change on screen. The sender goes on holding
+   * a dead track, every peer goes on showing the person as unmuted, and they
+   * go on talking to a room that cannot hear them until somebody thinks to
+   * say so.
+   *
+   * That is a large part of "audio cuts out and never comes back", and it is
+   * not a network problem at all, which is why no amount of bandwidth work
+   * would have found it.
+   */
+  private async openMic(): Promise<MediaStream | null> {
+    const stream = await this.capture(
+      {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          /*
+           * One channel, asked for explicitly. A stereo microphone doubles
+           * what the encoder is handed for no benefit to a voice, and some
+           * browsers will capture two channels and then negotiate Opus mono,
+           * which is work done twice to throw half of it away.
+           */
+          channelCount: 1,
+        },
+      },
+      { audio: true },
+      "microphone",
+    );
+    const track = stream?.getAudioTracks()[0];
+    if (track) {
+      track.addEventListener("ended", () => void this.recoverMic("the track ended"));
+      track.addEventListener("mute", () => {
+        /*
+         * Not treated as a failure and deliberately not written into
+         * `micOn`: `muted` means no media is flowing right now, which is what
+         * the operating system does for a second while a device changes hands,
+         * and `micOn` is what the PERSON chose. Inferring one from the other
+         * is how somebody ends up muted by a Bluetooth hiccup.
+         */
+        console.warn("[meeting] the microphone went quiet at the device level");
+      });
+    }
+    return stream;
+  }
+
+  /**
+   * Is the microphone we think we are using still alive?
+   *
+   * Called on `devicechange`, because on some Android builds that is the only
+   * notice given. Cheap enough to run on every one.
+   */
+  private checkMicAlive(): void {
+    if (!this.running || !this.state.micOn) return;
+    const track = this.micStream?.getAudioTracks()[0];
+    if (!track || track.readyState === "ended") {
+      void this.recoverMic("the device list changed");
+    }
+  }
+
+  /**
+   * Re-open a microphone that died, and say so either way.
+   *
+   * Bounded, because a device that has genuinely gone — a headset carried out
+   * of the room — must not be retried for the rest of the hour. The person is
+   * told on the first recovery and on the giving up; the quiet middle is the
+   * one case where saying nothing is right, because it worked.
+   */
+  private async recoverMic(why: string): Promise<void> {
+    if (!this.running || !this.state.micOn) return;
+    if (this.micRecoveries >= MIC_RECOVERY_LIMIT) {
+      console.error("[meeting] giving up on the microphone after", why);
+      this.events.onMicInterrupted?.("lost");
+      return;
+    }
+    this.micRecoveries++;
+    console.warn("[meeting] re-opening the microphone:", why);
+
+    this.stopStream(this.micStream);
+    this.micStream = null;
+
+    const fresh = await this.openMic();
+    if (!fresh) {
+      this.events.onMicInterrupted?.("lost");
+      return;
+    }
+    this.micStream = fresh;
+    fresh.getAudioTracks().forEach((t) => (t.enabled = true));
+    // `replaceTrack` on the senders that already exist, so nobody
+    // renegotiates and no picture flickers — the room simply starts hearing
+    // this person again.
+    this.attachEverywhere();
+    this.events.onMicInterrupted?.("recovered");
+  }
+
   async setCamera(on: boolean, facing?: "user" | "environment"): Promise<void> {
     const wanted = facing ?? this.state.facing;
+
+    if (on && !this.state.rights.camera) {
+      this.events.onError?.("Only the host can turn a camera on in this meeting.");
+      return;
+    }
 
     if (on && this.state.lowData) {
       this.events.onError?.("Turn off low-data mode to use your camera.");
@@ -1385,7 +1680,50 @@ export class MeetingClient {
       screen: this.state.sharing,
     });
     for (const [, p] of this.peers) this.applyProfileTo(p);
+    /*
+     * The SFU holds its own senders and receivers, so the jitter buffer and
+     * the voice's priority have to be re-applied there too. Without this a
+     * room that was rated "poor" halfway through kept the 200ms buffer it
+     * negotiated with — which is the one case the whole measurement exists
+     * for.
+     */
+    this.sfu?.tuneAudio();
+    this.renegotiateAudioIfNeeded();
     this.events.onLocalState?.({ ...this.state });
+  }
+
+  /**
+   * Turn redundancy on, or off, on a call that is already running.
+   *
+   * Everything else about the voice is a runtime setting. Redundancy is not:
+   * RED is chosen in the SDP and there is no switch for it, so changing our
+   * mind means a new offer. That is cheap — no ICE restart, no new tracks,
+   * nobody's picture flickers — but it is not free, and a link flapping
+   * between "fair" and "good" would otherwise re-offer to every peer every few
+   * seconds, which on a mesh is a glare storm at the worst possible moment.
+   *
+   * So: only when the SHAPE changed, and not more than once every half minute
+   * per peer. Both sides may offer; perfect negotiation already decides which
+   * one wins, and the loser's preference rides out on its answer anyway.
+   *
+   * Mesh only. The SFU path re-reads the profile when it publishes, and
+   * renegotiating a Cloudflare session to change a codec preference is a
+   * larger piece of surgery than the gain justifies — those rooms keep the
+   * tuning, the priority and the jitter buffer, which is most of the benefit.
+   */
+  private renegotiateAudioIfNeeded(): void {
+    if (this.transport !== "mesh") return;
+    const shape = audioShapeKey(this.state.profile.audio);
+    if (shape === this.audioShape) return;
+    this.audioShape = shape;
+
+    const now = Date.now();
+    for (const [peerId, p] of this.peers) {
+      if (p.pc.signalingState !== "stable") continue;
+      if (now - p.audioOfferedAt < AUDIO_REOFFER_MS) continue;
+      p.audioOfferedAt = now;
+      void this.makeOffer(peerId, p);
+    }
   }
 
   /**
@@ -1405,8 +1743,11 @@ export class MeetingClient {
     const set = (
       sender: RTCRtpSender | undefined,
       maxBitrate: number,
-      maxFramerate?: number,
-      degradation?: RTCDegradationPreference,
+      opts: {
+        maxFramerate?: number;
+        degradation?: RTCDegradationPreference;
+        priority?: RTCPriorityType;
+      } = {},
     ) => {
       if (!sender) return;
       try {
@@ -1415,26 +1756,107 @@ export class MeetingClient {
           params.encodings = [{}];
         }
         params.encodings[0].maxBitrate = maxBitrate;
-        if (maxFramerate) params.encodings[0].maxFramerate = maxFramerate;
-        if (degradation) params.degradationPreference = degradation;
-        void sender.setParameters(params).catch(() => {
-          /* a browser that will not take these still works, just greedier */
+        if (opts.maxFramerate) params.encodings[0].maxFramerate = opts.maxFramerate;
+        if (opts.priority) {
+          /*
+           * Who gives way when the uplink cannot carry everything.
+           *
+           * This is the setting that stops a camera from taking the voice down
+           * with it. Without it a browser divides what it has between audio
+           * and video by its own rules, and on a phone pushing 300kbps of
+           * video up a 200kbps link that means the speech queues behind the
+           * frames — which is heard as the voice breaking up every time
+           * somebody switches a camera on. `priority` is the bandwidth
+           * allocator's ranking; `networkPriority` is the DSCP marking, which
+           * some mobile networks actually honour.
+           */
+          params.encodings[0].priority = opts.priority;
+          params.encodings[0].networkPriority = opts.priority;
+        }
+        if (opts.degradation) params.degradationPreference = opts.degradation;
+        void sender.setParameters(params).catch((e) => {
+          // Not fatal — the browser carries on with its own numbers, greedier
+          // than we asked for. Worth seeing, because "we set a ceiling and it
+          // was ignored" and "we never set one" look identical in getStats.
+          console.warn("[meeting] sender parameters refused", e);
         });
-      } catch {
-        /* same */
+      } catch (e) {
+        console.warn("[meeting] sender parameters could not be read", e);
       }
     };
 
-    set(p.slots.audio?.sender, prof.audioBitrate);
-    set(
-      p.slots.camera?.sender,
-      prof.videoBitrate || 1,
-      prof.frameRate || undefined,
-      "maintain-framerate",
-    );
+    /*
+     * The ceiling is the WIRE cost, headers and redundancy included — not the
+     * Opus target. Setting it to the target alone would have the allocator
+     * squeeze the second RED copy back out again, so we would pay for
+     * redundancy in SDP and never receive any of it.
+     */
+    set(p.slots.audio?.sender, audioWireBitrate(prof.audio), { priority: "high" });
+    set(p.slots.camera?.sender, prof.videoBitrate || 1, {
+      maxFramerate: prof.frameRate || undefined,
+      degradation: "maintain-framerate",
+      priority: "low",
+    });
     // A shared screen is usually words on a slide: keep them sharp and let
     // the frame rate fall instead.
-    set(p.slots.screen?.sender, 800_000, 8, "maintain-resolution");
+    set(p.slots.screen?.sender, 800_000, {
+      maxFramerate: 8,
+      degradation: "maintain-resolution",
+      priority: "low",
+    });
+
+    this.tuneAudioReceiver(p.slots.audio?.receiver, prof.audio);
+  }
+
+  /**
+   * Hold some audio back before playing it.
+   *
+   * The single most effective thing in this file for "the sound keeps cutting
+   * in and out", and it costs no bandwidth at all. A player with an empty
+   * buffer has to invent any gap, and packets on a mobile link do not arrive
+   * one at a time — they stop for 300ms and then arrive in a gust. Chrome's
+   * own adaptive buffer starts small and grows only after it has already
+   * produced audible damage; this asks for the room up front, sized to what
+   * the link has been measured doing.
+   *
+   * `jitterBufferTarget` is the standard property; `playoutDelayHint` is the
+   * older Chrome one and is set too, because a browser that has the second and
+   * not the first is exactly the kind of browser a church member is using.
+   * Neither existing is not a failure — it is recorded once and the call goes
+   * on with the browser's own behaviour.
+   */
+  private tuneAudioReceiver(
+    receiver: RTCRtpReceiver | undefined,
+    audio: AudioProfile,
+  ): void {
+    if (!receiver) return;
+    const r = receiver as RTCRtpReceiver & {
+      jitterBufferTarget?: number | null;
+      playoutDelayHint?: number | null;
+    };
+    let applied = false;
+    try {
+      if ("jitterBufferTarget" in r) {
+        r.jitterBufferTarget = audio.jitterBufferMs;
+        applied = true;
+      }
+      if ("playoutDelayHint" in r) {
+        r.playoutDelayHint = audio.jitterBufferMs / 1000;
+        applied = true;
+      }
+    } catch (e) {
+      if (!this.jitterBufferRefused) {
+        this.jitterBufferRefused = true;
+        console.warn("[meeting] this browser refused a jitter buffer hint", e);
+      }
+      return;
+    }
+    if (!applied && !this.jitterBufferRefused) {
+      this.jitterBufferRefused = true;
+      console.warn(
+        "[meeting] this browser has no jitter buffer control; audio gaps will be its own to manage",
+      );
+    }
   }
 
   /**
@@ -1455,16 +1877,52 @@ export class MeetingClient {
    */
   private rateFlow(
     p: PeerState,
-    bytes: { videoOut: number; audioOut: number; videoIn: number; audioIn: number },
-    transport: string | null,
-    framesDecoded: number,
-    framesDropped: number,
+    sample: {
+      bytes: { videoOut: number; audioOut: number; videoIn: number; audioIn: number };
+      transport: string | null;
+      framesDecoded: number;
+      framesDropped: number;
+      audio: {
+        packetsReceived: number;
+        packetsLost: number;
+        concealedSamples: number;
+        totalSamples: number;
+        jitterMs: number;
+        jitterBufferMs: number;
+      };
+    },
   ): PeerDiagnostics {
     const now = Date.now();
     const prev = p.lastBytes;
     const seconds = prev ? (now - prev.at) / 1000 : 0;
     const kbps = (curr: number, before: number) =>
       seconds > 0 ? Math.max(0, Math.round(((curr - before) * 8) / seconds / 1000)) : 0;
+    const bytes = sample.bytes;
+
+    /*
+     * Loss and concealment since the LAST sample, as a share of what arrived
+     * in that window. Cumulative counters would average a rough first minute
+     * over a smooth hour, which is the opposite of what anybody looking at
+     * this panel wants to know.
+     */
+    const before = p.lastAudio;
+    const share = (curr: number, was: number, overCurr: number, overWas: number) => {
+      const top = Math.max(0, curr - was);
+      const bottom = Math.max(0, overCurr - overWas);
+      return bottom > 0 ? Math.round((top / bottom) * 1000) / 10 : 0;
+    };
+    const a = sample.audio;
+    const audioLossPct = before
+      ? share(
+          a.packetsLost,
+          before.packetsLost,
+          a.packetsLost + a.packetsReceived,
+          before.packetsLost + before.packetsReceived,
+        )
+      : 0;
+    const audioConcealedPct = before
+      ? share(a.concealedSamples, before.concealedSamples, a.totalSamples, before.totalSamples)
+      : 0;
 
     const d: PeerDiagnostics = {
       peerId: p.peerId,
@@ -1479,12 +1937,24 @@ export class MeetingClient {
       audioOutKbps: prev ? kbps(bytes.audioOut, prev.audioOut) : 0,
       videoInKbps: prev ? kbps(bytes.videoIn, prev.videoIn) : 0,
       audioInKbps: prev ? kbps(bytes.audioIn, prev.audioIn) : 0,
-      transport,
-      framesDecoded,
-      framesDropped,
+      transport: sample.transport,
+      framesDecoded: sample.framesDecoded,
+      framesDropped: sample.framesDropped,
+      audioLossPct,
+      audioConcealedPct,
+      audioJitterMs: Math.round(a.jitterMs),
+      audioJitterBufferMs: Math.round(a.jitterBufferMs),
+      audioRedundancy: this.state.profile.audio.redundancy,
     };
 
     p.lastBytes = { at: now, ...bytes };
+    p.lastAudio = {
+      packetsReceived: a.packetsReceived,
+      packetsLost: a.packetsLost,
+      concealedSamples: a.concealedSamples,
+      totalSamples: a.totalSamples,
+    };
+    p.lastConcealedPct = audioConcealedPct;
     return d;
   }
 
@@ -1513,6 +1983,7 @@ export class MeetingClient {
     if (!this.sfu) return;
     this.totals = await this.sfu.totals();
     const rows = await this.sfu.diagnose();
+    this.rateSfuLink(rows);
     this.sfuDiagnostics = [...rows.entries()].map(([peerId, d]) => ({
       peerId,
       ice: d.ice,
@@ -1521,11 +1992,49 @@ export class MeetingClient {
       videoOutKbps: 0,
       audioOutKbps: 0,
       videoInKbps: d.videoInKbps,
-      audioInKbps: 0,
+      audioInKbps: d.audioInKbps,
       transport: "sfu",
       framesDecoded: d.framesDecoded,
       framesDropped: 0,
+      audioLossPct: d.audioLossPct,
+      audioConcealedPct: d.audioConcealedPct,
+      audioJitterMs: d.audioJitterMs,
+      audioJitterBufferMs: d.audioJitterBufferMs,
+      // The SFU path keeps the tuning and the jitter buffer but not RED — see
+      // `renegotiateAudioIfNeeded`.
+      audioRedundancy: false,
     }));
+  }
+
+  /**
+   * Rate an SFU room's link, which nothing used to do at all.
+   *
+   * On a mesh the verdict comes from what we SEND — loss reported back by each
+   * peer, round-trip time, the browser's own estimate of headroom. None of
+   * that exists in a useful form here: there is one connection to a media
+   * server, and the thing that goes wrong is the voices arriving badly.
+   *
+   * So the verdict is built from what arrives. Concealment is the reading that
+   * matters, because a room of two hundred is exactly where somebody is on a
+   * phone in a compound with one bar, and it is what raises their jitter
+   * buffer and their redundancy. Without this an SFU room sat on "good" for
+   * the whole meeting however it actually sounded.
+   */
+  private rateSfuLink(rows: Map<string, { audioConcealedPct: number }>): void {
+    let worstConcealed = 0;
+    for (const [, row] of rows) {
+      if (row.audioConcealedPct > worstConcealed) worstConcealed = row.audioConcealedPct;
+    }
+
+    const quality = rateLink({
+      packetLossPct: 0,
+      rttMs: 0,
+      audioConcealedPct: worstConcealed,
+    });
+    if (quality === this.state.quality) return;
+    this.state.quality = quality;
+    this.applyProfile();
+    void this.flush({ quality });
   }
 
   /** Everything the diagnostics panel shows, as of the last sample. */
@@ -1546,6 +2055,11 @@ export class MeetingClient {
           transport: null,
           framesDecoded: 0,
           framesDropped: 0,
+          audioLossPct: 0,
+          audioJitterMs: 0,
+          audioConcealedPct: 0,
+          audioJitterBufferMs: 0,
+          audioRedundancy: this.state.profile.audio.redundancy,
         },
     );
   }
@@ -1562,6 +2076,7 @@ export class MeetingClient {
     let worstLoss = 0;
     let worstRtt = 0;
     let available = 0;
+    let worstConcealed = 0;
 
     for (const [, p] of this.peers) {
       try {
@@ -1574,6 +2089,14 @@ export class MeetingClient {
         let transport: string | null = null;
         let framesDecoded = 0;
         let framesDropped = 0;
+        const audio = {
+          packetsReceived: 0,
+          packetsLost: 0,
+          concealedSamples: 0,
+          totalSamples: 0,
+          jitterMs: 0,
+          jitterBufferMs: 0,
+        };
 
         stats.forEach((r) => {
           const report = r as unknown as Record<string, number | string>;
@@ -1599,7 +2122,55 @@ export class MeetingClient {
               framesDecoded += Number(report.framesDecoded ?? 0);
               framesDropped += Number(report.framesDropped ?? 0);
             }
-            if (report.kind === "audio") bytes.audioIn += n;
+            if (report.kind === "audio") {
+              bytes.audioIn += n;
+              /*
+               * The voice, as the player experienced it.
+               *
+               * `concealedSamples` is the number this module was missing: how
+               * much audio the browser INVENTED because nothing had arrived
+               * in time to play. A person saying "the sound keeps cutting" is
+               * describing this figure and nothing else, and it separates the
+               * three causes — loss, jitter, and a dead microphone at the
+               * other end — which from a seat in the meeting are identical.
+               */
+              audio.packetsReceived += Number(report.packetsReceived ?? 0);
+              audio.packetsLost += Number(report.packetsLost ?? 0);
+              /*
+               * Silence subtracted, and this is not a detail.
+               *
+               * DTX means a listener sends nothing at all while nobody is
+               * speaking, and the player fills that gap with synthesised
+               * silence — which the browser counts as concealment. Counting it
+               * would make a perfectly healthy quiet room read as 90% broken
+               * and have every phone in it wind its video down to nothing.
+               * `silentConcealedSamples` is the subset that was supposed to be
+               * silence; what is left is audio that was supposed to be sound
+               * and was not there.
+               */
+              audio.concealedSamples +=
+                Number(report.concealedSamples ?? 0) -
+                Number(report.silentConcealedSamples ?? 0);
+              audio.totalSamples += Number(report.totalSamplesReceived ?? 0);
+              audio.jitterMs = Math.max(
+                audio.jitterMs,
+                Number(report.jitter ?? 0) * 1000,
+              );
+              /*
+               * jitterBufferDelay is seconds-accumulated and
+               * jitterBufferEmittedCount is samples-emitted, so the ratio is
+               * the average wait per sample. Reported in ms, where it can be
+               * read against the target the profile asked for.
+               */
+              const delay = Number(report.jitterBufferDelay ?? 0);
+              const emitted = Number(report.jitterBufferEmittedCount ?? 0);
+              if (emitted > 0) {
+                audio.jitterBufferMs = Math.max(
+                  audio.jitterBufferMs,
+                  (delay / emitted) * 1000,
+                );
+              }
+            }
           }
           if (report.type === "candidate-pair" && report.state === "succeeded") {
             const rtt = Number(report.currentRoundTripTime ?? 0) * 1000;
@@ -1612,7 +2183,14 @@ export class MeetingClient {
           }
         });
 
-        p.diagnostics = this.rateFlow(p, bytes, transport, framesDecoded, framesDropped);
+        p.diagnostics = this.rateFlow(p, {
+          bytes,
+          transport,
+          framesDecoded,
+          framesDropped,
+          audio,
+        });
+        if (p.lastConcealedPct > worstConcealed) worstConcealed = p.lastConcealedPct;
 
         // Loss since the previous sample, not since the call began — a rough
         // first ten seconds must not condemn the next hour.
@@ -1672,6 +2250,7 @@ export class MeetingClient {
       packetLossPct: worstLoss,
       rttMs: worstRtt,
       availableOutgoing: available,
+      audioConcealedPct: worstConcealed,
     });
 
     if (quality !== this.state.quality) {
