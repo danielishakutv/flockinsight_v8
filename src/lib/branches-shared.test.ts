@@ -46,6 +46,7 @@ describe("parseBranchFilters", () => {
   it("defaults to the last 30 days and no filtering", () => {
     expect(parseBranchFilters({})).toEqual({
       range: "30d",
+      band: ALL,
       zone: ALL,
       state: ALL,
       city: ALL,
@@ -58,6 +59,7 @@ describe("parseBranchFilters", () => {
     expect(
       parseBranchFilters({
         range: "ytd",
+        band: "8f2b1c4e-0000-4000-8000-000000000000",
         zone: "North Zone",
         state: "Adamawa",
         city: "Yola",
@@ -66,6 +68,7 @@ describe("parseBranchFilters", () => {
       }),
     ).toEqual({
       range: "ytd",
+      band: "8f2b1c4e-0000-4000-8000-000000000000",
       zone: "North Zone",
       state: "Adamawa",
       city: "Yola",
@@ -82,5 +85,19 @@ describe("parseBranchFilters", () => {
     const f = parseBranchFilters({ zone: "   ", city: "" });
     expect(f.zone).toBe(ALL);
     expect(f.city).toBe(ALL);
+  });
+});
+
+describe("the band filter", () => {
+  it("defaults to every group", () => {
+    expect(parseBranchFilters({}).band).toBe(ALL);
+  });
+
+  it("carries the band through, and the unfiled list as its own answer", () => {
+    expect(parseBranchFilters({ band: "none" }).band).toBe("none");
+  });
+
+  it("treats an empty band in the URL as no filter", () => {
+    expect(parseBranchFilters({ band: "   " }).band).toBe(ALL);
   });
 });

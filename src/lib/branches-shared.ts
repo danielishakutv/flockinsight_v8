@@ -30,12 +30,22 @@ export function rangeLabel(key: RangeKey): string {
 
 export type BranchFilters = {
   range: RangeKey;
+  /**
+   * A band of the HQ's own hierarchy, "none" for the branches nobody has
+   * filed yet, or ALL. Covers everything UNDERNEATH the band too — see
+   * `branchIdsInBand`, because filing happens at the bottom and reports are
+   * read from the top.
+   */
+  band: string;
   zone: string;
   state: string;
   city: string;
   country: string;
   q: string;
 };
+
+/** The branches nobody has filed into a band yet. */
+export const UNFILED = "none";
 
 export const ALL = "all";
 
@@ -45,6 +55,7 @@ export function parseBranchFilters(
   const range = (sp.range ?? "30d") as RangeKey;
   return {
     range: RANGES.some((r) => r.id === range) ? range : "30d",
+    band: sp.band?.trim() || ALL,
     zone: sp.zone?.trim() || ALL,
     state: sp.state?.trim() || ALL,
     city: sp.city?.trim() || ALL,
@@ -57,6 +68,9 @@ export function parseBranchFilters(
 export type BranchStat = {
   churchId: string;
   name: string;
+  /** The band it is filed in, and the whole path to it for a report column. */
+  bandId: string | null;
+  bandPath: string;
   zone: string | null;
   city: string | null;
   state: string | null;

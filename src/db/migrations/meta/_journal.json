@@ -701,6 +701,13 @@
       "when": 1791580975859,
       "tag": "0099_meeting_attendee_media",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1791673360284,
+      "tag": "0100_branch_groups",
+      "breakpoints": true
     }
   ]
 }

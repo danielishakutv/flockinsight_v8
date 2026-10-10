@@ -29,6 +29,25 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.74.0",
+    date: "2026-10-11",
+    summary:
+      "Your network can now be organised the way you actually describe it — national, zonal, district, or whatever you call them — with branches filed into groups and every report readable for any level, including everything underneath it.",
+    changes: {
+      Added: [
+        "Groups for your branches, as deep as you need them. Build ‘Nigeria → North Central → Jos District’ with your own word for each level, then file each branch into one. Under Branches, for whoever manages settings.",
+        "Every filter, roll-up, scheduled report and CSV can be read for one group — and it includes the groups inside it, so a national figure counts the districts beneath it rather than only the churches pinned directly to the top.",
+        "A ‘Not in any group’ filter, which is the list you want when you sit down to organise.",
+        "The group a branch sits in is now a column in the branches export, with its full path, so a spreadsheet can be grouped at any level.",
+      ],
+      Fixed: [
+        "The branch name now stays put while you scroll the figures — for everybody. It was being unfrozen for exactly the people most likely to be reading twelve branches across eight columns.",
+        "A ‘select all’ box for the branch list, which the table had left room for but never had.",
+        "Giving across a network with more than one currency is no longer added into a single figure. The per-branch amounts were always right; the total now says it spans several currencies instead of printing a number that was true in none of them.",
+      ],
+    },
+  },
+  {
     version: "0.73.2",
     date: "2026-10-11",
     summary:

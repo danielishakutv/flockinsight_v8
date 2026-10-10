@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       const range = REPORT_RANGE[setting.frequency];
       const { rows } = await branchStats(setting.churchId, {
         range,
+        band: ALL,
         zone: ALL,
         state: ALL,
         city: ALL,

@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   attendanceSession,
+  branchGroup,
   branchRequest,
   church,
   giving,
@@ -14,10 +15,12 @@ import {
 import {
   rangeStart,
   ALL,
+  UNFILED,
   type BranchFilters,
   type BranchStat,
   type RangeKey,
 } from "@/lib/branches-shared";
+import { bandPath, bandWithDescendants } from "@/lib/branch-groups-shared";
 
 /* ============================================================
  * A headquarters and its branches.
@@ -34,6 +37,7 @@ export async function branchesOf(parentChurchId: string) {
     .select({
       id: church.id,
       name: church.name,
+      branchGroupId: church.branchGroupId,
       zone: church.zone,
       city: church.city,
       state: church.state,
@@ -46,6 +50,20 @@ export async function branchesOf(parentChurchId: string) {
     .from(church)
     .where(eq(church.parentChurchId, parentChurchId))
     .orderBy(asc(church.name));
+}
+
+/** The HQ's bands, flat, for the pure tree helpers. */
+async function nodesOfNetwork(hqChurchId: string) {
+  return db
+    .select({
+      id: branchGroup.id,
+      parentId: branchGroup.parentId,
+      name: branchGroup.name,
+      kind: branchGroup.kind,
+      sort: branchGroup.sort,
+    })
+    .from(branchGroup)
+    .where(eq(branchGroup.hqChurchId, hqChurchId));
 }
 
 export async function branchCount(parentChurchId: string): Promise<number> {
@@ -116,7 +134,31 @@ export async function branchStats(
 ): Promise<{ rows: BranchStat[]; options: FilterOptions }> {
   const branches = await branchesOf(parentChurchId);
   const options = filterOptions(branches);
-  const matching = branches.filter((b) => matchesFilters(b, filters));
+
+  /*
+   * The bands, so a row can say where it sits and a filter can mean what a
+   * person expects. A band filter covers everything UNDERNEATH it: filing
+   * happens at the bottom of the tree and reports are read from the top, so
+   * "North Central" has to include its districts and their churches.
+   */
+  const bands = await nodesOfNetwork(parentChurchId);
+  const inBand =
+    filters.band === ALL
+      ? null
+      : filters.band === UNFILED
+        ? new Set(branches.filter((b) => !b.branchGroupId).map((b) => b.id))
+        : (() => {
+            const ids = new Set(bandWithDescendants(bands, filters.band));
+            return new Set(
+              branches
+                .filter((b) => b.branchGroupId && ids.has(b.branchGroupId))
+                .map((b) => b.id),
+            );
+          })();
+
+  const matching = branches.filter(
+    (b) => matchesFilters(b, filters) && (!inBand || inBand.has(b.id)),
+  );
   const ids = matching.map((b) => b.id);
   if (ids.length === 0) return { rows: [], options };
 
@@ -172,6 +214,8 @@ export async function branchStats(
     return {
       churchId: b.id,
       name: b.name,
+      bandId: b.branchGroupId,
+      bandPath: bandPath(bands, b.branchGroupId),
       zone: b.zone,
       city: b.city,
       state: b.state,

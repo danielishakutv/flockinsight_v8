@@ -13,10 +13,14 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { setBranchZones } from "@/app/(app)/branches/actions";
+import {
+  fileBranchesInBand,
+  setBranchZones,
+} from "@/app/(app)/branches/actions";
 import {
   ALL,
   RANGES,
+  UNFILED,
   rangeLabel,
   type BranchFilters,
   type BranchStat,
@@ -38,6 +42,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/**
+ * "Remove from its group", as a Select value.
+ *
+ * A Select cannot carry an empty string, and null is what the action wants —
+ * so the intent travels as a sentinel and is turned back into null at the
+ * boundary.
+ */
+const UNFILED_PICK = "__unfile__";
+
 type Totals = {
   branches: number;
   members: number;
@@ -51,6 +64,7 @@ export function BranchDashboard({
   rows,
   totals,
   options,
+  bands,
   filters,
   currency,
   canManage,
@@ -59,6 +73,8 @@ export function BranchDashboard({
   rows: BranchStat[];
   totals: Totals;
   options: { zones: string[]; states: string[]; cities: string[]; countries: string[] };
+  /** The HQ's own hierarchy, flattened with a depth for indenting. */
+  bands: { id: string; name: string; kind: string; depth: number }[];
   filters: BranchFilters;
   currency: string;
   canManage: boolean;
@@ -76,6 +92,7 @@ export function BranchDashboard({
   const [term, setTerm] = useState(filters.q);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [zone, setZone] = useState("");
+  const [band, setBand] = useState<string>("");
 
   // Keep the box in step when the URL changes under us.
   const [lastQ, setLastQ] = useState(filters.q);
@@ -91,6 +108,33 @@ export function BranchDashboard({
       else sp.set(k, v);
     }
     router.push(`/branches?${sp.toString()}`);
+  }
+
+  /**
+   * File the selected branches into a band of the network's own hierarchy.
+   *
+   * Separate from the free-text zone beside it, which predates this and holds
+   * words churches actually typed. A band is the structured one: it nests, and
+   * a report for a band includes everything underneath it.
+   */
+  function applyBand() {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    startTransition(async () => {
+      const res = await fileBranchesInBand({
+        churchIds: ids,
+        bandId: band === UNFILED_PICK ? null : band,
+      });
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(
+        band === UNFILED_PICK
+          ? `${ids.length} branch${ids.length === 1 ? "" : "es"} unfiled.`
+          : `${ids.length} branch${ids.length === 1 ? "" : "es"} filed.`,
+      );
+      setPicked(new Set());
+      setBand("");
+      router.refresh();
+    });
   }
 
   function applyZone() {
@@ -109,6 +153,13 @@ export function BranchDashboard({
       router.refresh();
     });
   }
+
+  /*
+   * How many currencies the branches in view actually report in. One is the
+   * normal case and the total is then exact; more than one means it cannot be
+   * stated as a single figure, and the card says so.
+   */
+  const currencies = [...new Set(rows.map((r) => r.currency).filter(Boolean))];
 
   const avgAttendance = totals.services
     ? Math.round(totals.attendanceTotal / totals.services)
@@ -164,7 +215,20 @@ export function BranchDashboard({
           icon={HandCoins}
           label={t("branches.giving")}
           value={formatMoney(totals.giving, currency)}
-          sub="Across the network"
+          /*
+           * Said, rather than quietly added up. A network with churches in
+           * Nigeria and in the UK had its naira and its pounds summed into one
+           * number printed with one currency symbol — a figure that was not
+           * true in either currency. The total still shows, because for almost
+           * every network each branch reports in one currency and it is then
+           * exactly right; when it is not, the subtitle says so instead of the
+           * number lying.
+           */
+          sub={
+            currencies.length > 1
+              ? t("branches.mixedCurrencies", { count: currencies.length })
+              : "Across the network"
+          }
         />
       </div>
 
@@ -184,6 +248,30 @@ export function BranchDashboard({
                 ))}
               </SelectContent>
             </Select>
+            {bands.length > 0 && (
+              <Select
+                value={filters.band || ALL}
+                onValueChange={(v) => go({ band: v })}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-auto min-w-44"
+                  aria-label="Group"
+                >
+                  <SelectValue placeholder="Group" />
+                </SelectTrigger>
+                <SelectContent searchPlaceholder="Search groups…">
+                  <SelectItem value={ALL}>All groups</SelectItem>
+                  {bands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {" ".repeat(b.depth * 2)}
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={UNFILED}>Not in any group</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {filterPicker("Zones", "zone", options.zones)}
             {filterPicker("States", "state", options.states)}
             {filterPicker("Cities", "city", options.cities)}
@@ -226,10 +314,34 @@ export function BranchDashboard({
                 placeholder={t("branches.zoneNameEGNorth")}
                 className="h-9 w-56"
               />
-              <Button size="sm" onClick={applyZone} disabled={pending}>
+              <Button size="sm" variant="outline" onClick={applyZone} disabled={pending}>
                 {pending && <Loader2 className="size-4 animate-spin" />}
-                Set zone
+                {t("branches.setZone")}
               </Button>
+              {bands.length > 0 && (
+                <>
+                  <Select value={band} onValueChange={setBand}>
+                    <SelectTrigger size="sm" className="w-48" aria-label="Group">
+                      <SelectValue placeholder="Move into group…" />
+                    </SelectTrigger>
+                    <SelectContent searchPlaceholder="Search groups…">
+                      {bands.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {" ".repeat(b.depth * 2)}
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={UNFILED_PICK}>
+                        Remove from its group
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={applyBand} disabled={pending || !band}>
+                    {pending && <Loader2 className="size-4 animate-spin" />}
+                    {t("branches.moveIntoGroup")}
+                  </Button>
+                </>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
                 Clear
               </Button>
@@ -258,21 +370,56 @@ export function BranchDashboard({
             </div>
           ) : (
             /*
-             * Eight columns of figures. The branch name is frozen so a row of
+             * Eight columns of figures, so the branch name is frozen: a row of
              * numbers two screens to the right still has a church attached to
-             * it — except when the select-all checkbox is the first column,
-             * where freezing spends the width on nothing.
+             * it.
+             *
+             * It used to be frozen only for people who could NOT manage the
+             * network, on the grounds that the first column was the select-all
+             * checkbox and freezing it "spends the width on nothing". Two
+             * things were wrong with that. There was no select-all checkbox —
+             * the header cell was empty — and the person who manages the
+             * network is exactly the person reading eight columns of numbers
+             * across a dozen branches, so they were the one losing the name.
+             * The checkbox exists now, and it rides in the same frozen cell as
+             * the name rather than taking a column of its own.
              */
             <ScrollableTable
-              stickyFirstColumn={!canManage}
+              stickyFirstColumn
               hint={t("common.scrollForMore")}
               label={t("nav.branches")}
             >
               <table className="w-full min-w-[46rem] text-sm">
                 <thead className="text-muted-foreground border-b text-left text-xs uppercase">
                   <tr>
-                    {canManage && <th className="w-8 px-3 py-2" />}
-                    <th className="px-3 py-2 font-semibold">{t("branches.branch")}</th>
+                    <th className="px-3 py-2 font-semibold">
+                      <span className="flex items-center gap-2">
+                        {canManage && (
+                          <input
+                            type="checkbox"
+                            className="accent-primary size-4"
+                            aria-label={t("branches.selectAllBranches")}
+                            checked={picked.size > 0 && picked.size === rows.length}
+                            ref={(el) => {
+                              // Some but not all: the third state a checkbox
+                              // has, and the only honest one for a partial
+                              // selection.
+                              if (el)
+                                el.indeterminate =
+                                  picked.size > 0 && picked.size < rows.length;
+                            }}
+                            onChange={() =>
+                              setPicked((prev) =>
+                                prev.size === rows.length
+                                  ? new Set()
+                                  : new Set(rows.map((r) => r.churchId)),
+                              )
+                            }
+                          />
+                        )}
+                        {t("branches.branch")}
+                      </span>
+                    </th>
                     <th className="px-3 py-2 text-right font-semibold">{t("branches.members")}</th>
                     <th className="px-3 py-2 text-right font-semibold">{t("branches.new")}</th>
                     <th className="px-3 py-2 text-right font-semibold">{t("branches.services")}</th>
@@ -284,31 +431,33 @@ export function BranchDashboard({
                 <tbody className="divide-y">
                   {rows.map((r) => (
                     <tr key={r.churchId} className="hover:bg-accent/30">
-                      {canManage && (
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={picked.has(r.churchId)}
-                            onChange={() =>
-                              setPicked((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(r.churchId)) next.delete(r.churchId);
-                                else next.add(r.churchId);
-                                return next;
-                              })
-                            }
-                            aria-label={`Select ${r.name}`}
-                            className="accent-primary size-4"
-                          />
-                        </td>
-                      )}
                       <td className="px-3 py-2">
-                        <p className="font-medium">{r.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {[r.zone, r.city, r.state, r.country]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
+                        <div className="flex items-start gap-2">
+                          {canManage && (
+                            <input
+                              type="checkbox"
+                              checked={picked.has(r.churchId)}
+                              onChange={() =>
+                                setPicked((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(r.churchId)) next.delete(r.churchId);
+                                  else next.add(r.churchId);
+                                  return next;
+                                })
+                              }
+                              aria-label={`Select ${r.name}`}
+                              className="accent-primary mt-0.5 size-4 shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium">{r.name}</p>
+                            <p className="text-muted-foreground text-xs">
+                              {[r.bandPath || r.zone, r.city, r.state, r.country]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {r.members.toLocaleString()}

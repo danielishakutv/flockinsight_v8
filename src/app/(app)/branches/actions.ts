@@ -11,6 +11,13 @@ import { audit } from "@/lib/audit";
 import { requireCan } from "@/lib/permissions";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { churchTeamEmails } from "@/lib/branches";
+import {
+  createBand,
+  deleteBand,
+  fileBranches,
+  moveBand,
+  renameBand,
+} from "@/lib/branch-groups";
 import { escapeHtml } from "@/lib/html-escape";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -458,4 +465,184 @@ export async function findChurchesToInvite(
     )
     .orderBy(church.name)
     .limit(15);
+}
+
+/* ============================================================
+ * How a network is organised — the bands the church invents itself
+ *
+ * A band is the HQ's filing system, not the branch's: a branch is a standalone
+ * church with its own plan and logins, and this link only ever grants the HQ
+ * reporting across them. So every one of these needs `settings.manage` at the
+ * HEADQUARTERS, and every id that arrives from a browser is checked against
+ * that headquarters inside lib/branch-groups.ts before anything moves.
+ * ========================================================== */
+
+const bandSchema = z.object({
+  name: z.string().trim().min(1, "Give the group a name").max(120),
+  kind: z.string().trim().max(40).default("Group"),
+  parentId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
+});
+
+export async function createBranchBand(
+  input: z.input<typeof bandSchema>,
+): Promise<ActionResult> {
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
+  const { church: hq, user } = await requireChurch();
+  await requireCan("settings.manage");
+
+  const parsed = bandSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const res = await createBand({
+    hqChurchId: hq.id,
+    name: parsed.data.name,
+    kind: parsed.data.kind,
+    parentId: parsed.data.parentId,
+    createdBy: user?.id ?? null,
+  });
+  if (!res.ok) return res;
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary: `Added the ${parsed.data.kind.toLowerCase()} group "${parsed.data.name}"`,
+    targetType: "church",
+    meta: { bandId: res.id, parentId: parsed.data.parentId },
+  });
+
+  revalidatePath("/branches");
+  return { ok: true };
+}
+
+/** Renaming does not move anything, so it does not take a parent. */
+const renameSchema = z.object({
+  bandId: z.string().uuid(),
+  name: z.string().trim().min(1, "Give the group a name").max(120),
+  kind: z.string().trim().max(40).default("Group"),
+});
+
+export async function renameBranchBand(
+  input: z.input<typeof renameSchema>,
+): Promise<ActionResult> {
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
+  const { church: hq } = await requireChurch();
+  await requireCan("settings.manage");
+
+  const parsed = renameSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const res = await renameBand({
+    hqChurchId: hq.id,
+    bandId: parsed.data.bandId,
+    name: parsed.data.name,
+    kind: parsed.data.kind,
+  });
+  if (!res.ok) return res;
+
+  revalidatePath("/branches");
+  return { ok: true };
+}
+
+const moveSchema = z.object({
+  bandId: z.string().uuid(),
+  parentId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
+});
+
+export async function moveBranchBand(
+  input: z.input<typeof moveSchema>,
+): Promise<ActionResult> {
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
+  const { church: hq } = await requireChurch();
+  await requireCan("settings.manage");
+
+  const parsed = moveSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  // Refused with a reason if it would make a loop. See `canReparent`.
+  const res = await moveBand({
+    hqChurchId: hq.id,
+    bandId: parsed.data.bandId,
+    parentId: parsed.data.parentId,
+  });
+  if (!res.ok) return res;
+
+  revalidatePath("/branches");
+  return { ok: true };
+}
+
+export async function deleteBranchBand(input: {
+  bandId: string;
+}): Promise<ActionResult> {
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
+  const { church: hq } = await requireChurch();
+  await requireCan("settings.manage");
+
+  if (typeof input?.bandId !== "string") return { ok: false, error: "Invalid" };
+
+  /*
+   * The bands inside it go too — that is what a person means by deleting a
+   * region, and what the database's cascade says. The CHURCHES do not: they
+   * become unfiled and nothing about them is touched. The dialog says both
+   * before anybody agrees to it.
+   */
+  const res = await deleteBand({ hqChurchId: hq.id, bandId: input.bandId });
+  if (!res.ok) return res;
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary:
+      res.branchesUnfiled > 0
+        ? `Deleted a branch group; ${res.branchesUnfiled} branch${res.branchesUnfiled === 1 ? "" : "es"} became unfiled`
+        : "Deleted an empty branch group",
+    severity: "notice",
+    targetType: "church",
+    meta: { bandId: input.bandId, branchesUnfiled: res.branchesUnfiled },
+  });
+
+  revalidatePath("/branches");
+  return { ok: true };
+}
+
+const fileSchema = z.object({
+  churchIds: z.array(z.string()).min(1, "Pick at least one branch"),
+  bandId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
+});
+
+export async function fileBranchesInBand(
+  input: z.input<typeof fileSchema>,
+): Promise<ActionResult> {
+  const gate = await refuseWithoutFeature("branches");
+  if (gate) return gate;
+  const { church: hq } = await requireChurch();
+  await requireCan("settings.manage");
+
+  const parsed = fileSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+
+  const res = await fileBranches({
+    hqChurchId: hq.id,
+    churchIds: parsed.data.churchIds,
+    bandId: parsed.data.bandId,
+  });
+  if (!res.ok) return res;
+
+  await audit({
+    churchId: hq.id,
+    action: "settings.branch.update",
+    summary: `Filed ${res.moved} branch${res.moved === 1 ? "" : "es"} ${parsed.data.bandId ? "into a group" : "out of their group"}`,
+    targetType: "church",
+    meta: { churchIds: parsed.data.churchIds, bandId: parsed.data.bandId },
+  });
+
+  revalidatePath("/branches");
+  return { ok: true };
 }

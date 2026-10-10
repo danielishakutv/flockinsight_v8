@@ -435,7 +435,17 @@ export const church = pgTable("church", {
     onDelete: "set null",
   }),
   // Free-text grouping the HQ controls, e.g. "North Zone", "Lagos Region".
+  // Predates `groupId` and deliberately kept: churches typed real words here.
   zone: text(),
+  /**
+   * Which band of the HQ's own hierarchy this branch sits in.
+   *
+   * `set null` rather than cascade: deleting a band must never delete a
+   * church. The branch simply becomes unfiled.
+   */
+  branchGroupId: uuid().references((): AnyPgColumn => branchGroup.id, {
+    onDelete: "set null",
+  }),
 },
   (t) => [
     index("church_denomination_idx").on(t.denominationId),
@@ -3192,12 +3202,79 @@ export const hqReportSetting = pgTable("hq_report_setting", {
     .$onUpdate(() => new Date()),
 });
 
+
+/* ============================================================
+ * How a network is organised — the bands a church invents itself
+ *
+ * A mega church does not think in one flat list of branches. It thinks
+ * "Nigeria → North Central → Jos District → the three churches in Jos", and
+ * every network draws those lines differently: zones, regions, provinces,
+ * areas, districts, circuits. So the LEVELS are not in this schema. A group
+ * carries the church's own word for what it is, and points at the group above
+ * it; depth is whatever they build.
+ *
+ * Named branch_group, not church_group: church_group is already taken by the
+ * small groups and ministries inside a single church, and colliding with it
+ * made drizzle emit a migration that silently redefined that table.
+ *
+ * Owned by the headquarters, never by the branch. The branch is a standalone
+ * church with its own plan and logins — this is the HQ's filing system for
+ * reporting across them, which is the only thing the link grants.
+ *
+ * The free-text `church.zone` that came before this is left exactly where it
+ * is. It holds real words that real churches typed, it still shows on a branch
+ * row, and it is still a filter; a group is the structured answer beside it
+ * rather than a replacement that would have thrown that away.
+ * ========================================================== */
+
+export const branchGroup = pgTable(
+  "branch_group",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** The headquarters whose filing system this is. */
+    hqChurchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /**
+     * The band this one sits inside. Null is a top level.
+     *
+     * Self-referencing, so the depth is the church's business. Cycles are
+     * prevented in `lib/church-groups.ts` rather than here, because the
+     * check needs to walk the tree and wants to say WHY in a sentence.
+     */
+    parentId: uuid().references((): AnyPgColumn => branchGroup.id, {
+      onDelete: "cascade",
+    }),
+    name: text().notNull(),
+    /**
+     * What this network calls this kind of band: "National", "Zone",
+     * "Region", "District". Free text on purpose — a word in their language,
+     * printed on their reports.
+     */
+    kind: text().notNull().default("Group"),
+    /** Where it sits among its siblings, so a church can order its own list. */
+    sort: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("branch_group_hq_idx").on(t.hqChurchId),
+    index("branch_group_parent_idx").on(t.parentId),
+  ],
+);
+
 /* ============================================================
  * Type helpers
  * ========================================================== */
 
 export type Denomination = typeof denomination.$inferSelect;
 export type BranchRequest = typeof branchRequest.$inferSelect;
+export type BranchGroup = typeof branchGroup.$inferSelect;
+export type NewBranchGroup = typeof branchGroup.$inferInsert;
 export type HqReportSetting = typeof hqReportSetting.$inferSelect;
 export type Lead = typeof lead.$inferSelect;
 export type NewLead = typeof lead.$inferInsert;

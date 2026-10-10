@@ -9,6 +9,9 @@ import {
   rollUp,
 } from "@/lib/branches";
 import { parseBranchFilters } from "@/lib/branches-shared";
+import { bandsOf } from "@/lib/branch-groups";
+import { buildBandTree, flattenBandTree } from "@/lib/branch-groups-shared";
+import { BranchBands } from "@/components/branches/branch-bands";
 import { BranchDashboard } from "@/components/branches/branch-dashboard";
 import { BranchInvitations } from "@/components/branches/branch-invitations";
 import { PlanGate } from "@/components/app/plan-gate";
@@ -26,12 +29,26 @@ export default async function BranchesPage({
   const canManage = await can("settings.manage");
 
   const filters = parseBranchFilters(await searchParams);
-  const [{ rows, options }, requests, hq, reportSetting] = await Promise.all([
-    branchStats(church.id, filters),
-    branchRequests(church.id),
-    headquartersOf(church.id),
-    getReportSetting(church.id),
-  ]);
+  const [{ rows, options }, requests, hq, reportSetting, bands] =
+    await Promise.all([
+      branchStats(church.id, filters),
+      branchRequests(church.id),
+      headquartersOf(church.id),
+      getReportSetting(church.id),
+      bandsOf(church.id),
+    ]);
+
+  /*
+   * Flattened here rather than in the client: the depth is what indents a
+   * group in a dropdown, and working it out on the server means the browser is
+   * handed a list it can render straight.
+   */
+  const bandList = flattenBandTree(buildBandTree(bands)).map((b) => ({
+    id: b.id,
+    name: b.name,
+    kind: b.kind,
+    depth: b.depth,
+  }));
 
   const totals = rollUp(rows);
   const isHq = rows.length > 0 || requests.sent.length > 0;
@@ -72,11 +89,19 @@ export default async function BranchesPage({
         canManage={canManage}
       />
 
+      {/*
+        The shape of the network, above the numbers it produces. Only for the
+        headquarters, and only for somebody who can change settings — a branch
+        does not file itself, and a viewer reads the filing rather than edits it.
+      */}
+      {!hq && canManage && <BranchBands bands={bands} />}
+
       {!hq && (
         <BranchDashboard
           rows={rows}
           totals={totals}
           options={options}
+          bands={bandList}
           filters={filters}
           currency={church.currency}
           canManage={canManage}

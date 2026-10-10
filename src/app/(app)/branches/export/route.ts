@@ -18,11 +18,26 @@ export async function GET(request: Request) {
   const filters = parseBranchFilters(Object.fromEntries(url.searchParams));
   const { rows } = await branchStats(church.id, filters);
   const totals = rollUp(rows);
+  /*
+   * Naira and pounds added together and printed with one symbol is a figure
+   * that is not true in either currency. Left blank and said so, rather than
+   * quietly wrong — the per-branch rows above each carry their own currency
+   * and remain exact.
+   */
+  const mixedCurrency =
+    new Set(rows.map((r) => r.currency).filter(Boolean)).size > 1;
 
+  /*
+   * The group comes before the free-text zone, because that is the column a
+   * network sorts and pivots on. It carries the whole path — "Nigeria · North
+   * Central · Jos District" — so a spreadsheet can be grouped at any level
+   * without having to know this platform's tree.
+   */
   const csv = toCsv([
-    ["Branch", "Zone", "City", "State", "Country", "Members", "New members", "Services", "Total attendance", "Average attendance", "Giving", "Currency", "Last recorded"],
+    ["Branch", "Group", "Zone", "City", "State", "Country", "Members", "New members", "Services", "Total attendance", "Average attendance", "Giving", "Currency", "Last recorded"],
     ...rows.map((r) => [
       r.name,
+      r.bandPath,
       r.zone ?? "",
       r.city ?? "",
       r.state ?? "",
@@ -43,14 +58,15 @@ export async function GET(request: Request) {
       "",
       "",
       "",
+      "",
       totals.members,
       totals.newMembers,
       totals.services,
       totals.attendanceTotal,
       totals.services ? Math.round(totals.attendanceTotal / totals.services) : 0,
-      totals.giving,
-      church.currency,
-      "",
+      mixedCurrency ? "" : totals.giving,
+      mixedCurrency ? "mixed" : church.currency,
+      mixedCurrency ? "Branches report in more than one currency, so this is left blank" : "",
     ],
   ]);
 
