@@ -87,8 +87,19 @@ describe("the registry", () => {
      * "Esc" or "cmd+k" would sit there looking right and never match a key
      * press. Every token must be something `keyToken` can return.
      */
-    const producible = new Set<string>(["mod+k", "escape", "?", "/"]);
-    for (const c of "abcdefghijklmnopqrstuvwxyz") producible.add(c);
+    /*
+     * Derived by ASKING `keyToken`, rather than keeping a hand-written copy of
+     * what it returns beside it. The copy was the bug waiting to happen: a
+     * chord added to the handler and not to the list fails here for no reason,
+     * and one added to the list and not to the handler passes for no reason.
+     */
+    const producible = new Set<string>();
+    for (const key of [..."abcdefghijklmnopqrstuvwxyz", "\\", "?", "/", "Escape"]) {
+      for (const metaKey of [false, true]) {
+        const token = keyToken({ key, metaKey });
+        if (token) producible.add(token);
+      }
+    }
 
     for (const s of SHORTCUTS) {
       for (const k of s.keys) {

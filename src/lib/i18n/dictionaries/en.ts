@@ -228,10 +228,30 @@ export const en = {
     home: "Home",
     more: "More",
     menu: "Menu",
+    menuHint: "Everything your church can do, in seven groups",
+    /*
+     * The seven group headings.
+     *
+     * Named for the job somebody came to do, not for the table the data sits
+     * in. "Records" used to hold eleven entries — Giving beside Media beside
+     * QR codes — and at eleven a heading has stopped helping.
+     */
     sectionOverview: "Overview",
-    sectionRecords: "Records",
     sectionPeople: "People",
-    sectionAccount: "Account",
+    sectionGatherings: "Services & events",
+    sectionMoney: "Giving & finance",
+    sectionOutreach: "Communication",
+    sectionContent: "Media & sharing",
+    sectionAccount: "Account & help",
+    /* Quick access, and the controls on it */
+    quickAccess: "Quick access",
+    pin: "Pin {name} to Quick access",
+    unpin: "Unpin {name} from Quick access",
+    removeShortcut: "Remove the {name} shortcut",
+    collapseMenu: "Collapse the menu to icons",
+    expandMenu: "Show the menu labels",
+    filterPlaceholder: "Search the menu…",
+    noMatches: "Nothing in the menu matches “{query}”",
     yourProfile: "Your profile",
     studio: "Photo studio",
     studioDesc: "Put your logo on a whole service's photos at once",
@@ -2751,6 +2771,7 @@ export const en = {
     newGiving: "Record giving",
     newGroup: "Create a group",
     newBooking: "Book a facility",
+    toggleSidebar: "Narrow or widen the menu",
 
     /* The sheet */
     title: "Keyboard shortcuts",
@@ -2759,6 +2780,7 @@ export const en = {
     groupFind: "Find things",
     groupGo: "Go to",
     groupDo: "Do",
+    groupView: "Change the view",
     groupHelp: "Help",
     then: "then",
     openSheet: "Keyboard shortcuts",

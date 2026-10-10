@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CornerDownLeft, Keyboard, Search, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mobileMenuSections, navVisible } from "@/lib/nav";
+import { navSections, navVisible } from "@/lib/nav";
 import { SETTINGS_GROUPS, type Need } from "@/components/app/settings-nav";
 import { keysLabel, type Shortcut } from "@/lib/shortcuts";
 import { rankRows } from "@/lib/palette-rank";
@@ -21,7 +21,7 @@ import type { LucideIcon } from "lucide-react";
 /**
  * ⌘K — one box that reaches the whole app.
  *
- * The destinations are read from `mobileMenuSections`, the same list the
+ * The destinations are read from `navSections`, the same list the
  * sidebar renders, so a new module becomes searchable the moment it appears in
  * the menu and nobody has to remember this file exists. That is not a
  * convenience; it is the lesson from the three modules that shipped invisible
@@ -106,7 +106,7 @@ export function CommandPalette({
         .map((s) => [s.href!, s.keys] as const),
     );
 
-    for (const section of mobileMenuSections) {
+    for (const section of navSections) {
       for (const item of section.items) {
         if (!navVisible(item, perms, isOwner, churchSlug)) continue;
         const label = t(item.labelKey);

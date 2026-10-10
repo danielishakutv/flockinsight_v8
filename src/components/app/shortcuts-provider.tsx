@@ -16,6 +16,7 @@ import { useTipState } from "@/lib/use-shortcut-tips";
 import { CommandPalette } from "@/components/app/command-palette";
 import { ShortcutSheet } from "@/components/app/shortcut-sheet";
 import { ShortcutTip } from "@/components/app/shortcut-tip";
+import { toggleSidebar } from "@/lib/nav-events";
 
 /** Asks the provider to open the palette. See `PaletteHint`. */
 export const OPEN_PALETTE_EVENT = "fi:open-palette";
@@ -112,6 +113,14 @@ export function ShortcutsProvider({
         case "search-page":
           focusPageSearch();
           return;
+        /*
+         * Fired as an event rather than performed. The sidebar owns its own
+         * width, and lifting that state up to the layout so this component
+         * could set it would turn the whole app shell into a client component.
+         */
+        case "toggle-sidebar":
+          toggleSidebar();
+          return;
         default:
           if (s.href) {
             setPaletteOpen(false);
@@ -178,13 +187,19 @@ export function ShortcutsProvider({
        * out of. And ⌘K is a chord, not a character — nobody types it into a
        * name box — so it still toggles the palette when the cursor is already
        * in the palette's own search box, which is where it is a moment after
-       * the palette opens.
+       * the palette opens. ⌘\ is a chord for the same reason, and narrowing
+       * the sidebar mid-sentence loses nobody anything.
        *
        * `?` is NOT an exception, deliberately: in a search box it is a
        * character somebody meant to type.
        */
       const typing = isTypingTarget(e.target as HTMLElement | null);
-      if (typing && token !== "escape" && token !== "mod+k") {
+      if (
+        typing &&
+        token !== "escape" &&
+        token !== "mod+k" &&
+        token !== "mod+\\"
+      ) {
         clearBuffer();
         return;
       }

@@ -13,14 +13,14 @@
  * that does nothing is the same bug wearing a different hat.
  *
  * The palette's *destinations* are not listed here either — it reads
- * `mobileMenuSections` straight from `lib/nav.ts`, so a new module becomes
+ * `navSections` straight from `lib/nav.ts`, so a new module becomes
  * searchable the moment it appears in the menu, with nobody having to remember
  * this file exists.
  */
 import type { TKey } from "@/lib/i18n/translate";
 import type { FeatureKey } from "@/lib/entitlements";
 
-export type ShortcutGroup = "find" | "go" | "do" | "help";
+export type ShortcutGroup = "find" | "go" | "do" | "view" | "help";
 
 export type Shortcut = {
   /**
@@ -270,6 +270,21 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keywords: ["book the hall", "reserve", "hire", "venue"],
   },
 
+  /*
+   * Narrow or widen the sidebar.
+   *
+   * In "view" rather than "do": it writes nothing and goes nowhere. It is
+   * also the shortcut of most use to the people who will never read the cheat
+   * sheet — a laptop at 1280px gains 220px of table with one chord.
+   */
+  {
+    id: "toggle-sidebar",
+    keys: ["mod+\\"],
+    labelKey: "shortcuts.toggleSidebar",
+    group: "view",
+    keywords: ["sidebar", "menu", "collapse", "expand", "narrow", "wide", "icons"],
+  },
+
   /* --- Help ------------------------------------------------------- */
   {
     id: "sheet",
@@ -293,6 +308,17 @@ export const SHORTCUT_GROUPS: readonly { key: ShortcutGroup; titleKey: TKey }[] 
     { key: "find", titleKey: "shortcuts.groupFind" },
     { key: "go", titleKey: "shortcuts.groupGo" },
     { key: "do", titleKey: "shortcuts.groupDo" },
+    /*
+     * "Do" is things that write a record, and the tests enforce that: a `do`
+     * shortcut must have an href and must ask for a `.manage` permission,
+     * because teaching somebody a key that lands on a page where the button is
+     * missing reads as the app being broken.
+     *
+     * Narrowing the sidebar writes nothing and goes nowhere, so it is not a
+     * `do`. Its own group rather than a documented exception, so the guarantee
+     * on `do` stays a guarantee.
+     */
+    { key: "view", titleKey: "shortcuts.groupView" },
     { key: "help", titleKey: "shortcuts.groupHelp" },
   ];
 
@@ -322,8 +348,20 @@ export function keyToken(e: KeyPress): string | null {
   if (e.altKey) return null;
 
   if (mod) {
-    // The one chord we claim. Everything else with a modifier is not ours.
-    return e.key.toLowerCase() === "k" ? "mod+k" : null;
+    /*
+     * The two chords we claim, and nothing else.
+     *
+     * ⌘K opens the palette. ⌘\ narrows the sidebar — chosen because, unlike
+     * the obvious ⌘B, it is bound to nothing in any browser and is not bold in
+     * a rich-text editor, of which this app has one. Everything else held with
+     * Ctrl or ⌘ belongs to the browser: ⌘P prints the attendance sheet and ⌘L
+     * is the address bar, and a church app that swallows either has broken
+     * something people rely on far more than it has gained.
+     */
+    const k = e.key.toLowerCase();
+    if (k === "k") return "mod+k";
+    if (k === "\\") return "mod+\\";
+    return null;
   }
 
   const key = e.key;
@@ -442,6 +480,8 @@ export function keyLabel(token: string, isMac: boolean): string {
   switch (token) {
     case "mod+k":
       return isMac ? "⌘K" : "Ctrl K";
+    case "mod+\\":
+      return isMac ? "⌘\\" : "Ctrl \\";
     case "escape":
       return "Esc";
     case "/":

@@ -132,6 +132,20 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
         ],
       },
       {
+        title: "Making the menu narrow",
+        blocks: [
+          {
+            kind: "text",
+            text: "One chord, and the menu down the left shrinks to a column of icons — about 220 pixels of extra width for the table you are actually reading. Hover any icon and its name appears beside it; press it again and the names come back. FlockInsight remembers which way you had it, so it opens that way next time on this computer.",
+          },
+          { kind: "table", ...tableFor("view") },
+          {
+            kind: "note",
+            text: "Worth knowing on a 13-inch laptop, where a wide attendance or giving table is the difference between reading it and scrolling it sideways. On a phone there is nothing to collapse — the menu is the More button at the bottom.",
+          },
+        ],
+      },
+      {
         title: "Help",
         blocks: [
           { kind: "table", ...tableFor("help") },
@@ -164,7 +178,7 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
               {
                 title: "Anything your browser already uses",
                 detail:
-                  "Ctrl P still prints, Ctrl C still copies, Ctrl L still goes to the address bar. Ctrl K is the only combination FlockInsight claims.",
+                  "Ctrl P still prints, Ctrl C still copies, Ctrl L still goes to the address bar. Ctrl K and Ctrl \ are the only two combinations FlockInsight claims, and neither of them does anything in a browser on its own.",
               },
             ],
           },

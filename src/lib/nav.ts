@@ -131,7 +131,6 @@ const REPORT_PERMS = [
   "team.manage",
 ];
 
-/** Full navigation (desktop sidebar). */
 /*
  * `mainNav` used to live here: a second, parallel list of every module, read
  * by nothing at all.
@@ -141,11 +140,10 @@ const REPORT_PERMS = [
  * just a feature that was not there. Two of them were built, tested, deployed
  * and verified in that state, and the feature flag took the blame.
  *
- * `mobileMenuSections` below is the only list. The sidebar and the mobile menu
- * both render it. `nav-coverage.test.ts` now fails the build if a module has
- * no way to reach it.
+ * `navSections` below is the only list. The desktop sidebar, the mobile menu
+ * and the ⌘K palette all render it, and `nav-coverage.test.ts` fails the build
+ * if a module has no way to reach it.
  */
-
 
 /** The primary fast action — needs permission to record attendance. */
 export const recordAction: NavItem = {
@@ -155,7 +153,13 @@ export const recordAction: NavItem = {
   perm: "attendance.manage",
 };
 
-/** Bottom nav on mobile: 2 left, [Record], then Members + a "More" sheet. */
+/**
+ * Bottom nav on mobile: 2 left, [Record], then Members + a "More" sheet.
+ *
+ * Five targets and no more, because the bar is also the one row of the screen
+ * a thumb can reach without moving the hand. Everything else is in the sheet,
+ * which is one tap away and searchable.
+ */
 export const mobileNavLeft: NavItem[] = [
   { labelKey: "nav.home", href: "/dashboard", icon: LayoutDashboard },
   {
@@ -170,12 +174,43 @@ export const mobileNavRight: NavItem[] = [
 ];
 
 /**
- * Grouped menu for the mobile "More" sheet. `tile` holds full literal
- * Tailwind classes (so they aren't purged) for each item's coloured icon.
+ * One menu entry. `tile` holds full literal Tailwind classes (so they aren't
+ * purged) for the item's coloured icon.
  */
 export type MenuItem = NavItem & { descriptionKey: TKey; tile: string };
 
-export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
+export type NavSection = {
+  titleKey: TKey;
+  items: MenuItem[];
+  /**
+   * Pinned below the scroll area rather than inside it.
+   *
+   * Exactly one section is, and it is the last one. Settings and Help are what
+   * somebody reaches for when they are already stuck, and making them scroll
+   * past twenty-four modules they did not want in order to find the word
+   * "Help" is the moment a church gives up and sends a WhatsApp message
+   * instead. The mobile sheet renders it inline at the end, where there is
+   * room.
+   */
+  footer?: boolean;
+};
+
+/**
+ * The menu.
+ *
+ * Grouped by the job somebody came to do, not by the shape of the database.
+ * The previous grouping had eleven entries under "Records" — Giving beside
+ * Media beside QR codes — and nine under "People" that included video
+ * meetings. Eleven is past the point where a heading helps: it is a list with
+ * a word on top of it, and finding Finance meant reading all eleven.
+ *
+ * Seven groups of three to six, in the order a week actually runs: see the
+ * church, then the people in it, then the gatherings, then the money, then
+ * what you send out, then what you make, and finally the account. Nothing is
+ * nested two deep — every module is one click from here, which is the one
+ * thing a menu this size must not trade away.
+ */
+export const navSections: NavSection[] = [
   {
     titleKey: "nav.sectionOverview",
     items: [
@@ -203,103 +238,20 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
         perm: REPORT_PERMS,
       },
-    ],
-  },
-  {
-    titleKey: "nav.sectionRecords",
-    items: [
+      /*
+       * Branches sits with the other ways of looking at the whole church
+       * rather than under the account, which is where it used to be. It is not
+       * a setting — it is the network seen from above, which is the same
+       * question the dashboard and analytics answer at a smaller scale.
+       */
       {
-        labelKey: "nav.attendance",
-        href: "/attendance",
-        icon: ClipboardCheck,
-        descriptionKey: "nav.attendanceDesc",
-        tile: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-        perm: "attendance.view",
-      },
-      {
-        labelKey: "nav.giving",
-        href: "/giving",
-        icon: HandCoins,
-        descriptionKey: "nav.givingDesc",
-        tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-        perm: "giving.view",
-      },
-      {
-        labelKey: "nav.contributions",
-        href: "/contributions",
-        icon: Handshake,
-        descriptionKey: "nav.contributionsDesc",
-        tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-        perm: "contributions.view",
-      },
-      {
-        labelKey: "nav.finance",
-        feature: "finance",
-        href: "/finance",
-        icon: Wallet,
-        descriptionKey: "nav.financeDesc",
-        tile: "bg-lime-500/15 text-lime-600 dark:text-lime-400",
-        perm: "finance.view",
-      },
-      {
-        labelKey: "nav.events",
-        href: "/my-events",
-        icon: CalendarDays,
-        descriptionKey: "nav.eventsDesc",
-        tile: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
-        perm: "settings.manage",
-      },
-      {
-        labelKey: "nav.facilities",
-        feature: "facilities",
-        href: "/facilities",
-        icon: Building2,
-        descriptionKey: "nav.facilitiesDesc",
-        tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-        perm: "facilities.view",
-        beta: true,
-      },
-      {
-        labelKey: "nav.media",
-        href: "/media",
-        icon: FolderOpen,
-        descriptionKey: "nav.mediaDesc",
-        tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
-        perm: "media.view",
-      },
-      {
-        labelKey: "nav.studio",
-        href: "/studio",
-        icon: Wand2,
-        descriptionKey: "nav.studioDesc",
+        labelKey: "nav.branches",
+        feature: "branches",
+        href: "/branches",
+        icon: Network,
+        descriptionKey: "nav.branchesDesc",
         tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
-        perm: "media.view",
-      },
-      {
-        labelKey: "nav.forms",
-        feature: "forms",
-        href: "/forms",
-        icon: FileText,
-        descriptionKey: "nav.formsDesc",
-        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
-        perm: "forms.view",
-      },
-      {
-        labelKey: "nav.links",
-        href: "/links",
-        icon: QrCode,
-        descriptionKey: "nav.linksDesc",
-        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
-        perm: "links.view",
-      },
-      {
-        labelKey: "nav.devotionals",
-        feature: "devotionals",
-        href: "/devotionals",
-        icon: BookOpen,
-        descriptionKey: "nav.devotionalsDesc",
-        tile: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
-        perm: "devotionals.view",
+        perm: ["settings.manage", "analytics.view"],
       },
     ],
   },
@@ -313,6 +265,31 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         descriptionKey: "nav.membersDesc",
         tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
         perm: "members.view",
+      },
+      /*
+       * First-timers directly above Follow-up, and both above Members' other
+       * neighbours, because they are one errand: somebody new came on Sunday
+       * and has to be called on Tuesday. They were four apart in the old menu,
+       * which is part of why churches were registering visitors through
+       * Members → Add and losing them (see the note in AGENTS.md).
+       */
+      {
+        labelKey: "nav.firstTimers",
+        feature: "followUp",
+        href: "/first-timers",
+        icon: UserPlus,
+        descriptionKey: "nav.firstTimersDesc",
+        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+        perm: "followup.view",
+      },
+      {
+        labelKey: "nav.followUp",
+        feature: "followUp",
+        href: "/follow-up",
+        icon: HeartHandshake,
+        descriptionKey: "nav.followUpDesc",
+        tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+        perm: "followup.view",
       },
       {
         labelKey: "nav.groups",
@@ -339,6 +316,37 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
         perm: "training.view",
       },
+    ],
+  },
+  {
+    titleKey: "nav.sectionGatherings",
+    items: [
+      {
+        labelKey: "nav.attendance",
+        href: "/attendance",
+        icon: ClipboardCheck,
+        descriptionKey: "nav.attendanceDesc",
+        tile: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+        perm: "attendance.view",
+      },
+      {
+        labelKey: "nav.events",
+        href: "/my-events",
+        icon: CalendarDays,
+        descriptionKey: "nav.eventsDesc",
+        tile: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+        perm: "settings.manage",
+      },
+      {
+        labelKey: "nav.facilities",
+        feature: "facilities",
+        href: "/facilities",
+        icon: Building2,
+        descriptionKey: "nav.facilitiesDesc",
+        tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        perm: "facilities.view",
+        beta: true,
+      },
       {
         labelKey: "nav.meetings",
         feature: "meetings",
@@ -358,24 +366,41 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         tile: "bg-red-500/15 text-red-600 dark:text-red-400",
         perm: "meetings.view",
       },
+    ],
+  },
+  {
+    titleKey: "nav.sectionMoney",
+    items: [
       {
-        labelKey: "nav.firstTimers",
-        feature: "followUp",
-        href: "/first-timers",
-        icon: UserPlus,
-        descriptionKey: "nav.firstTimersDesc",
-        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-        perm: "followup.view",
+        labelKey: "nav.giving",
+        href: "/giving",
+        icon: HandCoins,
+        descriptionKey: "nav.givingDesc",
+        tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+        perm: "giving.view",
       },
       {
-        labelKey: "nav.followUp",
-        feature: "followUp",
-        href: "/follow-up",
-        icon: HeartHandshake,
-        descriptionKey: "nav.followUpDesc",
-        tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-        perm: "followup.view",
+        labelKey: "nav.contributions",
+        href: "/contributions",
+        icon: Handshake,
+        descriptionKey: "nav.contributionsDesc",
+        tile: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+        perm: "contributions.view",
       },
+      {
+        labelKey: "nav.finance",
+        feature: "finance",
+        href: "/finance",
+        icon: Wallet,
+        descriptionKey: "nav.financeDesc",
+        tile: "bg-lime-500/15 text-lime-600 dark:text-lime-400",
+        perm: "finance.view",
+      },
+    ],
+  },
+  {
+    titleKey: "nav.sectionOutreach",
+    items: [
       {
         labelKey: "nav.communication",
         href: "/communication",
@@ -384,10 +409,58 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
         perm: "communication.view",
       },
+      {
+        labelKey: "nav.devotionals",
+        feature: "devotionals",
+        href: "/devotionals",
+        icon: BookOpen,
+        descriptionKey: "nav.devotionalsDesc",
+        tile: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+        perm: "devotionals.view",
+      },
+      {
+        labelKey: "nav.forms",
+        feature: "forms",
+        href: "/forms",
+        icon: FileText,
+        descriptionKey: "nav.formsDesc",
+        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
+        perm: "forms.view",
+      },
+    ],
+  },
+  {
+    titleKey: "nav.sectionContent",
+    items: [
+      {
+        labelKey: "nav.media",
+        href: "/media",
+        icon: FolderOpen,
+        descriptionKey: "nav.mediaDesc",
+        tile: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
+        perm: "media.view",
+      },
+      {
+        labelKey: "nav.studio",
+        href: "/studio",
+        icon: Wand2,
+        descriptionKey: "nav.studioDesc",
+        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+        perm: "media.view",
+      },
+      {
+        labelKey: "nav.links",
+        href: "/links",
+        icon: QrCode,
+        descriptionKey: "nav.linksDesc",
+        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+        perm: "links.view",
+      },
     ],
   },
   {
     titleKey: "nav.sectionAccount",
+    footer: true,
     items: [
       {
         labelKey: "nav.notifications",
@@ -395,15 +468,6 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
         icon: Bell,
         descriptionKey: "nav.notificationsDesc",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
-      },
-      {
-        labelKey: "nav.branches",
-        feature: "branches",
-        href: "/branches",
-        icon: Network,
-        descriptionKey: "nav.branchesDesc",
-        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
-        perm: ["settings.manage", "analytics.view"],
       },
       {
         labelKey: "nav.settings",
@@ -423,3 +487,35 @@ export const mobileMenuSections: { titleKey: TKey; items: MenuItem[] }[] = [
     ],
   },
 ];
+
+/**
+ * Every entry, in menu order, filtered to what this person may see.
+ *
+ * One function, used by the sidebar, the mobile sheet, the palette and the
+ * quick-access ranking, so "what is in the menu" has exactly one answer. The
+ * alternative — each caller flattening and filtering for itself — is how four
+ * surfaces end up disagreeing about whether a module exists.
+ */
+export function visibleNavItems(
+  perms: string[],
+  isOwner: boolean,
+  churchSlug: string | null | undefined,
+): MenuItem[] {
+  return navSections.flatMap((s) =>
+    s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)),
+  );
+}
+
+/** The sections, each filtered, with the now-empty ones dropped. */
+export function visibleNavSections(
+  perms: string[],
+  isOwner: boolean,
+  churchSlug: string | null | undefined,
+): NavSection[] {
+  return navSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)),
+    }))
+    .filter((s) => s.items.length > 0);
+}

@@ -10,10 +10,17 @@
  *
  *   node scripts/audit-tap-targets.mjs
  *
- * Two findings are expected and correct, both the same situation: the
- * remove-photo button on a thumbnail (in the image uploader, and on each photo
- * in the photo studio) is 36px, because 44 would cover half of the photo being
- * judged.
+ * Three findings are expected and correct.
+ *
+ * Two are the same situation: the remove-photo button on a thumbnail (in the
+ * image uploader, and on each photo in the photo studio) is 36px, because 44
+ * would cover half of the photo being judged.
+ *
+ * The third is the pin/dismiss pair on a Quick access row in the desktop
+ * sidebar. That sidebar is `hidden lg:flex` -- it is never rendered on a touch
+ * device at all, the equivalent control in the mobile sheet is a 48px column,
+ * and the two buttons sit side by side, so growing either to 44px would make
+ * their hit areas overlap and turn "unpin" into "forget".
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

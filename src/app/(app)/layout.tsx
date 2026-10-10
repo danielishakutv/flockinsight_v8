@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   getIsSuperAdmin,
@@ -14,6 +15,7 @@ import { planPriceLabel } from "@/lib/plans";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
+import { NavVisitRecorder } from "@/components/app/nav-visits";
 import { AppTopbar } from "@/components/app/app-topbar";
 import { DesktopTopbar } from "@/components/app/desktop-topbar";
 import { MobileNav } from "@/components/app/mobile-nav";
@@ -31,6 +33,7 @@ import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/components/i18n-provider";
 import { getI18n } from "@/lib/i18n/server";
+import { RAIL_COOKIE, railFromCookie } from "@/lib/nav-rail";
 
 export default async function AppLayout({
   children,
@@ -53,6 +56,13 @@ export default async function AppLayout({
     getMyChurches(),
   ]);
   const perms = [...access.perms];
+  /*
+   * Which shape the sidebar is in, read here so the first paint is already
+   * right. From localStorage it could not be known until after hydration, and
+   * anybody who prefers the rail would watch 220px of the page jump sideways
+   * on every navigation. See lib/nav-rail.ts.
+   */
+  const rail = railFromCookie((await cookies()).get(RAIL_COOKIE)?.value);
   const canRecord = access.isOwner || access.perms.has("attendance.manage");
   const canManageBilling = access.isOwner || access.perms.has("settings.manage");
 
@@ -133,6 +143,7 @@ export default async function AppLayout({
           isOwner={access.isOwner}
           plan={church.plan}
           churchSlug={church.slug}
+          defaultRail={rail}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -178,6 +189,18 @@ export default async function AppLayout({
         isOwner={access.isOwner}
         churchSlug={church.slug}
         plan={church.plan}
+      />
+      {/*
+        Counts which modules this person actually opens, for the Quick access
+        rows at the top of the menu. Here rather than inside the sidebar: the
+        sidebar is `hidden lg:flex` so it does mount on a phone today, but it
+        would be working by accident, and the day it becomes desktop-only every
+        phone in every church silently stops learning anything.
+      */}
+      <NavVisitRecorder
+        perms={perms}
+        isOwner={access.isOwner}
+        churchSlug={church.slug}
       />
       <Toaster />
       <SplashScreen />

@@ -393,3 +393,52 @@ input[type="number"] {
     opacity: 0;
   }
 }
+
+/* ------------------------------------------------------------------
+   A scrolling sidebar that says so.
+
+   Named for the sidebar rather than generically because the fade is painted
+   in `--sidebar`: on any other background it would draw a pale band across
+   something that is not pale.
+
+   The sidebar menu is twenty-seven entries in seven groups and will not
+   fit a laptop screen whatever is done to the row height, so it scrolls.
+   An edge that is simply cut off reads as the end of the list — people do
+   not scroll what does not look scrollable — and the thing most often
+   below the fold is whichever group somebody was looking for.
+
+   Lea Verou's technique: two gradients painted in the SCROLLING box
+   (`local`) sit on top of two painted in the fixed box (`scroll`). When
+   the list is at the top the local one covers the shadow exactly; scroll
+   down and it slides away and the shadow appears. No javascript, no
+   resize observer, and it is correct on the frame the content changes
+   rather than one frame later.
+   ------------------------------------------------------------------ */
+.sidebar-scroll-shadow {
+  background:
+    linear-gradient(var(--sidebar) 30%, transparent) center top / 100% 1.25rem
+      no-repeat local,
+    linear-gradient(transparent, var(--sidebar) 70%) center bottom / 100% 1.25rem
+      no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 14%), transparent) center
+      top / 100% 0.6rem no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 14%), transparent)
+      center bottom / 100% 0.6rem no-repeat scroll;
+}
+
+/* The shadow has to be lighter than the panel to be seen on a dark one. */
+.dark .sidebar-scroll-shadow {
+  background:
+    linear-gradient(var(--sidebar) 30%, transparent) center top / 100% 1.25rem
+      no-repeat local,
+    linear-gradient(transparent, var(--sidebar) 70%) center bottom / 100% 1.25rem
+      no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgb(255 255 255 / 12%), transparent)
+      center top / 100% 0.6rem no-repeat scroll,
+    radial-gradient(
+        farthest-side at 50% 100%,
+        rgb(255 255 255 / 12%),
+        transparent
+      )
+      center bottom / 100% 0.6rem no-repeat scroll;
+}
