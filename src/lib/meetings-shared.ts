@@ -223,6 +223,17 @@ export const SIGNAL_TYPES = [
   "control", // host action: mute, remove, promote, admit, end
   "pause", // "stop sending me video" / "start again"
   "recording", // recording started or stopped
+  /*
+   * "I have dropped my connection to you; drop yours and dial again."
+   *
+   * The only way the voice's shape changes mid-call, and the only way out of a
+   * negotiation that has got stuck. Both are a new connection rather than a
+   * new description on the old one, because two peers renegotiating at the
+   * same moment can end up with their m-lines in different orders — after
+   * which every description either side builds is refused by the other and
+   * that pair's audio is dead for the rest of the call, silently.
+   */
+  "renegotiate",
 ] as const;
 export type SignalType = (typeof SIGNAL_TYPES)[number];
 

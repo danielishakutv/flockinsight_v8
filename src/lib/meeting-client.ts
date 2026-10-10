@@ -177,6 +177,15 @@ export type MeetingClientEvents = {
    * be silent.
    */
   onMicInterrupted?: (outcome: "recovered" | "lost") => void;
+  /**
+   * One connection had to be thrown away and dialled again.
+   *
+   * Reported because the person was, until that moment, in a meeting where
+   * somebody could not hear them and nothing said so. A second of silence with
+   * an explanation is a different experience from a call that quietly stopped
+   * working, and this is the only place the difference can be made.
+   */
+  onPeerRebuilt?: (peerId: string, reason: "stuck" | "voice") => void;
   /** Transport health, so the UI can say "reconnecting" honestly. */
   onTransport?: (state: "online" | "retrying" | "offline") => void;
   /**
@@ -216,6 +225,16 @@ type PeerState = {
   pc: RTCPeerConnection;
   polite: boolean;
   initiator: boolean;
+  /**
+   * Whether this side makes the very first offer on this connection.
+   *
+   * The initiator does — unless the connection was created because a
+   * description had already arrived for it, in which case the other side is
+   * mid-offer and a second one is a collision at the worst moment.
+   */
+  mayOfferFirst: boolean;
+  /** When this connection was made, so a reset meant for its predecessor can be told apart. */
+  createdAt: number;
   makingOffer: boolean;
   ignoreOffer: boolean;
   negotiated: boolean;
@@ -267,7 +286,43 @@ type PeerState = {
    * Saver within half a minute of joining hit exactly that.
    */
   audioOfferedAt: number;
+  /**
+   * The shape the last COMPLETED negotiation on this connection carried.
+   *
+   * Committed when signalling returns to "stable", never when an offer is
+   * merely sent. An offer can be ignored by the other side, rolled back, or
+   * refused outright, and claiming the shape at the moment it went out means a
+   * connection that never heard about it is marked as having it — so nothing
+   * ever tries again. That is the same silent failure twice over, and this
+   * time it cost a meeting.
+   */
   audioShape: string;
+  /** The shape an offer or answer is carrying right now. Committed on stable. */
+  audioShapePending: string | null;
+  /**
+   * When this connection last left "stable", or null while it is there.
+   *
+   * A pair whose m-lines have fallen out of step rejects every description
+   * either side builds, and sits in `have-local-offer` / `have-remote-offer`
+   * for the rest of the call with one direction of audio dead and nothing on
+   * screen to say so. This is how that is noticed.
+   */
+  unstableSince: number | null;
+  /**
+   * The chain every description on this connection goes through, in turn.
+   *
+   * Building an offer and answering an incoming one are both several awaits
+   * long — `createOffer`, `createAnswer` — and they used to be able to
+   * interleave, because offers are started with `void makeOffer(...)` while
+   * incoming signals are handled in their own loop. Half way through
+   * answering somebody's offer, our own `setLocalDescription` would land, and
+   * the answer we then tried to set was refused for being in the wrong state.
+   * The peer had asked a question that was never answered, and waited.
+   *
+   * One connection, one negotiation at a time. The state read at the top of a
+   * step is then still the state when the step runs.
+   */
+  negotiating: Promise<void>;
   /** The last reading, kept so the panel never has to await `getStats`. */
   diagnostics: PeerDiagnostics | null;
   /**
@@ -281,8 +336,39 @@ type PeerState = {
 
 const SEND_DEBOUNCE_MS = 40;
 const STATS_INTERVAL_MS = 4000;
-/** The least time between two offers made only to change the audio shape. */
-const AUDIO_REOFFER_MS = 30_000;
+/**
+ * The least time between two rebuilds of one connection for the voice's sake.
+ *
+ * A minute, not the half minute an offer used to cost, because a rebuild costs
+ * that pair about a second of media rather than a quiet exchange of
+ * descriptions. A link flapping between "fair" and "good" must not be able to
+ * spend that second over and over.
+ */
+const AUDIO_RESHAPE_MS = 60_000;
+/**
+ * How long a connection may sit mid-negotiation before it is rebuilt.
+ *
+ * A healthy offer/answer completes in well under a second, and a slow one on a
+ * rural link in a few. Fifteen seconds is not slow, it is stuck — and a stuck
+ * connection never recovers on its own, because every path out of it starts
+ * with a description the other side will reject.
+ */
+const NEGOTIATION_WEDGE_MS = 15_000;
+/** Rebuilds of one peer connection before giving up on it. */
+const PEER_RESET_LIMIT = 3;
+/**
+ * How long a new connection ignores a request to throw itself away.
+ *
+ * Both sides of a broken pair usually notice at the same moment, so both send
+ * the request and both rebuild. The second request then arrives at the
+ * connection that has just replaced the one it was about, and acting on it
+ * discards a perfectly good connection — which produces another request, and
+ * another. Measured as a pair ping-ponging ten rebuilds deep until the cap
+ * stopped it, with one direction dead at the end. A few seconds of deafness to
+ * requests is all it takes: anything in flight when a connection is made was
+ * written about its predecessor.
+ */
+const RESET_GRACE_MS = 4_000;
 /** How many times a microphone that dies mid-call will be re-opened. */
 const MIC_RECOVERY_LIMIT = 6;
 /** How long to wait before another long-poll after a failed one. Backs off. */
@@ -379,6 +465,14 @@ export class MeetingClient {
   private micRecoveries = 0;
   /** Whether this browser has been found to refuse a jitter buffer hint. */
   private jitterBufferRefused = false;
+  /**
+   * Rebuilds forced on each peer by a wedged negotiation.
+   *
+   * Kept out here rather than on `PeerState`, because the rebuild deletes the
+   * peer — a counter living on it would reset itself every time and the cap
+   * would never be reached.
+   */
+  private readonly peerResets = new Map<string, number>();
   private onDeviceChange: (() => void) | null = null;
 
   constructor(init: MeetingClientInit) {
@@ -710,6 +804,17 @@ export class MeetingClient {
     removed?: boolean;
     waitingForHost?: boolean;
   }): Promise<void> {
+    /*
+     * Nothing after the call has ended.
+     *
+     * A poll that was already in flight when `stop()` ran still resolves here
+     * a moment later, and `stop()` has by then emptied the peer map — so this
+     * would read the roster it was holding, decide it has nobody connected,
+     * and dial the whole room again. New peer connections, new signals posted,
+     * for a meeting this browser has left.
+     */
+    if (!this.running) return;
+
     if (typeof data.cursor === "number" && data.cursor > this.cursor) {
       this.cursor = data.cursor;
     }
@@ -851,7 +956,19 @@ export class MeetingClient {
     this.applyProfile();
   }
 
-  private createPeer(peerId: string): PeerState {
+  /**
+   * `answering` means this connection exists because a description arrived for
+   * it, so the other side is already offering and this one must not.
+   *
+   * Without it there is a collision built into the start of every call that
+   * happens to arrive out of order: an offer reaches us before the roster
+   * naming its sender does, we create the connection here, and because we are
+   * the initiator we offer too — into an offer already in flight. Perfect
+   * negotiation then rolls one back, and a rollback is what leaves the two
+   * sides disagreeing about the order of their m-lines, which is fatal and
+   * silent. Measured at roughly one room in five before this line existed.
+   */
+  private createPeer(peerId: string, opts: { answering?: boolean } = {}): PeerState {
     const pc = new RTCPeerConnection(this.rtcConfig);
     const initiator = shouldInitiate(this.peerId, peerId);
 
@@ -859,6 +976,8 @@ export class MeetingClient {
       pc,
       polite: isPolite(this.peerId, peerId),
       initiator,
+      mayOfferFirst: initiator && opts.answering !== true,
+      createdAt: Date.now(),
       makingOffer: false,
       ignoreOffer: false,
       negotiated: false,
@@ -884,6 +1003,9 @@ export class MeetingClient {
        */
       audioOfferedAt: Date.now(),
       audioShape: audioShapeKey(this.state.profile.audio),
+      audioShapePending: null,
+      unstableSince: null,
+      negotiating: Promise.resolve(),
       diagnostics: null,
       published: null,
       publishedScreen: null,
@@ -910,13 +1032,67 @@ export class MeetingClient {
 
     pc.ontrack = (e) => this.onRemoteTrack(peerId, p, e);
 
-    pc.onnegotiationneeded = async () => {
+    /*
+     * An offer is made for exactly one reason: this side has a transceiver
+     * with nowhere to live.
+     *
+     * A connection carries SIX m-lines, three per direction, because each side
+     * creates its own microphone, camera and screen transceivers. An answer
+     * can never add an m-line — so the side that did not make the first offer
+     * ends up with three transceivers and no m-lines for them, and until it
+     * offers it can hear everybody while nobody can hear it. That is what this
+     * event is for, and `mid === null` is the whole of the question.
+     *
+     * Everything else is refused, and that is the fix for the bug this file
+     * has been rewritten around. The old rule was "later renegotiations may
+     * come from either side; perfect negotiation sorts those out". It does not.
+     * Perfect negotiation resolves a collision by rolling an offer back, and a
+     * rollback leaves transceivers behind — so a pair that collides repeatedly
+     * ends up with its m-lines in different orders on the two sides, after
+     * which every description either one builds is refused by the other:
+     *
+     *     The order of m-lines in answer doesn't match order in offer
+     *
+     * and that pair's audio is finished for the rest of the call, silently.
+     * Answering an offer can itself raise this event, so "both sides may
+     * offer" is a loop rather than an unlucky coincidence. Once every
+     * transceiver has an m-line, an offer from here would add nothing and risk
+     * exactly that, so none is made: a change of audio shape goes through
+     * `renegotiateAudioIfNeeded`, which nominates one offerer per pair.
+     */
+    pc.onnegotiationneeded = () => {
       // The first offer belongs to the initiator alone — both sides learn
       // about each other at the same instant, and two simultaneous first
-      // offers are a collision for no reason. Later renegotiations may come
-      // from either side; perfect negotiation sorts those out.
-      if (!p.negotiated && !p.initiator) return;
-      await this.makeOffer(peerId, p);
+      // offers are a collision for no reason.
+      if (!p.negotiated) {
+        if (p.mayOfferFirst) void this.makeOffer(peerId, p);
+        return;
+      }
+      const homeless = [p.slots.audio, p.slots.camera, p.slots.screen].some(
+        (t) => t && t.mid === null,
+      );
+      if (!homeless) return;
+      void this.makeOffer(peerId, p);
+    };
+
+    /*
+     * Two jobs, both about not lying to ourselves.
+     *
+     * Reaching "stable" is the only moment at which an audio shape has really
+     * been agreed, so that is where it is written down. And leaving "stable"
+     * starts a clock, because a negotiation that never comes back is the shape
+     * of bug that killed one direction of a call and said nothing.
+     */
+    pc.onsignalingstatechange = () => {
+      if (pc.signalingState !== "stable") {
+        p.unstableSince ??= Date.now();
+        return;
+      }
+      p.unstableSince = null;
+      if (p.audioShapePending !== null) {
+        p.audioShape = p.audioShapePending;
+        p.audioShapePending = null;
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -937,18 +1113,46 @@ export class MeetingClient {
     return p;
   }
 
-  private async makeOffer(peerId: string, p: PeerState): Promise<void> {
-    try {
-      p.makingOffer = true;
-      const offer = await p.pc.createOffer();
-      if (offer.sdp) offer.sdp = tuneOpus(offer.sdp, this.state.profile.audio);
-      await p.pc.setLocalDescription(offer);
-      this.send("offer", { sdp: p.pc.localDescription?.toJSON() }, peerId);
-    } catch (e) {
-      console.error("[meeting] offer failed", e);
-    } finally {
-      p.makingOffer = false;
-    }
+  /**
+   * Run one negotiation step on a connection, after any already in progress.
+   *
+   * Offers are started with `void`, from a stats tick or a peer's request,
+   * while incoming descriptions arrive in the listen loop — so without this
+   * the two interleave, and a step that checked the signalling state at its
+   * first line finds a different one by its third. That is how an answer came
+   * to be refused for being in the wrong state while the peer who had asked
+   * the question sat waiting for it.
+   *
+   * The chain is never allowed to reject: each step handles its own failure,
+   * and anything that still escapes is reported rather than silently stopping
+   * every later step on that connection.
+   */
+  private negotiate(p: PeerState, step: () => Promise<void>): Promise<void> {
+    p.negotiating = p.negotiating.then(step, step).catch((e) => {
+      console.error("[meeting] a negotiation step failed outright", e);
+    });
+    return p.negotiating;
+  }
+
+  private makeOffer(peerId: string, p: PeerState): Promise<void> {
+    return this.negotiate(p, async () => {
+      try {
+        p.makingOffer = true;
+        const audio = this.state.profile.audio;
+        const offer = await p.pc.createOffer();
+        if (offer.sdp) offer.sdp = tuneOpus(offer.sdp, audio);
+        // Pending, not applied: it becomes this connection's shape when
+        // signalling reaches "stable", and not before.
+        p.audioShapePending = audioShapeKey(audio);
+        await p.pc.setLocalDescription(offer);
+        this.send("offer", { sdp: p.pc.localDescription?.toJSON() }, peerId);
+      } catch (e) {
+        p.audioShapePending = null;
+        console.error("[meeting] offer failed", e);
+      } finally {
+        p.makingOffer = false;
+      }
+    });
   }
 
   /**
@@ -982,17 +1186,27 @@ export class MeetingClient {
         await this.onCandidate(s);
         return;
       case "bye": {
-        const p = this.peers.get(s.fromPeer);
-        if (p) {
-          try {
-            p.pc.close();
-          } catch {
-            /* already closed */
-          }
-          this.peers.delete(s.fromPeer);
+        /*
+         * Who is leaving, which is not always the sender.
+         *
+         * A tab saying goodbye for itself sends no payload, so the sender is
+         * the one going. But the join route also posts a `bye` for every
+         * session a returning device has just retired — "this phone was
+         * already in the room, drop the old tile" — and there the sender is
+         * the NEW peer while the one to forget is named in the payload.
+         * Reading `fromPeer` for both meant that signal closed the connection
+         * to the person who had just walked in, and left the stale tile it was
+         * sent to clear.
+         */
+        const leaving =
+          typeof s.payload.peerId === "string" ? s.payload.peerId : s.fromPeer;
+        if (leaving === this.peerId) return;
+        const p = this.peers.get(leaving);
+        if (p) this.dropPeer(leaving, p);
+        else {
+          this.media.delete(leaving);
+          this.events.onMedia?.(new Map(this.media));
         }
-        this.media.delete(s.fromPeer);
-        this.events.onMedia?.(new Map(this.media));
         return;
       }
       case "pause": {
@@ -1001,6 +1215,38 @@ export class MeetingClient {
         if (!p) return;
         p.wantsVideo = s.payload.video !== false;
         this.attachLocalTracks(p);
+        return;
+      }
+      case "renegotiate": {
+        /*
+         * "I have thrown this connection away; throw yours away too."
+         *
+         * Sent for two reasons — a negotiation that got stuck, and a voice
+         * that now wants a shape the running connection cannot be given — and
+         * handled identically, because the answer to both is the same fresh
+         * connection. Both sides have to forget it: a new offer arriving at
+         * the old connection is a renegotiation, which is the thing being
+         * avoided. The next roster poll dials them again from nothing.
+         */
+        const p = this.peers.get(s.fromPeer);
+        if (!p) return;
+
+        // Sent about the connection this one replaced. See RESET_GRACE_MS.
+        const age = Date.now() - p.createdAt;
+        if (age < RESET_GRACE_MS) {
+          console.info(
+            `[meeting] ignoring ${s.fromPeer}'s request to start again: this ` +
+              `connection is ${age}ms old, so the request was about the one ` +
+              `before it.`,
+          );
+          return;
+        }
+
+        console.info(
+          `[meeting] ${s.fromPeer} has dropped its connection to us and asked ` +
+            `for a new one. Rebuilding ours to match.`,
+        );
+        this.dropPeer(s.fromPeer, p);
         return;
       }
       case "chat":
@@ -1059,37 +1305,113 @@ export class MeetingClient {
     this.events.onControl?.(s.payload);
   }
 
-  private async onDescription(s: SignalEnvelope): Promise<void> {
-    const p = this.peers.get(s.fromPeer) ?? this.createPeer(s.fromPeer);
+  private onDescription(s: SignalEnvelope): Promise<void> {
     const raw = s.payload.sdp as RTCSessionDescriptionInit | undefined;
-    if (!raw?.type) return;
+    if (!raw?.type) return Promise.resolve();
+    const p =
+      this.peers.get(s.fromPeer) ??
+      this.createPeer(s.fromPeer, { answering: raw.type === "offer" });
 
-    try {
-      const offerCollision =
-        raw.type === "offer" && (p.makingOffer || p.pc.signalingState !== "stable");
+    // Behind whatever this connection is already doing. Reading the signalling
+    // state and then acting on it is only sound if nothing else can change it
+    // in between, and offers are started from elsewhere without being awaited.
+    return this.negotiate(p, async () => {
+      try {
+        const offerCollision =
+          raw.type === "offer" && (p.makingOffer || p.pc.signalingState !== "stable");
 
-      // Perfect negotiation, as specified: the impolite peer ignores a
-      // colliding offer and keeps its own; the polite peer rolls back and
-      // accepts. Exactly one of the pair is polite, so they never both give
-      // way and never both insist.
-      p.ignoreOffer = !p.polite && offerCollision;
-      if (p.ignoreOffer) return;
+        // Perfect negotiation, as specified: the impolite peer ignores a
+        // colliding offer and keeps its own; the polite peer rolls back and
+        // accepts. Exactly one of the pair is polite, so they never both give
+        // way and never both insist.
+        p.ignoreOffer = !p.polite && offerCollision;
+        if (p.ignoreOffer) return;
 
-      await p.pc.setRemoteDescription(raw);
-      p.negotiated = true;
+        /*
+         * An answer to an offer we no longer have.
+         *
+         * Perfect negotiation rolls our own offer back when a colliding one
+         * arrives, and the answer to that rolled-back offer turns up a moment
+         * later. Handing it to `setRemoteDescription` throws "Called in wrong
+         * state: stable" — which was caught, logged where nobody was looking,
+         * and left the connection to be sorted out by nothing. It is not an
+         * error: the offer it answers genuinely no longer exists, so the right
+         * thing to do with it is nothing at all.
+         */
+        if (raw.type === "answer" && p.pc.signalingState !== "have-local-offer") {
+          p.audioShapePending = null;
+          return;
+        }
 
-      if (raw.type === "offer") {
-        const answer = await p.pc.createAnswer();
-        if (answer.sdp) answer.sdp = tuneOpus(answer.sdp, this.state.profile.audio);
-        await p.pc.setLocalDescription(answer);
-        this.send("answer", { sdp: p.pc.localDescription?.toJSON() }, s.fromPeer);
+        await p.pc.setRemoteDescription(raw);
+        p.negotiated = true;
+
+        if (raw.type === "offer") {
+          const audio = this.state.profile.audio;
+          const answer = await p.pc.createAnswer();
+          if (answer.sdp) answer.sdp = tuneOpus(answer.sdp, audio);
+          /*
+           * The answerer's shape counts too. What a peer SENDS is decided by
+           * the description it sets locally, so answering is this side
+           * agreeing a shape just as much as offering is — and recording it
+           * here is what stops the nominated-offerer arrangement below from
+           * asking for the same change every thirty seconds for the rest of
+           * the meeting.
+           */
+          p.audioShapePending = audioShapeKey(audio);
+          await p.pc.setLocalDescription(answer);
+          this.send("answer", { sdp: p.pc.localDescription?.toJSON() }, s.fromPeer);
+        }
+
+        this.applyProfileTo(p);
+        if (this.state.lowData) this.send("pause", { video: false }, s.fromPeer);
+      } catch (e) {
+        p.audioShapePending = null;
+
+        /*
+         * Two very different things end up here, and calling both
+         * "negotiation failed" is how the second one hid for as long as it did.
+         *
+         * A description that arrived for a negotiation that no longer exists
+         * is ordinary. The guards above catch most of them, but not all: a
+         * browser runs these calls through its own operations queue too, so a
+         * description can go stale between being handed over and being
+         * applied. Nothing is wrong and nothing needs doing — and shouting
+         * about it buries the real thing.
+         *
+         * A description REFUSED on its merits — "the order of m-lines in
+         * answer doesn't match order in offer" — is the real thing. There is
+         * no description either side can build after that, so there is
+         * nothing to retry: it is left to the wedge watchdog in
+         * `sampleStats`, which throws the connection away and dials again.
+         */
+        const message = e instanceof Error ? e.message : String(e);
+        if (/wrong state/i.test(message)) {
+          console.info(
+            `[meeting] a ${raw.type} from ${s.fromPeer} arrived for a ` +
+              `negotiation that had already moved on (now ` +
+              `"${p.pc.signalingState}"). Ignored.`,
+          );
+          return;
+        }
+        /*
+         * Refused on its merits, which means this connection is finished.
+         *
+         * Once the two sides disagree about the order of their m-lines there
+         * is no description either can build that the other will accept, so
+         * waiting is just silence: rebuilt now rather than in fifteen seconds
+         * when the watchdog would have noticed. The watchdog stays as the net
+         * for the other way this ends — a negotiation that never completes and
+         * never fails either.
+         */
+        console.error(
+          `[meeting] ${s.fromPeer} sent a ${raw.type} this connection will ` +
+            `not accept, in state "${p.pc.signalingState}". Rebuilding it now.`,
+          e,
+        );
+        this.rebuildPeer(s.fromPeer, p, "refused");
       }
-
-      this.applyProfileTo(p);
-      if (this.state.lowData) this.send("pause", { video: false }, s.fromPeer);
-    } catch (e) {
-      console.error("[meeting] negotiation failed", e);
-    }
+    });
   }
 
   private async onCandidate(s: SignalEnvelope): Promise<void> {
@@ -1722,44 +2044,177 @@ export class MeetingClient {
      * for.
      */
     this.sfu?.tuneAudio();
-    this.renegotiateAudioIfNeeded();
+    this.reshapeAudioIfNeeded();
     this.events.onLocalState?.({ ...this.state });
   }
 
   /**
-   * Turn redundancy on, or off, on a call that is already running.
+   * Put the voice's new shape on a connection that is already running — by
+   * building a new connection, not by renegotiating the old one.
    *
-   * Everything else about the voice is a runtime setting. Redundancy is not:
-   * RED is chosen in the SDP and there is no switch for it, so changing our
-   * mind means a new offer. That is cheap — no ICE restart, no new tracks,
-   * nobody's picture flickers — but it is not free, and a link flapping
-   * between "fair" and "good" would otherwise re-offer to every peer every few
-   * seconds, which on a mesh is a glare storm at the worst possible moment.
+   * Redundancy is the one dial that is not a runtime setting: RED is chosen in
+   * the SDP, there is no switch for it anywhere in WebRTC, so changing our
+   * mind about it means a new description. This used to be a new offer, and
+   * that is the bug the whole of this module has just been rewritten around.
    *
-   * So: only when the SHAPE changed, and not more than once every half minute
-   * per peer. Both sides may offer; perfect negotiation already decides which
-   * one wins, and the loser's preference rides out on its answer anyway.
+   * What happened. Both ends of a pair decide to change shape *for the same
+   * reason at the same moment*, because they are both measuring the same bad
+   * link — so a collision was the normal case rather than the unlucky one.
+   * Perfect negotiation resolves a collision by rolling an offer back, and a
+   * rollback leaves transceivers behind. After a few, the two sides no longer
+   * agree on the order of their m-lines, and from that point every description
+   * either one builds is refused by the other:
    *
-   * Mesh only. The SFU path re-reads the profile when it publishes, and
-   * renegotiating a Cloudflare session to change a codec preference is a
-   * larger piece of surgery than the gain justifies — those rooms keep the
-   * tuning, the priority and the jitter buffer, which is most of the benefit.
+   *     The order of m-lines in answer doesn't match order in offer
+   *
+   * The connection then sits in `have-local-offer` for the rest of the call
+   * with one direction of its audio gone. Nothing throws where a person can
+   * see it, the tiles stay lit, the roster is right, and somebody talks to a
+   * room that cannot hear them. That is what "only one person could be heard"
+   * was.
+   *
+   * Nominating one offerer per pair made it much rarer and did not make it go
+   * away — measured in `scripts/test-meeting-call.mjs`, which runs three real
+   * browsers through a real meeting: three runs in five came back clean
+   * instead of five in five. Two in five is not a fix.
+   *
+   * So the connection is thrown away and dialled again instead. A fresh
+   * connection negotiates the current shape from nothing: no rollback, no
+   * second offer, no m-line ordering to reason about — which is the invariant
+   * `createPeer` is built on and the one that mid-call renegotiation quietly
+   * broke. It costs that pair about a second of media, which on a link bad
+   * enough to want redundancy is a trade worth making, and it reuses the same
+   * path that recovers a wedged connection, so there is one mechanism here
+   * rather than two.
+   *
+   * Hedged accordingly: the initiator only, so a pair cannot both start it;
+   * not within a minute of the last one on that connection, so a link flapping
+   * between "fair" and "good" cannot rebuild every half minute; and capped for
+   * the call, so the worst case is a connection that keeps the shape it has.
+   *
+   * Mesh only. The SFU path re-reads the profile when it publishes, and those
+   * rooms keep the tuning, the priority and the jitter buffer, which is most
+   * of the benefit.
    */
-  private renegotiateAudioIfNeeded(): void {
+  private reshapeAudioIfNeeded(): void {
     if (this.transport !== "mesh") return;
     const shape = audioShapeKey(this.state.profile.audio);
 
     const now = Date.now();
     for (const [peerId, p] of this.peers) {
       if (p.audioShape === shape) continue;
-      if (p.pc.signalingState !== "stable") continue;
-      // Not marked until the offer is actually made, so a peer skipped by the
-      // cooldown is tried again on the next tick rather than written off.
-      if (now - p.audioOfferedAt < AUDIO_REOFFER_MS) continue;
+      // Mid-negotiation is not the moment: the connection is about to agree
+      // something, and it may well be this.
+      if (p.pc.signalingState !== "stable" || p.makingOffer) continue;
+      if (now - p.audioOfferedAt < AUDIO_RESHAPE_MS) continue;
+
+      /*
+       * One side starts it, and the other is told by `rebuildPeer`. Both must
+       * forget the connection: a fresh offer meeting the old one is a
+       * renegotiation again, which is the thing being avoided.
+       */
+      if (p.polite) continue;
+
       p.audioOfferedAt = now;
-      p.audioShape = shape;
-      void this.makeOffer(peerId, p);
+      console.info(
+        `[meeting] the voice on this link now wants "${shape}" rather than ` +
+          `"${p.audioShape}".`,
+      );
+      this.rebuildPeer(peerId, p, "voice");
     }
+  }
+
+  /**
+   * Throw a peer connection away so the next roster poll builds a fresh one.
+   *
+   * `reconcilePeers` dials anybody in the roster it has no connection to, and
+   * decides the initiator deterministically — so forgetting a peer here is the
+   * whole of the recovery, on both sides, with no new state machine.
+   */
+  private dropPeer(peerId: string, p: PeerState): void {
+    try {
+      p.pc.close();
+    } catch {
+      /* already closed */
+    }
+    this.peers.delete(peerId);
+    this.media.delete(peerId);
+    this.events.onMedia?.(new Map(this.media));
+  }
+
+  /**
+   * Rebuild any connection that has stopped negotiating, and say that it did.
+   *
+   * There is no description that recovers a pair whose m-lines have fallen out
+   * of step — that is why this is a rebuild and not a retry. Both ends have to
+   * forget the connection or the fresh offer meets the old, disordered one
+   * again, so the peer is told to drop its side too.
+   *
+   * Capped per peer: a connection that cannot be negotiated three times
+   * running has something else wrong with it, and rebuilding for ever would
+   * turn a bad link into a permanent reconnect loop.
+   */
+  private recoverWedgedPeers(): void {
+    if (this.transport !== "mesh") return;
+    const now = Date.now();
+
+    for (const [peerId, p] of this.peers) {
+      if (p.pc.signalingState === "stable") continue;
+      if (p.unstableSince === null) {
+        p.unstableSince = now;
+        continue;
+      }
+      if (now - p.unstableSince < NEGOTIATION_WEDGE_MS) continue;
+
+      console.warn(
+        `[meeting] negotiation with ${peerId} has been stuck in ` +
+          `"${p.pc.signalingState}" for ` +
+          `${Math.round((now - p.unstableSince) / 1000)}s.`,
+      );
+      this.rebuildPeer(peerId, p, "stuck");
+    }
+  }
+
+  /**
+   * Throw this connection away, tell the peer to do the same, and dial again.
+   *
+   * The one way out of a connection that cannot be negotiated, and — since
+   * mid-call renegotiation turned out to be what broke this module — also the
+   * way a change of voice shape is applied. Both sides must forget it: a fresh
+   * offer meeting the old connection is a renegotiation, which is the thing
+   * being avoided. `reconcilePeers` dials again from the next roster poll.
+   *
+   * Capped per peer for the length of the call. A connection that cannot be
+   * built three times running has something else wrong with it, and rebuilding
+   * for ever would turn a bad link into a permanent reconnect loop — which is
+   * worse than a link that stays as it is, because at least that one is
+   * carrying something.
+   */
+  private rebuildPeer(
+    peerId: string,
+    p: PeerState,
+    reason: "stuck" | "refused" | "voice",
+  ): boolean {
+    const used = this.peerResets.get(peerId) ?? 0;
+    if (used >= PEER_RESET_LIMIT) {
+      console.error(
+        `[meeting] the connection to ${peerId} has been rebuilt ` +
+          `${PEER_RESET_LIMIT} times and is still not working. Leaving it ` +
+          `alone; this call may be one-sided with that person.`,
+      );
+      return false;
+    }
+    this.peerResets.set(peerId, used + 1);
+    console.warn(
+      `[meeting] rebuilding the connection to ${peerId} (${reason}, ` +
+        `${used + 1} of ${PEER_RESET_LIMIT}).`,
+    );
+    this.send("renegotiate", {}, peerId);
+    this.dropPeer(peerId, p);
+    // A rebuild for the voice's sake is the engine doing its job; the other
+    // two mean somebody could not be heard, and that is worth a sentence.
+    this.events.onPeerRebuilt?.(peerId, reason === "voice" ? "voice" : "stuck");
+    return true;
   }
 
   /**
@@ -2107,6 +2562,12 @@ export class MeetingClient {
       });
       return;
     }
+    if (this.peers.size === 0) return;
+
+    // Before the readings: a connection that has stopped negotiating has no
+    // useful numbers to contribute, and leaving it in place is what turns a
+    // moment's glare into a call somebody spends silent.
+    this.recoverWedgedPeers();
     if (this.peers.size === 0) return;
 
     let worstLoss = 0;

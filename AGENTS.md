@@ -148,3 +148,31 @@ Nothing threw and nothing was logged; the glyph simply was not there. The PDFs
 now embed Noto Sans (`src/lib/pdf-font.ts`, registered once from
 `lib/pdf-chrome`), which also has no arrows: `→` draws an empty box the same
 silent way. `src/lib/pdf-font.test.ts` reads the .ttf files and fails on both.
+
+**A WebRTC connection in a mesh must never be renegotiated mid-call.** Both
+ends of a pair reach the same verdict about the same network at the same
+moment, so two peers deciding to re-offer is the normal case rather than an
+unlucky one. Perfect negotiation resolves a collision by rolling an offer back,
+and a rollback leaves transceivers behind — after a few, the two sides no
+longer agree on the order of their m-lines and every description either one
+builds is refused by the other:
+
+    The order of m-lines in answer doesn't match order in offer
+
+That pair's audio is then finished for the rest of the call. Nothing throws
+where a person can see it: the roster is right, the tiles stay lit, ICE says
+connected, the video is perfect, and somebody talks to a room that cannot hear
+them. It presents as "only one person could be heard".
+
+So `meeting-client.ts` offers exactly twice per connection — once from each
+side, to give each side's three transceivers an m-line, which an answer can
+never do — and never again. A change that needs new SDP (turning RED on) is
+applied by throwing the connection away and dialling it again, which is also
+how a wedged connection recovers: one mechanism, in `rebuildPeer`. Resets
+carry a grace window, because both ends usually notice at once and the second
+request lands on the connection that replaced the one it was about.
+
+`scripts/test-meeting-call.mjs` is how this was found and is the only thing
+that can see it: three real browsers, one real meeting, and a grid of who could
+hear whom. A unit test cannot — the thing under test is the browser's own SDP
+machinery. Run it against `next build` + `next start`, never `next dev`.

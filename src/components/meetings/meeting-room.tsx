@@ -22,10 +22,21 @@ import {
   Users,
   Video,
   VideoOff,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatBytes } from "@/lib/storage-bytes";
+import {
+  meetingSoundsDefault,
+  meetingSoundsEnabled,
+  playArrivalChime,
+  playDepartureChime,
+  releaseMeetingSounds,
+  setMeetingSoundsEnabled,
+  subscribeMeetingSounds,
+} from "@/lib/meeting-sounds";
 import {
   type UploadProgress,
 } from "@/lib/direct-upload";
@@ -202,6 +213,27 @@ export function MeetingRoom(props: {
   const [transport, setTransport] = useState<"online" | "retrying" | "offline">("online");
   const [panel, setPanel] = useState<Panel>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /*
+   * Whether this device plays a note when somebody arrives or leaves.
+   *
+   * The same arrangement as `shareCapable` above and for the same reason: the
+   * answer lives in `localStorage`, which the server cannot read, so it comes
+   * through a store with a server snapshot of "on" rather than through state
+   * seeded from an effect.
+   */
+  const sounds = useSyncExternalStore(
+    subscribeMeetingSounds,
+    meetingSoundsEnabled,
+    meetingSoundsDefault,
+  );
+
+  const toggleSounds = useCallback(() => {
+    const next = !meetingSoundsEnabled();
+    setMeetingSoundsEnabled(next);
+    // Play the arrival note when switching them on, so the choice is confirmed
+    // by the thing it chose rather than by a line of text.
+    if (next) playArrivalChime();
+  }, []);
   /*
    * A mirror of `panel` for the back-gesture listener below. That listener
    * pushes a history entry when it registers, so re-registering it on every
@@ -633,6 +665,32 @@ export function MeetingRoom(props: {
               if (outcome === "recovered") toast.info(t("meetings.micRecovered"));
               else toast.error(t("meetings.micLost"), { duration: 12000 });
             },
+            /*
+             * A connection that had to be thrown away and dialled again.
+             *
+             * Only the failures are said out loud. A connection rebuilt to
+             * carry a better-protected voice is the engine doing its job on a
+             * bad network, and announcing it would train people to ignore the
+             * sentence that matters.
+             *
+             * That sentence is for one pair of people unable to hear each
+             * other with every tile lit and nothing anywhere to suggest
+             * anything had gone wrong — which is what this was before. Named
+             * where we know the name: "ask them whether they can hear you" is
+             * only actionable if you know who they are.
+             */
+            onPeerRebuilt: (peerId, reason) => {
+              if (reason !== "stuck") return;
+              const name = clientRef.current
+                ?.roster()
+                .find((r) => r.peerId === peerId)?.name;
+              toast.warning(
+                name
+                  ? t("meetings.connectionRebuilt", { name })
+                  : t("meetings.connectionRebuiltAnon"),
+                { duration: 10000 },
+              );
+            },
             onShareUnsupported: () => {
               setShareRefused(true);
               toast.error(t("meetings.screenShareUnsupported"), { duration: 9000 });
@@ -669,7 +727,59 @@ export function MeetingRoom(props: {
    * Lobby → live, and host notifications
    * ========================================================== */
 
+  /**
+   * A note when somebody arrives, and a note when somebody leaves.
+   *
+   * Driven off the ROSTER, which is the server's own answer to who is in the
+   * room and arrives on every poll — not off peer connections, which come and
+   * go for reasons that have nothing to do with anybody walking in. A
+   * connection that is rebuilt after a failed negotiation must not ring the
+   * bell; the person never left.
+   *
+   * Three things this has to get right, each of which is somebody's bad
+   * experience if it does not:
+   *
+   *   The first roster is seeded, never sounded. Walking into a room of eight
+   *   people must not play eight chimes.
+   *
+   *   Yourself is never announced. You know.
+   *
+   *   A burst is one note. Six people arriving together — the end of a service,
+   *   a WhatsApp link going round — is one arrival as far as the ear is
+   *   concerned, and six overlapping chimes is just a noise.
+   */
+  const seenPeers = useRef<Set<string> | null>(null);
+  const myPeerId = session?.me?.peerId ?? null;
 
+  useEffect(() => {
+    if (phase !== "live") {
+      // Re-seeded on the way back in, so a rejoin does not announce the room.
+      seenPeers.current = null;
+      return;
+    }
+
+    const now = new Set(
+      roster.filter((r) => r.admitted && r.peerId !== myPeerId).map((r) => r.peerId),
+    );
+    const before = seenPeers.current;
+    seenPeers.current = now;
+    if (before === null) return;
+
+    let arrived = false;
+    let left = false;
+    for (const peerId of now) if (!before.has(peerId)) arrived = true;
+    for (const peerId of before) if (!now.has(peerId)) left = true;
+
+    if (!sounds) return;
+    // Both at once — somebody swapping phones mid-call — is an arrival. The
+    // room gained somebody, which is the more useful of the two to hear.
+    if (arrived) playArrivalChime();
+    else if (left) playDepartureChime();
+  }, [roster, phase, myPeerId, sounds]);
+
+  // The context holds an audio device open, which on a phone is the difference
+  // between a call ending and the earpiece staying taken.
+  useEffect(() => releaseMeetingSounds, []);
 
   /* ============================================================
    * Timers
@@ -2002,8 +2112,10 @@ export function MeetingRoom(props: {
             allowScreenShare={!!meeting?.allowScreenShare && screenShareable}
             recording={!!recording}
             cameraOn={!!local?.cameraOn}
+            sounds={sounds}
             onReact={react}
             onToggleLowData={toggleLowData}
+            onToggleSounds={toggleSounds}
             onFlipCamera={() => void clientRef.current?.flipCamera()}
             onToggleScreen={toggleScreenShare}
             onStartRecording={startRecording}
@@ -2338,8 +2450,10 @@ function MoreMenu({
   allowScreenShare,
   recording,
   cameraOn,
+  sounds,
   onReact,
   onToggleLowData,
+  onToggleSounds,
   onFlipCamera,
   onToggleScreen,
   onStartRecording,
@@ -2354,8 +2468,11 @@ function MoreMenu({
   allowScreenShare: boolean;
   recording: boolean;
   cameraOn: boolean;
+  /** Whether this device currently plays the arrival and departure notes. */
+  sounds: boolean;
   onReact: (emoji: string) => void;
   onToggleLowData: () => void;
+  onToggleSounds: () => void;
   onFlipCamera: () => void;
   onToggleScreen: () => void;
   onStartRecording: (mode: RecorderMode) => void;
@@ -2397,6 +2514,16 @@ function MoreMenu({
         <DropdownMenuItem onClick={onToggleLowData}>
           <Signal className="size-4" />
           {t("meetings.lowDataMode")}
+        </DropdownMenuItem>
+
+        {/*
+          The label says what tapping will do, and the icon says where things
+          stand. A menu item reading "Join and leave sounds" tells somebody who
+          wants them off nothing about whether they already are.
+        */}
+        <DropdownMenuItem onClick={onToggleSounds}>
+          {sounds ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          {sounds ? t("meetings.soundsOff") : t("meetings.soundsOn")}
         </DropdownMenuItem>
 
         {cameraOn && (

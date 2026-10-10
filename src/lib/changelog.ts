@@ -29,6 +29,24 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.73.1",
+    date: "2026-10-10",
+    summary:
+      "The fix for a meeting in which only one person could be heard. Changing how the voice was protected mid-call could leave two people unable to hear each other for the rest of the meeting, with every tile lit and nothing to say anything was wrong. Joining and leaving also make a sound now, which you can turn off.",
+    changes: {
+      Added: [
+        "A soft note when somebody joins a meeting, and a different one when somebody leaves — rising for an arrival, falling for a departure, so you can tell which without looking. Walking into a room of eight people plays one note, not eight, and you are never announced to yourself.",
+        "Turn those notes off from the “more” menu during a call. The choice is remembered on that device, which matters for whoever is running a service from the front.",
+      ],
+      Fixed: [
+        "A meeting where one person could be heard and nobody else could. Protecting the voice on a struggling connection used to be renegotiated while the call was running, and because both people reach that decision at the same moment — they are measuring the same network — the two sides could end up unable to agree on anything at all. From then on that pair simply could not hear each other, for the rest of the meeting, and nothing anywhere said so. The voice is now protected by rebuilding the connection, which takes about a second and cannot get stuck.",
+        "A connection that stops working is now noticed and rebuilt within a few seconds, and you are told which person it was so you can ask whether they can hear you. Before this, there was nothing to notice it.",
+        "Somebody rejoining a meeting from the same phone no longer removes the wrong person's picture from everyone else's screen.",
+        "Leaving a meeting no longer lets a reply that was already on its way reconnect the call that was just left.",
+      ],
+    },
+  },
+  {
     version: "0.73.0",
     date: "2026-10-09",
     summary:

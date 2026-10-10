@@ -67,7 +67,12 @@ function parseSignals(raw: unknown): OutgoingSignal[] {
     // changes the room — control, stage, roster — goes through /action, where
     // the caller's role is checked.
     if (!SIGNAL_TYPES.includes(type as SignalType)) continue;
-    if (!["offer", "answer", "ice", "bye", "pause", "reaction"].includes(type)) continue;
+    if (
+      !["offer", "answer", "ice", "bye", "pause", "reaction", "renegotiate"].includes(
+        type,
+      )
+    )
+      continue;
     const payload =
       s.payload && typeof s.payload === "object"
         ? (s.payload as Record<string, unknown>)

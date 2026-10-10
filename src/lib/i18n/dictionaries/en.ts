@@ -1449,6 +1449,12 @@ export const en = {
     micRecovered: "Your microphone dropped out and we've reconnected it.",
     micLost:
       "We've lost your microphone. Check nothing else is using it, then reload the page.",
+    connectionRebuilt:
+      "Your connection to {{name}} stopped working, so we've rebuilt it. Ask them whether they can hear you.",
+    connectionRebuiltAnon:
+      "A connection in this meeting stopped working, so we've rebuilt it.",
+    soundsOff: "Mute join and leave sounds",
+    soundsOn: "Play join and leave sounds",
     diagVoice: "voice",
     diagInvented: "invented",
     diagHeld: "held",
