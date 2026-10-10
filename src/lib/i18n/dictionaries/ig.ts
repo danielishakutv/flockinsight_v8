@@ -156,6 +156,7 @@ export const ig: PartialDictionary = {
     pin: "Kwụba {name} na ohere ngwa ngwa",
     unpin: "Wepụ {name} na ohere ngwa ngwa",
     removeShortcut: "Wepụ ụzọ mkpirisi {name}",
+    quickFull: "Ohere ngwa ngwa na-ejide {max}. Wepụ otu ka ị nweta ohere.",
     collapseMenu: "Mebelata menu ka ọ bụrụ akara",
     expandMenu: "Gosi aha menu",
     sectionOptions: "Otú ngalaba si emeghe",

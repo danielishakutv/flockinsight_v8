@@ -209,6 +209,8 @@ export const pt: PartialDictionary = {
     pin: "Fixar {name} no acesso rápido",
     unpin: "Desafixar {name} do acesso rápido",
     removeShortcut: "Remover o atalho {name}",
+    quickFull:
+      "O acesso rápido guarda {max}. Remova um para abrir espaço.",
     collapseMenu: "Reduzir o menu a ícones",
     expandMenu: "Mostrar os nomes do menu",
     sectionOptions: "Como as seções abrem",

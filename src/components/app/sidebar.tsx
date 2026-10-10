@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   sidebarFooterItems,
@@ -26,7 +27,11 @@ import {
   type NavSection,
 } from "@/lib/nav";
 import { railCookieString } from "@/lib/nav-rail";
-import { CLOSED_GROUPS_KEY, GROUP_MODE_KEY } from "@/lib/nav-prefs";
+import {
+  CLOSED_GROUPS_KEY,
+  GROUP_MODE_KEY,
+  QUICK_ACCESS_MAX,
+} from "@/lib/nav-prefs";
 import {
   allClosed,
   parseGroupMode,
@@ -44,7 +49,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { navKeyHints } from "@/lib/nav-hints";
+import { HINT_KEY, navKeyHints } from "@/lib/nav-hints";
 import { useMounted, useStoredValue, writeStoredValue } from "@/lib/client-state";
 import { Logo } from "@/components/brand";
 import { UserMenu } from "@/components/app/user-menu";
@@ -83,10 +88,6 @@ type Flyout = {
   top: number;
   left: number;
 };
-
-/** One printed key. Shared so the rail's label and the rows cannot drift. */
-const HINT_KEY =
-  "text-muted-foreground/70 border-border/60 bg-sidebar-accent/40 rounded border px-1 py-px font-mono text-[10px] font-semibold leading-none";
 
 /**
  * One floating label for the whole rail, portalled to `<body>`.
@@ -166,11 +167,81 @@ function flyoutFor(
  * row is a container, the link fills it, and the pin is laid over its right
  * edge — which also means the pin can be reached by Tab in its own right.
  */
+/**
+ * The pin, and what it does when there is no room left.
+ *
+ * Quick access holds four. The press used to be swallowed at the cap — the
+ * list was re-sliced to its first four and nothing changed on screen — so the
+ * only way to learn the limit existed was to press a fifth pin twice and
+ * conclude the button was broken. Three things carry the refusal now, because
+ * each one reaches a different person:
+ *
+ *  - the **name keeps the module in it**. "Quick access holds 4" on its own
+ *    would be the accessible name of all twenty-three unpinned pins at once,
+ *    so a screen reader's button list could no longer tell which pin pins
+ *    what. The reason is appended to the name, not substituted for it.
+ *  - `aria-disabled`, not `disabled`, so the control stays in the tab order
+ *    and keeps showing its own tooltip. A `disabled` button is skipped by the
+ *    keyboard and, in several browsers, stops rendering `title` — the one
+ *    moment it has something to say would be the moment it went quiet.
+ *  - a **toast on the press**, which is the only one of the three that works
+ *    on a touch screen. There is no hover there and the greyer pin is a
+ *    colour step nobody can be expected to notice, so without it the tap
+ *    would be exactly the silent nothing this set out to remove.
+ */
+function PinButton({
+  pinned,
+  full,
+  label,
+  onPin,
+  className,
+}: {
+  pinned: boolean;
+  full?: boolean;
+  label: string;
+  onPin: () => void;
+  className?: string;
+}) {
+  const t = useT();
+  const blocked = !pinned && !!full;
+  const name = pinned
+    ? t("nav.unpin", { name: label })
+    : t("nav.pin", { name: label });
+  const why = t("nav.quickFull", { max: String(QUICK_ACCESS_MAX) });
+  const title = blocked ? `${name} — ${why}` : name;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (blocked) {
+          toast(why);
+          return;
+        }
+        onPin();
+      }}
+      aria-pressed={pinned}
+      aria-disabled={blocked || undefined}
+      aria-label={title}
+      title={title}
+      className={cn(
+        "focus-visible:ring-ring grid place-items-center rounded-md transition focus-visible:ring-2 focus-visible:opacity-100 focus-visible:outline-none",
+        blocked
+          ? "text-muted-foreground/40 cursor-not-allowed"
+          : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+        className,
+      )}
+    >
+      <Pin className={cn("size-3.5", pinned && "fill-current")} />
+    </button>
+  );
+}
+
 function NavRow({
   item,
   active,
   rail,
   pinned,
+  pinFull,
   plan,
   hint,
   onPin,
@@ -181,6 +252,11 @@ function NavRow({
   active: boolean;
   rail: boolean;
   pinned: boolean;
+  /**
+   * Quick access already holds its four. Only affects an UNpinned row: taking
+   * a pin off is never refused.
+   */
+  pinFull?: boolean;
   plan: string;
   /** The keys that open this page, one label per press, already platformed. */
   hint?: string[];
@@ -298,22 +374,19 @@ function NavRow({
         both and is unhittable at one of them.
       */}
       {!rail && onPin && (
-        <button
-          type="button"
-          onClick={onPin}
-          aria-pressed={pinned}
-          aria-label={pinned ? t("nav.unpin", { name: label }) : t("nav.pin", { name: label })}
-          title={pinned ? t("nav.unpin", { name: label }) : t("nav.pin", { name: label })}
+        <PinButton
+          pinned={pinned}
+          full={pinFull}
+          label={label}
+          onPin={onPin}
           className={cn(
-            "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:ring-ring absolute top-1/2 right-1 grid size-7 -translate-y-1/2 place-items-center rounded-md transition focus-visible:ring-2 focus-visible:opacity-100 focus-visible:outline-none",
+            "absolute top-1/2 right-1 size-7 -translate-y-1/2",
             // Hidden until the row is hovered, so twenty-four pins are not
             // competing with twenty-four labels. Always visible once pinned,
             // because that is the only thing saying it is.
             pinned ? "opacity-100" : "opacity-0 group-hover/row:opacity-100",
           )}
-        >
-          <Pin className={cn("size-3.5", pinned && "fill-current")} />
-        </button>
+        />
       )}
     </div>
   );
@@ -385,29 +458,24 @@ function QuickAccessBlock({
             />
             {!rail && (
               <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
-                <button
-                  type="button"
-                  onClick={() => onToggle(row.href)}
-                  aria-pressed={row.pinned}
-                  aria-label={
-                    row.pinned
-                      ? t("nav.unpin", { name: t(row.item.labelKey) })
-                      : t("nav.pin", { name: t(row.item.labelKey) })
-                  }
-                  title={
-                    row.pinned
-                      ? t("nav.unpin", { name: t(row.item.labelKey) })
-                      : t("nav.pin", { name: t(row.item.labelKey) })
-                  }
+                {/*
+                  The same control as every other row's, so the two cannot
+                  drift. It is never the refused one: `full` means four pinned
+                  rows, and four pinned rows leave no room for a guessed one,
+                  so everything in this block is already pinned and unpinning
+                  is never refused.
+                */}
+                <PinButton
+                  pinned={row.pinned}
+                  label={t(row.item.labelKey)}
+                  onPin={() => onToggle(row.href)}
                   className={cn(
-                    "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:ring-ring grid size-7 place-items-center rounded-md transition focus-visible:ring-2 focus-visible:opacity-100 focus-visible:outline-none",
+                    "size-7",
                     row.pinned
                       ? "text-primary/80 opacity-100"
                       : "opacity-0 group-hover/quick:opacity-100",
                   )}
-                >
-                  <Pin className={cn("size-3.5", row.pinned && "fill-current")} />
-                </button>
+                />
                 {/*
                   Only a guessed row can be dismissed. A pinned row already has
                   its own way out, and offering two different removals for the
@@ -451,6 +519,7 @@ function Group({
   first,
   hints,
   isPinned,
+  pinFull,
   onPin,
   onFlyout,
 }: {
@@ -464,6 +533,8 @@ function Group({
   first: boolean;
   hints: Record<string, string[]>;
   isPinned: (href: string) => boolean;
+  /** Quick access is already holding its four. */
+  pinFull: boolean;
   onPin: (href: string) => void;
   onFlyout: (f: Flyout | null) => void;
 }) {
@@ -520,6 +591,7 @@ function Group({
             active={isActive(pathname, item.href)}
             rail={false}
             pinned={isPinned(item.href)}
+            pinFull={pinFull}
             plan={plan}
             hint={hints[item.href]}
             onPin={() => onPin(item.href)}
@@ -571,6 +643,7 @@ function Group({
                 active={isActive(pathname, item.href)}
                 rail={false}
                 pinned={isPinned(item.href)}
+                pinFull={pinFull}
                 plan={plan}
                 hint={hints[item.href]}
                 onPin={() => onPin(item.href)}
@@ -766,31 +839,65 @@ export function Sidebar({
     pathname,
     sections.flatMap((s) => s.items.map((i) => i.href)),
   );
-  const open = resolveOpenGroups(navGroups, closed, active, mode);
+
+  /*
+   * The group somebody has opened by hand while the menu is following the
+   * page.
+   *
+   * Memory, not storage, and it lasts until the next page — which is what
+   * makes it a glance rather than a second setting arguing with the first.
+   * Open Media & sharing to find one thing, click it, and the menu is
+   * following the page again with nothing left over to explain.
+   *
+   * It is a LIFETIME and not a lookup, and the difference is the whole bug it
+   * was written as first. Holding the page it was taken on and comparing —
+   * `glance.on === active` — reads like an expiry and is not one: it suspends
+   * the glance while you are elsewhere and brings it back the moment you
+   * return, so coming back to a page an hour later would fold the group that
+   * page is in and open one nobody had asked for since. Two pages outside the
+   * menu share that key as well, because `active` is `undefined` for all of
+   * them. So the glance is dropped when the path changes, by comparing against
+   * the path of the render that set it.
+   *
+   * Adjusted during render rather than in an effect: React documents this for
+   * exactly this case, it is one extra render React discards rather than a
+   * committed paint of the wrong menu, and a setState in an effect body is a
+   * lint error in this project for the cascade it causes.
+   */
+  const [peek, setPeek] = useState<string | null>(null);
+  const [peekPath, setPeekPath] = useState(pathname);
+  if (peekPath !== pathname) {
+    setPeekPath(pathname);
+    if (peek !== null) setPeek(null);
+  }
+
+  const open = resolveOpenGroups(navGroups, closed, active, mode, peek);
 
   const setMode = (next: GroupMode) => writeStoredValue(GROUP_MODE_KEY, next);
   const setClosed = (next: string[]) =>
     writeStoredValue(CLOSED_GROUPS_KEY, JSON.stringify(next));
 
   /*
-   * Working a chevron by hand means you want the menu to stay as you leave
-   * it, so it also turns following-the-page off. The alternative is a chevron
-   * that opens a group and then watches it shut again on the next click of a
-   * link, which reads as the app overruling you.
+   * A heading press, in both modes.
+   *
+   * In `manual` it is what it looks like: that group's own open/closed state,
+   * remembered. In `focus` it moves the one open group — press Media & sharing
+   * and Media & sharing opens while everything else folds, which is the same
+   * promise the mode already makes about navigating, kept for the mouse too.
+   * It does NOT leave the mode. It used to, and that was wrong in a way worth
+   * recording: a single glance into another group silently turned the setting
+   * off, so the behaviour somebody chose was spent by using the menu, and
+   * putting it back meant finding the sliders again.
+   *
+   * Pressing the group that is already open clears the choice instead of
+   * shutting it, so the menu goes back to following the page. In `focus` mode
+   * "nothing open" is not one of the available answers — an all-shut sidebar
+   * is the state that looks broken — and the group holding the page you are
+   * reading has to stay visible either way.
    */
   const toggleGroup = (titleKey: string) => {
     if (mode === "focus") {
-      setMode("manual");
-      /*
-       * The groups on screen a moment ago were "this one open, the rest
-       * closed", and that is what has to be written down — otherwise leaving
-       * focus mode flings all seven open, which is not what pressing one
-       * chevron asked for. The group just pressed is then toggled out of that.
-       */
-      const everythingElse = navGroups
-        .map((g) => g.title)
-        .filter((tKey) => !open.has(tKey));
-      setClosed(toggleClosed(everythingElse, titleKey));
+      setPeek(open.has(titleKey) ? null : titleKey);
       return;
     }
     setClosed(toggleClosed(closed, titleKey));
@@ -862,14 +969,19 @@ export function Sidebar({
                   onExpandAll={() => {
                     setMode("manual");
                     setClosed([]);
+                    setPeek(null);
                   }}
                   onCollapseAll={() => {
                     setMode("manual");
                     setClosed(allClosed(navGroups));
+                    setPeek(null);
                   }}
-                  onToggleFocus={() =>
-                    setMode(mode === "focus" ? "manual" : "focus")
-                  }
+                  /* Choosing the mode starts it from the page you are on,
+                     never from a glance taken before it was switched on. */
+                  onToggleFocus={() => {
+                    setMode(mode === "focus" ? "manual" : "focus");
+                    setPeek(null);
+                  }}
                 />
               )}
               <CollapseButton rail={rail} onClick={() => setRailAndRemember(true)} />
@@ -933,6 +1045,7 @@ export function Sidebar({
               plan={plan}
               hints={hints}
               isPinned={quick.isPinned}
+              pinFull={quick.full}
               onPin={quick.toggle}
               onFlyout={setFlyout}
             />
@@ -968,6 +1081,7 @@ export function Sidebar({
               active={isActive(pathname, item.href)}
               rail={rail}
               pinned={quick.isPinned(item.href)}
+              pinFull={quick.full}
               plan={plan}
               hint={hints[item.href]}
               onPin={() => quick.toggle(item.href)}

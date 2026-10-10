@@ -165,6 +165,7 @@ export const pcm: PartialDictionary = {
     pin: "Put {name} inside Quick access",
     unpin: "Remove {name} from Quick access",
     removeShortcut: "Clear di {name} shortcut",
+    quickFull: "Quick access only hold {max}. Unpin one make space.",
     collapseMenu: "Shrink di menu to icon",
     expandMenu: "Show di menu name",
     sectionOptions: "How di section dey open",

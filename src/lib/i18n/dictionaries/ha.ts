@@ -157,6 +157,7 @@ export const ha: PartialDictionary = {
     pin: "Maƙala {name} a hanya mai sauri",
     unpin: "Cire {name} daga hanya mai sauri",
     removeShortcut: "Cire gajeriyar hanyar {name}",
+    quickFull: "Hanya mai sauri na ɗauka {max}. Cire ɗaya don samun wuri.",
     collapseMenu: "Rage menu zuwa alamomi",
     expandMenu: "Nuna sunayen menu",
     sectionOptions: "Yadda sassan ke buɗewa",

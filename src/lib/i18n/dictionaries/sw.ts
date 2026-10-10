@@ -158,6 +158,7 @@ export const sw: PartialDictionary = {
     pin: "Bandika {name} kwenye ufikiaji wa haraka",
     unpin: "Ondoa {name} kwenye ufikiaji wa haraka",
     removeShortcut: "Ondoa njia ya mkato ya {name}",
+    quickFull: "Ufikiaji wa haraka hubeba {max}. Ondoa kimoja upate nafasi.",
     collapseMenu: "Punguza menyu hadi ikoni",
     expandMenu: "Onyesha majina ya menyu",
     sectionOptions: "Jinsi sehemu zinafunguka",

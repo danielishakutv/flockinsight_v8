@@ -59,17 +59,28 @@ export function allClosed(groups: NavGroup[]): string[] {
  * The group containing the current page is always open, whatever was saved —
  * otherwise following a link from elsewhere lands you on a page whose own menu
  * entry is invisible. That holds under "collapse all" too: it closes the other
- * six, not the one you are reading.
+ * five, not the one you are reading.
  *
  * In `focus` mode the stored list is ignored entirely rather than merged with.
  * Merging would make "only the section I'm in" mean "that one, plus whatever
  * you happened to have open in the other mode", which is neither thing.
+ *
+ * `peek` is the one group somebody has opened by hand WHILE in focus mode, and
+ * it wins over the page for as long as it lasts. Without it, focus mode had no
+ * answer to "let me look in there for a second": pressing a heading had to
+ * leave the mode altogether, so a glance at Media silently cost the setting,
+ * and the only way back was the sliders menu. With it the mode is what it
+ * says — one group open — and a heading press simply chooses which one. The
+ * caller holds it in memory and drops it on arriving anywhere, so the rule
+ * re-asserts itself the moment you actually go somewhere; it is a glance, not
+ * a second preference competing with the first.
  */
 export function resolveOpenGroups(
   groups: NavGroup[],
   closed: string[],
   active: string | undefined,
   mode: GroupMode = "manual",
+  peek?: string | null,
 ): Set<string> {
   if (mode === "focus") {
     /*
@@ -79,8 +90,14 @@ export function resolveOpenGroups(
      * "only the section I'm in" is a sidebar with every group shut: a menu
      * that looks broken and tells you nothing about why. The first group opens
      * instead.
+     *
+     * A `peek` naming a group that no longer exists is ignored rather than
+     * honoured into an empty set — a module can leave the menu between the
+     * press and the render when a plan lapses or a permission is withdrawn.
      */
-    const only = groupOf(groups, active) ?? groups[0]?.title;
+    const chosen =
+      peek && groups.some((g) => g.title === peek) ? peek : undefined;
+    const only = chosen ?? groupOf(groups, active) ?? groups[0]?.title;
     return new Set(only ? [only] : []);
   }
 

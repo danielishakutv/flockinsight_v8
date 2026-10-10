@@ -10,7 +10,9 @@ import {
   VISITS_KEY,
   destinationFor,
   forget,
+  pinsFull,
   rankQuickAccess,
+  reconcilePins,
   recordVisit,
   referencePoint,
   togglePin,
@@ -121,6 +123,11 @@ export type QuickAccess = {
   rows: QuickAccessRow[];
   /** Is this destination pinned? For the pin button on every menu row. */
   isPinned: (href: string) => boolean;
+  /**
+   * No room for another pin. The pin buttons read this so they can say why
+   * before being pressed, rather than appearing to work and doing nothing.
+   */
+  full: boolean;
   /** Pin or unpin. Pinning a destination we guessed at makes it permanent. */
   toggle: (href: string) => void;
   /** Drop a guess and forget the visits behind it, so it does not return. */
@@ -146,7 +153,18 @@ export function useQuickAccess({
   const visitsRaw = useStoredValue(VISITS_KEY);
   const pinsRaw = useStoredValue(PINS_KEY);
   const log = useMemo(() => parseStored<VisitLog>(visitsRaw, {}), [visitsRaw]);
-  const pins = useMemo(() => parseStored<string[]>(pinsRaw, []), [pinsRaw]);
+
+  /*
+   * One stored list, read three ways — the rows, `isPinned` and `full` — and
+   * they have to agree, or the cap becomes a locked door and the sentence
+   * explaining it becomes arithmetically false. The rules are `reconcilePins`
+   * in `lib/nav-prefs.ts`, where they can be argued with in a test; what is
+   * here is only the part that needs a browser.
+   */
+  const { pins, carried } = useMemo(() => {
+    const allowed = new Set(items.map((i) => i.href));
+    return reconcilePins(parseStored<string[]>(pinsRaw, []), allowed);
+  }, [items, pinsRaw]);
 
   const rows = useMemo(() => {
     const byHref = new Map(items.map((i) => [i.href, i]));
@@ -173,8 +191,14 @@ export function useQuickAccess({
   return {
     rows,
     isPinned: (href) => pins.includes(href),
+    full: pinsFull(pins),
     toggle: (href) =>
-      writeStoredValue(PINS_KEY, JSON.stringify(togglePin(pins, href))),
+      writeStoredValue(
+        PINS_KEY,
+        /* The ones with no row here go back in untouched: this is the same
+           person in a different church, not a tidy-up. */
+        JSON.stringify([...togglePin(pins, href), ...carried]),
+      ),
     /*
      * Dismissing clears the visits as well as the row. Hiding it without
      * forgetting would put it straight back inside a week, and an app that

@@ -4,11 +4,14 @@ import {
   MIN_AUTO_ITEMS,
   destinationFor,
   forget,
+  pinsFull,
   rankQuickAccess,
+  reconcilePins,
   recordVisit,
   referencePoint,
   score,
   togglePin,
+  QUICK_ACCESS_MAX,
   type VisitLog,
 } from "@/lib/nav-prefs";
 
@@ -282,6 +285,134 @@ describe("pinning", () => {
 
   it("keeps the order they were added in", () => {
     expect(togglePin(["/a"], "/b")).toEqual(["/a", "/b"]);
+  });
+
+  it("holds four", () => {
+    /*
+     * The row sits above the first group, so every slot it fills pushes the
+     * real menu down. Four is the number the churches asked for; this is here
+     * so lowering or raising it is a deliberate edit to a test and not a
+     * number somebody changed in passing.
+     */
+    expect(QUICK_ACCESS_MAX).toBe(4);
+  });
+
+  it("refuses a fifth rather than quietly dropping one", () => {
+    const four = ["/a", "/b", "/c", "/d"];
+    expect(pinsFull(four)).toBe(true);
+    expect(togglePin(four, "/e")).toEqual(four);
+  });
+
+  /*
+   * The cap came down from six, so there are browsers holding five and six.
+   * The old implementation took the first four of `[...pins, href]`, which
+   * means pinning a seventh thing would have deleted two pins somebody had
+   * declared — as a side effect of an unrelated press. This function does not
+   * delete what it was not asked to; reconciling a longer stored list with a
+   * four-row menu is `useQuickAccess`'s job, not this one's.
+   */
+  it("leaves a longer list from the older cap alone", () => {
+    const six = ["/a", "/b", "/c", "/d", "/e", "/f"];
+    expect(togglePin(six, "/g")).toEqual(six);
+  });
+
+  it("always lets one go, however long the list is", () => {
+    const six = ["/a", "/b", "/c", "/d", "/e", "/f"];
+    expect(togglePin(six, "/c")).toEqual(["/a", "/b", "/d", "/e", "/f"]);
+  });
+
+  it("makes room again on the way down", () => {
+    const four = ["/a", "/b", "/c", "/d"];
+    const three = togglePin(four, "/d");
+    expect(pinsFull(three)).toBe(false);
+    expect(togglePin(three, "/e")).toEqual(["/a", "/b", "/c", "/e"]);
+  });
+
+  it("shows only the first four of a longer stored list", () => {
+    /*
+     * Those extra pins are kept rather than trimmed on sight — if the cap
+     * ever goes back up they come back — so what stops them is the ranking,
+     * not the storage.
+     */
+    const rows = rankQuickAccess({
+      log: {},
+      pins: ["/members", "/giving", "/finance", "/attendance", "/media"],
+      hrefs: HREFS,
+      now: NOW,
+    });
+    expect(rows.map((r) => r.href)).toEqual([
+      "/members",
+      "/giving",
+      "/finance",
+      "/attendance",
+    ]);
+  });
+});
+
+/*
+ * The stored list is not the pins on screen, and the cap is about the second.
+ *
+ * One localStorage key serves every church this person can switch between and
+ * survives a permission being withdrawn, so a stored pin can have no row to
+ * unpin it from. A cap that counted those would be a refusal pointing at a
+ * control that does not exist — a locked door — which is the shape of bug this
+ * splits the list to avoid.
+ */
+describe("reconciling the stored pins with the menu in front of somebody", () => {
+  const here = new Set(["/members", "/giving", "/attendance", "/media", "/forms"]);
+
+  it("keeps the ones with a row, in the order they were pinned", () => {
+    const { pins, carried } = reconcilePins(["/giving", "/members"], here);
+    expect(pins).toEqual(["/giving", "/members"]);
+    expect(carried).toEqual([]);
+  });
+
+  it("carries the ones with no row here instead of counting them", () => {
+    /*
+     * Another church's module after a switch, or one a withdrawn permission
+     * has taken away. Three real pins plus two of these is not a full list:
+     * there is a fourth slot, and it must be offered.
+     */
+    const { pins, carried } = reconcilePins(
+      ["/elsewhere", "/members", "/giving", "/gone", "/attendance"],
+      here,
+    );
+    expect(pins).toEqual(["/members", "/giving", "/attendance"]);
+    expect(carried).toEqual(["/elsewhere", "/gone"]);
+    expect(pinsFull(pins)).toBe(false);
+  });
+
+  it("does not let the carried ones fill the four", () => {
+    const { pins } = reconcilePins(
+      ["/a", "/b", "/c", "/d", "/e", "/members"],
+      here,
+    );
+    expect(pins).toEqual(["/members"]);
+  });
+
+  it("drops what is past the cap, so the way out is one unpin", () => {
+    /*
+     * A browser holding six from yesterday. Keeping the fifth and sixth would
+     * make "unpin one to make room" false for ever: unpinning one of the four
+     * on screen would only promote the fifth into its place.
+     */
+    const { pins, carried } = reconcilePins(
+      ["/members", "/giving", "/attendance", "/media", "/forms"],
+      here,
+    );
+    expect(pins).toEqual(["/members", "/giving", "/attendance", "/media"]);
+    expect(carried).toEqual([]);
+    expect(pinsFull(pins)).toBe(true);
+    /* And after one unpin there is room, which is what the message promises. */
+    expect(pinsFull(togglePin(pins, "/media"))).toBe(false);
+  });
+
+  it("is empty for an empty list, and for a menu with nothing in it", () => {
+    expect(reconcilePins([], here)).toEqual({ pins: [], carried: [] });
+    expect(reconcilePins(["/members"], new Set())).toEqual({
+      pins: [],
+      carried: ["/members"],
+    });
   });
 });
 

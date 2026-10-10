@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
 import { chooseChurch } from "@/app/select-church/actions";
 import { useT } from "@/components/i18n-provider";
+import { HINT_KEY, navKeyHints } from "@/lib/nav-hints";
+import { useIsMac } from "@/lib/use-is-mac";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -66,6 +68,9 @@ export function UserMenu({
   activeChurchId?: string | null;
 }) {
   const t = useT();
+  /* The keys to print, worked out for this machine once. */
+  const isMac = useIsMac();
+  const hints = useMemo(() => navKeyHints(isMac), [isMac]);
   const router = useRouter();
   const { setTheme } = useTheme();
   const [switching, startSwitch] = useTransition();
@@ -147,7 +152,19 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings />
-            {t("nav.settings")}
+            <span className="flex-1">{t("nav.settings")}</span>
+            {/*
+              The chord, printed here for the same reason it is printed beside
+              the menu rows — and more so, because this is the one taught key
+              whose destination is no longer in the sidebar at all. Without it,
+              moving Settings into this menu would have quietly taken G S out
+              of the only place somebody would ever read it.
+            */}
+            {hints["/settings"]?.map((k) => (
+              <kbd key={k} aria-hidden className={HINT_KEY}>
+                {k}
+              </kbd>
+            ))}
           </Link>
         </DropdownMenuItem>
         {isSuperAdmin && (

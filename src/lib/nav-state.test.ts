@@ -11,8 +11,8 @@ import {
  *
  * The manual half of this is tested in `admin-nav.test.ts`, which is where it
  * started. What is here is the mode: "expand all", "collapse all" and "only
- * the section I'm in", which a church asked for because seven headings is a
- * lot to read when you only ever use two of them.
+ * the section I'm in", which a church asked for because six headings is a lot
+ * to read when you only ever use two of them.
  */
 
 const groups: NavGroup[] = [
@@ -41,7 +41,7 @@ describe("collapse all", () => {
   it("still leaves the group you are reading open", () => {
     /*
      * Deliberate, and the same rule as everywhere else: the entry for the page
-     * somebody is on must be visible. "Collapse all" closes the other six.
+     * somebody is on must be visible. "Collapse all" closes the other five.
      */
     const open = resolveOpenGroups(groups, allClosed(groups), "/giving");
     expect([...open]).toEqual(["Money"]);
@@ -91,5 +91,61 @@ describe("focus mode", () => {
     expect(here("/attendance")).toEqual(["Services"]);
     expect(here("/giving")).toEqual(["Money"]);
     expect(here("/members")).toEqual(["People"]);
+  });
+});
+
+/*
+ * A heading pressed by hand while the menu is following the page.
+ *
+ * This is what focus mode was missing. There was no way to look inside
+ * another group without the press turning the whole setting off, so a glance
+ * cost the preference, and nothing on screen said it had. Now the press moves
+ * the one open group and the mode survives it.
+ *
+ * What is tested here is the RULE: given a glance, which group is open. How
+ * long a glance lasts is the sidebar's, because it is a lifetime and not a
+ * lookup — the component drops it when the path changes, and anything pure
+ * enough to test here would have to be a comparison against the current page,
+ * which is the bug: it suspends the glance while you are away and revives it
+ * when you come back. It is covered from the outside instead, by the browser
+ * harness that drives a real build.
+ */
+describe("a group opened by hand while following the page", () => {
+  it("wins over the group holding the page", () => {
+    const open = resolveOpenGroups(groups, [], "/members", "focus", "Money");
+    expect([...open]).toEqual(["Money"]);
+  });
+
+  it("is still only one group", () => {
+    const open = resolveOpenGroups(groups, [], "/members", "focus", "Services");
+    expect(open.size).toBe(1);
+  });
+
+  it("is ignored when it names a group that is no longer there", () => {
+    /*
+     * A module can leave the menu between the press and the render — a plan
+     * lapses, a permission is withdrawn, somebody switches church. Honouring
+     * the name would open nothing at all, and an empty sidebar is the one
+     * state this mode must never produce.
+     */
+    const open = resolveOpenGroups(groups, [], "/members", "focus", "Media");
+    expect([...open]).toEqual(["People"]);
+  });
+
+  it("goes back to the page once the glance is dropped", () => {
+    const peeked = resolveOpenGroups(groups, [], "/members", "focus", "Money");
+    const after = resolveOpenGroups(groups, [], "/members", "focus", null);
+    expect([...peeked]).toEqual(["Money"]);
+    expect([...after]).toEqual(["People"]);
+  });
+
+  it("means nothing in manual mode, where the closed list decides", () => {
+    /*
+     * The glance only exists because focus mode has exactly one open group to
+     * move. In manual mode every group has its own remembered state and a
+     * stray value must not quietly override it.
+     */
+    const open = resolveOpenGroups(groups, ["Money"], "/members", "manual", "Money");
+    expect([...open].sort()).toEqual(["People", "Services"]);
   });
 });

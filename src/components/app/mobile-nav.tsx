@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Pin, Search, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import { BetaBadge } from "@/components/beta-badge";
 import { PlanChip } from "@/components/app/plan-chip";
 import { useQuickAccess } from "@/components/app/nav-visits";
+import { QUICK_ACCESS_MAX } from "@/lib/nav-prefs";
 import { rankRows } from "@/lib/palette-rank";
 import {
   mobileNavLeft,
@@ -64,6 +66,7 @@ function SheetRow({
   pathname,
   plan,
   pinned,
+  pinFull,
   onPin,
   onNavigate,
 }: {
@@ -71,12 +74,31 @@ function SheetRow({
   pathname: string;
   plan: string;
   pinned: boolean;
+  /** Quick access already holds its four; only an unpinned row is refused. */
+  pinFull: boolean;
   onPin: () => void;
   onNavigate: () => void;
 }) {
   const t = useT();
   const active = isActive(pathname, item.href);
   const label = t(item.labelKey);
+  /*
+   * At the cap the tap is refused and says so, rather than re-slicing the list
+   * to its first four and appearing to have done nothing.
+   *
+   * On a phone the refusal has to be the TOAST. There is no hover, so the
+   * tooltip never shows; the greyer pin is a colour step nobody can be asked
+   * to notice; and the tap highlight is kept for the same reason — a control
+   * that does not acknowledge a tap reads as a dead app, whatever it then
+   * says. The name keeps the module in it and the reason is appended, so a
+   * screen reader still hears which row it is on.
+   */
+  const blocked = !pinned && pinFull;
+  const pinName = pinned
+    ? t("nav.unpin", { name: label })
+    : t("nav.pin", { name: label });
+  const why = t("nav.quickFull", { max: String(QUICK_ACCESS_MAX) });
+  const pinLabel = blocked ? `${pinName} — ${why}` : pinName;
   return (
     <div className={cn("flex items-stretch", active && "bg-primary/5")}>
       <Link
@@ -111,11 +133,17 @@ function SheetRow({
       </Link>
       <button
         type="button"
-        onClick={onPin}
+        onClick={() => {
+          if (blocked) {
+            toast(why);
+            return;
+          }
+          onPin();
+        }}
         aria-pressed={pinned}
-        aria-label={
-          pinned ? t("nav.unpin", { name: label }) : t("nav.pin", { name: label })
-        }
+        aria-disabled={blocked || undefined}
+        aria-label={pinLabel}
+        title={pinLabel}
         className={cn(
           // No rule down its left edge: a border there turns twenty-seven
           // optional controls into a table column, which is most of what the
@@ -123,6 +151,7 @@ function SheetRow({
           // and quiet when not.
           "active:bg-accent grid w-12 shrink-0 place-items-center transition-colors",
           pinned ? "text-primary" : "text-muted-foreground/30",
+          blocked && "text-muted-foreground/25",
         )}
       >
         <Pin className={cn("size-4", pinned && "fill-current")} />
@@ -351,6 +380,7 @@ export function MobileNav({
                         pathname={pathname}
                         plan={plan}
                         pinned={quick.isPinned(item.href)}
+                        pinFull={quick.full}
                         onPin={() => quick.toggle(item.href)}
                         onNavigate={closeSheet}
                       />
@@ -369,8 +399,8 @@ export function MobileNav({
                       {/*
                         Chips rather than rows. On a phone the value of the
                         shortcut row is that the whole of it is visible at once
-                        without scrolling, and six full-height rows with
-                        descriptions is already most of the screen.
+                        without scrolling, and four full-height rows with
+                        descriptions is already a third of the screen.
                       */}
                       <div className="flex flex-wrap gap-2">
                         {quick.rows.map((row) => {
@@ -428,6 +458,7 @@ export function MobileNav({
                             pathname={pathname}
                             plan={plan}
                             pinned={quick.isPinned(item.href)}
+                            pinFull={quick.full}
                             onPin={() => quick.toggle(item.href)}
                             onNavigate={closeSheet}
                           />

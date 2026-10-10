@@ -150,7 +150,7 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
         blocks: [
           {
             kind: "text",
-            text: "The menu is six groups — Services & events, Giving & finance, People, Insights, Communication, Media & sharing — and every heading folds away on its own if you press it. At the very bottom of the menu, under the last group, there is a small control with three sliders on it that does the same thing to all of them at once.",
+            text: "The menu is six groups — Services & events, Giving & finance, People, Insights, Communication, Media & sharing — and every heading folds away on its own if you press it. Next to the arrow that narrows the menu, at the top, there is a small control with three sliders on it that does the same thing to all six at once.",
           },
           {
             kind: "steps",
@@ -163,18 +163,18 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
               {
                 title: "Collapse all",
                 detail:
-                  "Every group folded to its heading, except the one holding the page you are on — that one stays open, so you can always see where you are. Seven headings and nothing else is the shortest the menu goes.",
+                  "Every group folded to its heading, except the one holding the page you are on — that one stays open, so you can always see where you are. Six headings and nothing else is the shortest the menu goes.",
               },
               {
                 title: "Only the one I'm in",
                 detail:
-                  "The menu follows you. Open Giving and the Giving & finance group opens by itself and the rest fold away; open Members and People opens instead. Nothing to press and nothing to remember — useful if you work in one or two parts of the app and the other five are noise.",
+                  "The menu follows you. Open Giving and the Giving & finance group opens by itself and the rest fold away; open Members and People opens instead. One group open at a time, always the one you are working in. Nothing to press and nothing to remember — useful if you work in one or two parts of the app and the other five are noise.",
               },
             ],
           },
           {
             kind: "note",
-            text: "Pressing a heading by hand while “Only the one I'm in” is on switches back to doing it yourself, keeping the menu exactly as it looks at that moment. Whichever you choose is remembered on that computer, so you set it once.",
+            text: "While “Only the one I'm in” is on, pressing a heading moves the open group rather than adding to it: press Media & sharing and Media & sharing opens while the rest fold. It is a look, not a change of mind — the setting stays on, and the next page you open puts the menu back on the group you are working in. Whichever of the three you choose is remembered on that computer, so you set it once.",
           },
           {
             kind: "text",
@@ -187,11 +187,15 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
         blocks: [
           {
             kind: "text",
-            text: "On a computer, thirteen of the menu entries have two small keys printed on the right-hand side — “G M” beside Members, “G A” beside Attendance. That is the shortcut for that page, shown where you are already looking rather than in a list you have to go and find.",
+            text: "On a computer, thirteen places in the menu have two small keys printed beside them — “G M” beside Members, “G A” beside Attendance. Eleven are in the list itself, one is Help & Support at the bottom, and the last is Settings inside the menu under your own name. That is the shortcut for that page, shown where you are already looking rather than in a list you have to go and find.",
           },
           {
             kind: "text",
             text: "They fade out as your pointer crosses the row, because the pin button for Quick access sits in the same corner. Nothing is lost: the keys are for reading the menu, and by the time you are hovering one row you have already found what you wanted.",
+          },
+          {
+            kind: "text",
+            text: "That pin is the other half of the same idea. Quick access — the short list above the first group — holds four, either the ones you pin or the ones the app has noticed you keep opening, and pinned ones are never pushed out by a guess. Four because the list sits above the menu proper: a longer one stops being a shortcut and starts being a second menu. At four the pin says so, and you unpin one to make room.",
           },
         ],
       },

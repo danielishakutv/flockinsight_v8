@@ -28,6 +28,17 @@ import { SHORTCUTS, keyLabel, type Shortcut } from "@/lib/shortcuts";
  * them would make "G M" and "Ctrl B" look like the same instruction when one
  * is two presses and the other is one.
  */
+/**
+ * How one printed key looks, wherever it is printed.
+ *
+ * Here rather than in the sidebar because three places print these now — the
+ * menu rows, the rail's hover label, and Settings in the account menu — and
+ * three copies of a class string is three chances for one of them to end up a
+ * different size from the others.
+ */
+export const HINT_KEY =
+  "text-muted-foreground/70 border-border/60 bg-sidebar-accent/40 rounded border px-1 py-px font-mono text-[10px] font-semibold leading-none";
+
 export function navKeyHints(
   isMac: boolean,
   shortcuts: readonly Shortcut[] = SHORTCUTS,

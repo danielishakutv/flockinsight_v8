@@ -158,6 +158,7 @@ export const yo: PartialDictionary = {
     pin: "Kan {name} mọ́ ìwọlé kíákíá",
     unpin: "Yọ {name} kúrò nínú ìwọlé kíákíá",
     removeShortcut: "Yọ ọ̀nà kúkúrú {name} kúrò",
+    quickFull: "Ìwọlé kíákíá gba {max}. Yọ ọ̀kan kúrò kí o ní àyè.",
     collapseMenu: "Dín àtòjọ kù sí àmì",
     expandMenu: "Fi orúkọ àtòjọ hàn",
     sectionOptions: "Bí àwọn apá ṣe ń ṣí",

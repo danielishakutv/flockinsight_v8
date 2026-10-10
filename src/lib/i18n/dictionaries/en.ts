@@ -252,6 +252,7 @@ export const en = {
     pin: "Pin {name} to Quick access",
     unpin: "Unpin {name} from Quick access",
     removeShortcut: "Remove the {name} shortcut",
+    quickFull: "Quick access holds {max}. Unpin one to make room.",
     collapseMenu: "Collapse the menu to icons",
     expandMenu: "Show the menu labels",
     sectionOptions: "How the sections open",

@@ -1,9 +1,9 @@
 /**
  * "Quick access": the handful of places this person actually goes.
  *
- * Twenty-seven modules in seven groups is a well-organised menu and still a
- * menu you scroll. Nobody uses twenty-seven; a church secretary uses five, a
- * treasurer uses three, and they are not the same five. Surfacing them at the
+ * Twenty-seven modules in six groups is a well-organised menu and still a
+ * menu you scroll. Nobody uses twenty-seven; a church secretary uses four, a
+ * treasurer uses three, and they are not the same four. Surfacing them at the
  * top is the one change that shortens the common path without taking anything
  * away from anybody — the full menu is still underneath, in the same order,
  * every time.
@@ -48,8 +48,23 @@ export type QuickItem = {
  */
 export const HALF_LIFE_DAYS = 14;
 
-/** Pins plus guesses. Six rows is a glance; ten is a second menu. */
-export const QUICK_ACCESS_MAX = 6;
+/**
+ * Pins plus guesses. Four rows is a glance; ten is a second menu.
+ *
+ * It was six, and six was too many for two separate reasons. The row sits
+ * above the first group, so every slot it fills pushes the real menu further
+ * down — at six it reached the fold on a 13-inch laptop, which is the machine
+ * this is for. And the fifth and sixth guesses are not habits: by then the
+ * ranking is scraping pages somebody opened twice a fortnight ago, so the
+ * bottom of the list was the part most likely to be wrong and the part that
+ * cost the most room.
+ *
+ * Four is also about what a person actually has. A secretary's four are
+ * Attendance, Members, Giving and Communication; a treasurer's are three.
+ * Nothing is taken away by the cap — the full menu is directly underneath, in
+ * the same order, every time.
+ */
+export const QUICK_ACCESS_MAX = 4;
 
 /**
  * A destination has to be visited twice before we will claim it is a habit.
@@ -258,11 +273,74 @@ export function rankQuickAccess({
   return [...pinned, ...keep.map((href) => ({ href, pinned: false }))];
 }
 
-/** Pinning and unpinning, keeping the order they were added in. */
+/**
+ * The stored pin list, read against the menu actually in front of somebody.
+ *
+ * `fi-nav-pins` is one key per browser, so the list and the pins on screen are
+ * not the same thing, and every rule about the cap has to be about the second:
+ *
+ *  - **carried**: pinned, but with no row here — another church's module after
+ *    a switch, or one a withdrawn permission has taken away. They cannot be
+ *    unpinned from this screen, so counting them towards the cap would be a
+ *    refusal pointing at a control that does not exist. Handed back untouched
+ *    on every write: a different church is not a tidy-up.
+ *  - **pins**: what this person can see and act on, capped.
+ *  - anything visible past the cap is in neither, so the next write drops it.
+ *    That is the list a browser is holding from yesterday, when the cap was
+ *    six. Keeping it would make "unpin one to make room" false — unpinning one
+ *    of four would only ever promote the fifth — so normalising once is the
+ *    honest trade.
+ *
+ * Stored order throughout, because pins show in the order they were added and
+ * a reconciliation must not reshuffle somebody's rows.
+ */
+export function reconcilePins(
+  stored: readonly string[],
+  allowed: ReadonlySet<string>,
+  max = QUICK_ACCESS_MAX,
+): { pins: string[]; carried: string[] } {
+  const pins: string[] = [];
+  const carried: string[] = [];
+  for (const href of stored) {
+    if (!allowed.has(href)) carried.push(href);
+    else if (pins.length < max) pins.push(href);
+  }
+  return { pins, carried };
+}
+
+/**
+ * Pinning and unpinning, keeping the order they were added in.
+ *
+ * At the cap a new pin is REFUSED, and the button that would have added it
+ * says so first. What this used to do was `[...pins, href].slice(0, MAX)`,
+ * which keeps the FIRST four of five — so the press quietly did nothing, and
+ * the person pressed it again. Worse, once the cap came down from six to
+ * four, that same slice would have thrown away two pins somebody had already
+ * declared, as a side effect of pressing a third thing. Neither belongs in a
+ * menu. `pinsFull` is what the button asks, `nav.quickFull` is what it says.
+ *
+ * Unpinning is never refused, whatever length the list is — including a list
+ * stored under the older, larger cap, which is how somebody gets back down to
+ * four. What counts towards the cap is decided above this function, in
+ * `useQuickAccess`: a pin whose module is not in this person's menu at all has
+ * no row to unpin it from, so counting it would be a refusal pointing at a
+ * control that does not exist. This function only adds and removes.
+ */
 export function togglePin(pins: readonly string[], href: string): string[] {
-  return pins.includes(href)
-    ? pins.filter((h) => h !== href)
-    : [...pins, href].slice(0, QUICK_ACCESS_MAX);
+  if (pins.includes(href)) return pins.filter((h) => h !== href);
+  if (pinsFull(pins)) return [...pins];
+  return [...pins, href];
+}
+
+/**
+ * No room for another pin. Read by the control that would add one.
+ *
+ * Pass the pins somebody can actually see and act on — see `useQuickAccess`,
+ * which is where the stored list is reconciled with the menu in front of
+ * them. Handing it the raw stored list is how a cap becomes a locked door.
+ */
+export function pinsFull(pins: readonly string[]): boolean {
+  return pins.length >= QUICK_ACCESS_MAX;
 }
 
 /* ------------------------------------------------------------------ *
