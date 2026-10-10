@@ -29,6 +29,33 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.73.2",
+    date: "2026-10-11",
+    summary:
+      "Meetings again, and this time in the half of the code that every real meeting actually uses. Devices that froze with a black screen, voices that dropped on a good line, and a recording that silenced the host's own microphone — all three traced, fixed and now measured.",
+    changes: {
+      Fixed: [
+        "Devices freezing with a black screen part-way through a long meeting. A browser kept every voice it had ever been sent — including from people who had left — so a meeting joined forty-eight times left a laptop holding fifty audio players it no longer needed, and a phone could not survive it. Everything belonging to somebody who has left is now handed back the moment they go.",
+        "A microphone that stopped being heard when a recording started, and stayed unheard even after leaving and rejoining. The recording now takes its own copy of the voice instead of borrowing the live one.",
+        "Audio dropping briefly on a good connection. One rough second in ten was enough to make the meeting re-judge the line and re-time everybody's sound, which is itself a click. It now waits for a second opinion before changing anything — but still protects a call that has genuinely gone bad at once.",
+        "Pressing Record twice when the first press seemed to do nothing. The button now changes the moment recording starts rather than after the server answers, a second recording cannot be started by mistake, and neither can two be started from two devices.",
+        "Recordings made from a meeting link were never uploaded, because the part of the app that sends them was only running on the signed-in pages. They upload from the meeting itself now — and if nobody is signed in on that device, it says so and tells you what to do instead of retrying silently for ever.",
+        "A recording of a reading or a verse re-measured every word of it twelve times a second for the whole recording. It is worked out once.",
+        "Leaving the meeting page by a link or the back button left the recorder running invisibly — still compositing video, still holding the microphone. It stops.",
+        "A microphone the operating system takes away — a headset unplugged, a phone call arriving — was noticed only if the device reported it one particular way. The other way is now noticed too, and if the microphone cannot be recovered the meeting stops showing you as live instead of letting you talk to nobody.",
+        "A connection that lost its network could only repair itself on one side of each pair, which is worse than not trying. Either side can now recover it.",
+        "A voice recording made with nothing but voices in it missed anybody who joined after it started.",
+      ],
+      Added: [
+        "The People panel now shows whether YOUR voice is actually leaving your device, and says so plainly if your microphone is working but the meeting is not receiving it. Until now that figure was always zero on large meetings whether it was working or not.",
+        "A meeting writes down any moment this device stops responding, and shows it in the People panel afterwards — so a laptop that froze can say so once it is back, instead of the freeze being invisible to everyone including whoever it happened to.",
+      ],
+      Security: [
+        "The media server's controls are now proved to belong to the person using them. Anyone in a meeting could previously have taken another person's microphone and camera away from the whole room, or pointed the room at somebody else's media. Nobody waiting in the lobby can reach the media server at all.",
+      ],
+    },
+  },
+  {
     version: "0.73.1",
     date: "2026-10-10",
     summary:

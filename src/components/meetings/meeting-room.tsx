@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatBytes } from "@/lib/storage-bytes";
+import { watchStalls, worstStall } from "@/lib/meeting-stalls";
+import { RecordingUploader } from "@/components/meetings/recording-uploader";
 import {
   meetingSoundsDefault,
   meetingSoundsEnabled,
@@ -377,6 +379,8 @@ export function MeetingRoom(props: {
    * recording code exists, so moving it would be a use-before-declaration.
    */
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+  /** True between pressing Record and the recorder actually running. */
+  const startingRecordingRef = useRef(false);
   const frameRef = useRef({ stage: EMPTY_STAGE as Stage, media, roster, localStream });
 
   const me = session?.me;
@@ -662,8 +666,23 @@ export function MeetingRoom(props: {
              * "my audio cut out and never came back".
              */
             onMicInterrupted: (outcome) => {
-              if (outcome === "recovered") toast.info(t("meetings.micRecovered"));
-              else toast.error(t("meetings.micLost"), { duration: 12000 });
+              if (outcome === "recovered") {
+                toast.info(t("meetings.micRecovered"));
+                return;
+              }
+              /*
+               * "unheard" is the one that was silent until now: the microphone
+               * is open and hearing the person perfectly, and none of it is
+               * reaching the meeting. It stays on screen until dismissed,
+               * because somebody who cannot be heard has no other way to find
+               * out and the alternative is a whole service spent talking to
+               * nobody.
+               */
+              if (outcome === "unheard") {
+                toast.error(t("meetings.micUnheard"), { duration: Infinity });
+                return;
+              }
+              toast.error(t("meetings.micLost"), { duration: 12000 });
             },
             /*
              * A connection that had to be thrown away and dialled again.
@@ -780,6 +799,46 @@ export function MeetingRoom(props: {
   // The context holds an audio device open, which on a phone is the difference
   // between a call ending and the earpiece staying taken.
   useEffect(() => releaseMeetingSounds, []);
+
+  /*
+   * And stop the recorder if this component ever goes away.
+   *
+   * Leaving the room by navigation — a link, the browser's back button, a
+   * router push — unmounted everything and left the recorder running: a 12fps
+   * paint loop compositing a 1280x720 canvas, a MediaRecorder still pushing
+   * five-second blobs into an array nobody holds, an audio graph still reading
+   * the microphone, and a pile of hidden players still decoding. On a laptop
+   * that is a tab that gets slower until it stops; nothing stopped it but
+   * closing the browser.
+   *
+   * The file is in the vault before any of this, so stopping is safe.
+   */
+  useEffect(() => {
+    return () => {
+      const recorder = recorderRef.current;
+      if (!recorder) return;
+      recorderRef.current = null;
+      void recorder.stop().catch((e: unknown) => {
+        console.error("[meetings] the recorder did not stop cleanly on unmount", e);
+      });
+    };
+  }, []);
+
+  /*
+   * Write down any minute this device spends not responding.
+   *
+   * Three devices in one meeting froze with a black screen, dropped out, and
+   * came back — and there was nothing to look at afterwards, because the only
+   * witness was a tab that had stopped running and whoever it happened to had
+   * already reloaded. This survives that reload. It costs one timer.
+   */
+  useEffect(() => {
+    if (phase !== "live") return;
+    return watchStalls(() => ({
+      connections: null,
+      elements: document.querySelectorAll("video, audio").length,
+    }));
+  }, [phase]);
 
   /* ============================================================
    * Timers
@@ -1239,6 +1298,24 @@ export function MeetingRoom(props: {
         return;
       }
 
+      /*
+       * One recording at a time, and the guard has to be synchronous.
+       *
+       * `MeetingRecorder.start()` refuses a second start — but only on the
+       * same instance, and this made a brand-new one on every press, so that
+       * guard could never fire. Worse, the REC pill and the menu only change
+       * after `recording.start` has been to the server and back, so on a slow
+       * connection the host pressed Record, saw nothing happen, and pressed it
+       * again. The second press orphaned the first recorder ALIVE: its paint
+       * loop, its MediaRecorder, its audio graph and its hidden players all
+       * kept running with nothing holding them, and only the second was ever
+       * stopped. Two rows, eight seconds apart, both nought bytes.
+       */
+      // Both refs, so the guard is synchronous and this callback's identity
+      // does not change every time the recording state does.
+      if (recorderRef.current || startingRecordingRef.current) return;
+      startingRecordingRef.current = true;
+
       const recorder = new MeetingRecorder({
         mode,
         churchName: props.churchName,
@@ -1281,12 +1358,26 @@ export function MeetingRoom(props: {
         },
       });
 
-      const started = await recorder.start();
-      if (!started) return;
-      recorderRef.current = recorder;
+      let started = false;
+      try {
+        started = await recorder.start();
+        if (!started) return;
+        recorderRef.current = recorder;
 
-      const res = await runAction("recording.start", { mode });
-      setRecording({ id: (res?.recordingId as string) ?? null, mode });
+        /*
+         * Said on screen BEFORE the round trip, so the pill and the menu
+         * change the instant the recorder is running. Waiting for the server
+         * is what made the host press it twice.
+         */
+        setRecording({ id: null, mode });
+        const res = await runAction("recording.start", { mode });
+        setRecording({ id: (res?.recordingId as string) ?? null, mode });
+      } finally {
+        startingRecordingRef.current = false;
+        // A recorder that would not start must not leave the room believing
+        // one is running.
+        if (!started) setRecording(null);
+      }
       setRecordingElapsed(0);
       toast.success(
         t("meetings.recordingStarted", { name: t("meetings.host") }),
@@ -1797,6 +1888,23 @@ export function MeetingRoom(props: {
         <AudioSink key={m.peerId} stream={m.stream} />
       ))}
 
+      {/*
+        The uploader, here as well as in the app shell.
+
+        Its own note says it belongs in the shell "rather than in the meeting
+        room", and the reason was sound: the old one unmounted mid-upload when
+        somebody left. What that missed is that a meeting lives at /meet/<code>,
+        which is NOT inside the app shell — so a host who recorded and then
+        closed the tab had a recording that was never uploaded by anything, and
+        the row sat at "uploading" until a cron called it failed. Eleven of them
+        did.
+
+        It is safe here now for the same reason it was unsafe before: the file
+        is in the vault before a byte is sent, and the server decides where to
+        resume. Unmounting costs progress, not the recording.
+      */}
+      <RecordingUploader />
+
       {/* Header */}
       <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="min-w-0 flex-1">
@@ -2263,6 +2371,10 @@ export function MeetingRoom(props: {
           onMuteAll={() => void runAction("mute")}
           onLowerHands={() => void runAction("lower-hands")}
           diagnostics={diagnostics}
+          // Read when the panel opens rather than watched: it changes only
+          // when this device has just had a very bad second, and re-rendering
+          // the room for it would be its own small irony.
+          deviceStall={worstStall()}
           attendeeMediaLocked={
             meeting?.allowAttendeeMic === false ||
             meeting?.allowAttendeeCamera === false

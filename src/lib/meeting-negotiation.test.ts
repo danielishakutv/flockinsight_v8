@@ -426,8 +426,9 @@ async function midFirstOffer(myPeerId: string, theirPeerId: string) {
   return { engine, pc, theirPeerId };
 }
 
-/** Mirrors PEER_RESET_LIMIT in meeting-client.ts. */
-const PEER_RESET_LIMIT = 3;
+/** Mirrors the two budgets in meeting-client.ts. */
+const PEER_RESET_LIMIT = 4;
+const VOICE_RESHAPE_LIMIT = 2;
 
 /* ============================================================
  * A change of voice is a new connection
@@ -579,15 +580,19 @@ describe("a connection that stops negotiating", () => {
     expect(pc.signalingState).toBe("stable");
   });
 
-  it("is not rebuilt for ever", async () => {
+  it("will not spend the recovery budget on the voice", async () => {
     /*
-     * A connection that cannot be negotiated three times running has
-     * something else wrong with it, and rebuilding without end turns a bad
-     * link into a permanent reconnect loop.
+     * Two budgets, not one. Rebuilding for a better-protected voice is a
+     * comfort; rebuilding to recover a wedged connection is the call working
+     * at all. They used to share three attempts, so three ordinary quality
+     * wobbles in the first minutes left nothing for a connection that broke
+     * later — and it could then never be repaired.
+     *
+     * So the voice gets its own smaller allowance and cannot touch the other.
      */
     const { engine } = await inACall("aaa", "zzz");
 
-    for (let round = 0; round < PEER_RESET_LIMIT + 2; round++) {
+    for (let round = 0; round < VOICE_RESHAPE_LIMIT + 3; round++) {
       jumpPastTheCooldown();
       await engine.setLowData(round % 2 === 0);
       await new Promise((r) => setTimeout(r, 60));
@@ -602,8 +607,10 @@ describe("a connection that stops negotiating", () => {
       if (latest.signalingState === "have-local-offer") await latest.fakeAnswerOurOffer();
     }
 
-    expect(signalsTo("zzz").filter((s) => s.type === "renegotiate").length).toBe(
-      PEER_RESET_LIMIT,
-    );
+    expect(
+      signalsTo("zzz").filter((s) => s.type === "renegotiate").length,
+      "the voice should stop at its own budget, well short of the recovery one",
+    ).toBe(VOICE_RESHAPE_LIMIT);
+    expect(VOICE_RESHAPE_LIMIT).toBeLessThan(PEER_RESET_LIMIT);
   });
 });

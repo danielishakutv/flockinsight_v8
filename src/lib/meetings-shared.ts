@@ -481,6 +481,55 @@ export function rateLink(opts: {
   return "good";
 }
 
+/** Worst first is the order that matters: a higher number is a worse link. */
+const QUALITY_RANK: Record<MeetingQuality, number> = { good: 0, fair: 1, poor: 2, lost: 3 };
+
+/**
+ * Should this reading actually change the verdict yet?
+ *
+ * `rateLink` has no hysteresis and a low bar — two per cent of concealed
+ * speech is "fair", and one gust inside a four-second window clears that. The
+ * reading is also the WORST of everybody arriving, so in a room of ten the
+ * chance that nobody had a rough window is small.
+ *
+ * On its own that would only mislabel a connection. What made it audible is
+ * what the verdict DOES: the voice profile follows it and the profile carries
+ * the jitter buffer, so every flip re-times every receiver at once. Shrinking
+ * a live playout buffer has to drop or hurry audio and growing it has to
+ * invent some — both are heard. A link flickering between "good" and "fair"
+ * was therefore a link that clicked every few seconds, on a connection its
+ * owner would describe as good.
+ *
+ * So an IMPROVEMENT has to be confirmed by a second consecutive sample, and
+ * getting worse is acted on at once: being slow to protect a call that has
+ * genuinely gone bad is the one mistake worth avoiding here, and the
+ * protections cost nothing when they turn out not to be needed.
+ */
+export function settleVerdict(opts: {
+  current: MeetingQuality;
+  reading: MeetingQuality;
+  /** The reading that is waiting to be confirmed, and how many times seen. */
+  candidate: { quality: MeetingQuality; samples: number } | null;
+  /** Consecutive agreeing samples an improvement needs. */
+  confirmations?: number;
+}): {
+  apply: boolean;
+  candidate: { quality: MeetingQuality; samples: number } | null;
+} {
+  const { current, reading, candidate } = opts;
+  const needed = opts.confirmations ?? 2;
+
+  if (reading === current) return { apply: false, candidate: null };
+
+  if (QUALITY_RANK[reading] > QUALITY_RANK[current]) {
+    return { apply: true, candidate: null };
+  }
+
+  const samples = candidate?.quality === reading ? candidate.samples + 1 : 1;
+  if (samples < needed) return { apply: false, candidate: { quality: reading, samples } };
+  return { apply: true, candidate: null };
+}
+
 export const QUALITY_LABEL: Record<MeetingQuality, string> = {
   good: "Good connection",
   fair: "Connection is a bit weak",

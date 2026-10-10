@@ -14,6 +14,7 @@ import {
   type RemoteTrack,
   type SessionDescription,
 } from "@/lib/sfu";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,8 @@ type Body = {
   secret?: unknown;
   action?: unknown;
   session?: unknown;
+  /** The proof that this session was minted for this peer. */
+  proof?: unknown;
   sdp?: unknown;
   tracks?: unknown;
   mids?: unknown;
@@ -67,6 +70,50 @@ function description(v: unknown): SessionDescription | null {
   return { type: d.type, sdp: d.sdp };
 }
 
+/* ============================================================
+ * Proving a session belongs to the caller
+ *
+ * Every action but "session" names a Cloudflare session id, and the id of
+ * everybody's PUBLISHER is broadcast to the whole room in every roster — it
+ * has to be, because that is how anybody pulls anybody. So a session id is
+ * public knowledge, and it was also the only thing these actions checked.
+ *
+ * "pull" did verify that the session named belonged to this meeting. "close",
+ * "renegotiate" and "publish" verified nothing at all, which meant any
+ * authenticated guest could post
+ *
+ *     { action: "close", session: "<the preacher's session>", mids: ["0","1","2"] }
+ *
+ * and take that person's microphone, camera and screen away from everybody for
+ * the rest of the meeting — silently, because a forced close skips
+ * renegotiation and the victim's connection stays up. "publish" was worse: the
+ * id went straight onto the CALLER's row, so a guest could make the roster
+ * point at somebody else's media.
+ *
+ * The fix needs no new table. When a session is minted, the route hands back a
+ * short proof alongside it: an HMAC over (this participant, that session) with
+ * a server secret the browser never sees. Later actions send the proof back
+ * and it is recomputed. A session id remains public; a session id WITH a valid
+ * proof means "the server gave this to you".
+ * ========================================================== */
+
+function sessionProof(participantId: string, sessionId: string): string {
+  const secret =
+    process.env.BETTER_AUTH_SECRET || process.env.CRON_SECRET || "flockinsight-dev";
+  return createHmac("sha256", secret)
+    .update(`sfu:${participantId}:${sessionId}`)
+    .digest("base64url");
+}
+
+/** Constant-time, because this is a signature check. */
+function proofHolds(participantId: string, sessionId: string, given: unknown): boolean {
+  if (typeof given !== "string" || given.length === 0) return false;
+  const expected = sessionProof(participantId, sessionId);
+  const a = Buffer.from(expected);
+  const b = Buffer.from(given);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ code: string }> },
@@ -82,12 +129,38 @@ export async function POST(
 
   const action = str(body?.action, 32);
 
+  /*
+   * Nobody in the lobby touches the media server.
+   *
+   * This was never checked, so somebody held at the door — not admitted, not
+   * visible in the roster, possibly refused a moment later — could mint a
+   * session and pull every microphone in the meeting. A waiting room that does
+   * not stop someone listening is not a waiting room.
+   */
+  if (!peer.admitted) return fail("You're still waiting to be let in.", 403);
+
+  /*
+   * And every action but the first has to prove the session is its own.
+   */
+  if (action !== "session") {
+    const sessionId = str(body?.session, 200);
+    if (!sessionId) return fail("Malformed request.", 400);
+    if (!proofHolds(peer.id, sessionId, body?.proof)) {
+      console.warn(
+        `[sfu] ${peer.peerId} named session ${sessionId.slice(0, 8)}… without a valid proof`,
+      );
+      return fail("That media session isn't yours.", 403);
+    }
+  }
+
   try {
     switch (action) {
       /* ------------------------------------------------- a new session */
       case "session": {
         const sessionId = await newSession();
-        return json({ ok: true, sessionId });
+        // The proof travels with it, and only ever to the peer it was made
+        // for. See the note above.
+        return json({ ok: true, sessionId, proof: sessionProof(peer.id, sessionId) });
       }
 
       /* ------------------------------------------- publish my own media */
@@ -110,9 +183,9 @@ export async function POST(
 
         /*
          * Remember where they publish, so the roster can tell everybody else.
-         * Written server-side from the session WE created for them — a client
-         * that could name its own would be able to point the room at
-         * somebody else's media.
+         * Safe to take from the body now only because the proof above
+         * establishes that this session was minted for THIS participant —
+         * without it, a guest could point the room at somebody else's media.
          */
         await db
           .update(meetingParticipant)

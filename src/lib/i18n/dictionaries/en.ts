@@ -1455,6 +1455,10 @@ export const en = {
       "A connection in this meeting stopped working, so we've rebuilt it.",
     soundsOff: "Mute join and leave sounds",
     soundsOn: "Play join and leave sounds",
+    deviceStalled:
+      "This device stopped responding for {seconds}s during a meeting. That is what drops someone out of a call.",
+    micUnheard:
+      "Your microphone is working but the meeting isn't receiving it. Stop any recording, then turn your microphone off and on again. If that doesn't help, reload the page.",
     diagVoice: "voice",
     diagInvented: "invented",
     diagHeld: "held",

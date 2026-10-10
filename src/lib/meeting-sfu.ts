@@ -46,6 +46,15 @@ export type SfuEvents = {
 
 type Api = (action: string, body: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
+/**
+ * Attempts at one track before it is left alone.
+ *
+ * A track that is not published yet appears within a second or two, which is
+ * what the retry is for. One that never will must stop asking, because every
+ * attempt renegotiates the session every voice in the room arrives on.
+ */
+const PULL_ATTEMPTS = 6;
+
 type PulledTrack = { peerId: string; name: string };
 
 /** One person's connection, as the subscriber sees it. */
@@ -69,6 +78,9 @@ export class SfuTransport {
 
   private publisherSession: string | null = null;
   private subscriberSession: string | null = null;
+  /** The route's proof that each session was minted for this participant. */
+  private publisherProof = "";
+  private subscriberProof = "";
 
   /** Our own sendonly transceivers, by track name. */
   private senders = new Map<string, RTCRtpTransceiver>();
@@ -78,6 +90,9 @@ export class SfuTransport {
   private incoming = new Map<string, PulledTrack>();
   /** What we have already asked for, so a poll does not re-pull every tick. */
   private pulled = new Set<string>();
+  /** Failed attempts per track, and when the next one may be made. */
+  private pullTries = new Map<string, number>();
+  private pullAfter = new Map<string, number>();
 
   /** Per-peer media, assembled as tracks arrive. */
   private media = new Map<string, { stream: MediaStream; screen: MediaStream }>();
@@ -250,11 +265,33 @@ export class SfuTransport {
       if (this.stopped) return;
 
       if (!this.publisher) {
+        /*
+         * The session FIRST, and the connection only if it was granted.
+         *
+         * This was the other way round, so a Cloudflare hiccup left
+         * `this.publisher` set and `publisherSession` null — and because the
+         * connection existed, nothing ever tried again. That person was mute
+         * for the rest of the meeting and nothing said why.
+         */
+        const session = await this.session().catch((e: unknown) => {
+          console.error("[sfu] no publishing session; will try again", e);
+          return null;
+        });
+        if (!session) {
+          this.events.onError?.(
+            "We could not reach the media server to send your voice. Trying again.",
+          );
+          return;
+        }
+        this.publisherSession = session.id;
+        this.publisherProof = session.proof;
         this.publisher = this.pc();
         this.publisher.onconnectionstatechange = () => {
-          if (this.publisher) this.events.onState(this.publisher.connectionState);
+          const pc = this.publisher;
+          if (!pc) return;
+          this.events.onState(pc.connectionState);
+          if (pc.connectionState === "failed") this.resetPublisher();
         };
-        this.publisherSession = await this.session();
       }
 
       const wanted: [keyof Published, string, MediaStreamTrack | null][] = [
@@ -300,6 +337,7 @@ export class SfuTransport {
 
       const res = await this.api("publish", {
         session: this.publisherSession,
+        proof: this.publisherProof,
         sdp: {
           type: "offer",
           sdp: this.publisher.localDescription?.sdp ?? "",
@@ -365,6 +403,28 @@ export class SfuTransport {
         if (!live.has(peerId)) this.pulled.delete(key);
       }
 
+      /*
+       * And HAND BACK what they were arriving on.
+       *
+       * Forgetting a departed peer locally was not the same as letting go of
+       * them, and the difference is what made a long meeting fall over. Every
+       * voice is pulled onto the one subscriber session, and nothing here ever
+       * closed a microphone — `dropUnwatched` reclaims cameras and skips
+       * anybody who has left the room at all. So a peer who left took nothing
+       * with them: their transceiver, its decoder and its jitter buffer stayed
+       * for the rest of the meeting, pointed at a Cloudflare session that had
+       * gone, and every later pull renegotiated a description carrying all of
+       * them.
+       *
+       * That cost grows with CHURN rather than with the size of the room,
+       * which is why it never showed in a quick two-person test and did show
+       * in a room of eleven people that was joined forty-eight times: a
+       * browser holding fifty dead audio decoders and renegotiating a
+       * fifty-section description is a browser that hangs, and three of them
+       * did. `src/lib/meeting-sfu-churn.test.ts` holds the arithmetic.
+       */
+      await this.reclaimDeparted(live);
+
       await this.dropUnwatched(live);
 
       const wanted: { sessionId: string; trackName: string }[] = [];
@@ -402,6 +462,18 @@ export class SfuTransport {
         for (const name of available) {
           const key = `${r.peerId}:${name}`;
           if (this.pulled.has(key)) continue;
+          /*
+           * Backed off, because a track that cannot be pulled used to be asked
+           * for again on every poll return — not every four seconds, every
+           * RETURN, which during a busy room is several times a second. Each
+           * attempt renegotiates the subscriber session, so one unpullable
+           * track became a permanent renegotiation storm on the connection
+           * carrying every voice in the room. That is a device locking up.
+           */
+          const tries = this.pullTries.get(key) ?? 0;
+          if (tries >= PULL_ATTEMPTS) continue;
+          const nextAt = this.pullAfter.get(key) ?? 0;
+          if (Date.now() < nextAt) continue;
           wanted.push({ sessionId: r.sfuSessionId as string, trackName: name });
           record.push({ peerId: r.peerId, name });
         }
@@ -410,15 +482,33 @@ export class SfuTransport {
       if (wanted.length === 0) return;
 
       if (!this.subscriber) {
+        const session = await this.session().catch((e: unknown) => {
+          console.error("[sfu] no subscribing session; will try again", e);
+          return null;
+        });
+        if (!session) return;
+        this.subscriberSession = session.id;
+        this.subscriberProof = session.proof;
         this.subscriber = this.pc();
         this.subscriber.ontrack = (e) => this.onTrack(e);
-        this.subscriberSession = await this.session();
+        /*
+         * The connection that carries every voice in the room had no state
+         * handler at all, so a subscriber that failed went unnoticed: the
+         * transport pill said "retrying" while nothing retried, and the person
+         * sat in a silent meeting.
+         */
+        this.subscriber.onconnectionstatechange = () => {
+          const pc = this.subscriber;
+          if (!pc) return;
+          if (pc.connectionState === "failed") this.resetSubscriber();
+        };
       }
 
       let res: Record<string, unknown>;
       try {
         res = await this.api("pull", {
           session: this.subscriberSession,
+          proof: this.subscriberProof,
           tracks: wanted,
         });
       } catch {
@@ -456,7 +546,22 @@ export class SfuTransport {
          * managed to look like success. Left unmarked, so the next poll asks
          * again — a track that is not there yet usually is a moment later.
          */
-        if (t.error || !t.mid) return;
+        if (t.error || !t.mid) {
+          const key = `${who.peerId}:${who.name}`;
+          const tries = (this.pullTries.get(key) ?? 0) + 1;
+          this.pullTries.set(key, tries);
+          // Doubling, capped: a track that is simply not published yet usually
+          // appears within a second or two, and one that never will must stop
+          // costing a renegotiation.
+          this.pullAfter.set(key, Date.now() + Math.min(2 ** tries, 32) * 1000);
+          if (tries === PULL_ATTEMPTS) {
+            console.warn(
+              `[sfu] giving up on ${who.name} from ${who.peerId} after ` +
+                `${tries} attempts: ${t.error?.errorDescription ?? "no reason given"}`,
+            );
+          }
+          return;
+        }
 
         if (t.trackName && t.trackName !== who.name) {
           // Order and names disagreeing means an assumption here is wrong, and
@@ -466,7 +571,10 @@ export class SfuTransport {
         }
 
         // Marked only now, having actually been allocated a mid.
-        this.pulled.add(`${who.peerId}:${who.name}`);
+        const key = `${who.peerId}:${who.name}`;
+        this.pullTries.delete(key);
+        this.pullAfter.delete(key);
+        this.pulled.add(key);
         this.incoming.set(t.mid, who);
       });
 
@@ -481,6 +589,7 @@ export class SfuTransport {
 
       await this.api("renegotiate", {
         session: this.subscriberSession,
+        proof: this.subscriberProof,
         sdp: {
           type: "answer",
           sdp: this.subscriber.localDescription?.sdp ?? "",
@@ -502,35 +611,43 @@ export class SfuTransport {
    * people who are still in the room but no longer on screen — somebody who
    * has left is handled by the caller, which forgets them entirely.
    */
-  private async dropUnwatched(live: Set<string>): Promise<void> {
-    if (this.videoInterest === null || !this.subscriber || !this.subscriberSession) {
-      return;
+  /**
+   * Give back everything belonging to people who have left the room.
+   *
+   * Every kind, not just cameras: a microphone is a decoder and a jitter
+   * buffer too, and it is the one that is always there. Closing the mid is
+   * what lets the media server stop sending, lets the browser release the
+   * decoder, and lets the mid be used again — so the description stops
+   * carrying the whole history of the meeting.
+   *
+   * Their media bundle and `pulled` entries have already been struck by the
+   * caller, so there is nothing to publish to the interface here; this is
+   * purely handing resources back.
+   */
+  private async reclaimDeparted(live: Set<string>): Promise<void> {
+    const mids: string[] = [];
+    for (const [mid, who] of this.incoming) {
+      if (!live.has(who.peerId)) mids.push(mid);
     }
+    for (const mid of await this.closeMids(mids)) this.forget(mid);
+  }
+
+  private async dropUnwatched(live: Set<string>): Promise<void> {
+    if (this.videoInterest === null) return;
 
     const mids: string[] = [];
     for (const [mid, who] of this.incoming) {
       if (who.name !== TRACK_NAMES.camera) continue;
+      // Departed peers are `reclaimDeparted`'s job, every track of them.
       if (!live.has(who.peerId)) continue;
       if (this.videoInterest.has(who.peerId)) continue;
       mids.push(mid);
     }
-    if (mids.length === 0) return;
 
-    try {
-      await this.api("close", { session: this.subscriberSession, mids });
-    } catch {
-      // Leave everything as it is and try again on the next poll. Failing to
-      // close costs bandwidth; getting the bookkeeping wrong loses a picture.
-      return;
-    }
-
-    for (const mid of mids) {
+    for (const mid of await this.closeMids(mids)) {
       const who = this.incoming.get(mid);
+      this.forget(mid);
       if (!who) continue;
-      this.incoming.delete(mid);
-      // Forget it, so coming back on screen pulls it again.
-      this.pulled.delete(`${who.peerId}:${who.name}`);
-
       const bundle = this.media.get(who.peerId);
       if (!bundle) continue;
       for (const t of bundle.stream.getVideoTracks()) bundle.stream.removeTrack(t);
@@ -539,6 +656,57 @@ export class SfuTransport {
         screen: new MediaStream(bundle.screen.getTracks()),
       });
     }
+  }
+
+  /**
+   * Stop accounting for one mid.
+   *
+   * Struck from `pulled` as well as from `incoming`, so the same track coming
+   * back — a camera returning to screen, a person rejoining — is asked for
+   * again rather than found already recorded as had.
+   */
+  private forget(mid: string): void {
+    const who = this.incoming.get(mid);
+    if (!who) return;
+    this.incoming.delete(mid);
+    const key = `${who.peerId}:${who.name}`;
+    this.pulled.delete(key);
+    this.pullTries.delete(key);
+    this.pullAfter.delete(key);
+  }
+
+  /**
+   * Tell the media server to stop sending these.
+   *
+   * Returns the mids it accepted, still present in `incoming` so the caller
+   * can read what they were before calling `forget` on each. Striking the
+   * bookkeeping is deliberately the caller's step rather than this one's: the
+   * camera path needs to know whose picture it was in order to take it off the
+   * screen.
+   *
+   * A failed close is left entirely alone and tried again on the next poll.
+   * Failing to close costs bandwidth for a few seconds; forgetting something
+   * the server is still sending loses a voice or a picture outright.
+   */
+  private async closeMids(mids: string[]): Promise<string[]> {
+    if (mids.length === 0) return [];
+    if (!this.subscriber || !this.subscriberSession) return [];
+
+    try {
+      await this.api("close", {
+        session: this.subscriberSession,
+        proof: this.subscriberProof,
+        mids,
+      });
+    } catch (e) {
+      console.warn(
+        `[sfu] the media server would not close ${mids.length} track(s); ` +
+          `trying again on the next poll`,
+        e,
+      );
+      return [];
+    }
+    return mids.filter((mid) => this.incoming.has(mid));
   }
 
   private onTrack(e: RTCTrackEvent): void {
@@ -580,11 +748,18 @@ export class SfuTransport {
     if (who.name === TRACK_NAMES.mic) this.tuneAudio();
   }
 
-  private async session(): Promise<string> {
+  /**
+   * Ask for a session, and keep the proof that it is ours.
+   *
+   * Session ids are public — everybody's publisher id is in every roster —
+   * so the route will not act on one without the proof it issued alongside.
+   * See the note at the top of `api/meet/[code]/sfu/route.ts`.
+   */
+  private async session(): Promise<{ id: string; proof: string }> {
     const res = await this.api("session", {});
     const id = res.sessionId;
     if (typeof id !== "string") throw new Error("The media server gave no session.");
-    return id;
+    return { id, proof: typeof res.proof === "string" ? res.proof : "" };
   }
 
   /**
@@ -594,6 +769,53 @@ export class SfuTransport {
    * larger of what it has and what arrives, so a reconnection that resets
    * these counters cannot make a church's total go backwards.
    */
+  /**
+   * What OUR OWN microphone is doing: is it hearing anything, and is any of it
+   * leaving the machine?
+   *
+   * Two numbers from two different places, and the pair is the whole point.
+   * `media-source` reports the energy the capture device is producing; the
+   * outbound report says how many packets have actually gone. Sound going in
+   * and nothing going out is a microphone that is working perfectly and is not
+   * in the meeting — which is precisely what a host hit after starting a
+   * recording, and nothing anywhere could tell them, because the People panel
+   * reported this person's outgoing audio as a hardcoded zero on this
+   * transport.
+   *
+   * `totalAudioEnergy` is cumulative and only rises when there is something to
+   * hear, so comparing it against itself distinguishes "nobody is talking"
+   * from "the microphone has been cut off" — which matters here, because DTX
+   * means a silent room legitimately sends almost nothing.
+   */
+  async outgoingAudio(): Promise<{
+    bytesSent: number;
+    packetsSent: number;
+    audioEnergy: number;
+    audioLevel: number;
+  } | null> {
+    if (!this.publisher) return null;
+    const out = { bytesSent: 0, packetsSent: 0, audioEnergy: 0, audioLevel: 0 };
+    try {
+      const report = await this.publisher.getStats();
+      report.forEach((r) => {
+        const x = r as unknown as Record<string, number | string>;
+        if (x.type === "outbound-rtp" && x.kind === "audio") {
+          out.bytesSent += Number(x.bytesSent ?? 0);
+          out.packetsSent += Number(x.packetsSent ?? 0);
+        }
+        if (x.type === "media-source" && x.kind === "audio") {
+          out.audioEnergy = Number(x.totalAudioEnergy ?? 0);
+          out.audioLevel = Number(x.audioLevel ?? 0);
+        }
+      });
+    } catch {
+      // A connection that is closing has nothing to report, which is not a
+      // fault and must not be read as a silent microphone.
+      return null;
+    }
+    return out;
+  }
+
   async totals(): Promise<{ received: number; sent: number }> {
     let received = 0;
     let sent = 0;
@@ -760,6 +982,58 @@ export class SfuTransport {
     return out;
   }
 
+  /**
+   * Throw the publishing connection away so the next `setLocal` builds it again.
+   *
+   * Neither connection was ever rebuilt. A publisher that failed left this
+   * person permanently mute with the pill saying "retrying", and a subscriber
+   * that failed left them in a silent room — in both cases with nothing in the
+   * code that could ever repair it.
+   */
+  private resetPublisher(): void {
+    if (this.stopped) return;
+    console.warn("[sfu] the publishing connection failed; rebuilding it");
+    try {
+      this.publisher?.close();
+    } catch {
+      /* already closed */
+    }
+    this.publisher = null;
+    this.publisherSession = null;
+    this.publisherProof = "";
+    this.senders.clear();
+    this.published = {};
+    this.events.onError(
+      "Your connection to the meeting dropped. Putting it back together.",
+    );
+  }
+
+  /**
+   * Throw the subscribing connection away, and forget everything pulled on it.
+   *
+   * The roster drives `sync`, so the next poll pulls the whole room again —
+   * which is the right recovery, because the mids it was holding belonged to a
+   * session that no longer exists.
+   */
+  private resetSubscriber(): void {
+    if (this.stopped) return;
+    console.warn("[sfu] the subscribing connection failed; rebuilding it");
+    try {
+      this.subscriber?.close();
+    } catch {
+      /* already closed */
+    }
+    this.subscriber = null;
+    this.subscriberSession = null;
+    this.subscriberProof = "";
+    for (const [peerId] of this.media) this.events.onGone(peerId);
+    this.media.clear();
+    this.incoming.clear();
+    this.pulled.clear();
+    this.pullTries.clear();
+    this.pullAfter.clear();
+  }
+
   close(): void {
     this.stopped = true;
     for (const pc of [this.publisher, this.subscriber]) {
@@ -774,6 +1048,8 @@ export class SfuTransport {
     this.media.clear();
     this.incoming.clear();
     this.pulled.clear();
+    this.pullTries.clear();
+    this.pullAfter.clear();
     this.senders.clear();
     this.lastAudio.clear();
     this.lastVideoBytes.clear();

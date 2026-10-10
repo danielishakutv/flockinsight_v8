@@ -349,7 +349,18 @@ describe("a microphone that dies mid-call", () => {
     expect(interruptions).toContain("lost");
     // Bounded: it does not go on opening devices for the rest of the hour.
     expect(micTracks().length).toBeLessThanOrEqual(8);
-    expect(engine.currentState().micOn).toBe(true);
+    /*
+     * And it turns the microphone OFF when it gives up.
+     *
+     * This used to assert the opposite, and the opposite was wrong. Leaving
+     * `micOn` true with no working track on any sender meant every other
+     * person in the room went on seeing a live microphone beside a name
+     * nobody could hear, and the person themselves had a red "mute" button
+     * implying they were being heard. Off is the honest state: nothing is
+     * being sent, the button and the roster both say so, and pressing it
+     * tries the device again.
+     */
+    expect(engine.currentState().micOn).toBe(false);
   });
 
   it("reports a device that cannot be re-opened at all", async () => {

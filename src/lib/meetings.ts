@@ -1751,6 +1751,42 @@ export async function startRecordingRow(opts: {
   mode: "video" | "audio";
   createdBy: string | null;
 }): Promise<string> {
+  /*
+   * One active row per meeting.
+   *
+   * The client now refuses a second start, but the server must too: a retry, a
+   * co-host pressing Record at the same moment as the host, or a second tab
+   * all reach this line, and each one used to mint another row that nothing
+   * would ever finish. Two of them, eight seconds apart, is what sent us
+   * looking at this.
+   *
+   * Returning the existing id rather than refusing is deliberate: whoever
+   * asked wants a recording, there is one, and this is its id. A retry whose
+   * first answer was lost then lands on its feet instead of orphaning a row.
+   */
+  /*
+   * Scoped to the last couple of minutes rather than to "any unfinished row",
+   * because a genuine recording stays at "uploading" for its whole length —
+   * so matching on status alone would hand a second, deliberate recording an
+   * hour later the id of the first. Two minutes covers a double press, a
+   * retry, and two people reaching for it at once, which is the whole of what
+   * this is for.
+   */
+  const recent = new Date(Date.now() - 2 * 60_000);
+  const [existing] = await db
+    .select({ id: meetingRecording.id })
+    .from(meetingRecording)
+    .where(
+      and(
+        eq(meetingRecording.meetingId, opts.meetingId),
+        eq(meetingRecording.status, "uploading"),
+        gte(meetingRecording.startedAt, recent),
+      ),
+    )
+    .orderBy(desc(meetingRecording.startedAt))
+    .limit(1);
+  if (existing) return existing.id;
+
   const [row] = await db
     .insert(meetingRecording)
     .values({

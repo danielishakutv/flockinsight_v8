@@ -44,6 +44,7 @@ export function PeoplePanel({
   onMuteAll,
   onLowerHands,
   diagnostics,
+  deviceStall,
   attendeeMediaLocked,
 }: {
   roster: RosterEntry[];
@@ -67,6 +68,15 @@ export function PeoplePanel({
    * and one screenshot.
    */
   diagnostics?: Map<string, PeerDiagnostics>;
+  /**
+   * The worst spell this device has spent not responding, if any.
+   *
+   * Here because this is the panel somebody opens when a meeting is going
+   * badly, and because a device that froze for half a minute is the answer to
+   * "why did they drop out", which nothing could previously say. It survives
+   * the reload that always follows a freeze.
+   */
+  deviceStall?: { ms: number; heapMb: number | null; elements: number | null } | null;
   waiting: { participantId: string; name: string }[];
   myPeerId: string;
   canHost: boolean;
@@ -110,6 +120,16 @@ export function PeoplePanel({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {deviceStall && (
+        <div className="border-b border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-200">
+          {t("meetings.deviceStalled", {
+            seconds: (deviceStall.ms / 1000).toFixed(1),
+          })}
+          {deviceStall.heapMb === null ? null : ` · ${deviceStall.heapMb}MB`}
+          {deviceStall.elements === null ? null : ` · ${deviceStall.elements} players`}
         </div>
       )}
 

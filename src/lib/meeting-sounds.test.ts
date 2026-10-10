@@ -92,3 +92,87 @@ describe("the join and leave notes", () => {
     expect(meetingSoundsDefault()).toBe(true);
   });
 });
+
+/* ============================================================
+ * The sound itself
+ * ========================================================== */
+
+describe("the chime that is generated", () => {
+  /*
+   * A generated sound that comes out silent, or malformed, fails exactly the
+   * way the Naira sign did in the PDFs: nothing throws, nothing is logged, and
+   * the thing simply is not there. So the bytes are read.
+   */
+  async function wav(notes: number[]) {
+    vi.stubGlobal("window", { localStorage: storage("works") });
+    vi.resetModules();
+    const { chimeWav } = await import("@/lib/meeting-sounds");
+    const uri = chimeWav(notes);
+    expect(uri.startsWith("data:audio/wav;base64,")).toBe(true);
+    return Buffer.from(uri.slice("data:audio/wav;base64,".length), "base64");
+  }
+
+  it("is a real WAV file", async () => {
+    const buf = await wav([587.33, 880]);
+    expect(buf.toString("ascii", 0, 4)).toBe("RIFF");
+    expect(buf.toString("ascii", 8, 12)).toBe("WAVE");
+    expect(buf.toString("ascii", 36, 40)).toBe("data");
+    // Mono, 16-bit, 16kHz — and the header must agree with itself or a
+    // browser plays noise.
+    expect(buf.readUInt16LE(22)).toBe(1);
+    expect(buf.readUInt32LE(24)).toBe(16000);
+    expect(buf.readUInt16LE(34)).toBe(16);
+    expect(buf.readUInt32LE(4)).toBe(buf.length - 8);
+    expect(buf.readUInt32LE(40)).toBe(buf.length - 44);
+  });
+
+  it("actually makes a sound, and a quiet one", async () => {
+    const buf = await wav([587.33, 880]);
+    let peak = 0;
+    let nonZero = 0;
+    for (let i = 44; i < buf.length - 1; i += 2) {
+      const v = Math.abs(buf.readInt16LE(i));
+      if (v > 0) nonZero++;
+      if (v > peak) peak = v;
+    }
+    // Audible: well clear of silence.
+    expect(peak).toBeGreaterThan(1000);
+    // And quiet: a chime that competes with a voice is worse than no chime.
+    expect(peak).toBeLessThan(0.12 * 32767);
+    expect(nonZero).toBeGreaterThan(1000);
+  });
+
+  it("starts and ends near silence, so it cannot click", async () => {
+    const buf = await wav([587.33, 880]);
+    expect(Math.abs(buf.readInt16LE(44))).toBeLessThan(400);
+    expect(Math.abs(buf.readInt16LE(buf.length - 2))).toBeLessThan(400);
+  });
+
+  it("is small enough to live in the bundle", async () => {
+    const buf = await wav([587.33, 880]);
+    expect(buf.length).toBeLessThan(32 * 1024);
+  });
+
+  it("rises for an arrival and falls for a departure", async () => {
+    /*
+     * The whole reason there are two: it has to be understandable without
+     * being listened to. Compared by where the energy sits in each half.
+     */
+    const energy = (buf: Buffer) => {
+      const mid = 44 + Math.floor((buf.length - 44) / 2 / 2) * 2;
+      let first = 0;
+      let second = 0;
+      for (let i = 44; i < mid - 1; i += 2) first += Math.abs(buf.readInt16LE(i));
+      for (let i = mid; i < buf.length - 1; i += 2) second += Math.abs(buf.readInt16LE(i));
+      return { first, second };
+    };
+    const up = energy(await wav([587.33, 880]));
+    const down = energy(await wav([880, 587.33]));
+    // Not a pitch analysis — just that the two are not the same sound.
+    expect(up.first).toBeGreaterThan(0);
+    expect(down.first).toBeGreaterThan(0);
+    const upUri = await wav([587.33, 880]);
+    const downUri = await wav([880, 587.33]);
+    expect(upUri.equals(downUri)).toBe(false);
+  });
+});

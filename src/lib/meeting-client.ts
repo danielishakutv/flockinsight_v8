@@ -23,6 +23,7 @@ import {
   mediaRights,
   profileFor,
   rateLink,
+  settleVerdict,
   shouldInitiate,
   tuneOpus,
   type AudioProfile,
@@ -176,7 +177,7 @@ export type MeetingClientEvents = {
    * never came back" is. It is reported either way so that it can never again
    * be silent.
    */
-  onMicInterrupted?: (outcome: "recovered" | "lost") => void;
+  onMicInterrupted?: (outcome: "recovered" | "lost" | "unheard") => void;
   /**
    * One connection had to be thrown away and dialled again.
    *
@@ -354,8 +355,15 @@ const AUDIO_RESHAPE_MS = 60_000;
  * with a description the other side will reject.
  */
 const NEGOTIATION_WEDGE_MS = 15_000;
-/** Rebuilds of one peer connection before giving up on it. */
-const PEER_RESET_LIMIT = 3;
+/** Rebuilds of one peer connection before giving up on recovering it. */
+const PEER_RESET_LIMIT = 4;
+/**
+ * Rebuilds spent on the VOICE alone, which is a comfort rather than the call.
+ *
+ * Its own budget, because sharing one with recovery meant a few ordinary
+ * quality wobbles could leave a connection that later broke with no way back.
+ */
+const VOICE_RESHAPE_LIMIT = 2;
 /**
  * How long a new connection ignores a request to throw itself away.
  *
@@ -371,6 +379,15 @@ const PEER_RESET_LIMIT = 3;
 const RESET_GRACE_MS = 4_000;
 /** How many times a microphone that dies mid-call will be re-opened. */
 const MIC_RECOVERY_LIMIT = 6;
+/**
+ * How long a capture track may stay muted before it is treated as lost.
+ *
+ * An operating system mutes a microphone for a moment while a device changes
+ * hands, which is normal. Four seconds of it is not.
+ */
+const MIC_MUTE_GRACE_MS = 4_000;
+/** How long a recovered microphone must hold before its allowance is forgiven. */
+const MIC_FORGIVE_MS = 120_000;
 /** How long to wait before another long-poll after a failed one. Backs off. */
 const RETRY_BASE_MS = 800;
 const RETRY_MAX_MS = 8000;
@@ -465,6 +482,37 @@ export class MeetingClient {
   private micRecoveries = 0;
   /** Whether this browser has been found to refuse a jitter buffer hint. */
   private jitterBufferRefused = false;
+  /** The previous outgoing-voice reading, for turning totals into a rate. */
+  private lastOutgoingVoice: {
+    at: number;
+    bytesSent: number;
+    packetsSent: number;
+    audioEnergy: number;
+    audioLevel: number;
+  } | null = null;
+  /** A verdict waiting to be confirmed by a second sample. See settleQuality. */
+  private qualityCandidate: { quality: MeetingQuality; samples: number } | null = null;
+  private micMuteTimer: ReturnType<typeof setTimeout> | null = null;
+  private micForgiveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Signal ids already acted on, so a duplicate delivery cannot act twice. */
+  private seenSignals = new Set<number>();
+  /**
+   * The signal cursor at the moment each peer was last thrown away.
+   *
+   * Anything written before that cannot be about the connection that replaced
+   * it, which is the only way to tell a stale offer from a fresh one: the ids
+   * come from one Postgres sequence, so they are ordered across the room.
+   * Without this, an answer or a candidate written about the connection that
+   * was just discarded is applied to its replacement, and the replacement is
+   * broken in exactly the way the discard was meant to repair.
+   */
+  private droppedAt = new Map<string, number>();
+  /** Rebuilds spent recovering a connection, and rebuilds spent on the voice. */
+  private recoveryResets = new Map<string, number>();
+  private voiceResets = new Map<string, number>();
+  /** Consecutive samples where the microphone was heard but nothing was sent. */
+  private voiceSilentStrikes = 0;
+  private voiceSilenceReported = false;
   /**
    * Rebuilds forced on each peer by a wedged negotiation.
    *
@@ -472,7 +520,7 @@ export class MeetingClient {
    * peer — a counter living on it would reset itself every time and the cap
    * would never be reached.
    */
-  private readonly peerResets = new Map<string, number>();
+
   private onDeviceChange: (() => void) | null = null;
 
   constructor(init: MeetingClientInit) {
@@ -613,6 +661,11 @@ export class MeetingClient {
     }
     if (this.statsTimer) clearInterval(this.statsTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
+    // A timer that fires after the call has ended would re-open a microphone
+    // for a meeting this browser has left.
+    if (this.micMuteTimer) clearTimeout(this.micMuteTimer);
+    if (this.micForgiveTimer) clearTimeout(this.micForgiveTimer);
+    this.micMuteTimer = this.micForgiveTimer = null;
     this.listening?.abort();
 
     for (const [, p] of this.peers) {
@@ -847,7 +900,21 @@ export class MeetingClient {
       this.events.onRoster?.(data.roster);
       this.reconcilePeers(data.roster);
     }
-    for (const s of data.signals ?? []) await this.handleSignal(s);
+    /*
+     * Not awaited, and that matters more than it looks.
+     *
+     * Handling a description now goes through that peer's negotiation queue,
+     * so awaiting it here put the whole of signalling behind one connection's
+     * negotiation: a step that never settled — and closing a peer connection
+     * mid-step is exactly that — stopped every signal for every peer for the
+     * rest of the call. Ordering is still kept where ordering matters, because
+     * descriptions and candidates for one peer go through that peer's own
+     * queue in arrival order.
+     */
+    for (const s of data.signals ?? []) {
+      if (this.alreadyHandled(s)) continue;
+      void this.handleSignal(s);
+    }
   }
 
   /* ============================================================
@@ -1097,14 +1164,13 @@ export class MeetingClient {
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
-      if (s === "failed") void this.restartIce(peerId, p);
+      if (s === "failed") this.recoverIce(peerId, p);
       if (s === "disconnected") {
         // Give it a few seconds: "disconnected" is frequently a phone changing
-        // masts and recovers by itself. Restarting immediately would throw
-        // away a connection that was about to come back.
+        // masts and recovers by itself. Acting immediately would throw away a
+        // connection that was about to come back.
         setTimeout(() => {
-          if (pc.iceConnectionState === "disconnected")
-            void this.restartIce(peerId, p);
+          if (pc.iceConnectionState === "disconnected") this.recoverIce(peerId, p);
         }, 4000);
       }
     };
@@ -1161,20 +1227,78 @@ export class MeetingClient {
    * disruptive than tearing the peer down and starting again. Capped, because
    * a peer that has genuinely gone should not be retried forever.
    */
-  private async restartIce(peerId: string, p: PeerState): Promise<void> {
-    if (!this.running || p.restarts >= 5) return;
-    p.restarts++;
-    try {
-      p.pc.restartIce();
-      if (p.initiator || p.polite === false) await this.makeOffer(peerId, p);
-    } catch (e) {
-      console.error("[meeting] ICE restart failed", e);
-    }
+  private recoverIce(peerId: string, p: PeerState): void {
+    if (!this.running) return;
+    if (this.peers.get(peerId) !== p) return;
+
+    /*
+     * Rebuilt rather than ICE-restarted, and that is a correction.
+     *
+     * An ICE restart is a new offer, and only one side of a pair is allowed to
+     * offer now — so `restartIce` quietly did nothing at all on the other
+     * half of every connection. `pc.restartIce()` raises
+     * `negotiationneeded`, the guard there sees every transceiver already has
+     * an m-line, and the event is dropped. The polite side therefore burned
+     * its retry budget five times and recovered nothing, which is a worse
+     * failure than the one the guard was added to prevent.
+     *
+     * A rebuild needs no renegotiation, works from either side, tells the
+     * other end, and is capped — the same machinery that recovers a wedged
+     * negotiation. ICE restart is an optimisation; being able to recover at
+     * all is not.
+     */
+    this.rebuildPeer(peerId, p, "ice");
   }
 
   /* ============================================================
    * Signals in
    * ========================================================== */
+
+  /**
+   * Has this exact signal already been dealt with?
+   *
+   * The long poll and a state push are two requests to the same endpoint, and
+   * both hand their answer to `consume`. A signal that lands while a push is
+   * in flight comes back in both, with the same id — so it used to be
+   * processed twice. A duplicated offer was accepted as a genuine mid-call
+   * renegotiation, which is the very thing yesterday's work removed, and a
+   * duplicated "renegotiate" threw away a connection that had just been built
+   * to replace the one the first copy asked about.
+   *
+   * Ids come from a Postgres sequence, so they are unique and ordered. The set
+   * is trimmed because a long service is tens of thousands of them.
+   */
+  private alreadyHandled(s: SignalEnvelope): boolean {
+    if (typeof s.id !== "number") return false;
+    if (this.seenSignals.has(s.id)) return true;
+    this.seenSignals.add(s.id);
+    if (this.seenSignals.size > 4000) {
+      // Oldest first, which for a Set is insertion order.
+      const keep = [...this.seenSignals].slice(-2000);
+      this.seenSignals = new Set(keep);
+    }
+    return false;
+  }
+
+  /**
+   * Was this written before the connection it names was thrown away?
+   *
+   * See `droppedAt`. A description or a candidate from before the discard
+   * describes something that no longer exists, and applying it to the fresh
+   * connection is how a rebuild produced a connection as broken as the one it
+   * replaced.
+   */
+  private writtenBeforeThisConnection(s: SignalEnvelope): boolean {
+    const dropped = this.droppedAt.get(s.fromPeer);
+    if (dropped === undefined) return false;
+    if (typeof s.id !== "number") return false;
+    if (s.id > dropped) return false;
+    console.info(
+      `[meeting] ignoring a ${s.type} from ${s.fromPeer} written before that ` +
+        `connection was thrown away`,
+    );
+    return true;
+  }
 
   private async handleSignal(s: SignalEnvelope): Promise<void> {
     switch (s.type) {
@@ -1308,6 +1432,7 @@ export class MeetingClient {
   private onDescription(s: SignalEnvelope): Promise<void> {
     const raw = s.payload.sdp as RTCSessionDescriptionInit | undefined;
     if (!raw?.type) return Promise.resolve();
+    if (this.writtenBeforeThisConnection(s)) return Promise.resolve();
     const p =
       this.peers.get(s.fromPeer) ??
       this.createPeer(s.fromPeer, { answering: raw.type === "offer" });
@@ -1419,12 +1544,17 @@ export class MeetingClient {
     if (!p) return;
     const candidate = s.payload.candidate as RTCIceCandidateInit | undefined;
     if (!candidate) return;
-    try {
-      await p.pc.addIceCandidate(candidate);
-    } catch (e) {
-      // Expected while an offer we chose to ignore is still in flight.
-      if (!p.ignoreOffer) console.warn("[meeting] candidate rejected", e);
-    }
+    if (this.writtenBeforeThisConnection(s)) return;
+    // Behind this peer's descriptions. A candidate applied before the
+    // description it belongs to is refused, and the refusal used to be the
+    // only sign that the two had been handled out of order.
+    await this.negotiate(p, async () => {
+      try {
+        await p.pc.addIceCandidate(candidate);
+      } catch (e) {
+        if (!p.ignoreOffer) console.warn("[meeting] candidate rejected", e);
+      }
+    });
   }
 
   /**
@@ -1778,15 +1908,29 @@ export class MeetingClient {
     const track = stream?.getAudioTracks()[0];
     if (track) {
       track.addEventListener("ended", () => void this.recoverMic("the track ended"));
+      /*
+       * `muted` is never written into `micOn` — that is what the PERSON chose,
+       * and inferring it from the device is how somebody ends up silenced by a
+       * Bluetooth hiccup. But it must not be ignored either, which is what it
+       * used to be: a capture track that goes muted and STAYS muted is a
+       * microphone the operating system has taken away, and the person goes on
+       * talking with a live-looking button. The device recovers in a second
+       * when it is handing over; anything longer is a fault.
+       */
       track.addEventListener("mute", () => {
-        /*
-         * Not treated as a failure and deliberately not written into
-         * `micOn`: `muted` means no media is flowing right now, which is what
-         * the operating system does for a second while a device changes hands,
-         * and `micOn` is what the PERSON chose. Inferring one from the other
-         * is how somebody ends up muted by a Bluetooth hiccup.
-         */
         console.warn("[meeting] the microphone went quiet at the device level");
+        if (this.micMuteTimer) clearTimeout(this.micMuteTimer);
+        this.micMuteTimer = setTimeout(() => {
+          this.micMuteTimer = null;
+          const live = this.micStream?.getAudioTracks()[0];
+          if (!this.running || !this.state.micOn) return;
+          if (!live || !live.muted) return;
+          void this.recoverMic("the device stopped giving us any sound");
+        }, MIC_MUTE_GRACE_MS);
+      });
+      track.addEventListener("unmute", () => {
+        if (this.micMuteTimer) clearTimeout(this.micMuteTimer);
+        this.micMuteTimer = null;
       });
     }
     return stream;
@@ -1817,7 +1961,21 @@ export class MeetingClient {
   private async recoverMic(why: string): Promise<void> {
     if (!this.running || !this.state.micOn) return;
     if (this.micRecoveries >= MIC_RECOVERY_LIMIT) {
+      /*
+       * And say so to the ROOM, not only to this person.
+       *
+       * Giving up used to leave `micOn` true with no working track on any
+       * sender, so every other participant went on seeing a live microphone
+       * beside a name nobody could hear — and the person themselves had a red
+       * "mute" button suggesting they were being heard. Turning it off is the
+       * honest state: nothing is being sent, the button says so, the roster
+       * says so, and pressing it tries the device again.
+       */
       console.error("[meeting] giving up on the microphone after", why);
+      this.state.micOn = false;
+      this.attachEverywhere();
+      this.pushState();
+      this.events.onLocalState?.({ ...this.state });
       this.events.onMicInterrupted?.("lost");
       return;
     }
@@ -1834,6 +1992,17 @@ export class MeetingClient {
     }
     this.micStream = fresh;
     fresh.getAudioTracks().forEach((t) => (t.enabled = true));
+    /*
+     * Six recoveries was a per-CALL allowance, so a two-hour service that
+     * handed the microphone over six times in its first ten minutes spent the
+     * lot and was defenceless for the remaining hour and fifty. The count is
+     * now forgiven once a recovery has held for a while.
+     */
+    if (this.micForgiveTimer) clearTimeout(this.micForgiveTimer);
+    this.micForgiveTimer = setTimeout(() => {
+      this.micForgiveTimer = null;
+      this.micRecoveries = 0;
+    }, MIC_FORGIVE_MS);
     // `replaceTrack` on the senders that already exist, so nobody
     // renegotiates and no picture flickers — the room simply starts hearing
     // this person again.
@@ -2132,11 +2301,22 @@ export class MeetingClient {
    * whole of the recovery, on both sides, with no new state machine.
    */
   private dropPeer(peerId: string, p: PeerState): void {
+    /*
+     * Only if the map still holds THIS connection.
+     *
+     * A rebuild replaces the entry, and anything still holding the old
+     * `PeerState` — a queued negotiation step, a timer armed before the
+     * swap — would otherwise delete the healthy replacement and wipe that
+     * person's media with it.
+     */
+    if (this.peers.get(peerId) !== p) return;
     try {
       p.pc.close();
     } catch {
       /* already closed */
     }
+    // Everything already written about this connection is now stale.
+    this.droppedAt.set(peerId, this.cursor);
     this.peers.delete(peerId);
     this.media.delete(peerId);
     this.events.onMedia?.(new Map(this.media));
@@ -2193,21 +2373,35 @@ export class MeetingClient {
   private rebuildPeer(
     peerId: string,
     p: PeerState,
-    reason: "stuck" | "refused" | "voice",
+    reason: "stuck" | "refused" | "voice" | "ice",
   ): boolean {
-    const used = this.peerResets.get(peerId) ?? 0;
-    if (used >= PEER_RESET_LIMIT) {
-      console.error(
-        `[meeting] the connection to ${peerId} has been rebuilt ` +
-          `${PEER_RESET_LIMIT} times and is still not working. Leaving it ` +
-          `alone; this call may be one-sided with that person.`,
-      );
+    /*
+     * Two budgets, not one.
+     *
+     * A voice reshape is a comfort and a recovery is the call working at all,
+     * and they used to share three rebuilds between them — so three ordinary
+     * quality wobbles in the first minutes spent the whole allowance, and a
+     * connection that genuinely wedged later could never be repaired. The
+     * cosmetic reason now gets its own small budget and cannot touch the
+     * other.
+     */
+    const budget = reason === "voice" ? this.voiceResets : this.recoveryResets;
+    const limit = reason === "voice" ? VOICE_RESHAPE_LIMIT : PEER_RESET_LIMIT;
+    const used = budget.get(peerId) ?? 0;
+    if (used >= limit) {
+      if (reason !== "voice") {
+        console.error(
+          `[meeting] the connection to ${peerId} has been rebuilt ${limit} ` +
+            `times and is still not working. Leaving it alone; this call may ` +
+            `be one-sided with that person.`,
+        );
+      }
       return false;
     }
-    this.peerResets.set(peerId, used + 1);
+    budget.set(peerId, used + 1);
     console.warn(
       `[meeting] rebuilding the connection to ${peerId} (${reason}, ` +
-        `${used + 1} of ${PEER_RESET_LIMIT}).`,
+        `${used + 1} of ${limit}).`,
     );
     this.send("renegotiate", {}, peerId);
     this.dropPeer(peerId, p);
@@ -2475,13 +2669,18 @@ export class MeetingClient {
     this.totals = await this.sfu.totals();
     const rows = await this.sfu.diagnose();
     this.rateSfuLink(rows);
+    const out = await this.sfu.outgoingAudio();
+    const audioOutKbps = this.watchOutgoingVoice(out);
     this.sfuDiagnostics = [...rows.entries()].map(([peerId, d]) => ({
       peerId,
       ice: d.ice,
       videoAttached: this.state.cameraOn,
       videoWithheld: this.state.cameraOn ? null : ("camera-off" as const),
       videoOutKbps: 0,
-      audioOutKbps: 0,
+      // Measured, not assumed. This was a hardcoded zero, so the one panel
+      // that could have said "your voice is not leaving this machine" said
+      // nothing at all on the transport every real meeting uses.
+      audioOutKbps,
       videoInKbps: d.videoInKbps,
       audioInKbps: d.audioInKbps,
       transport: "sfu",
@@ -2492,9 +2691,88 @@ export class MeetingClient {
       audioJitterMs: d.audioJitterMs,
       audioJitterBufferMs: d.audioJitterBufferMs,
       // The SFU path keeps the tuning and the jitter buffer but not RED — see
-      // `renegotiateAudioIfNeeded`.
+      // `reshapeAudioIfNeeded`.
       audioRedundancy: false,
     }));
+  }
+
+  /**
+   * Is this person's voice actually leaving the machine?
+   *
+   * Returns the outgoing rate for the panel, and — the reason this exists —
+   * says so when the answer is no.
+   *
+   * A microphone can be open, unmuted, enabled, producing sound, and still not
+   * reaching the room: something else on the page takes the capture device,
+   * the sender is left holding a track nothing reads, and the person goes on
+   * talking. That happened to a host the moment they started recording, and
+   * stayed that way through leaving and rejoining. Nothing threw, nothing was
+   * logged, and the diagnostics panel reported their outgoing audio as zero
+   * whether it was working or not, so there was nothing to read either.
+   *
+   * The test is the PAIR of readings. Energy rising means the device is
+   * hearing something; packets not moving means none of it is going anywhere.
+   * Either one alone proves nothing: DTX makes a quiet room send almost
+   * nothing, and a muted microphone is supposed to send nothing at all.
+   *
+   * Three samples — about twelve seconds — before saying anything, because one
+   * stats tick that lands badly is not a fault.
+   */
+  private watchOutgoingVoice(
+    out: {
+      bytesSent: number;
+      packetsSent: number;
+      audioEnergy: number;
+      audioLevel: number;
+    } | null,
+  ): number {
+    if (!out) return 0;
+
+    const prev = this.lastOutgoingVoice;
+    const now = Date.now();
+    this.lastOutgoingVoice = { at: now, ...out };
+
+    const seconds = prev ? (now - prev.at) / 1000 : 0;
+    const kbps =
+      seconds > 0
+        ? Math.max(0, Math.round(((out.bytesSent - prev!.bytesSent) * 8) / seconds / 1000))
+        : 0;
+    if (!prev) return kbps;
+
+    const track = this.micStream?.getAudioTracks()[0];
+    const shouldBeHeard =
+      this.state.micOn && !!track && track.readyState === "live" && track.enabled;
+    if (!shouldBeHeard) {
+      this.voiceSilentStrikes = 0;
+      this.voiceSilenceReported = false;
+      return kbps;
+    }
+
+    // A rise in cumulative energy is the device telling us it heard something.
+    // The threshold is small on purpose: this is "any sound at all", not
+    // "somebody is speaking clearly".
+    const heardSomething = out.audioEnergy - prev.audioEnergy > 1e-7;
+    const sentSomething = out.packetsSent > prev.packetsSent;
+
+    if (heardSomething && !sentSomething) {
+      this.voiceSilentStrikes++;
+      if (this.voiceSilentStrikes >= 3 && !this.voiceSilenceReported) {
+        this.voiceSilenceReported = true;
+        console.error(
+          "[meeting] the microphone is producing sound and none of it is " +
+            "being sent. Something else on this page has taken the capture " +
+            "device.",
+        );
+        this.events.onMicInterrupted?.("unheard");
+      }
+      return kbps;
+    }
+
+    if (sentSomething) {
+      this.voiceSilentStrikes = 0;
+      this.voiceSilenceReported = false;
+    }
+    return kbps;
   }
 
   /**
@@ -2517,15 +2795,34 @@ export class MeetingClient {
       if (row.audioConcealedPct > worstConcealed) worstConcealed = row.audioConcealedPct;
     }
 
-    const quality = rateLink({
-      packetLossPct: 0,
-      rttMs: 0,
-      audioConcealedPct: worstConcealed,
+    this.settleQuality(
+      rateLink({
+        packetLossPct: 0,
+        rttMs: 0,
+        audioConcealedPct: worstConcealed,
+      }),
+    );
+  }
+
+  /**
+   * Change the verdict only once the link has actually changed its mind.
+   *
+   * The decision itself is `settleVerdict` in meetings-shared.ts, where it can
+   * be tested without a meeting. Everything that follows from it — the voice
+   * profile, the jitter buffer, the figure the room shows — happens here.
+   */
+  private settleQuality(reading: MeetingQuality): void {
+    const { apply, candidate } = settleVerdict({
+      current: this.state.quality,
+      reading,
+      candidate: this.qualityCandidate,
     });
-    if (quality === this.state.quality) return;
-    this.state.quality = quality;
+    this.qualityCandidate = candidate;
+    if (!apply) return;
+
+    this.state.quality = reading;
     this.applyProfile();
-    void this.flush({ quality });
+    void this.flush({ quality: reading });
   }
 
   /** Everything the diagnostics panel shows, as of the last sample. */
@@ -2750,11 +3047,8 @@ export class MeetingClient {
       audioConcealedPct: worstConcealed,
     });
 
-    if (quality !== this.state.quality) {
-      this.state.quality = quality;
-      this.applyProfile();
-      void this.flush({ quality });
-    }
+    // Through the same gate as the SFU path: see `settleQuality`.
+    this.settleQuality(quality);
   }
 
   /* ============================================================

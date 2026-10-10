@@ -58,6 +58,13 @@ function backoffMs(attempts: number): number {
 }
 
 export function RecordingUploader() {
+  /**
+   * Whether the server refused us for want of a session.
+   *
+   * Shown rather than retried silently: this is the one upload failure the
+   * person can actually do something about.
+   */
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [active, setActive] = useState<{
     title: string;
     sentBytes: number;
@@ -114,11 +121,33 @@ export function RecordingUploader() {
           uploadId: entry.uploadId ?? undefined,
         }),
       });
+      /*
+       * Not signed in on this device, which is a real and silent case.
+       *
+       * `/api/media/chunk` needs a church session, and a host can run a whole
+       * meeting from the host LINK without ever signing in — so every attempt
+       * came back 401, was recorded as an ordinary failure, and retried with
+       * backoff for ever. The recording sat on the device, the row sat at
+       * "uploading" until a cron called it failed, and nobody was told the one
+       * thing that would have fixed it.
+       */
+      if (startRes.status === 401 || startRes.status === 403) {
+        await noteFailure(
+          entry.id,
+          "This recording is saved on this device but can't be sent yet: " +
+            "nobody is signed in to the church account in this browser. " +
+            "Sign in at flockinsight.com in this browser and it will upload itself.",
+        );
+        setNeedsSignIn(true);
+        return false;
+      }
+
       const start = await startRes.json().catch(() => null);
       if (!start?.ok) {
         await noteFailure(entry.id, start?.error ?? "Could not start the upload.");
         return false;
       }
+      setNeedsSignIn(false);
 
       const uploadId: string = start.uploadId;
       let offset: number = Math.min(Number(start.received) || 0, entry.bytes);
@@ -322,6 +351,23 @@ export function RecordingUploader() {
         <p className="text-muted-foreground mt-1 text-xs">
           {active?.reason || waiting?.reason || "It will keep trying in the background."}
         </p>
+
+        {/*
+          The one failure somebody can act on, said plainly and with the way
+          out. A host can run a whole meeting from the host link without ever
+          signing in, and the upload needs a church session — so without this
+          the recording simply never left the device and nothing said why.
+        */}
+        {needsSignIn && (
+          <p className="mt-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+            It is safe on this device, but nobody is signed in to the church
+            account in this browser.{" "}
+            <a className="font-semibold underline" href="/login" target="_blank" rel="noreferrer">
+              Sign in
+            </a>{" "}
+            and it will upload itself.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import {
   parseStage,
   profileFor,
   rateLink,
+  settleVerdict,
   shouldInitiate,
   tileColumns,
   tuneOpus,
@@ -559,5 +560,90 @@ describe("deviceId", () => {
     // null as "no device" and retires nothing — a duplicate tile is a
     // blemish, being unable to join your own church's meeting is not.
     expect(deviceId()).toBeNull();
+  });
+});
+
+/* ============================================================
+ * The verdict settling down
+ * ========================================================== */
+
+describe("settleVerdict", () => {
+  /*
+   * Why this exists: the verdict carries the jitter buffer, and re-timing a
+   * live receiver is audible. A reading that flickers is therefore a call that
+   * clicks, on a connection its owner would call good.
+   */
+  it("acts on a link getting worse at once", () => {
+    const r = settleVerdict({ current: "good", reading: "poor", candidate: null });
+    expect(r.apply).toBe(true);
+    expect(r.candidate).toBeNull();
+  });
+
+  it("makes an improvement prove itself twice", () => {
+    const first = settleVerdict({ current: "fair", reading: "good", candidate: null });
+    expect(first.apply).toBe(false);
+    expect(first.candidate).toEqual({ quality: "good", samples: 1 });
+
+    const second = settleVerdict({
+      current: "fair",
+      reading: "good",
+      candidate: first.candidate,
+    });
+    expect(second.apply).toBe(true);
+    expect(second.candidate).toBeNull();
+  });
+
+  it("does nothing at all while the reading agrees with the verdict", () => {
+    const r = settleVerdict({ current: "good", reading: "good", candidate: null });
+    expect(r.apply).toBe(false);
+    expect(r.candidate).toBeNull();
+  });
+
+  it("will not let a flapping link change anything", () => {
+    /*
+     * The case that was costing audio: one rough four-second window in ten
+     * makes the reading alternate, and every change re-timed every receiver.
+     * Alternating readings must now settle on nothing.
+     */
+    let current: "good" | "fair" = "good";
+    let candidate: { quality: "good" | "fair" | "poor" | "lost"; samples: number } | null =
+      null;
+    let changes = 0;
+
+    for (const reading of ["fair", "good", "fair", "good", "fair", "good"] as const) {
+      const r = settleVerdict({ current, reading, candidate });
+      candidate = r.candidate;
+      if (r.apply) {
+        changes++;
+        current = reading;
+      }
+    }
+
+    /*
+     * "fair" is worse, so it is allowed through immediately and honestly — but
+     * the recoveries never confirm, so the link settles at fair instead of
+     * oscillating. Three changes rather than six, and never back and forth.
+     */
+    expect(current).toBe("fair");
+    expect(changes).toBeLessThanOrEqual(3);
+  });
+
+  it("lets a genuine recovery through once it holds", () => {
+    let current: "good" | "fair" = "fair";
+    let candidate: { quality: "good" | "fair" | "poor" | "lost"; samples: number } | null =
+      null;
+    let applied = false;
+
+    for (const reading of ["good", "good"] as const) {
+      const r = settleVerdict({ current, reading, candidate });
+      candidate = r.candidate;
+      if (r.apply) {
+        applied = true;
+        current = reading;
+      }
+    }
+
+    expect(applied).toBe(true);
+    expect(current).toBe("good");
   });
 });

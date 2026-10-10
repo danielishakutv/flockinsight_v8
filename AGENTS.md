@@ -176,3 +176,30 @@ request lands on the connection that replaced the one it was about.
 that can see it: three real browsers, one real meeting, and a grid of who could
 hear whom. A unit test cannot — the thing under test is the browser's own SDP
 machinery. Run it against `next build` + `next start`, never `next dev`.
+
+**The transport is the SFU, not the mesh.** Every production meeting has
+`transport: 'sfu'`: `max_participants` is 12 by default, `MESH_CEILING` is 6,
+and the Cloudflare Realtime credentials are set — so `chooseTransport` has
+never returned `mesh` for a real room. Hours were spent fixing the mesh path
+for a bug reported in an SFU room, because the mesh is what `meeting-client.ts`
+reads like. **Check `meeting.transport` in the database before believing any
+theory about a real meeting.**
+
+The SFU half lives in `src/lib/meeting-sfu.ts`: one sendonly publisher
+connection, one recvonly subscriber connection, and `publish`/`pull`/`close`
+over an HTTP proxy at `api/meet/[code]/sfu`. Two things about it are easy to get
+wrong and both have cost a meeting.
+
+Everything a peer sends arrives on the ONE subscriber connection, so **anything
+not handed back accumulates for the whole call**. Forgetting a departed peer
+locally is not enough — their mid has to be closed on the media server, or the
+transceiver, its decoder and its jitter buffer stay for the rest of the
+meeting. The cost then grows with CHURN, not with the size of the room: a
+two-person test never shows it, and a room joined forty-eight times freezes
+phones. `src/lib/meeting-sfu-churn.test.ts` holds the arithmetic.
+
+And **a session id is public** — every publisher's id is in every roster,
+because that is how anybody pulls anybody. So naming one proves nothing. The
+route hands back an HMAC proof when it mints a session and requires it on every
+later action; without that, any guest could close any participant's tracks for
+the whole room.

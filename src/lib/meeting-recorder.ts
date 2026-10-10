@@ -116,7 +116,34 @@ export class MeetingRecorder {
 
   private audioCtx: AudioContext | null = null;
   private mixDest: MediaStreamAudioDestinationNode | null = null;
-  private wired = new Map<string, MediaStreamAudioSourceNode>();
+  /**
+   * What is in the mix, and the CLONES it is fed from.
+   *
+   * The clone is the whole point, and it is the fix for a recording that
+   * silenced the host's own microphone for the rest of the meeting. The
+   * streams handed to this class include the live local microphone — the very
+   * track attached to the sender that the rest of the room hears — and
+   * connecting that track to a WebAudio graph puts a second consumer on a
+   * capture device that is already being processed for echo cancellation.
+   * Chrome's behaviour when that happens is not something to rely on, and what
+   * it did here was stop sending it: the host went on talking and nobody heard
+   * a word, through leaving and rejoining, because the page was never
+   * reloaded and the graph was still holding the device.
+   *
+   * So the recorder never touches a track it did not create. It clones what it
+   * is given, mixes the clones, and stops the clones when it is done — and the
+   * original goes on reaching the meeting, untouched, whatever WebAudio makes
+   * of the copy.
+   */
+  private wired = new Map<
+    string,
+    { node: MediaStreamAudioSourceNode; clone: MediaStream }
+  >();
+
+  /**
+   * The last laid-out passage, so a verse is wrapped once rather than per frame.
+   */
+  private laidOut: { key: string; size: number; lines: string[] } | null = null;
 
   /** Hidden <video> elements, one per stream we need to paint. */
   private videos = new Map<string, HTMLVideoElement>();
@@ -158,6 +185,21 @@ export class MeetingRecorder {
           .webkitAudioContext;
       if (!AudioCtor) throw new Error("no AudioContext");
       this.audioCtx = new AudioCtor();
+      /*
+       * A context can be created suspended — a tab that was in the background,
+       * Safari before a gesture — and a suspended context produces nothing.
+       * The recording then runs for an hour and contains uninterrupted
+       * silence, with no error anywhere. Asked to resume, and said out loud if
+       * it will not.
+       */
+      if (this.audioCtx.state === "suspended") {
+        void this.audioCtx.resume().catch((e: unknown) => {
+          console.error("[recorder] the audio mix would not start", e);
+          this.opts.onError?.(
+            "The recording could not start its audio. Tap the page and try again.",
+          );
+        });
+      }
       this.mixDest = this.audioCtx.createMediaStreamDestination();
       this.syncAudio();
       tracks.push(...this.mixDest.stream.getAudioTracks());
@@ -179,6 +221,16 @@ export class MeetingRecorder {
       this.paint();
       this.paintTimer = setInterval(() => this.paint(), Math.round(1000 / FPS));
       tracks.push(...this.canvas.captureStream(FPS).getVideoTracks());
+    } else {
+      /*
+       * An audio-only recording has no paint loop, and `syncAudio` used to be
+       * called only from there — so the mix was whatever the room happened to
+       * be at the instant Record was pressed. Anybody who joined afterwards
+       * was missing from the whole file, and a host who was muted at that
+       * moment was missing from their own recording. Cheap: a map comparison,
+       * twice a second.
+       */
+      this.paintTimer = setInterval(() => this.syncAudio(), 500);
     }
 
     try {
@@ -263,19 +315,14 @@ export class MeetingRecorder {
     }
     this.videos.clear();
     this.images.clear();
-    for (const [, node] of this.wired) {
-      try {
-        node.disconnect();
-      } catch {
-        /* context already closed */
-      }
-    }
+    for (const [id, entry] of [...this.wired]) this.unwire(id, entry);
     this.wired.clear();
     closeAudioContext(this.audioCtx, "meeting recorder");
     this.audioCtx = null;
     this.mixDest = null;
     this.canvas = null;
     this.ctx = null;
+    this.laidOut = null;
   }
 
   /* ---------------------------------------------------------- audio */
@@ -293,27 +340,45 @@ export class MeetingRecorder {
     const seen = new Set<string>();
 
     for (const stream of streams) {
-      if (stream.getAudioTracks().length === 0) continue;
+      const live = stream.getAudioTracks().filter((t) => t.readyState === "live");
+      if (live.length === 0) continue;
       seen.add(stream.id);
       if (this.wired.has(stream.id)) continue;
+      let clone: MediaStream | null = null;
       try {
-        const src = this.audioCtx.createMediaStreamSource(stream);
+        // A copy, never the original. See the note on `wired`.
+        clone = new MediaStream(live.map((t) => t.clone()));
+        const src = this.audioCtx.createMediaStreamSource(clone);
         src.connect(this.mixDest);
-        this.wired.set(stream.id, src);
-      } catch {
-        /* a stream whose track ended mid-connect — skip it */
+        this.wired.set(stream.id, { node: src, clone });
+      } catch (e) {
+        // A track that ended between the filter above and the clone. Stop
+        // whatever was cloned so a failed attempt cannot leak a capture.
+        clone?.getTracks().forEach((t) => t.stop());
+        console.info("[recorder] a voice could not be added to the mix", e);
       }
     }
 
-    for (const [id, node] of this.wired) {
+    for (const [id, entry] of this.wired) {
       if (seen.has(id)) continue;
-      try {
-        node.disconnect();
-      } catch {
-        /* fine */
-      }
-      this.wired.delete(id);
+      this.unwire(id, entry);
     }
+  }
+
+  /** Take one source out of the mix and release the copy it was reading. */
+  private unwire(
+    id: string,
+    entry: { node: MediaStreamAudioSourceNode; clone: MediaStream },
+  ): void {
+    try {
+      entry.node.disconnect();
+    } catch (e) {
+      console.info("[recorder] a mix source would not disconnect", e);
+    }
+    // The clones are ours, so stopping them is both safe and necessary: a
+    // clone left running holds the device open as surely as the original.
+    for (const t of entry.clone.getTracks()) t.stop();
+    this.wired.delete(id);
   }
 
   /* -------------------------------------------------------- painting */
@@ -337,6 +402,31 @@ export class MeetingRecorder {
     return el;
   }
 
+  /**
+   * Let go of the off-screen players for streams that are no longer painted.
+   *
+   * Each one is a real, decoding `<video>` in the document, and they were only
+   * ever removed when the recording stopped. The room hands over a NEW
+   * MediaStream object whenever a person's set of tracks changes — a camera
+   * swapped, a screen share starting, a connection rebuilt — and the id is
+   * what these are keyed on, so an hour of a busy meeting left an hour's worth
+   * of decoders attached to the page. On a laptop that is a recording that
+   * gets slower and slower; on a phone it is the tab going down.
+   */
+  private reapVideos(frame: RecorderFrame): void {
+    if (this.videos.size === 0) return;
+    const painted = new Set<string>();
+    if (frame.screen) painted.add(frame.screen.id);
+    for (const p of frame.people) if (p.stream) painted.add(p.stream.id);
+
+    for (const [id, el] of [...this.videos]) {
+      if (painted.has(id)) continue;
+      el.srcObject = null;
+      el.remove();
+      this.videos.delete(id);
+    }
+  }
+
   private imageFor(url: string): HTMLImageElement | null {
     const existing = this.images.get(url);
     if (existing) return existing.complete && existing.naturalWidth > 0 ? existing : null;
@@ -354,6 +444,7 @@ export class MeetingRecorder {
 
     this.syncAudio();
     const frame = this.opts.getFrame();
+    this.reapVideos(frame);
     const W = canvas.width;
     const H = canvas.height;
 
@@ -438,18 +529,34 @@ export class MeetingRecorder {
       cursor += 52;
     }
 
-    // Shrink the body until it fits, rather than clipping it. A verse cut in
-    // half on a recording is worse than a verse that is slightly small.
-    let size = 40;
-    let lines: string[] = [];
+    /*
+     * Shrink the body until it fits, rather than clipping it — but work it out
+     * ONCE per passage, not once per frame.
+     *
+     * This loop tries up to eight sizes, and each try re-wraps the whole
+     * passage, which is a `measureText` per word. On a long reading that is
+     * several thousand text measurements, and it ran twelve times a second for
+     * the length of the recording, on the main thread, beside everything else
+     * a meeting is doing. A verse stays on screen for minutes; the layout
+     * cannot change between frames unless the passage or the box does.
+     */
     const maxWidth = w - pad * 2;
     const maxHeight = h - (cursor - y) - pad - 30;
-    while (size >= 18) {
-      ctx.font = `500 ${size}px Georgia, 'Times New Roman', serif`;
-      lines = wrap(ctx, body, maxWidth);
-      if (lines.length * (size * 1.4) <= maxHeight) break;
-      size -= 3;
+    const key = `${body.length}:${body.slice(0, 64)}:${Math.round(maxWidth)}:${Math.round(maxHeight)}`;
+    let laid = this.laidOut;
+    if (!laid || laid.key !== key) {
+      let size = 40;
+      let lines: string[] = [];
+      while (size >= 18) {
+        ctx.font = `500 ${size}px Georgia, 'Times New Roman', serif`;
+        lines = wrap(ctx, body, maxWidth);
+        if (lines.length * (size * 1.4) <= maxHeight) break;
+        size -= 3;
+      }
+      laid = { key, size, lines };
+      this.laidOut = laid;
     }
+    const { size, lines } = laid;
 
     ctx.fillStyle = TEXT;
     ctx.font = `500 ${size}px Georgia, 'Times New Roman', serif`;
