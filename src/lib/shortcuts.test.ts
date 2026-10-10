@@ -232,6 +232,20 @@ describe("reading a key press", () => {
     expect(keyToken({ key: "/" })).toBe("/");
     expect(keyToken({ key: "k", metaKey: true })).toBe("mod+k");
     expect(keyToken({ key: "k", ctrlKey: true })).toBe("mod+k");
+    expect(keyToken({ key: "b", metaKey: true })).toBe("mod+b");
+    expect(keyToken({ key: "B", ctrlKey: true })).toBe("mod+b");
+  });
+
+  it("still answers the sidebar's old chord with the new one", () => {
+    /*
+     * ⌘\ was the sidebar key for one release before ⌘B — the convention every
+     * other app uses — replaced it. It returns the SAME token rather than one
+     * of its own, so the fingers that learned it in that week keep working
+     * while only one key is ever taught. A second token would mean a second
+     * registry entry and a cheat sheet listing one job twice.
+     */
+    expect(keyToken({ key: "\\", metaKey: true })).toBe("mod+b");
+    expect(keyToken({ key: "\\", ctrlKey: true })).toBe("mod+b");
   });
 
   it("leaves every other browser and system shortcut alone", () => {

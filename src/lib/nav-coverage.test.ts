@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { navSections, visibleNavItems } from "@/lib/nav";
+import { navSections, sidebarFooterItems, visibleNavItems } from "@/lib/nav";
 
 /**
  * A module with no way to reach it.
@@ -74,6 +74,69 @@ describe("the grouping", () => {
     const footers = navSections.filter((s) => s.footer);
     expect(footers.length).toBe(1);
     expect(navSections[navSections.length - 1].footer).toBe(true);
+  });
+
+  /*
+   * And exactly one at the top, for the same reason in reverse.
+   *
+   * The lead section is the one the sidebar draws with no heading and no
+   * chevron, because it holds the dashboard and that row must be visible
+   * however somebody has arranged the rest. Two of them would silently drop a
+   * second heading; one in the middle would render a block of unlabelled rows
+   * between two labelled groups.
+   */
+  it("leads with exactly one section, and it is the first", () => {
+    const leads = navSections.filter((s) => s.lead);
+    expect(leads.length).toBe(1);
+    expect(navSections[0].lead).toBe(true);
+    expect(navSections[0].items.map((i) => i.href)).toEqual(["/dashboard"]);
+  });
+
+  /*
+   * Recording before reading about it.
+   *
+   * This is the whole argument of the ordering and it is one line away from
+   * being undone by somebody tidying the list alphabetically. A church spends
+   * Sunday writing records down and Monday looking at them, and there are far
+   * more Sundays: Attendance and Giving are above Members, and all three are
+   * above Analytics and the reports.
+   */
+  it("puts the weekly jobs above the monthly ones", () => {
+    const at = (href: string) => renderedHrefs.indexOf(href);
+    expect(at("/dashboard")).toBe(0);
+    expect(at("/attendance")).toBeLessThan(at("/members"));
+    expect(at("/giving")).toBeLessThan(at("/members"));
+    expect(at("/members")).toBeLessThan(at("/analytics"));
+    expect(at("/attendance")).toBeLessThan(at("/reports"));
+  });
+});
+
+/**
+ * What the desktop sidebar pins above the avatar.
+ *
+ * Notifications and Settings moved into the account menu, and the dangerous
+ * way to do that would have been deleting them from `navSections` — which is
+ * exactly how three modules went invisible. They are still in the list, still
+ * in the palette, still in the phone's sheet; only the sidebar's footer skips
+ * them, and only because of this flag.
+ */
+describe("the account rows", () => {
+  const footerItems = sidebarFooterItems(navSections);
+
+  it("leaves Help alone above the avatar", () => {
+    expect(footerItems.map((i) => i.href)).toEqual(["/help"]);
+  });
+
+  it("keeps Notifications and Settings in the one list all the same", () => {
+    for (const href of ["/notifications", "/settings"]) {
+      const item = navSections
+        .flatMap((s) => s.items)
+        .find((i) => i.href === href);
+      expect(item, `${href} has been removed from navSections`).toBeDefined();
+      expect(item!.accountMenu, `${href} should be flagged for the account menu`).toBe(
+        true,
+      );
+    }
   });
 });
 

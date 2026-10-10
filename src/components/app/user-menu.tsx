@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import Link from "next/link";
 import {
+  Bell,
   Check,
   Church,
   Laptop,
@@ -126,6 +127,21 @@ export function UserMenu({
           <Link href="/profile">
             <UserRound />
             {t("nav.yourProfile")}
+          </Link>
+        </DropdownMenuItem>
+        {/*
+          Notifications and Settings live here rather than above the avatar in
+          the sidebar. Both are about the person and the account rather than
+          about running the church, and two permanent rows in a menu of
+          twenty-seven modules is two rows the menu could have spent on the
+          work. The sidebar's `accountMenu` flag in `lib/nav.ts` is the other
+          half of this; the phone's menu sheet still lists them inline, where
+          there is no avatar menu to put them behind.
+        */}
+        <DropdownMenuItem asChild>
+          <Link href="/notifications">
+            <Bell />
+            {t("nav.notifications")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

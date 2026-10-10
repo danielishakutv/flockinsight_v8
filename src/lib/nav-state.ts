@@ -15,6 +15,24 @@
 
 export type NavGroup = { title: string; hrefs: string[] };
 
+/**
+ * How the groups decide what is open.
+ *
+ * `manual` is the honest default: every group is open until somebody closes
+ * it, and what they closed is remembered. `focus` hands that decision to the
+ * page instead — only the group you are working in is open, and it changes as
+ * you move. Both exist because the two preferences are genuinely different
+ * people: one wants the whole map in front of them, the other wants one thing
+ * at a time, and guessing which is which from a screen size would be wrong
+ * half the time.
+ */
+export type GroupMode = "manual" | "focus";
+
+/** A stored mode, or the default. Anything unrecognised reads as the default. */
+export function parseGroupMode(raw: string | null | undefined): GroupMode {
+  return raw === "focus" ? "focus" : "manual";
+}
+
 /** The group holding the current page, if any. */
 export function groupOf(
   groups: NavGroup[],
@@ -22,6 +40,11 @@ export function groupOf(
 ): string | undefined {
   if (!active) return undefined;
   return groups.find((g) => g.hrefs.includes(active))?.title;
+}
+
+/** Every group's title — what "collapse all" stores. */
+export function allClosed(groups: NavGroup[]): string[] {
+  return groups.map((g) => g.title);
 }
 
 /**
@@ -35,13 +58,32 @@ export function groupOf(
  *
  * The group containing the current page is always open, whatever was saved —
  * otherwise following a link from elsewhere lands you on a page whose own menu
- * entry is invisible.
+ * entry is invisible. That holds under "collapse all" too: it closes the other
+ * six, not the one you are reading.
+ *
+ * In `focus` mode the stored list is ignored entirely rather than merged with.
+ * Merging would make "only the section I'm in" mean "that one, plus whatever
+ * you happened to have open in the other mode", which is neither thing.
  */
 export function resolveOpenGroups(
   groups: NavGroup[],
   closed: string[],
   active: string | undefined,
+  mode: GroupMode = "manual",
 ): Set<string> {
+  if (mode === "focus") {
+    /*
+     * The fallback matters more than the rule. Plenty of pages are not in the
+     * menu at all — /profile, a single member's record, a meeting room — and
+     * on one of those there is no current group, so the strict reading of
+     * "only the section I'm in" is a sidebar with every group shut: a menu
+     * that looks broken and tells you nothing about why. The first group opens
+     * instead.
+     */
+    const only = groupOf(groups, active) ?? groups[0]?.title;
+    return new Set(only ? [only] : []);
+  }
+
   const open = new Set(
     groups.map((g) => g.title).filter((t) => !closed.includes(t)),
   );

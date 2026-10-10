@@ -228,18 +228,22 @@ export const en = {
     home: "Home",
     more: "More",
     menu: "Menu",
-    menuHint: "Everything your church can do, in seven groups",
+    menuHint: "Everything your church can do, grouped by the job",
     /*
-     * The seven group headings.
+     * The section headings, in menu order.
      *
      * Named for the job somebody came to do, not for the table the data sits
      * in. "Records" used to hold eleven entries — Giving beside Media beside
      * QR codes — and at eleven a heading has stopped helping.
+     *
+     * The order lives in `lib/nav.ts`, not here: recording what happened on
+     * Sunday comes before reading about it on Monday.
      */
-    sectionOverview: "Overview",
-    sectionPeople: "People",
+    sectionHome: "Home",
     sectionGatherings: "Services & events",
     sectionMoney: "Giving & finance",
+    sectionPeople: "People",
+    sectionInsights: "Insights",
     sectionOutreach: "Communication",
     sectionContent: "Media & sharing",
     sectionAccount: "Account & help",
@@ -250,6 +254,10 @@ export const en = {
     removeShortcut: "Remove the {name} shortcut",
     collapseMenu: "Collapse the menu to icons",
     expandMenu: "Show the menu labels",
+    sectionOptions: "How the sections open",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
+    focusSections: "Only the one I'm in",
     filterPlaceholder: "Search the menu…",
     noMatches: "Nothing in the menu matches “{query}”",
     yourProfile: "Your profile",

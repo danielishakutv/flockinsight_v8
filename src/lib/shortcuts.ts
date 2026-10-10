@@ -276,10 +276,17 @@ export const SHORTCUTS: readonly Shortcut[] = [
    * In "view" rather than "do": it writes nothing and goes nowhere. It is
    * also the shortcut of most use to the people who will never read the cheat
    * sheet — a laptop at 1280px gains 220px of table with one chord.
+   *
+   * ⌘B because that is what every other app with a sidebar uses — VS Code,
+   * Notion, Linear, Slack — and a convention somebody already has in their
+   * fingers beats a key we picked for being unclaimed. The cost is real: ⌘B is
+   * bold in a rich-text editor, and this app has one. That is settled in the
+   * provider, which does not claim this chord while the cursor is in a field,
+   * so bold still bolds. See `keyToken` below.
    */
   {
     id: "toggle-sidebar",
-    keys: ["mod+\\"],
+    keys: ["mod+b"],
     labelKey: "shortcuts.toggleSidebar",
     group: "view",
     keywords: ["sidebar", "menu", "collapse", "expand", "narrow", "wide", "icons"],
@@ -351,16 +358,22 @@ export function keyToken(e: KeyPress): string | null {
     /*
      * The two chords we claim, and nothing else.
      *
-     * ⌘K opens the palette. ⌘\ narrows the sidebar — chosen because, unlike
-     * the obvious ⌘B, it is bound to nothing in any browser and is not bold in
-     * a rich-text editor, of which this app has one. Everything else held with
-     * Ctrl or ⌘ belongs to the browser: ⌘P prints the attendance sheet and ⌘L
-     * is the address bar, and a church app that swallows either has broken
-     * something people rely on far more than it has gained.
+     * ⌘K opens the palette. ⌘B narrows the sidebar, which is the convention
+     * everywhere else a sidebar collapses. Everything else held with Ctrl or ⌘
+     * belongs to the browser: ⌘P prints the attendance sheet and ⌘L is the
+     * address bar, and a church app that swallows either has broken something
+     * people rely on far more than it has gained.
+     *
+     * ⌘\ returns the SAME token, not one of its own. It was the sidebar chord
+     * for one release and is in a handful of fingers and one cheat sheet
+     * screenshot; keeping it as a second way to press the same thing costs one
+     * line, and the alternative is a key that worked yesterday doing nothing
+     * today. Only ⌘B is shown, because teaching two keys for one job teaches
+     * neither.
      */
     const k = e.key.toLowerCase();
     if (k === "k") return "mod+k";
-    if (k === "\\") return "mod+\\";
+    if (k === "b" || k === "\\") return "mod+b";
     return null;
   }
 
@@ -480,8 +493,8 @@ export function keyLabel(token: string, isMac: boolean): string {
   switch (token) {
     case "mod+k":
       return isMac ? "⌘K" : "Ctrl K";
-    case "mod+\\":
-      return isMac ? "⌘\\" : "Ctrl \\";
+    case "mod+b":
+      return isMac ? "⌘B" : "Ctrl B";
     case "escape":
       return "Esc";
     case "/":

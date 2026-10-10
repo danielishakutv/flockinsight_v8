@@ -40,8 +40,9 @@ export function openCommandPalette(): void {
  *     guard 1 does not cover a stray `g` while the Add member sheet is open
  *     with six fields filled in. Nothing navigates while a dialog is open.
  *  3. **Stealing the browser's own keys.** ⌘P prints the attendance sheet, ⌘L
- *     is the address bar. `keyToken` claims exactly one chord, ⌘K, and returns
- *     null for every other modifier combination.
+ *     is the address bar. `keyToken` claims two chords — ⌘K and ⌘B — and
+ *     returns null for every other modifier combination. ⌘B is additionally
+ *     given up whenever somebody is typing, because there it means bold.
  *
  * It renders the three surfaces that go with the keys — the palette, the cheat
  * sheet and the occasional tip — because all three need the same
@@ -187,19 +188,20 @@ export function ShortcutsProvider({
        * out of. And ⌘K is a chord, not a character — nobody types it into a
        * name box — so it still toggles the palette when the cursor is already
        * in the palette's own search box, which is where it is a moment after
-       * the palette opens. ⌘\ is a chord for the same reason, and narrowing
-       * the sidebar mid-sentence loses nobody anything.
+       * the palette opens.
        *
-       * `?` is NOT an exception, deliberately: in a search box it is a
-       * character somebody meant to type.
+       * ⌘B is deliberately NOT an exception, which is the whole reason that
+       * key is safe to claim. In the rich-text editor (`ui/rich-text-editor`,
+       * which leans on the browser's own ⌘B rather than binding it) the chord
+       * means bold, and somebody writing a newsletter must get bold. Falling
+       * through here is what gives them it: nothing is prevented on this path,
+       * so the editor sees the press exactly as if this app were not listening.
+       *
+       * `?` is not an exception either: in a search box it is a character
+       * somebody meant to type.
        */
       const typing = isTypingTarget(e.target as HTMLElement | null);
-      if (
-        typing &&
-        token !== "escape" &&
-        token !== "mod+k" &&
-        token !== "mod+\\"
-      ) {
+      if (typing && token !== "escape" && token !== "mod+k") {
         clearBuffer();
         return;
       }

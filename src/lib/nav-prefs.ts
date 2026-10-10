@@ -281,3 +281,9 @@ export function togglePin(pins: readonly string[], href: string): string[] {
 export const VISITS_KEY = "fi-nav-visits";
 export const PINS_KEY = "fi-nav-pins";
 export const CLOSED_GROUPS_KEY = "fi-nav-closed";
+/**
+ * Whether the groups follow the page (`focus`) or stay as they were left
+ * (`manual`). Separate from the closed list on purpose: switching to `focus`
+ * and back has to give somebody the menu they had, not a reset one.
+ */
+export const GROUP_MODE_KEY = "fi-nav-sections";

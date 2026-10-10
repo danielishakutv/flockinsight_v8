@@ -136,12 +136,62 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
         blocks: [
           {
             kind: "text",
-            text: "One chord, and the menu down the left shrinks to a column of icons — about 220 pixels of extra width for the table you are actually reading. Hover any icon and its name appears beside it; press it again and the names come back. FlockInsight remembers which way you had it, so it opens that way next time on this computer.",
+            text: "One chord, and the menu down the left shrinks to a column of icons — about 220 pixels of extra width for the table you are actually reading. Hover any icon and its name appears beside it, with its own shortcut key printed next to the name; press the chord again and the labels come back. FlockInsight remembers which way you had it, so it opens that way next time on this computer.",
           },
           { kind: "table", ...tableFor("view") },
           {
             kind: "note",
             text: "Worth knowing on a 13-inch laptop, where a wide attendance or giving table is the difference between reading it and scrolling it sideways. On a phone there is nothing to collapse — the menu is the More button at the bottom.",
+          },
+        ],
+      },
+      {
+        title: "Deciding how much of the menu you see",
+        blocks: [
+          {
+            kind: "text",
+            text: "The menu is six groups — Services & events, Giving & finance, People, Insights, Communication, Media & sharing — and every heading folds away on its own if you press it. At the very bottom of the menu, under the last group, there is a small control with three sliders on it that does the same thing to all of them at once.",
+          },
+          {
+            kind: "steps",
+            items: [
+              {
+                title: "Expand all",
+                detail:
+                  "Every group open. The whole menu in front of you, which is what most people want on a large screen.",
+              },
+              {
+                title: "Collapse all",
+                detail:
+                  "Every group folded to its heading, except the one holding the page you are on — that one stays open, so you can always see where you are. Seven headings and nothing else is the shortest the menu goes.",
+              },
+              {
+                title: "Only the one I'm in",
+                detail:
+                  "The menu follows you. Open Giving and the Giving & finance group opens by itself and the rest fold away; open Members and People opens instead. Nothing to press and nothing to remember — useful if you work in one or two parts of the app and the other five are noise.",
+              },
+            ],
+          },
+          {
+            kind: "note",
+            text: "Pressing a heading by hand while “Only the one I'm in” is on switches back to doing it yourself, keeping the menu exactly as it looks at that moment. Whichever you choose is remembered on that computer, so you set it once.",
+          },
+          {
+            kind: "text",
+            text: "Two things never fold away, on purpose: Dashboard at the very top, and Help & Support at the very bottom above your name. The first is where everything starts and the second is what you reach for when you are stuck, which is the worst moment to be hunting for it.",
+          },
+        ],
+      },
+      {
+        title: "The keys printed in the menu",
+        blocks: [
+          {
+            kind: "text",
+            text: "On a computer, thirteen of the menu entries have two small keys printed on the right-hand side — “G M” beside Members, “G A” beside Attendance. That is the shortcut for that page, shown where you are already looking rather than in a list you have to go and find.",
+          },
+          {
+            kind: "text",
+            text: "They fade out as your pointer crosses the row, because the pin button for Quick access sits in the same corner. Nothing is lost: the keys are for reading the menu, and by the time you are hovering one row you have already found what you wanted.",
           },
         ],
       },
@@ -178,7 +228,12 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
               {
                 title: "Anything your browser already uses",
                 detail:
-                  "Ctrl P still prints, Ctrl C still copies, Ctrl L still goes to the address bar. Ctrl K and Ctrl \ are the only two combinations FlockInsight claims, and neither of them does anything in a browser on its own.",
+                  "Ctrl P still prints, Ctrl C still copies, Ctrl L still goes to the address bar. Ctrl K and Ctrl B are the only two combinations FlockInsight claims.",
+              },
+              {
+                title: "Ctrl B while you are writing",
+                detail:
+                  "Ctrl B narrows the menu — except inside a box you are typing in, where it still means bold, as it does everywhere else. Writing a devotional or a newsletter, Ctrl B makes the word bold and leaves the menu where it is. That is deliberate: the key belongs to whatever you are working in.",
               },
             ],
           },

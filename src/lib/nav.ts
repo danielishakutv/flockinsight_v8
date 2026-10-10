@@ -67,6 +67,22 @@ export type NavItem = {
    * its records intact rather than on a dead end.
    */
   feature?: FeatureKey;
+  /**
+   * Belongs in the account menu on desktop, not in the sidebar.
+   *
+   * Notifications and Settings are about the person and the account rather
+   * than about running the church, and a bell already sits in the top bar with
+   * the unread count on it. Two permanent rows above the avatar for things
+   * nobody opens weekly is two rows the menu could have spent on the work.
+   *
+   * They stay HERE, in the one list, rather than being deleted from it: the
+   * mobile sheet shows them inline, the ⌘K palette finds them by name, and
+   * `nav-coverage.test.ts` checks every module is reachable. A module removed
+   * from this list to move it somewhere else is precisely how three of them
+   * went invisible (see the note further down). Only the desktop sidebar reads
+   * this flag, and only to skip the row.
+   */
+  accountMenu?: boolean;
 };
 
 /** Is a nav item visible given the user's permissions? */
@@ -185,14 +201,26 @@ export type NavSection = {
   /**
    * Pinned below the scroll area rather than inside it.
    *
-   * Exactly one section is, and it is the last one. Settings and Help are what
-   * somebody reaches for when they are already stuck, and making them scroll
-   * past twenty-four modules they did not want in order to find the word
-   * "Help" is the moment a church gives up and sends a WhatsApp message
-   * instead. The mobile sheet renders it inline at the end, where there is
-   * room.
+   * Exactly one section is, and it is the last one. Help is what somebody
+   * reaches for when they are already stuck, and making them scroll past
+   * twenty-four modules they did not want in order to find the word "Help" is
+   * the moment a church gives up and sends a WhatsApp message instead. The
+   * mobile sheet renders it inline at the end, where there is room.
    */
   footer?: boolean;
+  /**
+   * The first section, which the desktop sidebar draws with no heading and no
+   * chevron.
+   *
+   * Exactly one, and it is first. It holds the dashboard, and the reason it is
+   * not simply the top of a group is that it must never be collapsible: it is
+   * where the wordmark points, where every sign-in lands, and the one row that
+   * has to be visible at a glance however somebody has arranged the rest. A
+   * heading over a single row in a 288px column is also twenty pixels spent
+   * saying nothing. The mobile sheet does show the heading — there is room,
+   * and a headingless block at the top of a sheet reads as detached.
+   */
+  lead?: boolean;
 };
 
 /**
@@ -204,15 +232,25 @@ export type NavSection = {
  * meetings. Eleven is past the point where a heading helps: it is a list with
  * a word on top of it, and finding Finance meant reading all eleven.
  *
- * Seven groups of three to six, in the order a week actually runs: see the
- * church, then the people in it, then the gatherings, then the money, then
- * what you send out, then what you make, and finally the account. Nothing is
- * nested two deep — every module is one click from here, which is the one
- * thing a menu this size must not trade away.
+ * **Doing comes before reading about it.** The order is the argument: home,
+ * then the gathering you are recording, then the money you counted, then the
+ * people, and only then the analytics and the reports. A church's Sunday is
+ * spent writing records down and its Monday is spent looking at them, and
+ * there are far more Sundays. The first arrangement had Analytics, Reports and
+ * Branches above Attendance and Giving, which put the weekly job fifth and the
+ * monthly job first.
+ *
+ * Nothing is nested two deep — every module is one click from here, which is
+ * the one thing a menu this size must not trade away.
  */
 export const navSections: NavSection[] = [
+  /*
+   * Home: one row, no heading on desktop, and never collapsible. See `lead`
+   * on NavSection for why it is not simply the first entry of a group.
+   */
   {
-    titleKey: "nav.sectionOverview",
+    titleKey: "nav.sectionHome",
+    lead: true,
     items: [
       {
         labelKey: "nav.dashboard",
@@ -220,101 +258,6 @@ export const navSections: NavSection[] = [
         icon: LayoutDashboard,
         descriptionKey: "nav.dashboardDesc",
         tile: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
-      },
-      {
-        labelKey: "nav.analytics",
-        feature: "analytics",
-        href: "/analytics",
-        icon: BarChart3,
-        descriptionKey: "nav.analyticsDesc",
-        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-      },
-      {
-        labelKey: "nav.reports",
-        feature: "reports",
-        href: "/reports",
-        icon: Database,
-        descriptionKey: "nav.reportsDesc",
-        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
-        perm: REPORT_PERMS,
-      },
-      /*
-       * Branches sits with the other ways of looking at the whole church
-       * rather than under the account, which is where it used to be. It is not
-       * a setting — it is the network seen from above, which is the same
-       * question the dashboard and analytics answer at a smaller scale.
-       */
-      {
-        labelKey: "nav.branches",
-        feature: "branches",
-        href: "/branches",
-        icon: Network,
-        descriptionKey: "nav.branchesDesc",
-        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
-        perm: ["settings.manage", "analytics.view"],
-      },
-    ],
-  },
-  {
-    titleKey: "nav.sectionPeople",
-    items: [
-      {
-        labelKey: "nav.members",
-        href: "/members",
-        icon: Users,
-        descriptionKey: "nav.membersDesc",
-        tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-        perm: "members.view",
-      },
-      /*
-       * First-timers directly above Follow-up, and both above Members' other
-       * neighbours, because they are one errand: somebody new came on Sunday
-       * and has to be called on Tuesday. They were four apart in the old menu,
-       * which is part of why churches were registering visitors through
-       * Members → Add and losing them (see the note in AGENTS.md).
-       */
-      {
-        labelKey: "nav.firstTimers",
-        feature: "followUp",
-        href: "/first-timers",
-        icon: UserPlus,
-        descriptionKey: "nav.firstTimersDesc",
-        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-        perm: "followup.view",
-      },
-      {
-        labelKey: "nav.followUp",
-        feature: "followUp",
-        href: "/follow-up",
-        icon: HeartHandshake,
-        descriptionKey: "nav.followUpDesc",
-        tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-        perm: "followup.view",
-      },
-      {
-        labelKey: "nav.groups",
-        href: "/groups",
-        icon: UsersRound,
-        descriptionKey: "nav.groupsDesc",
-        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
-        perm: "groups.view",
-      },
-      {
-        labelKey: "nav.celebrations",
-        href: "/celebrations",
-        icon: PartyPopper,
-        descriptionKey: "nav.celebrationsDesc",
-        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
-        perm: "members.view",
-      },
-      {
-        labelKey: "nav.training",
-        feature: "training",
-        href: "/training",
-        icon: GraduationCap,
-        descriptionKey: "nav.trainingDesc",
-        tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
-        perm: "training.view",
       },
     ],
   },
@@ -399,6 +342,111 @@ export const navSections: NavSection[] = [
     ],
   },
   {
+    titleKey: "nav.sectionPeople",
+    items: [
+      {
+        labelKey: "nav.members",
+        href: "/members",
+        icon: Users,
+        descriptionKey: "nav.membersDesc",
+        tile: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        perm: "members.view",
+      },
+      /*
+       * First-timers directly above Follow-up, and both above Members' other
+       * neighbours, because they are one errand: somebody new came on Sunday
+       * and has to be called on Tuesday. They were four apart in the old menu,
+       * which is part of why churches were registering visitors through
+       * Members → Add and losing them (see the note in AGENTS.md).
+       */
+      {
+        labelKey: "nav.firstTimers",
+        feature: "followUp",
+        href: "/first-timers",
+        icon: UserPlus,
+        descriptionKey: "nav.firstTimersDesc",
+        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+        perm: "followup.view",
+      },
+      {
+        labelKey: "nav.followUp",
+        feature: "followUp",
+        href: "/follow-up",
+        icon: HeartHandshake,
+        descriptionKey: "nav.followUpDesc",
+        tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+        perm: "followup.view",
+      },
+      {
+        labelKey: "nav.groups",
+        href: "/groups",
+        icon: UsersRound,
+        descriptionKey: "nav.groupsDesc",
+        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+        perm: "groups.view",
+      },
+      {
+        labelKey: "nav.celebrations",
+        href: "/celebrations",
+        icon: PartyPopper,
+        descriptionKey: "nav.celebrationsDesc",
+        tile: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
+        perm: "members.view",
+      },
+      {
+        labelKey: "nav.training",
+        feature: "training",
+        href: "/training",
+        icon: GraduationCap,
+        descriptionKey: "nav.trainingDesc",
+        tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
+        perm: "training.view",
+      },
+    ],
+  },
+  /*
+   * Reading what was recorded, which is a different week from recording it —
+   * and the reason this group sits below the three above rather than at the
+   * top, where it started.
+   */
+  {
+    titleKey: "nav.sectionInsights",
+    items: [
+      {
+        labelKey: "nav.analytics",
+        feature: "analytics",
+        href: "/analytics",
+        icon: BarChart3,
+        descriptionKey: "nav.analyticsDesc",
+        tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+      },
+      {
+        labelKey: "nav.reports",
+        feature: "reports",
+        href: "/reports",
+        icon: Database,
+        descriptionKey: "nav.reportsDesc",
+        tile: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+        perm: REPORT_PERMS,
+      },
+      /*
+       * Branches sits with the other ways of looking at the whole church
+       * rather than under the account, which is where it used to be. It is not
+       * a setting — it is the network seen from above, which is the same
+       * question analytics and the reports answer at a smaller scale.
+       */
+      {
+        labelKey: "nav.branches",
+        feature: "branches",
+        href: "/branches",
+        icon: Network,
+        descriptionKey: "nav.branchesDesc",
+        tile: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+        perm: ["settings.manage", "analytics.view"],
+      },
+    ],
+  },
+  {
     titleKey: "nav.sectionOutreach",
     items: [
       {
@@ -462,12 +510,20 @@ export const navSections: NavSection[] = [
     titleKey: "nav.sectionAccount",
     footer: true,
     items: [
+      /*
+       * Notifications and Settings are `accountMenu`: the desktop sidebar
+       * leaves them to the menu under the avatar, which is where somebody
+       * looks for their own account anyway, and the top bar already carries a
+       * bell with the unread count on it. They are still listed here, so the
+       * phone sheet, the palette and the coverage test all still see them.
+       */
       {
         labelKey: "nav.notifications",
         href: "/notifications",
         icon: Bell,
         descriptionKey: "nav.notificationsDesc",
         tile: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400",
+        accountMenu: true,
       },
       {
         labelKey: "nav.settings",
@@ -476,7 +532,15 @@ export const navSections: NavSection[] = [
         descriptionKey: "nav.settingsDesc",
         tile: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
         perm: SETTINGS_PERMS,
+        accountMenu: true,
       },
+      /*
+       * Help stays fixed above the avatar, alone. It is the one thing in this
+       * group somebody reaches for mid-task, and it is reached for precisely
+       * when they are stuck — which is the worst moment to ask them to scroll
+       * past twenty-four modules or to guess that it lives behind their own
+       * photograph.
+       */
       {
         labelKey: "nav.help",
         href: "/help",
@@ -504,6 +568,23 @@ export function visibleNavItems(
   return navSections.flatMap((s) =>
     s.items.filter((i) => navVisible(i, perms, isOwner, churchSlug)),
   );
+}
+
+/**
+ * What the desktop sidebar pins above the avatar.
+ *
+ * The footer section minus the rows the account menu has taken, which today
+ * leaves Help on its own. A function rather than a filter written into the
+ * component, because the mobile sheet must NOT apply it — on a phone there is
+ * no sidebar footer and the sheet is the whole menu — and the easiest way to
+ * get that wrong is for the rule to live in a component where the next person
+ * copies it into the other one.
+ */
+export function sidebarFooterItems(sections: NavSection[]): MenuItem[] {
+  return sections
+    .filter((s) => s.footer)
+    .flatMap((s) => s.items)
+    .filter((i) => !i.accountMenu);
 }
 
 /** The sections, each filtered, with the now-empty ones dropped. */
