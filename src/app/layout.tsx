@@ -7,6 +7,7 @@ import { PostHogProvider } from "@/components/analytics/posthog-provider";
 import { MatomoProvider } from "@/components/analytics/matomo-provider";
 import { I18nProvider } from "@/components/i18n-provider";
 import { getI18n } from "@/lib/i18n/server";
+import { ENTITY_SENTENCE_SHORT, metaKeywords } from "@/lib/seo/keywords";
 
 const SITE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -24,25 +25,41 @@ const geistSans = Geist({
   display: "swap",
 });
 
+/*
+ * The site-wide default metadata, and the single most consequential edit in
+ * this file's history.
+ *
+ * It used to read "Modern Church Management for Africa", with
+ * `locale: "en_NG"` and a description naming only Nigeria. Every search engine
+ * and every AI assistant reads those three fields first and takes them
+ * literally — so a pastor in London asking any of them for church software was
+ * being told, by us, that this product is for somebody else. We have paying
+ * churches in Europe and East Africa; the metadata disqualified them.
+ *
+ * What replaces it says what the product IS before where it is from, which is
+ * the order `ENTITY_SENTENCE` enforces and `keywords.test.ts` asserts. Africa
+ * is not removed — it is moved to where it is a credential rather than a
+ * fence: `alternateLocale`, `areaServed` in the landing page's Organization
+ * schema, and the "built in Nigeria, which is why it works anywhere" section.
+ *
+ * `keywords` is a dead ranking signal for Google and has been for a decade. It
+ * stays because AI crawlers do still read it, and it now comes from the
+ * keyword map rather than being typed here, so it cannot drift from the pages
+ * that actually target those phrases.
+ */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "FlockInsight — Modern Church Management for Africa",
+    default: "FlockInsight — Church Management & Operations Platform",
     template: "%s · FlockInsight",
   },
-  description:
-    "Track attendance, members, groups, giving and follow-up — built for churches in Nigeria and across Africa. Fast, offline-ready and beautifully simple.",
+  description: ENTITY_SENTENCE_SHORT,
   applicationName: "FlockInsight",
-  keywords: [
-    "church management software",
-    "church app Nigeria",
-    "church attendance app",
-    "church giving tithe offering",
-    "ChMS Africa",
-    "member management",
-    "FlockInsight",
-  ],
-  authors: [{ name: "Toko Technologies" }],
+  keywords: metaKeywords(),
+  authors: [{ name: "Toko Technologies", url: "https://tokotechnologies.com" }],
+  creator: "Toko Technologies",
+  publisher: "Toko Technologies",
+  category: "Church Management Software",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -53,19 +70,39 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "FlockInsight",
-    title: "FlockInsight — Modern Church Management for Africa",
-    description:
-      "Attendance, members, groups, giving and follow-up for the modern African church.",
+    title: "FlockInsight — Church Management & Operations Platform",
+    description: ENTITY_SENTENCE_SHORT,
     url: SITE_URL,
-    locale: "en_NG",
+    /*
+     * en_GB, not en_NG. Both are honest; only one of them fails to narrow the
+     * audience. The locales we actually serve are listed beside it so a
+     * crawler can see the site is multilingual before it finds the hreflang.
+     */
+    locale: "en_GB",
+    alternateLocale: ["en_NG", "fr_FR", "pt_PT", "sw_KE", "ha_NG", "ig_NG", "yo_NG"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "FlockInsight — Modern Church Management",
-    description:
-      "Attendance, members, groups, giving and follow-up for the modern African church.",
+    title: "FlockInsight — Church Management & Operations Platform",
+    description: ENTITY_SENTENCE_SHORT,
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+    /*
+     * `max-image-preview: large` is what lets Google show the OG card in
+     * search and in Discover rather than a thumbnail. Without it the images
+     * built in `lib/og/card.tsx` are shown small or not at all — the same
+     * mistake as declaring a large Twitter card with no image.
+     */
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {

@@ -13,10 +13,10 @@ import type { LandingContent } from "@/lib/landing-content";
 export const fr: LandingContent = {
   hero: {
     eyebrow: "Pour les églises, fraternités et ministères",
-    title: "Tout ce dont votre ministère a besoin,",
-    titleAccent: "dans une seule application",
-    body: "Ne jonglez plus entre carnets, tableurs et groupes WhatsApp. Présence, membres, groupes, classes, dons, finances de l'église et suivi des nouveaux. SMS groupés et e-mails gratuits, rappels qui s'envoient seuls, événements, formulaires, prédications et votre propre page publique — une seule connexion, pensée pour l'Afrique.",
-    ctaPrimary: "Commencer gratuitement",
+    title: "Gérez toute votre église",
+    titleAccent: "depuis une seule connexion",
+    body: "Ne jonglez plus entre carnets, tableurs et groupes WhatsApp. Présence, membres, groupes, classes, dons, finances de l'église et suivi des nouveaux. SMS groupés et e-mails gratuits, rappels qui s'envoient seuls, événements, formulaires, prédications et votre propre page publique — dix-huit modules, une seule connexion, dans votre propre devise.",
+    ctaPrimary: "Démarrer mon essai gratuit",
     ctaSecondary: "Voir les tarifs",
     reassurance: "7 premiers dimanches gratuits • Sans carte bancaire • Résiliable à tout moment",
   },
@@ -156,10 +156,10 @@ export const fr: LandingContent = {
     },
   ],
 
-  builtForTitle: "Pensé pour l'église africaine",
+  builtForTitle: "Conçu au Nigeria, et c'est pourquoi il fonctionne partout",
   builtFor: [
     {
-      title: "Cela fonctionne sur une connexion lente",
+      title: "Conçu là où la connexion est la pire",
       body: "Les pages qu'un visiteur ou un bénévole ouvre réellement sont conçues pour être légères. Pas de tableaux de bord lourds là où une page simple suffit, et rien de chargé avant que vous puissiez lire la page.",
     },
     {
@@ -167,8 +167,8 @@ export const fr: LandingContent = {
       body: "Nous nous occupons pour vous de l'enregistrement de l'identifiant auprès des opérateurs, pour que vos messages affichent GraceChapel plutôt qu'un numéro inconnu que l'on ignore.",
     },
     {
-      title: "Le naira, et 30 autres devises africaines",
-      body: "L'argent est enregistré et présenté dans votre propre devise, pas converti dans celle de quelqu'un d'autre.",
+      title: "Votre argent, pas une conversion",
+      body: "Plus de 40 devises — naira, cedi, shilling, rand, livre, euro, dollar — enregistrées et présentées telles quelles. Vos comptes ne sont jamais la devise de quelqu'un d'autre avec un taux appliqué.",
     },
     {
       title: "Les adresses telles qu'on les écrit vraiment",
@@ -233,7 +233,7 @@ export const fr: LandingContent = {
     },
     {
       q: "Dans quels pays cela fonctionne-t-il ?",
-      a: "Partout où il y a une connexion internet, avec la prise en charge de plus de 30 devises africaines. C'est construit en pensant d'abord au Nigeria et au reste de l'Afrique — formats d'adresse, devises et routes SMS sont configurés pour ce contexte en priorité.",
+      a: "Tout pays disposant d'une connexion internet. Plus de 60 pays sont pris en charge avec leur propre devise, fuseau horaire et format d'adresse, soit plus de 40 devises dont le naira, le cedi, le shilling, le rand, la livre, l'euro et le dollar. Des églises l'utilisent en Afrique de l'Ouest, en Afrique de l'Est, en Afrique australe et en Europe. Les identifiants SMS sont pour l'instant limités au Nigeria ; l'e-mail fonctionne partout.",
     },
     {
       q: "Les données de mon église sont-elles en sécurité ?",

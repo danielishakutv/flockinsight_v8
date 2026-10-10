@@ -56,7 +56,12 @@ export async function generateMetadata({
     openGraph: {
       title: e.title,
       description: desc,
-      images: e.flyerUrl ? [`${siteUrl()}${e.flyerUrl}`] : undefined,
+      /*
+       * The flyer is not the preview. `opengraph-image.tsx` here explains why:
+       * flyers are portrait, and every platform centre-crops a portrait image
+       * into the 1.91:1 slot, which takes the event name off the top and the
+       * date off the bottom. The flyer still leads the page.
+       */
       type: "website",
     },
   };

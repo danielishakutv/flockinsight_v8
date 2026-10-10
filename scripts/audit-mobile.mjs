@@ -323,7 +323,21 @@ function scan(path, html) {
     if (tag === "table") {
       const scroller = stack.find((a) => scrollsX(a.cls));
       const clipper = stack.find((a) => clipsX(a.cls));
-      if (!scroller) {
+      /*
+       * A table that stacks is not a table, as far as overflow goes.
+       *
+       * `block md:table` means the element is a block below the `md`
+       * breakpoint — its rows and cells are blocks too — so at 320px it is a
+       * column of text that wraps inside its container and has no horizontal
+       * extent to reach. Flagging it as unscrollable sends the next person
+       * looking for a scroller that must not exist: adding one would turn a
+       * perfectly readable stack into a sideways-scrolling grid on a phone.
+       *
+       * Only `md:table` (and the `lg`/`sm` equivalents) count. A plain
+       * `<table>` with no responsive display switch is still a finding.
+       */
+      const stacksOnMobile = cls.some((c) => /^(sm|md|lg|xl):table$/.test(c));
+      if (!scroller && !stacksOnMobile) {
         add(clipper ? "HIGH" : "MEDIUM", "table-not-scrollable", {
           minWidth: minWidthPx(cls) || null,
           clippedBy: clipper

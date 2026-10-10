@@ -36,7 +36,7 @@ export async function generateMetadata({
           ? `${formatMoney(link.raised, link.currency)} given so far. ${description}`
           : description,
       type: "website",
-      images: link.churchLogo ? [{ url: link.churchLogo }] : undefined,
+      // Card comes from `opengraph-image.tsx` here.
     },
     /*
      * Indexed, unlike a group contribution page.

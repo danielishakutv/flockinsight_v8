@@ -52,7 +52,14 @@ export async function generateMetadata({
     c.tagline ||
     c.about?.slice(0, 160) ||
     `${c.name}${c.city ? ` in ${c.city}` : ""} on FlockInsight.`;
-  const img = c.coverUrl || c.logo;
+  /*
+   * No `images` here. `opengraph-image.tsx` in this folder generates the card,
+   * and a file-convention image takes precedence over anything set in
+   * metadata — so listing one here would be dead code that reads like the
+   * source of truth. It used to be `coverUrl || logo`, which handed WhatsApp a
+   * square image and got the small preview bubble for the platform's
+   * most-shared link.
+   */
   return {
     title: `${c.name} · FlockInsight`,
     description: desc,
@@ -61,7 +68,6 @@ export async function generateMetadata({
       title: c.name,
       description: desc,
       url: churchUrl(handle),
-      images: img ? [img.startsWith("http") ? img : `${siteUrl()}${img}`] : undefined,
       type: "website",
     },
     twitter: { card: "summary_large_image", title: c.name, description: desc },

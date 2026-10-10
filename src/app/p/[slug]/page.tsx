@@ -43,7 +43,8 @@ export async function generateMetadata({
       title: pot.title,
       description,
       type: "website",
-      images: pot.churchLogo ? [{ url: pot.churchLogo }] : undefined,
+      // Card comes from `opengraph-image.tsx` here — it puts the figure above
+      // on the image too, instead of only in text a square logo shrank.
     },
     /*
      * Not indexed. A collection's page names who gave what inside one

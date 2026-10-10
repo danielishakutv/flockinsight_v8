@@ -28,10 +28,21 @@ export type LandingFeature = {
  * what search engines and AI assistants penalise, and they are the first thing
  * a careful pastor checks.
  */
+/*
+ * "₦0 to start" used to be the third of these, and it had to go.
+ *
+ * Not because it was untrue — there is no card to begin — but because a Naira
+ * sign in the first figure a visitor reads tells a church in London, Nairobi
+ * or Lisbon that this product is for somebody else. It is the same mistake the
+ * old `<title>` made with "for Africa". The replacement says the same
+ * reassuring thing in a way that is true everywhere: the money stays in your
+ * money. 43 currencies in `lib/money.ts`, 62 countries profiled in
+ * `lib/country-profile.ts` — "40+" is the figure we can defend if asked.
+ */
 export const HIGHLIGHTS: { value: string; label: string }[] = [
   { value: "18", label: "Modules, one login" },
   { value: "7", label: "Sundays free to try" },
-  { value: "₦0", label: "To start — no card" },
+  { value: "40+", label: "Currencies, yours included" },
   { value: "100%", label: "Your data, exportable" },
 ];
 
@@ -129,33 +140,43 @@ export const FEATURES: LandingFeature[] = [
 ];
 
 /**
- * Why this suits an African church specifically. These are design decisions
- * you can verify in the product, which is what makes them worth publishing.
+ * The engineering decisions, and why being built in Nigeria is the credential
+ * rather than the limit.
+ *
+ * This list used to be headed "why this suits an African church specifically",
+ * which quietly argued that a church anywhere else should look elsewhere. The
+ * facts in it did not change — the frame did. Software that has to stay usable
+ * on a congested mobile network in Lagos is software that is pleasant on
+ * fibre in Rotterdam; the reverse is not true, which is why most church
+ * software is unusable in half the world.
+ *
+ * Every line is a design decision you can verify in the product within an hour
+ * of signing up. That is the only kind of claim worth publishing.
  */
 export const BUILT_FOR: { title: string; body: string }[] = [
   {
-    title: "It works on a slow connection",
-    body: "The pages a visitor or a volunteer actually opens are built to be light. No heavy dashboards where a simple page will do, and nothing loaded before you can read the page.",
+    title: "Built where the connection is worst",
+    body: "The pages a visitor or a volunteer actually opens are kept light, and nothing loads before you can read the page. Software that survives a congested mobile network is quick everywhere else by default.",
   },
   {
     title: "SMS that arrives from your church's name",
     body: "We handle the sender-ID registration with the networks for you, so your texts say GraceChapel rather than an unknown number people ignore.",
   },
   {
-    title: "Naira, and 30 other African currencies",
-    body: "Money is recorded and reported in your own currency, not converted into somebody else's.",
+    title: "Your own money, not a conversion",
+    body: "More than 40 currencies — Naira, Cedis, Shillings, Rand, Pounds, Euros, Dollars — recorded and reported as themselves. Your books are never somebody else's currency with a rate applied.",
   },
   {
-    title: "Addresses the way they are actually written",
-    body: "House, street, city, LGA and state — with landmarks on your public page, because that is how people are really directed in a Nigerian city.",
+    title: "Addresses the way your city writes them",
+    body: "House, street, city, LGA and state where that is the format, ordinary postal addresses where it is not, and landmarks on your public page — because that is how people are really directed.",
   },
   {
     title: "Runs on the phone in your pocket",
-    body: "Install it to your home screen and it opens like an app. Attendance is designed to be recorded standing up, one-handed.",
+    body: "Install it to your home screen and it opens like an app. Attendance is designed to be recorded standing up, one-handed, at the back of the hall.",
   },
   {
-    title: "Priced for a real congregation",
-    body: "Seven Sundays free, no card to begin, and a plan that starts small. Nothing here assumes an American church budget.",
+    title: "Priced against a real congregation",
+    body: "Seven Sundays free, no card to begin, and a plan that starts small — in your currency, at your country's level, not converted from an American price list.",
   },
 ];
 
@@ -205,11 +226,11 @@ export const STEPS = [
 export const FAQ: { q: string; a: string }[] = [
   {
     q: "What is FlockInsight?",
-    a: "FlockInsight is church management software for churches, fellowships and ministries. It keeps attendance, members, groups, training, giving, church finances, visitor follow-up, communication, events, forms, sermons and reports in one place, and gives every church a public page. It runs in a web browser on any phone or computer.",
+    a: "FlockInsight is an all-in-one church management and operations platform. It holds attendance, members, groups, training, giving, church finances, visitor follow-up, communication, events, facilities, media and reports in one login, and gives every church a public page. It runs in a browser on any phone or computer.",
   },
   {
     q: "How much does it cost?",
-    a: "Every church gets its first seven Sundays free with no card required. After that there are paid plans priced in Naira, differing mainly by how many members you can hold. Email is free and unlimited on every plan; SMS is paid per message from a wallet you top up.",
+    a: "Your first seven Sundays are free, with no card required. After that, plans differ mainly by how many members you can hold, and are charged in your own currency. Email to members is free and unlimited on every plan; SMS is paid per message from a wallet you top up.",
   },
   {
     q: "Does it work on a phone?",
@@ -241,7 +262,11 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Which countries does it work in?",
-    a: "It works anywhere with an internet connection and supports more than 30 African currencies. It is built with Nigeria and the rest of Africa in mind — address formats, currencies and SMS routes are set up for that context first.",
+    a: "Any country with an internet connection. More than 60 countries are profiled with their own currency, timezone and address format, covering over 40 currencies including Naira, Cedis, Shillings, Rand, Pounds, Euros and Dollars. Churches use it across West and East Africa, Southern Africa and Europe. SMS sender IDs are currently Nigeria-only; email works everywhere.",
+  },
+  {
+    q: "Is it only for African churches?",
+    a: "No. It was engineered in Nigeria, which is why it stays usable on a poor connection and keeps your money in your own currency — both of which matter to a church anywhere. A church in London or Nairobi gets the same platform, priced and dated for where it actually is.",
   },
   {
     q: "Is my church's data safe?",
@@ -379,12 +404,27 @@ export type PricingCopy = {
 };
 
 export const en: LandingContent = {
+  /*
+   * The headline is the positioning, so it is worth saying what changed.
+   *
+   * It used to end "in one simple app ... built for Africa". Two problems.
+   * "App" invited a comparison with a member database, which is the fight we
+   * lose — the field has ten of those and they are all older than us. And "for
+   * Africa" is an instruction to every search engine and assistant to rule us
+   * out for the churches we already have in London, Nairobi and Lisbon.
+   *
+   * "Run your whole church from one login" claims the operations category
+   * instead, which nothing else in this field can claim, because nothing else
+   * in this field is eighteen modules. Africa stays — as the engineering
+   * credential further down the page, where it is an advantage rather than a
+   * boundary.
+   */
   hero: {
     eyebrow: "For churches, fellowships & ministries",
-    title: "Everything your ministry needs,",
-    titleAccent: "in one simple app",
-    body: "Stop juggling notebooks, spreadsheets and WhatsApp groups. Attendance, members, groups, classes, giving, church finances and follow-up. Bulk SMS and free email, reminders that send themselves, events, forms, sermons and your own public page — one login, built for Africa.",
-    ctaPrimary: "Start free",
+    title: "Run your whole church",
+    titleAccent: "from one login",
+    body: "Stop juggling notebooks, spreadsheets and WhatsApp groups. Attendance, members, groups, classes, giving, church finances and follow-up. Bulk SMS and free email, reminders that send themselves, events, facilities, forms, sermons and your own public page — eighteen modules, one login, in your own currency.",
+    ctaPrimary: "Start my free trial",
     ctaSecondary: "See pricing",
     reassurance: "First 7 Sundays free • No card required • Cancel anytime",
   },
@@ -398,7 +438,7 @@ export const en: LandingContent = {
   features: FEATURES,
   stepsTitle: "Get started in minutes",
   steps: STEPS,
-  builtForTitle: "Built for how African churches actually work",
+  builtForTitle: "Built in Nigeria, which is why it works anywhere",
   builtFor: BUILT_FOR,
   audiencesTitle: "Built for",
   audiences: AUDIENCES,

@@ -45,7 +45,7 @@ export async function generateMetadata({
     openGraph: {
       title: `${page.title} · ${page.churchName}`,
       description: description.slice(0, 300),
-      images: page.churchLogo ? [page.churchLogo] : undefined,
+      // Card comes from `opengraph-image.tsx` here.
       type: "website",
     },
   };

@@ -37,10 +37,14 @@ export async function generateMetadata({
       url,
       type: "article",
       publishedTime: post.publishedAt?.toISOString(),
-      images: post.coverUrl ? [{ url: post.coverUrl }] : undefined,
+      // Card comes from `opengraph-image.tsx` here: the headline as type,
+      // which is never cropped. Cover art still leads the article.
     },
     twitter: {
-      card: post.coverUrl ? "summary_large_image" : "summary",
+      // Always the large card now, because there is always a large image.
+      // This used to fall back to "summary" for a post with no cover, which
+      // is the narrow thumbnail nobody taps.
+      card: "summary_large_image",
       title: post.seoTitle || post.title,
       description,
     },

@@ -9,8 +9,8 @@ import {
   pricesForCountry,
   requestCountry,
 } from "@/lib/plan-price";
-import { Wordmark } from "@/components/brand";
-import { PublicLanguageMenu } from "@/components/public/public-language-menu";
+import { PublicHeader } from "@/components/landing/public-header";
+import { PublicFooter } from "@/components/landing/public-footer";
 import { PromoPopup } from "@/components/public/promo-popup";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,30 +52,19 @@ export default async function PricingPage() {
   const currencyNote = currencyNoteFor(priced, t);
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <PromoPopup />
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 lg:px-8">
-        <Link href="/">
-          <Wordmark />
-        </Link>
-        <div className="flex items-center gap-2">
-          <PublicLanguageMenu />
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/churches">{nav.findChurch}</Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/demo">{nav.bookDemo}</Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">{nav.logIn}</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/signup">{nav.startFree}</Link>
-          </Button>
-        </div>
-      </header>
+      {/*
+        The shared header, not a second hand-rolled one.
+        The bespoke bar this replaces put four buttons and a language menu in
+        an unwrapped flex row: 623px of content in a 390px viewport, so the
+        whole pricing page scrolled sideways on every phone. It also meant the
+        one page a buyer reads before paying was the only public page with no
+        route to the solution, country and comparison pages.
+      */}
+      <PublicHeader nav={nav} />
 
-      <main className="mx-auto max-w-6xl px-4 pb-20 lg:px-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 lg:px-8">
         <div className="mx-auto max-w-2xl py-10 text-center lg:py-16">
           <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
             {t.title}
@@ -180,6 +169,13 @@ export default async function PricingPage() {
           .
         </p>
       </main>
+
+      <PublicFooter
+        footer={content.footer}
+        nav={nav}
+        pricing={t}
+        tagline={content.footerTagline}
+      />
     </div>
   );
 }

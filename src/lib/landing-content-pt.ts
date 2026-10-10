@@ -12,10 +12,10 @@ import type { LandingContent } from "@/lib/landing-content";
 export const pt: LandingContent = {
   hero: {
     eyebrow: "Para igrejas, comunhões e ministérios",
-    title: "Tudo o que o seu ministério precisa,",
-    titleAccent: "numa só aplicação simples",
-    body: "Deixe de andar entre cadernos, folhas de cálculo e grupos de WhatsApp. Presenças, membros, grupos, turmas, ofertas, finanças da igreja e acompanhamento. SMS em massa e e-mail grátis, lembretes que se enviam sozinhos, eventos, formulários, pregações e a sua própria página pública — uma só conta, feita para África.",
-    ctaPrimary: "Começar gratuitamente",
+    title: "Gira toda a sua igreja",
+    titleAccent: "a partir de uma só conta",
+    body: "Deixe de andar entre cadernos, folhas de cálculo e grupos de WhatsApp. Presenças, membros, grupos, turmas, ofertas, finanças da igreja e acompanhamento. SMS em massa e e-mail grátis, lembretes que se enviam sozinhos, eventos, formulários, pregações e a sua própria página pública — dezoito módulos, uma só conta, na sua própria moeda.",
+    ctaPrimary: "Começar o meu teste grátis",
     ctaSecondary: "Ver preços",
     reassurance: "Primeiros 7 domingos grátis • Sem cartão • Cancele quando quiser",
   },
@@ -155,10 +155,10 @@ export const pt: LandingContent = {
     },
   ],
 
-  builtForTitle: "Feito para o modo como as igrejas africanas funcionam",
+  builtForTitle: "Construído na Nigéria, e é por isso que funciona em qualquer lugar",
   builtFor: [
     {
-      title: "Funciona com ligação lenta",
+      title: "Construído onde a ligação é pior",
       body: "As páginas que um visitante ou um voluntário abre de facto são feitas para serem leves. Sem painéis pesados onde basta uma página simples, e nada é carregado antes de poder ler a página.",
     },
     {
@@ -166,8 +166,8 @@ export const pt: LandingContent = {
       body: "Tratamos por si do registo do ID de remetente junto das operadoras, para que as suas mensagens digam GraceChapel em vez de um número desconhecido que as pessoas ignoram.",
     },
     {
-      title: "Naira, e mais 30 moedas africanas",
-      body: "O dinheiro é registado e apresentado na sua própria moeda, não convertido para a de outra pessoa.",
+      title: "O seu dinheiro, não uma conversão",
+      body: "Mais de 40 moedas — naira, cedi, xelim, rand, libra, euro, dólar — registadas e apresentadas como são. As suas contas nunca são a moeda de outra pessoa com uma taxa aplicada.",
     },
     {
       title: "Moradas como são realmente escritas",
@@ -232,7 +232,7 @@ export const pt: LandingContent = {
     },
     {
       q: "Em que países funciona?",
-      a: "Em qualquer lugar com ligação à internet, com suporte para mais de 30 moedas africanas. Foi construído a pensar primeiro na Nigéria e no resto de África — formatos de morada, moedas e rotas de SMS estão configurados para esse contexto.",
+      a: "Qualquer país com ligação à internet. Mais de 60 países estão perfilados com a sua própria moeda, fuso horário e formato de morada, cobrindo mais de 40 moedas, incluindo naira, cedi, xelim, rand, libra, euro e dólar. Há igrejas a usá-lo na África Ocidental, Oriental e Austral e na Europa. Os IDs de remetente de SMS são, por agora, apenas da Nigéria; o e-mail funciona em todo o lado.",
     },
     {
       q: "Os dados da minha igreja estão seguros?",

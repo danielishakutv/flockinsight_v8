@@ -49,3 +49,10 @@ next-env.d.ts
 /_flockinsight-web.emptied/
 /src/app/_old_dashboard/
 src/db/_roletest.ts.bak
+
+# Screenshots and one-off analysis scripts.
+# `scripts/screenshot.mjs` IS committed — it is the tool. Its output is not:
+# the full set is ~200MB of PNGs, regenerated in a few minutes by
+# `node scripts/screenshot.mjs` against a running server.
+/screenshots/
+/scratch/
