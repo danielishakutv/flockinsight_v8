@@ -74,6 +74,8 @@ export const yo: PartialDictionary = {
     firstName: "Orúkọ àkọ́kọ́",
     lastName: "Orúkọ ìdílé",
     phone: "Fóònù",
+    phoneNumber: "Nọ́mbà fóònù",
+    referralCode: "Kóòdù ìtọ́kasí",
     email: "Ímeèlì",
     address: "Àdírẹ́sì",
     notes: "Àkọsílẹ̀",

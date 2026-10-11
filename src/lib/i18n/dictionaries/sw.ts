@@ -74,6 +74,8 @@ export const sw: PartialDictionary = {
     firstName: "Jina la kwanza",
     lastName: "Jina la ukoo",
     phone: "Simu",
+    phoneNumber: "Namba ya simu",
+    referralCode: "Namba ya rufaa",
     email: "Barua pepe",
     address: "Anwani",
     notes: "Maelezo",

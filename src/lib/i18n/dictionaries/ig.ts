@@ -72,6 +72,8 @@ export const ig: PartialDictionary = {
     firstName: "Aha mbụ",
     lastName: "Aha nna",
     phone: "Ekwentị",
+    phoneNumber: "Nọmba ekwentị",
+    referralCode: "Koodu ntụziaka",
     email: "Imel",
     address: "Adreesị",
     notes: "Ndetu",

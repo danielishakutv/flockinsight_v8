@@ -81,6 +81,8 @@ export const pcm: PartialDictionary = {
     firstName: "First name",
     lastName: "Last name",
     phone: "Phone",
+    phoneNumber: "Phone number",
+    referralCode: "Referral code",
     email: "Email",
     address: "Address",
     notes: "Notes",

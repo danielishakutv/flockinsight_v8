@@ -65,47 +65,13 @@ export async function requirePeer(
  * Rate limiting
  *
  * A meeting passcode is six digits — a million combinations, which a script
- * works through in minutes if nothing stops it. This does.
- *
- * In-memory and therefore per-worker: with PM2 running two workers an attacker
- * gets twice the allowance. That is a factor of two against a limit chosen
- * with orders of magnitude of headroom, and the alternative — a table write on
- * every attempt — would put a hot row in front of the join path for everyone.
+ * works through in minutes if nothing stops it. The counter itself now lives
+ * in `lib/rate-limit.ts`, because four things outside this module were importing
+ * it from here and pulling the whole meetings tree in behind it. Re-exported
+ * so the join route and its tests go on reading it from one place.
  * ========================================================== */
 
-type Bucket = { count: number; resetAt: number };
-const buckets = new Map<string, Bucket>();
-
-export function rateLimit(
-  key: string,
-  limit: number,
-  windowMs: number,
-): { ok: boolean; retryAfterSec: number } {
-  const now = Date.now();
-  const existing = buckets.get(key);
-
-  if (!existing || existing.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    if (buckets.size > 5000) sweepBuckets(now);
-    return { ok: true, retryAfterSec: 0 };
-  }
-
-  existing.count++;
-  if (existing.count > limit) {
-    return { ok: false, retryAfterSec: Math.ceil((existing.resetAt - now) / 1000) };
-  }
-  return { ok: true, retryAfterSec: 0 };
-}
-
-/** Drop expired buckets. Only ever removes entries that have already lapsed. */
-function sweepBuckets(now: number): void {
-  for (const [k, b] of buckets) if (b.resetAt <= now) buckets.delete(k);
-}
-
-/** Forget a bucket after a success, so one typo doesn't cost a whole window. */
-export function clearRateLimit(key: string): void {
-  buckets.delete(key);
-}
+export { rateLimit, clearRateLimit } from "@/lib/rate-limit";
 
 /* ============================================================
  * Names

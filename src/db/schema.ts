@@ -3359,7 +3359,11 @@ export const partnerReferral = pgTable(
       .notNull()
       .unique()
       .references(() => church.id, { onDelete: "cascade" }),
-    /** "link" — they followed the referral URL; "portal" — the agent signed them up. */
+    /**
+     * How the attribution arrived: "link" — they followed the referral URL;
+     * "code" — the code was typed into the signup form; "portal" — the agent
+     * signed them up themselves.
+     */
     source: text().notNull().default("link"),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

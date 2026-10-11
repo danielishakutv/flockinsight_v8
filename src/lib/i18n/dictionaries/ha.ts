@@ -73,6 +73,8 @@ export const ha: PartialDictionary = {
     firstName: "Sunan farko",
     lastName: "Sunan mahaifi",
     phone: "Waya",
+    phoneNumber: "Lambar waya",
+    referralCode: "Lambar gayyata",
     email: "Imel",
     address: "Adireshi",
     notes: "Bayanin kula",

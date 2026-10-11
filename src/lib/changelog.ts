@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.76.0",
+    date: "2026-10-11",
+    summary:
+      "Signing up now asks for a phone number and takes a referral code, and it tells you about an email address or number we already have on file while you are still filling the form in — not after you press the button.",
+    changes: {
+      Added: [
+        "A phone number on the sign-up form. It is the number we use to reach you about your own account, and never a number your members are messaged from.",
+        "A referral code box, for a partner’s code or the handle of the church that introduced you. It names whoever gets the credit before you sign up, so a mistyped character cannot quietly cost somebody their commission.",
+      ],
+      Improved: [
+        "The sign-up form checks your email address and phone number as you move between the boxes. An address that already has an account says so, with a link to log in instead; a number we already hold says so without stopping you, because two churches can honestly share a line.",
+        "Phone numbers from outside Nigeria are accepted as they are written. A nine-digit Mozambican mobile or an eight-digit Malian one was previously rejected as incomplete.",
+      ],
+      Fixed: [
+        "A partner link of the form /signup?ref=<code> did nothing at all. It now fills the code in and confirms whose it is.",
+        "If something went wrong while creating an account, the button stopped spinning and said nothing. It now says what happened.",
+      ],
+    },
+  },
+  {
     version: "0.75.0",
     date: "2026-10-11",
     summary:

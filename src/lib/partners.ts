@@ -149,7 +149,7 @@ export async function createPartner(opts: {
 export async function attributeChurch(opts: {
   churchId: string;
   code: string;
-  source?: "link" | "portal";
+  source?: "link" | "code" | "portal";
 }): Promise<boolean> {
   const p = await partnerByCode(opts.code);
   if (!p) return false;
