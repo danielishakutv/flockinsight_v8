@@ -289,6 +289,61 @@ export function canWithdraw(opts: {
   return { ok: true };
 }
 
+
+/* ============================================================
+ * Proving a verification code is this Partner's
+ * ========================================================== */
+
+/**
+ * One normaliser, used when a code is SENT and again when it is checked.
+ *
+ * The destination stored on an OTP is compared against the Partner's current
+ * email or phone to prove the code went to them, and that comparison is only
+ * sound if both sides were spelled the same way. An email differing by case,
+ * or a number written with spaces, would fail a check that should pass.
+ */
+export function otpDestination(which: "email" | "phone", raw: string): string {
+  return which === "email" ? raw.trim().toLowerCase() : raw.replace(/[^0-9+]/g, "");
+}
+
+/**
+ * Is this stored code genuinely this Partner's, for this field?
+ *
+ * Three conditions, and each one closes a real hole:
+ *
+ *   PURPOSE — without it, a code from any other flow, including the Partner's
+ *   own email verification, could be submitted as `which: "phone"` and mark a
+ *   number verified that was never texted.
+ *
+ *   PARTNER — without it, one Partner's code could verify another's details.
+ *
+ *   DESTINATION — without it, somebody could request a code to a number they
+ *   control, change the number on their profile, and verify the new one with
+ *   the old code.
+ *
+ * Email and phone verification are gates on withdrawing money, so all three are
+ * load-bearing rather than tidy. Pure, and tested, because a hole here is not a
+ * broken page.
+ */
+export function otpBelongsToPartner(opts: {
+  which: "email" | "phone";
+  partnerId: string;
+  /** The Partner's current address or number, already normalised. */
+  expectedDestination: string;
+  stored: {
+    purpose: string;
+    destination: string;
+    payload: Record<string, unknown> | null;
+  };
+}): boolean {
+  const { which, partnerId, expectedDestination, stored } = opts;
+  if (!expectedDestination) return false;
+  if (stored.purpose !== `partner_${which}`) return false;
+  if ((stored.payload ?? {}).partnerId !== partnerId) return false;
+  if (stored.destination !== expectedDestination) return false;
+  return true;
+}
+
 /* ============================================================
  * The code in the link
  * ========================================================== */

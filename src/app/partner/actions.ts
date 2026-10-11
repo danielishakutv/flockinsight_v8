@@ -14,8 +14,12 @@ import {
   partnerWallet,
   requestPayout,
 } from "@/lib/partners";
-import { canWithdraw } from "@/lib/partners-shared";
-import { issueOtp, verifyOtp } from "@/lib/otp";
+import {
+  canWithdraw,
+  otpBelongsToPartner,
+  otpDestination,
+} from "@/lib/partners-shared";
+import { issueOtp, peekOtp, verifyOtp } from "@/lib/otp";
 import { emailLayout, sendEmail } from "@/lib/mailer";
 import { sendSms } from "@/lib/sms";
 
@@ -113,7 +117,8 @@ export async function sendPartnerOtp(
   const { user, partner: p } = await me();
   if (!p) return { ok: false, error: "You are not a Partner." };
 
-  const destination = which === "email" ? (user.email ?? "") : (p.phone ?? "");
+  const raw = which === "email" ? (user.email ?? "") : (p.phone ?? "");
+  const destination = raw ? otpDestination(which, raw) : "";
   if (!destination) {
     return {
       ok: false,
@@ -130,6 +135,15 @@ export async function sendPartnerOtp(
     destination,
     channel: which === "email" ? "email" : "sms",
     purpose: `partner_${which}`,
+    /*
+     * Who this code belongs to, so confirming it can prove the code was sent
+     * to THIS Partner for THIS field. Without it, any valid code from any
+     * other flow could be handed to `confirmPartnerOtp` to mark a phone
+     * verified that was never texted — and phone verification is one of the
+     * gates on withdrawing money. Checked with `peekOtp` before the code is
+     * spent; see the note there on why that order matters.
+     */
+    payload: { partnerId: p.id, which, destination },
   });
   if (!issued.ok) return { ok: false, error: issued.error };
 
@@ -176,24 +190,76 @@ export async function sendPartnerOtp(
   return { ok: true, id: issued.id };
 }
 
-export async function confirmPartnerOtp(input: {
-  which: "email" | "phone";
-  id: string;
-  code: string;
-}): Promise<ActionResult> {
-  const { partner: p } = await me();
+const confirmSchema = z.object({
+  which: z.enum(["email", "phone"]),
+  id: z.string().uuid(),
+  code: z.string().trim().regex(/^[0-9]{6}$/, "Enter the 6-digit code"),
+});
+
+export async function confirmPartnerOtp(
+  input: z.input<typeof confirmSchema>,
+): Promise<ActionResult> {
+  const { user, partner: p } = await me();
   if (!p) return { ok: false, error: "You are not a Partner." };
-  if (typeof input?.id !== "string" || typeof input?.code !== "string") {
-    return { ok: false, error: "Invalid" };
+
+  const parsed = confirmSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  const { which, id, code } = parsed.data;
+
+  /*
+   * Prove the code is ours BEFORE spending it.
+   *
+   * `verifyOtp` marks a correct code consumed the moment it matches, so every
+   * check that could reject the attempt on other grounds has to happen first
+   * or a valid code is burned by a request that was never going to succeed.
+   * That is what `peekOtp` is for.
+   *
+   * Three things are checked, and each one closes a real hole. Without the
+   * PURPOSE check, a code from any other flow — including the Partner's own
+   * email verification — could be submitted as `which: "phone"` and mark a
+   * number verified that was never texted. Without the PARTNER check, one
+   * Partner's code could verify another's details. Without the DESTINATION
+   * check, somebody could request a code to a number they control, change the
+   * number on their profile, and verify the new one with the old code.
+   *
+   * Phone and email verification are gates on withdrawing money, so all three
+   * are load-bearing rather than tidy.
+   */
+  const stored = await peekOtp(id);
+  if (!stored) {
+    return { ok: false, error: "This code is no longer valid. Please start again." };
   }
 
-  const res = await verifyOtp(input.id, input.code);
+  const expectedRaw = which === "email" ? (user.email ?? "") : (p.phone ?? "");
+  const mine = otpBelongsToPartner({
+    which,
+    partnerId: p.id,
+    expectedDestination: expectedRaw ? otpDestination(which, expectedRaw) : "",
+    stored: {
+      purpose: stored.purpose,
+      destination: stored.destination,
+      payload: (stored.payload ?? null) as Record<string, unknown> | null,
+    },
+  });
+
+  if (!mine) {
+    console.warn(
+      `[partners] ${p.code} tried to confirm a code that was not theirs ` +
+        `(purpose ${stored.purpose}, which ${which})`,
+    );
+    // Deliberately the same sentence as a wrong code: this must not become a
+    // way to find out which codes exist.
+    return { ok: false, error: "This code is no longer valid. Please start again." };
+  }
+
+  const res = await verifyOtp(id, code);
   if (!res.ok) return { ok: false, error: res.error };
 
   await db
     .update(partner)
     .set(
-      input.which === "email"
+      which === "email"
         ? { emailVerifiedAt: new Date() }
         : { phoneVerifiedAt: new Date() },
     )
@@ -220,7 +286,12 @@ export async function savePartnerPhone(
   // number changing is not a verification.
   await db
     .update(partner)
-    .set({ phone: parsed.data.phone, phoneVerifiedAt: null })
+    .set({
+      // Stored normalised, because this is what an OTP's destination is
+      // compared against when the code comes back.
+      phone: otpDestination("phone", parsed.data.phone),
+      phoneVerifiedAt: null,
+    })
     .where(eq(partner.id, p.id));
 
   revalidatePath("/partner");

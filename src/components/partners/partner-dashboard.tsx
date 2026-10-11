@@ -634,7 +634,7 @@ export function PartnerDashboard({
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))}
             inputMode="numeric"
-            maxLength={8}
+            maxLength={6}
             placeholder="123456"
             className="text-center text-xl tracking-[0.4em]"
           />
@@ -642,7 +642,7 @@ export function PartnerDashboard({
             <Button variant="ghost" onClick={() => setOtp(null)}>
               Cancel
             </Button>
-            <Button onClick={finishVerify} disabled={pending || code.length < 4}>
+            <Button onClick={finishVerify} disabled={pending || code.length !== 6}>
               {pending && <Loader2 className="size-4 animate-spin" />}
               <Check className="size-4" /> Verify
             </Button>

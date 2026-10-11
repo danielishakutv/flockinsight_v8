@@ -7,6 +7,8 @@ import {
   generatePartnerCode,
   normalisePartnerCode,
   normaliseRates,
+  otpBelongsToPartner,
+  otpDestination,
   nextTier,
   partnerLink,
   tierFor,
@@ -273,5 +275,102 @@ describe("the code in the link", () => {
     expect(partnerLink("https://flockinsight.com/", "bc3k9m")).toBe(
       "https://flockinsight.com/signup?ref=bc3k9m",
     );
+  });
+});
+
+/* ============================================================
+ * Proving a verification code is this Partner's
+ * ========================================================== */
+
+describe("otpBelongsToPartner", () => {
+  /*
+   * This is a security rule on a money path: email and phone verification are
+   * two of the gates on withdrawing. Each case below is a hole that was open
+   * in the first version of the Partner module, found by a review of the
+   * pushed commit.
+   */
+  const good = {
+    which: "phone" as const,
+    partnerId: "p-1",
+    expectedDestination: "08012345678",
+    stored: {
+      purpose: "partner_phone",
+      destination: "08012345678",
+      payload: { partnerId: "p-1", which: "phone", destination: "08012345678" },
+    },
+  };
+
+  it("accepts the Partner's own code for the field it was sent for", () => {
+    expect(otpBelongsToPartner(good)).toBe(true);
+  });
+
+  it("refuses a code issued for a different purpose", () => {
+    /*
+     * THE HOLE. `verifyOtp` only checks that the code matches the row, so
+     * without this a Partner could take the code from their own EMAIL
+     * verification — which they legitimately receive — and submit it as
+     * `which: "phone"`, marking a number verified that was never texted.
+     */
+    expect(
+      otpBelongsToPartner({
+        ...good,
+        stored: { ...good.stored, purpose: "partner_email" },
+      }),
+    ).toBe(false);
+
+    // And any other OTP in the platform, for the same reason.
+    expect(
+      otpBelongsToPartner({
+        ...good,
+        stored: { ...good.stored, purpose: "church_contact_phone" },
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses another Partner's code", () => {
+    expect(
+      otpBelongsToPartner({
+        ...good,
+        stored: {
+          ...good.stored,
+          payload: { partnerId: "p-2", which: "phone" },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses a code with no owner recorded on it", () => {
+    // An older code, from before the payload was written. It must fail closed.
+    expect(
+      otpBelongsToPartner({ ...good, stored: { ...good.stored, payload: null } }),
+    ).toBe(false);
+  });
+
+  it("refuses a code sent to a different number", () => {
+    /*
+     * Otherwise: request a code to a number you control, change the number on
+     * your profile, then verify the NEW one with the OLD code.
+     */
+    expect(
+      otpBelongsToPartner({
+        ...good,
+        stored: { ...good.stored, destination: "08099999999" },
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses when the Partner has no number or address to compare", () => {
+    expect(otpBelongsToPartner({ ...good, expectedDestination: "" })).toBe(false);
+  });
+});
+
+describe("otpDestination", () => {
+  it("lowercases and trims an email, so case cannot fail a real match", () => {
+    expect(otpDestination("email", "  Pastor@Grace.NG ")).toBe("pastor@grace.ng");
+  });
+
+  it("strips the punctuation people type into a phone number", () => {
+    expect(otpDestination("phone", "+234 (801) 234-5678")).toBe("+2348012345678");
+    expect(otpDestination("phone", "0801 234 5678")).toBe("08012345678");
   });
 });
