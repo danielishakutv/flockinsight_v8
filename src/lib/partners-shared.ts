@@ -197,35 +197,50 @@ export function earningFor(opts: {
 export type EarningRow = {
   amount: number;
   status: "pending" | "available" | "paid" | "cancelled";
+  /** Set once a withdrawal has claimed this row. */
+  payoutId?: string | null;
 };
 
 /**
- * The three numbers a wallet shows, and they must add up.
+ * The numbers a wallet shows, and they must add up.
  *
- * `available` is what a withdrawal may draw on. `pending` is earned but not
- * yet released. `paid` is history. A cancelled row counts towards none of
- * them and is kept so the ledger still explains itself.
+ * `available` is what a withdrawal may draw on. `requested` is earned,
+ * released, and already inside a withdrawal somebody is waiting on.
+ * `pending` is earned but not yet released. `paid` is history. A cancelled row
+ * counts towards none of them and is kept so the ledger still explains itself.
+ *
+ * **`requested` exists because status alone cannot tell you.** A row claimed by
+ * an open payout stays `available` until that payout is marked paid — so
+ * bucketing by status put money a Partner had already asked for back under
+ * "Available", and the figure did not move when they pressed withdraw. Two
+ * different situations, one number. It also means `available` is now the amount
+ * a further withdrawal could really draw on, which is what `canWithdraw` wants.
  */
 export function walletTotals(rows: EarningRow[]): {
   available: number;
+  requested: number;
   pending: number;
   paid: number;
   lifetime: number;
 } {
   let available = 0;
+  let requested = 0;
   let pending = 0;
   let paid = 0;
   for (const r of rows) {
     const amount = Number.isFinite(r.amount) ? r.amount : 0;
-    if (r.status === "available") available += amount;
-    else if (r.status === "pending") pending += amount;
+    if (r.status === "available") {
+      if (r.payoutId) requested += amount;
+      else available += amount;
+    } else if (r.status === "pending") pending += amount;
     else if (r.status === "paid") paid += amount;
   }
   return {
     available: round2(available),
+    requested: round2(requested),
     pending: round2(pending),
     paid: round2(paid),
-    lifetime: round2(available + pending + paid),
+    lifetime: round2(available + requested + pending + paid),
   };
 }
 

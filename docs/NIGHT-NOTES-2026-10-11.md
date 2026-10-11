@@ -334,6 +334,64 @@ marketing site is a reputational risk, and Google treats it as one.
 
 ---
 
+## 5b. One more fix after the deploy: a double withdrawal (v0.75.1)
+
+An automated security review of tonight's Partners code found a second hole,
+and this one was mine twice over: the bug, and a comment claiming the bug was
+impossible.
+
+`requestPayout` selected a Partner's unclaimed earnings and then marked them as
+belonging to a new payout, both inside one transaction. The docstring said that
+made a double withdrawal impossible. **It did not.** Postgres runs READ
+COMMITTED, so two requests arriving together each read the same unclaimed
+earnings — neither can see the other's uncommitted write. Both insert a payout.
+The second UPDATE waits for the first to commit and then overwrites
+`payout_id`. The result is two withdrawal requests for one balance, with the
+ledger naming only the later one, and nothing on any screen showing it. If both
+were approved, the same money went out twice.
+
+The pre-check in the action did not help either — `hasOpenPayout` ran *before*
+the transaction, so two taps both read "nothing open".
+
+**It is now held three ways, and any one of them would do it:**
+
+1. the earnings are selected `FOR UPDATE`, so the second transaction blocks,
+   re-checks its own condition against the committed row, and correctly finds
+   nothing;
+2. the UPDATE repeats the "unclaimed" condition and counts what came back — if
+   the numbers disagree the whole transaction is thrown away rather than
+   half-applied, taking its payout row with it;
+3. migration `0102` adds a unique index that lets the **database** refuse a
+   second open request per Partner.
+
+**Measured, not reasoned.** `src/lib/partners.db-check.ts` (new, 9 checks,
+`pnpm test:db`) fires concurrent withdrawals at a real Postgres, and then
+interleaves two transactions on purpose over a single contested earning:
+without the lock both claim it and one write silently overwrites the other —
+the bug, reproduced; with the lock exactly one claims it. That second pair is
+there because a concurrency test that happens to serialise passes whether the
+bug is present or not.
+
+**And a second bug it turned up on the way.** Writing those checks, an
+assertion I expected to pass did not: the wallet read **₦20,000 available**
+while ₦10,000 was already inside a withdrawal request. An earning claimed by an
+open payout keeps the status `available` until that payout is marked *paid*,
+and `walletTotals` bucketed purely by status. Not a double-spend — the
+one-open-request rule stops that — but "Available" meant two different things
+depending on whether a request was open, and the figure did not move when you
+pressed Withdraw. There is now an **In a request** figure beside it, the
+earnings list says `requested` instead of repeating `available` for that money,
+and `available` is now what a further withdrawal could genuinely draw on.
+
+Migration 0102 is wrapped so it **cannot fail a deploy**: if any Partner
+somehow already has two open requests it raises a warning naming them and
+leaves the data alone, rather than aborting and taking the release down. I could
+not check production's `partner_payout` rows directly — reading the server's
+`.env` was blocked here — but there should be none yet, and the row lock holds
+the rule either way. Worth a glance at the migrate output in the deploy log.
+
+---
+
 ## 6. If something looks wrong this morning
 
 - **Rolling back:** `git revert <sha> && git push origin main:production`. All
@@ -348,3 +406,5 @@ marketing site is a reputational risk, and Google treats it as one.
   bigger room.
 - **Partners:** `/partner/join` to create one for yourself and try it end to
   end. Nothing pays out without you marking it paid.
+- **The money path has its own checks now:** `pnpm test:db` (needs a local
+  Postgres). Run it before touching anything in `lib/partners.ts`.

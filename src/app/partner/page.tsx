@@ -90,6 +90,7 @@ export default async function PartnerPage() {
           currency: e.currency,
           rateBps: e.rateBps,
           status: e.status,
+          payoutId: e.payoutId,
           churchName: e.churchName,
           createdAt: e.createdAt.toISOString(),
         }))}

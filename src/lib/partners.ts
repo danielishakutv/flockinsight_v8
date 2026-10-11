@@ -399,11 +399,19 @@ export async function partnerChurches(partnerId: string): Promise<PartnerChurch[
 
 export async function partnerWallet(partnerId: string) {
   const rows = await db
-    .select({ amount: partnerEarning.amount, status: partnerEarning.status })
+    .select({
+      amount: partnerEarning.amount,
+      status: partnerEarning.status,
+      payoutId: partnerEarning.payoutId,
+    })
     .from(partnerEarning)
     .where(eq(partnerEarning.partnerId, partnerId));
   return walletTotals(
-    rows.map((r) => ({ amount: Number(r.amount), status: r.status })),
+    rows.map((r) => ({
+      amount: Number(r.amount),
+      status: r.status,
+      payoutId: r.payoutId,
+    })),
   );
 }
 
@@ -416,6 +424,9 @@ export async function partnerEarnings(partnerId: string, limit = 200) {
       currency: partnerEarning.currency,
       rateBps: partnerEarning.rateBps,
       status: partnerEarning.status,
+      // So the list can say "in a request" rather than repeating "available"
+      // for money the Partner has already asked for.
+      payoutId: partnerEarning.payoutId,
       createdAt: partnerEarning.createdAt,
       churchName: church.name,
     })
@@ -456,13 +467,29 @@ export async function hasOpenPayout(partnerId: string): Promise<boolean> {
 /**
  * Turn available earnings into a payout request.
  *
- * The earnings are MARKED as belonging to this payout at the same moment the
- * payout is created, inside one transaction — so the same balance cannot be
- * withdrawn twice by two taps on a slow connection. Oldest first, so a
- * Partner's ledger drains in the order it filled.
+ * Oldest first, so a Partner's ledger drains in the order it filled. Nothing
+ * here sends money: a human approves and marks it paid in superadmin against a
+ * transfer they actually made.
  *
- * Nothing here sends money. A human approves and marks it paid in superadmin
- * against a transfer they actually made.
+ * **One transaction is not enough to stop a double withdrawal, and an earlier
+ * version of this comment claimed it was.** Postgres runs READ COMMITTED, so
+ * two requests arriving together each select the same unclaimed earnings —
+ * neither can see the other's uncommitted write. Both insert a payout; the
+ * second UPDATE waits for the first to commit and then overwrites `payout_id`.
+ * The result is two payout rows for one balance, with the ledger pointing at
+ * only the later one, and a human paying both.
+ *
+ * So the claim is held three ways, and each one alone would do it:
+ *
+ * - `for("update")` locks the earning rows. The second transaction blocks,
+ *   then re-checks its own WHERE against the committed row — `payout_id` is
+ *   now set, the rows no longer qualify, and it correctly finds nothing.
+ * - the UPDATE repeats `isNull(payoutId)` and counts what came back. If a row
+ *   was claimed between the select and the update, the numbers disagree and
+ *   the whole transaction is thrown away rather than half-applied.
+ * - `partner_payout_one_open_idx` lets the database refuse a second open
+ *   request outright, which is also why a unique violation here is an
+ *   expected answer and not a crash.
  */
 export async function requestPayout(opts: {
   partnerId: string;
@@ -470,59 +497,131 @@ export async function requestPayout(opts: {
   bank: { name: string | null; accountNumber: string | null; accountName: string | null };
   currency: string;
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  return db.transaction(async (tx) => {
-    const rows = await tx
-      .select({ id: partnerEarning.id, amount: partnerEarning.amount })
-      .from(partnerEarning)
-      .where(
-        and(
-          eq(partnerEarning.partnerId, opts.partnerId),
-          eq(partnerEarning.status, "available"),
-          isNull(partnerEarning.payoutId),
-        ),
-      )
-      .orderBy(asc(partnerEarning.createdAt));
+  try {
+    return await db.transaction(async (tx) => {
+      // Re-checked inside the transaction, not just in the action: the
+      // courtesy check out there ran before this one took any lock.
+      const [open] = await tx
+        .select({ id: partnerPayout.id })
+        .from(partnerPayout)
+        .where(
+          and(
+            eq(partnerPayout.partnerId, opts.partnerId),
+            inArray(partnerPayout.status, ["requested", "approved"]),
+          ),
+        )
+        .limit(1);
+      if (open) {
+        return {
+          ok: false as const,
+          error: "You already have a withdrawal waiting. We'll settle that one first.",
+        };
+      }
 
-    const available = rows.reduce((sum, r) => sum + Number(r.amount), 0);
-    if (opts.amount > available + 0.001) {
-      return { ok: false as const, error: "That is more than your available balance." };
+      const rows = await tx
+        .select({ id: partnerEarning.id, amount: partnerEarning.amount })
+        .from(partnerEarning)
+        .where(
+          and(
+            eq(partnerEarning.partnerId, opts.partnerId),
+            eq(partnerEarning.status, "available"),
+            isNull(partnerEarning.payoutId),
+          ),
+        )
+        .orderBy(asc(partnerEarning.createdAt))
+        .for("update");
+
+      const available = rows.reduce((sum, r) => sum + Number(r.amount), 0);
+      if (opts.amount > available + 0.001) {
+        return { ok: false as const, error: "That is more than your available balance." };
+      }
+
+      // Take whole earnings until the request is covered. Splitting a row would
+      // make the ledger stop explaining itself for the sake of a few kobo.
+      const taken: string[] = [];
+      let running = 0;
+      for (const r of rows) {
+        if (running >= opts.amount - 0.001) break;
+        taken.push(r.id);
+        running += Number(r.amount);
+      }
+      if (taken.length === 0) {
+        return { ok: false as const, error: "There is nothing available to withdraw." };
+      }
+
+      const [payout] = await tx
+        .insert(partnerPayout)
+        .values({
+          partnerId: opts.partnerId,
+          // What is actually being paid is the earnings taken, not the number
+          // typed — so the payout and the ledger can never disagree.
+          amount: Math.round(running * 100) / 100,
+          currency: opts.currency,
+          status: "requested",
+          bankName: opts.bank.name,
+          bankAccountNumber: opts.bank.accountNumber,
+          bankAccountName: opts.bank.accountName,
+        })
+        .returning({ id: partnerPayout.id });
+
+      const claimed = await tx
+        .update(partnerEarning)
+        .set({ payoutId: payout.id })
+        .where(
+          and(
+            inArray(partnerEarning.id, taken),
+            // Repeated, so the UPDATE itself refuses a row somebody else took.
+            isNull(partnerEarning.payoutId),
+          ),
+        )
+        .returning({ id: partnerEarning.id });
+
+      if (claimed.length !== taken.length) {
+        // Throwing is the point: it takes the payout row back out with it.
+        // Half a claim would be a request for money the ledger never gave up.
+        throw new PayoutRaced(
+          `claimed ${claimed.length} of ${taken.length} earnings for partner ${opts.partnerId}`,
+        );
+      }
+
+      return { ok: true as const, id: payout.id };
+    });
+  } catch (err) {
+    if (err instanceof PayoutRaced) {
+      console.warn(`[partners] payout rolled back: ${err.message}`);
+      return {
+        ok: false as const,
+        error: "That request came in twice. Please check your wallet and try again.",
+      };
     }
-
-    // Take whole earnings until the request is covered. Splitting a row would
-    // make the ledger stop explaining itself for the sake of a few kobo.
-    const taken: string[] = [];
-    let running = 0;
-    for (const r of rows) {
-      if (running >= opts.amount - 0.001) break;
-      taken.push(r.id);
-      running += Number(r.amount);
+    // The one-open-request index firing is an answer, not a fault.
+    if (isUniqueViolation(err, "partner_payout_one_open_idx")) {
+      return {
+        ok: false as const,
+        error: "You already have a withdrawal waiting. We'll settle that one first.",
+      };
     }
-    if (taken.length === 0) {
-      return { ok: false as const, error: "There is nothing available to withdraw." };
-    }
+    throw err;
+  }
+}
 
-    const [payout] = await tx
-      .insert(partnerPayout)
-      .values({
-        partnerId: opts.partnerId,
-        // What is actually being paid is the earnings taken, not the number
-        // typed — so the payout and the ledger can never disagree.
-        amount: Math.round(running * 100) / 100,
-        currency: opts.currency,
-        status: "requested",
-        bankName: opts.bank.name,
-        bankAccountNumber: opts.bank.accountNumber,
-        bankAccountName: opts.bank.accountName,
-      })
-      .returning({ id: partnerPayout.id });
+/** Two requests reached the same earnings. Named so the catch can tell. */
+class PayoutRaced extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PayoutRaced";
+  }
+}
 
-    await tx
-      .update(partnerEarning)
-      .set({ payoutId: payout.id })
-      .where(inArray(partnerEarning.id, taken));
-
-    return { ok: true as const, id: payout.id };
-  });
+/** Postgres 23505, optionally for one named index. */
+function isUniqueViolation(err: unknown, constraint?: string): boolean {
+  const e = err as { code?: string; constraint?: string; cause?: unknown } | null;
+  if (!e || typeof e !== "object") return false;
+  if (e.code === "23505") {
+    return !constraint || e.constraint === constraint || !e.constraint;
+  }
+  // Drizzle wraps the driver error on some paths.
+  return e.cause ? isUniqueViolation(e.cause, constraint) : false;
 }
 
 /** Approve, pay or reject a request. Superadmin only; the route enforces that. */

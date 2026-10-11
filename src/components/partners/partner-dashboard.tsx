@@ -44,7 +44,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type Wallet = { available: number; pending: number; paid: number; lifetime: number };
+type Wallet = {
+  available: number;
+  requested: number;
+  pending: number;
+  paid: number;
+  lifetime: number;
+};
 
 type Earning = {
   id: string;
@@ -53,6 +59,7 @@ type Earning = {
   currency: string;
   rateBps: number;
   status: string;
+  payoutId: string | null;
   churchName: string | null;
   createdAt: string;
 };
@@ -268,8 +275,20 @@ export function PartnerDashboard({
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div
+            className={cn(
+              "grid grid-cols-2 gap-3",
+              // Only five columns when there is a fifth figure to show.
+              wallet.requested > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4",
+            )}
+          >
             <Figure label="Available" value={shown ? money(wallet.available) : hidden} strong />
+            {wallet.requested > 0 && (
+              <Figure
+                label="In a request"
+                value={shown ? money(wallet.requested) : hidden}
+              />
+            )}
             <Figure label="Pending" value={shown ? money(wallet.pending) : hidden} />
             <Figure label="Paid out" value={shown ? money(wallet.paid) : hidden} />
             <Figure label="Lifetime" value={shown ? money(wallet.lifetime) : hidden} />
@@ -564,12 +583,19 @@ export function PartnerDashboard({
                         "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold uppercase",
                         e.status === "paid"
                           ? "bg-muted text-muted-foreground"
-                          : e.status === "available"
+                          : e.status === "available" && !e.payoutId
                             ? "bg-primary/10 text-primary"
                             : "bg-amber-500/10 text-amber-600",
                       )}
                     >
-                      {e.status}
+                      {/*
+                       * A claimed row keeps the status "available" until the
+                       * payout is paid, so the status alone would tell a
+                       * Partner they can still withdraw it.
+                       */}
+                      {e.status === "available" && e.payoutId
+                        ? "requested"
+                        : e.status}
                     </span>
                   </li>
                 ))}

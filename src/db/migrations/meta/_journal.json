@@ -715,6 +715,13 @@
       "when": 1791675407203,
       "tag": "0101_partners",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1791679509026,
+      "tag": "0102_payout_one_open",
+      "breakpoints": true
     }
   ]
 }

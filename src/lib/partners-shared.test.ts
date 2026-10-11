@@ -155,9 +155,45 @@ describe("the wallet", () => {
     expect(t.lifetime).toBe(59_500.5);
   });
 
+  /*
+   * A row claimed by an open withdrawal keeps the status "available" until
+   * that payout is marked paid. Counting it as available showed a Partner
+   * money they had already asked for, and the figure did not move when they
+   * pressed the button.
+   */
+  it("moves money inside an open request out of available", () => {
+    const t = walletTotals([
+      { amount: 10_000, status: "available", payoutId: "p1" },
+      { amount: 5000, status: "available", payoutId: null },
+      { amount: 3000, status: "pending" },
+    ]);
+    expect(t.available).toBe(5000);
+    expect(t.requested).toBe(10_000);
+    expect(t.pending).toBe(3000);
+    // Still theirs, so it still counts towards what they have ever earned.
+    expect(t.lifetime).toBe(18_000);
+  });
+
+  it("does not count a paid row twice once its payout is settled", () => {
+    // After a payout is marked paid the rows become `paid` and keep the id.
+    const t = walletTotals([{ amount: 10_000, status: "paid", payoutId: "p1" }]);
+    expect(t.requested).toBe(0);
+    expect(t.available).toBe(0);
+    expect(t.paid).toBe(10_000);
+    expect(t.lifetime).toBe(10_000);
+  });
+
+  it("treats a missing payoutId as unclaimed", () => {
+    // Callers that do not select the column must not lose their balance.
+    const t = walletTotals([{ amount: 2000, status: "available" }]);
+    expect(t.available).toBe(2000);
+    expect(t.requested).toBe(0);
+  });
+
   it("is zero for a Partner who has earned nothing", () => {
     expect(walletTotals([])).toEqual({
       available: 0,
+      requested: 0,
       pending: 0,
       paid: 0,
       lifetime: 0,

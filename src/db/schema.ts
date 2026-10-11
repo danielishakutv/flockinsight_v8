@@ -3454,7 +3454,20 @@ export const partnerPayout = pgTable(
     decidedAt: timestamp({ withTimezone: true }),
     paidAt: timestamp({ withTimezone: true }),
   },
-  (t) => [index("partner_payout_partner_idx").on(t.partnerId, t.status)],
+  (t) => [
+    index("partner_payout_partner_idx").on(t.partnerId, t.status),
+    /*
+     * One open request per Partner, enforced by the database.
+     *
+     * `canWithdraw` already refuses a second request while one is open, but
+     * that is a read followed by a write: two taps that arrive together both
+     * read "nothing open" and both insert. This index is the only version of
+     * that rule two concurrent transactions cannot both pass.
+     */
+    uniqueIndex("partner_payout_one_open_idx")
+      .on(t.partnerId)
+      .where(sql`status in ('requested', 'approved')`),
+  ],
 );
 
 /* ============================================================
