@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 
 import { activatePlan } from "@/lib/billing";
+import { awardPartnerCommission } from "@/lib/partners";
 import { creditWallet, debitWallet } from "@/lib/wallet";
 import { recordAudit } from "@/lib/audit";
 import { planName } from "@/lib/plans";
@@ -74,22 +75,37 @@ export async function recordOfflinePayment(
       )
     : new Date();
 
-  await db.insert(payment).values({
-    churchId: d.churchId,
-    plan: d.plan,
-    amount: d.amount,
-    currency: "NGN",
-    gateway: d.gateway,
-    reference:
-      d.reference || `MANUAL-${d.churchId.slice(0, 8)}-${Date.now()}`,
-    status: "success",
-    periodMonths: d.months || 1,
-    note: d.note || `Recorded by ${admin.name ?? "an admin"}`,
-    createdBy: admin.id,
-    paidAt,
-  });
+  const [recorded] = await db
+    .insert(payment)
+    .values({
+      churchId: d.churchId,
+      plan: d.plan,
+      amount: d.amount,
+      currency: "NGN",
+      gateway: d.gateway,
+      reference:
+        d.reference || `MANUAL-${d.churchId.slice(0, 8)}-${Date.now()}`,
+      status: "success",
+      periodMonths: d.months || 1,
+      note: d.note || `Recorded by ${admin.name ?? "an admin"}`,
+      createdBy: admin.id,
+      paidAt,
+    })
+    .returning({ id: payment.id });
 
   if (d.months > 0) await activatePlan(d.churchId, d.plan, d.months);
+
+  /*
+   * The Partner's commission, on money that never went near a gateway.
+   *
+   * Most churches here pay by bank transfer, and a church paying for a YEAR
+   * almost always does — so this is the path an annual payment actually takes.
+   * Without this line the Partner who closed it earned nothing at all, and the
+   * only payments that ever paid a commission were the card ones. Idempotent
+   * and it never throws, exactly as in the gateway callback: a commission that
+   * failed to record must not fail the recording of money that has arrived.
+   */
+  if (recorded) await awardPartnerCommission(recorded.id);
 
   await recordAudit({
     actorUserId: admin.id,
@@ -269,6 +285,9 @@ export async function markPaymentReceived(
   if (row.periodMonths && row.periodMonths > 0 && row.plan) {
     await activatePlan(row.churchId, row.plan, row.periodMonths);
   }
+
+  // And the commission, which the missing callback never awarded either.
+  await awardPartnerCommission(row.id);
 
   await recordAudit({
     actorUserId: admin.id,

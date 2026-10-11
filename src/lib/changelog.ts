@@ -29,6 +29,26 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.77.0",
+    date: "2026-10-11",
+    summary:
+      "Pay for a year and get two months free — and a Partner whose church does that is paid the whole year’s commission on the day it clears, instead of one month now and the rest whenever the church pays again.",
+    changes: {
+      Added: [
+        "Yearly billing. A year costs ten months instead of twelve, so two months are free, and it is one payment rather than twelve. Switch between monthly and yearly on the pricing page, the landing page and your own billing screen — every figure, in your own currency, before you decide anything.",
+        "For a church outside Nigeria, paying for the year also carries the international card fee once instead of twelve times, so the saving is larger than the two months.",
+        "A public Partner Program page at /partners: what you earn, the levels, how withdrawals work, what a Partner can and can never see, and the full terms. Every rate on it is read live from our own settings, so it cannot advertise a figure the system does not pay.",
+        "Platform Admin → Pricing: set how many months are free for paying yearly, or set it to 0 to hide the yearly option everywhere.",
+      ],
+      Fixed: [
+        "A church paying for a whole year earned its Partner a single commission and then nothing for twelve months — the second commission waited for a payment that was already made, and the recurring share expired unused. An annual payment now earns the commission for every month it covers, in one credit, on the day it clears.",
+        "Partners earned nothing at all on a payment recorded by hand — a bank transfer or cash, which is how most churches here pay, and almost always how a church pays for a year. Those payments now award the commission like any other.",
+        "A free activation or a 100% discount counted as a church’s first payment, so the first real payment was treated as the second one and the first commission was paid to nobody. Only money counts now.",
+        "Two payments recorded on the same date could both be treated as a church’s first, paying the first commission twice. The order is now decided properly.",
+      ],
+    },
+  },
+  {
     version: "0.76.0",
     date: "2026-10-11",
     summary:
@@ -132,24 +152,24 @@ export const releases: Release[] = [
     version: "0.73.0",
     date: "2026-10-09",
     summary:
-      "Meetings hold on to the voice. Data Saver now makes the sound lighter as well as turning the camera off, the connection is judged by what you HEAR rather than only by what you send, and a microphone that drops out mid-call is reconnected instead of failing quietly. A meeting can also be set so that only its leaders can be heard and seen \u2014 a service, a class, a board meeting.",
+      "Meetings hold on to the voice. Data Saver now makes the sound lighter as well as turning the camera off, the connection is judged by what you HEAR rather than only by what you send, and a microphone that drops out mid-call is reconnected instead of failing quietly. A meeting can also be set so that only its leaders can be heard and seen — a service, a class, a board meeting.",
     changes: {
       Added: [
-        "A meeting can take the microphone and camera buttons away from everyone except the hosts. Not muted on arrival \u2014 gone, so there is nothing for forty people to tap by mistake. Both are under \u201cShow more settings\u201d when you create or edit a meeting.",
-        "\u201cLet them speak\u201d, in the People panel. Somebody raises their hand, you tap their name, and their microphone and camera come back at once \u2014 no rejoining, and no other powers: they cannot end the meeting or remove anybody. \u201cStop them speaking\u201d puts it back.",
+        "A meeting can take the microphone and camera buttons away from everyone except the hosts. Not muted on arrival — gone, so there is nothing for forty people to tap by mistake. Both are under \u201cShow more settings\u201d when you create or edit a meeting.",
+        "\u201cLet them speak\u201d, in the People panel. Somebody raises their hand, you tap their name, and their microphone and camera come back at once — no rejoining, and no other powers: they cannot end the meeting or remove anybody. \u201cStop them speaking\u201d puts it back.",
         "Turning the cameras off for everyone but the preacher is now also the biggest single saving available on a large meeting, and nobody has to remember to choose Data Saver.",
-        "The People panel reports the voice as well as the picture: how much was lost, how much the phone had to invent, how gusty the line is and how much sound is being held back. Those numbers tell apart three problems that sound identical in a meeting \u2014 a weak network, an uneven one, and a microphone that has stopped working.",
+        "The People panel reports the voice as well as the picture: how much was lost, how much the phone had to invent, how gusty the line is and how much sound is being held back. Those numbers tell apart three problems that sound identical in a meeting — a weak network, an uneven one, and a microphone that has stopped working.",
       ],
       Improved: [
         "Data Saver makes the voice lighter, not just the picture. It used to turn the camera off and leave the microphone costing exactly what it did before, so it saved less than it promised. The voice now uses about half the data and is narrowed to the range speech actually sits in: slightly less rich, no harder to understand.",
-        "The voice is protected when the connection starts struggling. Every packet begins carrying a copy of the one before it, so one lost on the way is no longer a gap you can hear \u2014 paid for out of what Data Saver just saved.",
+        "The voice is protected when the connection starts struggling. Every packet begins carrying a copy of the one before it, so one lost on the way is no longer a gap you can hear — paid for out of what Data Saver just saved.",
         "A little more sound is held back before being played, which is what stops a voice cutting in and out when a phone's signal arrives in gusts rather than steadily. It is set from the start now rather than after the damage has been heard.",
         "The voice outranks the pictures. Somebody switching a camera on can no longer take the speech down with it on a thin connection.",
         "A meeting now judges the connection by what you are hearing, not only by what you are sending. A phone with a fine upload and an uneven download used to rate itself perfectly healthy while the voices broke up in its ear.",
         "Large meetings held on the media server were not judging their connection at all. They do now, so the same protections reach the rooms that need them most.",
       ],
       Fixed: [
-        "A microphone that stops working mid-call is reconnected, and you are told. A headset unplugged, Bluetooth handing over, or a phone call arriving ends the microphone with no error anywhere \u2014 so people went on talking into nothing until somebody thought to mention it. If it cannot be recovered, that is now said plainly instead of being silent.",
+        "A microphone that stops working mid-call is reconnected, and you are told. A headset unplugged, Bluetooth handing over, or a phone call arriving ends the microphone with no error anywhere — so people went on talking into nothing until somebody thought to mention it. If it cannot be recovered, that is now said plainly instead of being silent.",
         "Nobody joining a meeting where they cannot use a microphone or camera is asked for permission to use one. A permission request for a device that cannot be used is a question that can only be answered wrongly.",
       ],
     },
@@ -315,21 +335,21 @@ export const releases: Release[] = [
     version: "0.67.0",
     date: "2026-10-04",
     summary:
-      "A photo studio. Put your church's logo on a whole service's photographs at once, add the date, shrink them for WhatsApp, and download the lot as a zip \u2014 on your phone, without uploading anything.",
+      "A photo studio. Put your church's logo on a whole service's photographs at once, add the date, shrink them for WhatsApp, and download the lot as a zip — on your phone, without uploading anything.",
     changes: {
       Added: [
-        "Photo studio, under Media. Add up to a hundred photos, upload your logo, choose where it sits, and press Process. Every photo comes out with the same mark in the same place \u2014 which is the difference between a church that looks like itself and one that looks like whoever was holding the phone.",
+        "Photo studio, under Media. Add up to a hundred photos, upload your logo, choose where it sits, and press Process. Every photo comes out with the same mark in the same place — which is the difference between a church that looks like itself and one that looks like whoever was holding the phone.",
         "Portrait and landscape are set up separately, and each photo automatically uses the settings for its own shape. A mixed batch from a service comes out consistent without sorting it first.",
         "Your logo, tidied up: remove a white background (it only works inward from the edges, so white inside a letter is never touched), trim the blank space around it, or crop it by dragging a box. Every control can be turned off again without re-uploading.",
-        "A line of text burned onto the photo \u2014 the service and the date, a sermon title, a verse \u2014 with one tap to insert your church's name or today's date. Because it is part of the picture, it survives being forwarded; a caption does not.",
+        "A line of text burned onto the photo — the service and the date, a sermon title, a verse — with one tap to insert your church's name or today's date. Because it is part of the picture, it survives being forwarded; a caption does not.",
         "Download one photo, or all of them as a single zip file.",
         "Export shapes for where you actually post: square for an Instagram grid, 4:5 for a feed post, 9:16 for a status or a story, 16:9 for a screen.",
-        "Save it all as your church's brand. Whoever opens the studio next \u2014 on any phone \u2014 starts with the same position, size, strength and output settings, so four volunteers produce one consistent look.",
-        "A full guide at Help \u2192 The photo studio: a start-to-finish walkthrough, a table of what to do when the logo looks wrong, and which size to choose for what.",
+        "Save it all as your church's brand. Whoever opens the studio next — on any phone — starts with the same position, size, strength and output settings, so four volunteers produce one consistent look.",
+        "A full guide at Help → The photo studio: a start-to-finish walkthrough, a table of what to do when the logo looks wrong, and which size to choose for what.",
       ],
       Improved: [
         "Quality is kept and the file is not: a 4MB camera photo usually comes out under 500KB with nothing visible lost, which is what makes a whole service shareable on WhatsApp. The studio shows you the saving on every photo.",
-        "Photos that other tools turn sideways come out the right way up, because the studio reads how the phone was held \u2014 which also means the watermark lands where you put it.",
+        "Photos that other tools turn sideways come out the right way up, because the studio reads how the phone was held — which also means the watermark lands where you put it.",
       ],
       Security: [
         "The studio removes the hidden location data from every photo it processes. A phone records the GPS coordinates of where a picture was taken, including inside somebody's home, and posting the file publishes them. Almost nobody knows they are there.",
@@ -341,21 +361,21 @@ export const releases: Release[] = [
     version: "0.66.0",
     date: "2026-10-03",
     summary:
-      "Your church can now take offerings online, straight into its own bank account \u2014 and six other things that were quietly missing: your own profile, a church you can switch between, SMS that waits for the hours networks will actually deliver it, and a demo anybody can try.",
+      "Your church can now take offerings online, straight into its own bank account — and six other things that were quietly missing: your own profile, a church you can switch between, SMS that waits for the hours networks will actually deliver it, and a demo anybody can try.",
     changes: {
       Added: [
-        "Online giving. Connect your church's own Paystack, Flutterwave or Monnify account \u2014 or a payment link you already have \u2014 and share one page people can give from. Gifts land in your own bank account on your own settlement schedule; FlockInsight never holds the money and takes none of it. Each link can take any amount, a few suggested amounts, or one fixed amount, and successful gifts appear in your giving records under the category you chose, with a receipt sent automatically. Growth plan and up.",
-        "Your profile. Your name, your photo, how you sign in and your password, in one place \u2014 and reachable by anybody on your team, including a member you have given a staff login. Changing your sign-in email asks for your password and sends a code to the new address, and the old address is told it has lost the account.",
+        "Online giving. Connect your church's own Paystack, Flutterwave or Monnify account — or a payment link you already have — and share one page people can give from. Gifts land in your own bank account on your own settlement schedule; FlockInsight never holds the money and takes none of it. Each link can take any amount, a few suggested amounts, or one fixed amount, and successful gifts appear in your giving records under the category you chose, with a receipt sent automatically. Growth plan and up.",
+        "Your profile. Your name, your photo, how you sign in and your password, in one place — and reachable by anybody on your team, including a member you have given a staff login. Changing your sign-in email asks for your password and sends a code to the new address, and the old address is told it has lost the account.",
         "If you are part of more than one church, you are now asked which one you are working in when you sign in, and can switch at any time from the menu beside your name. Before this, the second church was invisible.",
         "A demonstration church anybody can try, with data in every module, rebuilt from scratch every two hours.",
       ],
       Improved: [
-        "SMS sent outside 8am\u20138pm is now held until the morning instead of being charged and thrown away. Nigerian networks only deliver bulk SMS in those hours \u2014 a Saturday-night reminder was money spent on nothing, with \u201cSent to 143\u201d in the history to prove otherwise. The composer says the hours before you type, anything held appears in a \u201cWaiting to send\u201d list with the time it will go, and you can cancel it. Nothing is charged until it actually goes.",
-        "Complimentary access can now have an end date \u2014 three months, six, nine, a year \u2014 and your billing page says when it runs out. We warn you two weeks, one week and three days before.",
+        "SMS sent outside 8am\u20138pm is now held until the morning instead of being charged and thrown away. Nigerian networks only deliver bulk SMS in those hours — a Saturday-night reminder was money spent on nothing, with \u201cSent to 143\u201d in the history to prove otherwise. The composer says the hours before you type, anything held appears in a \u201cWaiting to send\u201d list with the time it will go, and you can cancel it. Nothing is charged until it actually goes.",
+        "Complimentary access can now have an end date — three months, six, nine, a year — and your billing page says when it runs out. We warn you two weeks, one week and three days before.",
         "A FlockInsight operator who also pastors a church can now use that church normally, instead of being sent to the platform admin area every time.",
       ],
       Security: [
-        "Payment keys are encrypted before they are stored, with a key held outside the database \u2014 so a backup of the database is useless on its own. We check them against the provider before switching anything on, and never show them back to you.",
+        "Payment keys are encrypted before they are stored, with a key held outside the database — so a backup of the database is useless on its own. We check them against the provider before switching anything on, and never show them back to you.",
         "A verification code is never held for the morning. SMS codes expire in ten minutes, so instead of queueing one we say plainly that a text cannot carry it right now and point you at email.",
       ],
     },
@@ -409,25 +429,25 @@ export const releases: Release[] = [
       "Hold a meeting in your browser — video, voice, screen sharing and scripture on screen, built to survive a weak connection. Plus an activity log of everything that happens in your church's workspace.",
     changes: {
       Added: [
-        "Meetings. Create one, share the link, and people join in their browser \u2014 no app, no account, nothing to install. Video, voice, screen sharing, chat, reactions and a raised hand. It runs from a phone as well as a laptop.",
-        "Low data mode. One tap turns off video in both directions and keeps the voices, using roughly a tenth of the data. Set it as the default on a meeting and everybody starts that way \u2014 the right setting for a midweek prayer meeting most people join on mobile data. The meeting also lowers its own quality as the room grows and when your connection weakens, so a call degrades instead of freezing.",
-        "Put a Bible verse on everyone's screen. Type \u201cJohn 3:16\u201d, \u201cPs 23\u201d or \u201c1 cor 13:4-7\u201d, pick a translation, and it appears large enough to read from the back of a room. Six public-domain translations, and you can paste your own text when you need a different one \u2014 which also means it works with no internet at all. Verses are kept after the first fetch, so the second time anyone uses one it is instant.",
-        "Share slides from your media library, or a plain note in very large type \u2014 a hymn number, an announcement, a name to pray for. Anyone joining late sees the same thing as everyone else.",
-        "Record a meeting, as video or as audio only. The recording is made on the host's own computer, so it costs no bandwidth during the call, and everyone in the room is told the moment it starts. Save it to your media library or download it. Audio-only recordings are about a twentieth of the size \u2014 usually what you want for a sermon.",
+        "Meetings. Create one, share the link, and people join in their browser — no app, no account, nothing to install. Video, voice, screen sharing, chat, reactions and a raised hand. It runs from a phone as well as a laptop.",
+        "Low data mode. One tap turns off video in both directions and keeps the voices, using roughly a tenth of the data. Set it as the default on a meeting and everybody starts that way — the right setting for a midweek prayer meeting most people join on mobile data. The meeting also lowers its own quality as the room grows and when your connection weakens, so a call degrades instead of freezing.",
+        "Put a Bible verse on everyone's screen. Type \u201cJohn 3:16\u201d, \u201cPs 23\u201d or \u201c1 cor 13:4-7\u201d, pick a translation, and it appears large enough to read from the back of a room. Six public-domain translations, and you can paste your own text when you need a different one — which also means it works with no internet at all. Verses are kept after the first fetch, so the second time anyone uses one it is instant.",
+        "Share slides from your media library, or a plain note in very large type — a hymn number, an announcement, a name to pray for. Anyone joining late sees the same thing as everyone else.",
+        "Record a meeting, as video or as audio only. The recording is made on the host's own computer, so it costs no bandwidth during the call, and everyone in the room is told the moment it starts. Save it to your media library or download it. Audio-only recordings are about a twentieth of the size — usually what you want for a sermon.",
         "Host controls: mute one person or everyone, a lobby you let people into one at a time, co-hosts, and removing somebody so the link will not let them back in. Raised hands go to the top of the list so nobody is missed.",
-        "Every meeting keeps a register \u2014 who joined, when they arrived and left, and for how long \u2014 and one button turns it into an attendance record. \u201cRun it again\u201d copies a finished meeting's settings into a fresh one, which is the weekly prayer meeting in one tap.",
-        "Activity log. Settings \u2192 Activity log now shows everything that happens in your church's workspace: who added, changed, deleted, sent, exported or signed in, when, and what actually changed \u2014 field by field, with the old value beside the new one. Filter by area, by person or by date, search it, and download it as a CSV. Nothing in it is ever edited or removed.",
+        "Every meeting keeps a register — who joined, when they arrived and left, and for how long — and one button turns it into an attendance record. \u201cRun it again\u201d copies a finished meeting's settings into a fresh one, which is the weekly prayer meeting in one tap.",
+        "Activity log. Settings → Activity log now shows everything that happens in your church's workspace: who added, changed, deleted, sent, exported or signed in, when, and what actually changed — field by field, with the old value beside the new one. Filter by area, by person or by date, search it, and download it as a CSV. Nothing in it is ever edited or removed.",
         "When our support team works inside your church, it is marked as ours in your own log rather than hidden. Anything we do on your behalf, you can see.",
         "Two new downloads in Reports: every meeting, and every visit to every meeting.",
       ],
       Improved: [
-        "The platform audit log now covers church activity as well as operator actions, with filters, search and an export \u2014 and a download of the log is itself recorded.",
-        "Settings has an \u201cAbout this software\u201d card: what the platform is, who built it, and the terms in plain words \u2014 including the one that matters, which is that the data belongs to the church and to nobody else.",
+        "The platform audit log now covers church activity as well as operator actions, with filters, search and an export — and a download of the log is itself recorded.",
+        "Settings has an \u201cAbout this software\u201d card: what the platform is, who built it, and the terms in plain words — including the one that matters, which is that the data belongs to the church and to nobody else.",
       ],
       Security: [
         "A deleted member, gift, financial record, transfer or pledge is now recorded with enough detail to reconstruct it by hand. Until now the most destructive things in the app left no trace of who did them.",
         "Sign-ins are recorded, so \u201cwho deleted this?\u201d has an answer that starts before the deletion.",
-        "The activity log strips anything that looks like a password, token or key before it is stored \u2014 a log more people can read must never become the place a credential leaks.",
+        "The activity log strips anything that looks like a password, token or key before it is stored — a log more people can read must never become the place a credential leaks.",
       ],
     },
   },

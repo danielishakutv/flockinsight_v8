@@ -233,6 +233,14 @@ export const FAQ: { q: string; a: string }[] = [
     a: "Your first seven Sundays are free, with no card required. After that, plans differ mainly by how many members you can hold, and are charged in your own currency. Email to members is free and unlimited on every plan; SMS is paid per message from a wallet you top up.",
   },
   {
+    q: "Is it cheaper to pay for a year?",
+    a: "Yes — a year costs ten months rather than twelve, so two months are free, and it is one payment instead of twelve. You can switch between monthly and yearly on the pricing page to see both figures before you decide, and a church outside Nigeria saves the card fee eleven times over as well.",
+  },
+  {
+    q: "Can I earn from introducing other churches?",
+    a: "Yes. The FlockInsight Partner Program pays you a share of what every church you introduce pays us — on their first two months and then a smaller share of every month for a year. It is free to join, there is no quota, and a Partner never sees a church's members or its giving. The rates, the levels and the terms are all on the Partner Program page.",
+  },
+  {
     q: "Does it work on a phone?",
     a: "Yes, and it is designed phone-first. You can install it to your home screen so it opens like an app. Recording attendance is built to be done one-handed while standing.",
   },
@@ -387,6 +395,24 @@ export type PricingCopy = {
   contactUs: string;
   /** The "/mo" after a price. Moves in translation. */
   perMonth: string;
+  /** The "/yr" after a yearly total. */
+  perYear: string;
+  /*
+   * The yearly option, said in three places and nowhere else.
+   *
+   * `monthly` and `annual` label the toggle; `annualSave` is the badge beside
+   * it and `annualEquivalent` the line under a yearly price. All four take the
+   * NUMBER as a placeholder rather than carrying one, because the number is a
+   * setting an administrator can change from a phone and the sentence is not.
+   */
+  monthly: string;
+  annual: string;
+  /** `{months}` — how many of the twelve are free. */
+  annualSave: string;
+  /** `{price}` — the yearly total divided by twelve, already formatted. */
+  annualEquivalent: string;
+  /** `{price}` — what the church keeps over the year, already formatted. */
+  annualSaving: string;
   customTitle: string;
   talkToUs: string;
   fullDetailsPre: string;
@@ -458,6 +484,12 @@ export const en: LandingContent = {
     getStarted: "Get started",
     contactUs: "Contact us",
     perMonth: "/mo",
+    perYear: "/yr",
+    monthly: "Monthly",
+    annual: "Yearly",
+    annualSave: "Pay yearly · {months} months free",
+    annualEquivalent: "Works out at {price}/mo",
+    annualSaving: "You keep {price}",
     customTitle:
       "Need something custom for a denomination or multi-branch ministry?",
     talkToUs: "Talk to us",

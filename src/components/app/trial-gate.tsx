@@ -11,31 +11,44 @@ import {
 } from "@/app/(app)/settings/billing/actions";
 import { signOut } from "@/lib/auth-client";
 import type { PlanId } from "@/lib/plans";
+import { freeMonthsLabel, type BillingCycle } from "@/lib/billing-cycle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 
-type PlanOpt = { id: PlanId; name: string; tagline: string; priceLabel: string };
+type PlanOpt = {
+  id: PlanId;
+  name: string;
+  tagline: string;
+  priceLabel: string;
+  /** The yearly total, worked out on the server. Null for a custom plan. */
+  annualPriceLabel: string | null;
+};
 
 /** Full-page block shown when a church's free trial has ended and it hasn't paid. */
 export function TrialGate({
   churchName,
   canManageBilling,
   plans,
+  annualFreeMonths,
 }: {
   churchName: string;
   canManageBilling: boolean;
   plans: PlanOpt[];
+  /** Months free for paying a year. 0 hides the choice entirely. */
+  annualFreeMonths: number;
 }) {
   const t = useT();
   const router = useRouter();
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const annual = cycle === "annual";
   const [paying, setPaying] = useState<PlanId | null>(null);
   const [requesting, startRequest] = useTransition();
   const [requested, setRequested] = useState(false);
 
   async function pay(plan: PlanId) {
     setPaying(plan);
-    const res = await startCheckout(plan);
+    const res = await startCheckout(plan, cycle);
     if (!res.ok) {
       toast.error(res.error);
       setPaying(null);
@@ -86,6 +99,37 @@ export function TrialGate({
 
           {canManageBilling ? (
             <>
+              {annualFreeMonths > 0 && (
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <div
+                    role="radiogroup"
+                    aria-label="Billing period"
+                    className="bg-muted inline-flex rounded-full p-1"
+                  >
+                    {(["monthly", "annual"] as const).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        role="radio"
+                        aria-checked={cycle === c}
+                        onClick={() => setCycle(c)}
+                        className={cn(
+                          "min-h-11 rounded-full px-5 text-sm font-bold transition",
+                          cycle === c
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {c === "monthly" ? "Monthly" : "Yearly"}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-bold">
+                    {freeMonthsLabel(annualFreeMonths)}
+                  </span>
+                </div>
+              )}
+
               <div className="mt-6 space-y-3">
                 {plans.map((p) => (
                   <div
@@ -98,13 +142,18 @@ export function TrialGate({
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-extrabold tabular-nums">
-                        {p.priceLabel}
+                        {annual ? (p.annualPriceLabel ?? p.priceLabel) : p.priceLabel}
                       </span>
                       <Button onClick={() => pay(p.id)} disabled={!!paying}>
                         {paying === p.id ? (
                           <Loader2 className="size-4 animate-spin" />
                         ) : null}
-                        Pay
+                        {/*
+                          What is being bought, on the button. "Pay" beside a
+                          yearly figure leaves a church to guess whether the
+                          next screen is asking for one month or twelve.
+                        */}
+                        {annual ? "Pay for a year" : "Pay"}
                       </Button>
                     </div>
                   </div>

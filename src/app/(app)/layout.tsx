@@ -10,9 +10,10 @@ import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { computeStanding } from "@/lib/trial";
 import { getDemoState } from "@/lib/demo";
-import { getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
 import { planPriceLabel } from "@/lib/plans";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
+import { annualTotal } from "@/lib/billing-cycle";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
 import { NavVisitRecorder } from "@/components/app/nav-visits";
@@ -79,20 +80,33 @@ export default async function AppLayout({
   // they can still help. Only an EXPIRED trial (no payment/waiver) blocks.
   const standing = computeStanding(church);
   if (standing.gated && !impersonating) {
+    /*
+     * The gate is the moment a church actually decides, so it offers the
+     * yearly price too. Before this it sold monthly only — the one screen
+     * where a church is choosing with its records behind it was the one screen
+     * that never mentioned that a year costs two months less.
+     */
+    const annualFreeMonths = await getAnnualFreeMonths();
     const plans = (await getPlans())
       .filter((p) => p.priceMonthly && p.priceMonthly > 0)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        tagline: p.tagline,
-        priceLabel: planPriceLabel(p),
-      }));
+      .map((p) => {
+        const yearly = annualTotal(p.priceMonthly, annualFreeMonths);
+        return {
+          id: p.id,
+          name: p.name,
+          tagline: p.tagline,
+          priceLabel: planPriceLabel(p),
+          annualPriceLabel:
+            yearly === null ? null : `₦${yearly.toLocaleString()}/yr`,
+        };
+      });
     return (
       <I18nProvider locale={locale} dict={dict}>
         <TrialGate
           churchName={church.name}
           canManageBilling={canManageBilling}
           plans={plans}
+          annualFreeMonths={annualFreeMonths}
         />
       </I18nProvider>
     );

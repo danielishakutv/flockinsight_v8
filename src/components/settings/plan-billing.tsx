@@ -7,6 +7,13 @@ import { Check, CreditCard, Gift, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { startCheckout } from "@/app/(app)/settings/billing/actions";
 import { PLANS, planName, type PlanId } from "@/lib/plans";
+import {
+  annualSaving,
+  annualTotal,
+  freeMonthsLabel,
+  monthlyEquivalent,
+  type BillingCycle,
+} from "@/lib/billing-cycle";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +43,8 @@ export function PlanBilling({
   renewsAt,
   discount,
   prices,
+  annualPrices,
+  annualFreeMonths,
   basePrices,
   payments,
   status,
@@ -46,6 +55,10 @@ export function PlanBilling({
   renewsAt: string | null;
   discount: number;
   prices: Record<PlanId, number | null>;
+  /** The yearly total per plan, worked out on the server. */
+  annualPrices: Record<PlanId, number | null>;
+  /** How many of the twelve months are free when paying for a year. */
+  annualFreeMonths: number;
   basePrices: Record<PlanId, number | null>;
   payments: PaymentRow[];
   status: string | null;
@@ -64,6 +77,8 @@ export function PlanBilling({
   international?: {
     /** Per plan: the price in the church's own money, ready to print. */
     labels: Record<string, string | null>;
+    /** The same, for a year. One card surcharge rather than twelve. */
+    annualLabels: Record<string, string | null>;
     currency: string;
     /** What the card is actually charged, in naira, for the priciest plan
      *  shown — used only in the explanatory note. */
@@ -79,6 +94,8 @@ export function PlanBilling({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const annual = cycle === "annual";
   const toasted = useRef(false);
 
   useEffect(() => {
@@ -95,7 +112,7 @@ export function PlanBilling({
   function checkout(plan: PlanId) {
     setBusyPlan(plan);
     startTransition(async () => {
-      const res = await startCheckout(plan);
+      const res = await startCheckout(plan, cycle);
       if (!res.ok) {
         toast.error(res.error);
         setBusyPlan(null);
@@ -188,11 +205,48 @@ export function PlanBilling({
         </CardContent>
       </Card>
 
+      {/*
+        Monthly or yearly.
+        Two buttons rather than a switch: a switch has to be read twice to work
+        out which side is on, and this one decides what a church is charged.
+      */}
+      {annualFreeMonths > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            role="radiogroup"
+            aria-label="Billing period"
+            className="bg-muted inline-flex rounded-full p-1"
+          >
+            {(["monthly", "annual"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={cycle === c}
+                onClick={() => setCycle(c)}
+                className={cn(
+                  "min-h-11 rounded-full px-5 text-sm font-bold transition",
+                  cycle === c
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {c === "monthly" ? "Monthly" : "Yearly"}
+              </button>
+            ))}
+          </div>
+          <span className="bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-bold">
+            Pay yearly · {freeMonthsLabel(annualFreeMonths)}
+          </span>
+        </div>
+      )}
+
       {/* Plans */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((p, i) => {
           const isCurrent = p.id === currentPlan;
-          const price = prices[p.id];
+          const monthlyPrice = prices[p.id];
+          const price = annual ? annualPrices[p.id] : monthlyPrice;
           // A church abroad sees its own money; the naira total is explained
           // once below the grid rather than repeated on every card.
           const priceLabel =
@@ -200,8 +254,17 @@ export function PlanBilling({
               ? "Custom"
               : price === 0
                 ? "Free"
-                : (international?.labels[p.id] ??
-                  `₦${price.toLocaleString()}/mo`);
+                : annual
+                  ? (international?.annualLabels[p.id] ??
+                    `₦${price.toLocaleString()}/yr`)
+                  : (international?.labels[p.id] ??
+                    `₦${price.toLocaleString()}/mo`);
+          // What the year works out at per month, and what it saves. Said in
+          // naira even for a church abroad: the conversion is on the price
+          // above it, and two converted figures invite a comparison between
+          // two rounded numbers that will not quite reconcile.
+          const perMonth = monthlyEquivalent(monthlyPrice, annualFreeMonths);
+          const saving = annualSaving(monthlyPrice, annualFreeMonths);
           const action =
             p.id === "enterprise"
               ? "contact"
@@ -235,12 +298,29 @@ export function PlanBilling({
                     {priceLabel}
                     {price !== null && price > 0 && discount > 0 && (
                       <span className="text-muted-foreground ml-1 text-xs font-normal line-through">
-                        ₦{basePrices[p.id]?.toLocaleString()}
+                        {/*
+                          The undiscounted price for the SAME period. Striking
+                          through a monthly figure beside a yearly one invited
+                          a comparison between two different things.
+                        */}
+                        ₦
+                        {(annual
+                          ? annualTotal(basePrices[p.id], annualFreeMonths)
+                          : basePrices[p.id]
+                        )?.toLocaleString()}
                       </span>
                     )}
                   </>
                 )}
               </p>
+              {annual && price !== null && price > 0 && perMonth !== null && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Works out at ₦{perMonth.toLocaleString()}/mo ·{" "}
+                  <span className="text-primary font-semibold">
+                    saves ₦{saving.toLocaleString()}
+                  </span>
+                </p>
+              )}
               <ul className="mt-3 flex-1 space-y-1.5">
                 {p.features.slice(0, 4).map((f) => (
                   <li key={f} className="flex items-start gap-1.5 text-xs">
@@ -270,6 +350,7 @@ export function PlanBilling({
                     <Loader2 className="animate-spin" />
                   )}
                   {action}
+                  {annual ? " · 1 year" : ""}
                 </Button>
               )}
             </div>
@@ -294,6 +375,8 @@ export function PlanBilling({
           {international.live
             ? " Converted at today's exchange rate; your bank's rate may differ slightly."
             : " The exchange rate service is unreachable right now, so the converted figure is indicative — the naira amount charged is exact."}
+          {annualFreeMonths > 0 &&
+            " That fee is charged once per payment, so paying for the year carries it once rather than twelve times."}
         </p>
       )}
 

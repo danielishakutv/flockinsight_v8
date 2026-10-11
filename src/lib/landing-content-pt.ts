@@ -203,6 +203,14 @@ export const pt: LandingContent = {
       a: "Cada igreja tem os primeiros sete domingos grátis, sem necessidade de cartão. Depois há planos pagos em naira, que diferem sobretudo no número de membros que pode ter. O e-mail é gratuito e ilimitado em todos os planos; os SMS são pagos por mensagem a partir de uma carteira que carrega.",
     },
     {
+      q: "É mais barato pagar um ano de uma vez?",
+      a: "Sim — um ano custa dez meses em vez de doze: dois meses são grátis e é um pagamento em vez de doze. Na página de preços pode alternar entre mensal e anual para ver os dois valores antes de decidir, e uma igreja fora da Nigéria poupa também onze vezes a taxa de cartão.",
+    },
+    {
+      q: "Posso ganhar por apresentar outras igrejas?",
+      a: "Sim. O Programa de Parceiros da FlockInsight paga-lhe uma parte do que cada igreja que apresentar nos paga — nos dois primeiros meses e depois uma parte menor de cada mês durante um ano. A adesão é gratuita, não há quota, e um parceiro nunca vê os membros nem as ofertas de uma igreja. As taxas, os níveis e os termos estão na página do Programa de Parceiros.",
+    },
+    {
       q: "Funciona no telemóvel?",
       a: "Sim, e foi pensado primeiro para o telemóvel. Pode instalá-lo no ecrã principal e abre como uma aplicação. Registar presenças foi feito para se fazer com uma só mão, de pé.",
     },
@@ -260,6 +268,12 @@ export const pt: LandingContent = {
     getStarted: "Começar",
     contactUs: "Fale connosco",
     perMonth: "/mês",
+    perYear: "/ano",
+    monthly: "Mensal",
+    annual: "Anual",
+    annualSave: "Pague anualmente · {months} meses grátis",
+    annualEquivalent: "Equivale a {price}/mês",
+    annualSaving: "Poupa {price}",
     customTitle:
       "Precisa de algo à medida para uma denominação ou um ministério com várias congregações?",
     talkToUs: "Fale connosco",

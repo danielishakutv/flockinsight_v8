@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
-import { applyDiscount, getPlanPrices } from "@/lib/pricing";
+import { applyDiscount, getAnnualFreeMonths, getPlanPrices } from "@/lib/pricing";
+import { annualTotal } from "@/lib/billing-cycle";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { computeStanding } from "@/lib/trial";
 import { pricesForCountry, planPriceLabelFor } from "@/lib/plan-price";
@@ -49,9 +50,24 @@ export default async function BillingPage({
       .limit(20),
   ]);
 
-  const basePrices = await getPlanPrices();
+  const [basePrices, freeMonths] = await Promise.all([
+    getPlanPrices(),
+    getAnnualFreeMonths(),
+  ]);
   const prices = Object.fromEntries(
     PLANS.map((p) => [p.id, applyDiscount(basePrices[p.id], row.discount)]),
+  ) as Record<PlanId, number | null>;
+
+  /*
+   * The yearly total for each plan, computed here rather than in the browser.
+   *
+   * The toggle on the billing screen chooses between two numbers the server
+   * worked out; it never multiplies a price itself. A total computed in a
+   * client component is a total a browser can edit, and this one is handed
+   * straight to a payment.
+   */
+  const annualPrices = Object.fromEntries(
+    PLANS.map((p) => [p.id, annualTotal(prices[p.id], freeMonths)]),
   ) as Record<PlanId, number | null>;
 
   const standing = computeStanding(c);
@@ -62,7 +78,10 @@ export default async function BillingPage({
    * server, from the SAME helper the checkout action uses — if the card and
    * the charge ever disagreed, the church would find out on its statement.
    */
-  const localised = await pricesForCountry(prices, c.country);
+  const [localised, localisedAnnual] = await Promise.all([
+    pricesForCountry(prices, c.country),
+    pricesForCountry(annualPrices, c.country),
+  ]);
   const first = Object.values(localised).find((p) => p?.international);
   const international = first
     ? {
@@ -70,6 +89,18 @@ export default async function BillingPage({
           Object.entries(localised).map(([id, p]) => [
             id,
             p && p.baseNgn > 0 ? planPriceLabelFor(p) : null,
+          ]),
+        ),
+        /*
+         * The yearly figures carry ONE surcharge, not twelve — it is a flat
+         * amount per card transaction and a year is one transaction. So these
+         * are a separate conversion rather than the monthly label times ten,
+         * and paying annually saves a church abroad more than the two months.
+         */
+        annualLabels: Object.fromEntries(
+          Object.entries(localisedAnnual).map(([id, p]) => [
+            id,
+            p && p.baseNgn > 0 ? planPriceLabelFor(p, { perMonth: "/yr" }) : null,
           ]),
         ),
         currency: first.displayCurrency,
@@ -84,6 +115,8 @@ export default async function BillingPage({
       renewsAt={row.renewsAt ? row.renewsAt.toISOString() : null}
       discount={row.discount}
       prices={prices}
+      annualPrices={annualPrices}
+      annualFreeMonths={freeMonths}
       basePrices={basePrices}
       trial={{
         state: standing.state,

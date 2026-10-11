@@ -61,6 +61,8 @@ type Earning = {
   status: string;
   payoutId: string | null;
   churchName: string | null;
+  /** Why this row covers what it covers, for a payment of several months. */
+  note: string | null;
   createdAt: string;
 };
 
@@ -574,6 +576,16 @@ export function PartnerDashboard({
                         {(e.rateBps / 100).toFixed(0)}% ·{" "}
                         {new Date(e.createdAt).toLocaleDateString()}
                       </p>
+                      {/*
+                        Three rows landing on the same day is what an annual
+                        payment looks like, and without this line it looks
+                        like a mistake instead of a year paid at once.
+                      */}
+                      {e.note && (
+                        <p className="text-muted-foreground truncate text-xs">
+                          {e.note}
+                        </p>
+                      )}
                     </div>
                     <span className="shrink-0 font-semibold tabular-nums">
                       {shown ? formatMoney(e.amount, e.currency) : hidden}

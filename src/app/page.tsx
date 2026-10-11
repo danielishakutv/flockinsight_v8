@@ -13,13 +13,20 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { PromoPopup } from "@/components/public/promo-popup";
 import { PublicHeader } from "@/components/landing/public-header";
 import { PublicFooter } from "@/components/landing/public-footer";
+import {
+  CyclePrice,
+  PriceCycleProvider,
+  PriceCycleToggle,
+} from "@/components/landing/price-cycle";
 import { SectionHeading } from "@/components/landing/section-heading";
 import { ModuleGroups } from "@/components/landing/module-groups";
 import { ReplacesTable } from "@/components/landing/replaces-table";
 import { CompareTable } from "@/components/landing/compare-table";
-import { getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { annualTotal } from "@/lib/billing-cycle";
 import {
   currencyNoteFor,
+  planAmountLabel,
   planPriceLabelFor,
   pricesForCountry,
   requestCountry,
@@ -128,17 +135,34 @@ export default async function LandingPage({ searchParams }: PageProps) {
     faqSchema(c.faq, "/"),
   ];
 
-  const plans = await getPlans();
+  const [plans, freeMonths] = await Promise.all([
+    getPlans(),
+    getAnnualFreeMonths(),
+  ]);
 
   /*
    * Plan prices in the visitor's own currency. A church outside Nigeria also
    * carries a surcharge covering the international card fee, so the figure here
    * is the figure checkout charges — same helper, one calculation.
    */
-  const priced = await pricesForCountry(
-    Object.fromEntries(plans.map((p) => [p.id, p.priceMonthly])),
-    await requestCountry(),
-  );
+  const country = await requestCountry();
+  const [priced, pricedAnnual] = await Promise.all([
+    pricesForCountry(
+      Object.fromEntries(plans.map((p) => [p.id, p.priceMonthly])),
+      country,
+    ),
+    /*
+     * The yearly total is converted on its own, not multiplied from the
+     * monthly label: the international card surcharge is flat per
+     * transaction, and a year is one transaction rather than twelve.
+     */
+    pricesForCountry(
+      Object.fromEntries(
+        plans.map((p) => [p.id, annualTotal(p.priceMonthly, freeMonths)]),
+      ),
+      country,
+    ),
+  ]);
   const currencyNote = currencyNoteFor(priced, c.pricing);
 
   return (
@@ -447,6 +471,7 @@ export default async function LandingPage({ searchParams }: PageProps) {
         {/* ---------------------------------------------------------------
             Pricing
             --------------------------------------------------------------- */}
+        <PriceCycleProvider>
         <section id="pricing" className="bg-muted/30 border-y py-20 lg:py-28">
           <div className="mx-auto max-w-6xl px-4 lg:px-8">
             <SectionHeading
@@ -454,15 +479,54 @@ export default async function LandingPage({ searchParams }: PageProps) {
               title={c.pricing.title}
               intro={c.pricing.intro}
             />
+            {freeMonths > 0 && (
+              <PriceCycleToggle
+                className="mt-8"
+                monthlyLabel={c.pricing.monthly}
+                annualLabel={c.pricing.annual}
+                savingLabel={c.pricing.annualSave.replace(
+                  "{months}",
+                  String(freeMonths),
+                )}
+              />
+            )}
             <div className="mt-12 grid gap-5 lg:grid-cols-4">
               {plans.map((p) => {
                 const localised = priced[p.id];
+                const localisedAnnual = pricedAnnual[p.id];
                 const priceLabel = localised
                   ? planPriceLabelFor(localised, {
                       free: c.pricing.free,
                       perMonth: c.pricing.perMonth,
                     })
                   : "—";
+                const annualLabel = localisedAnnual
+                  ? planPriceLabelFor(localisedAnnual, {
+                      free: c.pricing.free,
+                      perMonth: c.pricing.perYear,
+                    })
+                  : "—";
+                const paid = !!p.priceMonthly && p.priceMonthly > 0;
+                // The saving is the gap between the two totals, which for a
+                // church abroad is more than the free months alone.
+                const perMonthLabel =
+                  paid && localisedAnnual
+                    ? planAmountLabel(
+                        Math.round(localisedAnnual.displayAmount / 12),
+                        localisedAnnual.displayCurrency,
+                      )
+                    : null;
+                const savingLabel =
+                  paid && localisedAnnual && localised
+                    ? planAmountLabel(
+                        Math.max(
+                          0,
+                          localised.displayAmount * 12 -
+                            localisedAnnual.displayAmount,
+                        ),
+                        localisedAnnual.displayCurrency,
+                      )
+                    : null;
                 return (
                   <div
                     key={p.id}
@@ -481,18 +545,50 @@ export default async function LandingPage({ searchParams }: PageProps) {
                       {p.tagline}
                     </p>
                     <div className="mt-4">
-                      {p.priceMonthly && p.priceMonthly > 0 ? (
-                        <>
-                          <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
-                            {priceLabel}
-                          </span>
-                          <span className="text-primary ml-2 text-2xl font-extrabold">
-                            {c.pricing.free}
-                          </span>
-                          <p className="text-primary mt-0.5 text-xs font-bold tracking-wide uppercase">
-                            {c.pricing.firstSundays}
-                          </p>
-                        </>
+                      {paid ? (
+                        <CyclePrice
+                          monthly={
+                            <>
+                              <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                                {priceLabel}
+                              </span>
+                              <span className="text-primary ml-2 text-2xl font-extrabold">
+                                {c.pricing.free}
+                              </span>
+                              <p className="text-primary mt-0.5 text-xs font-bold tracking-wide uppercase">
+                                {c.pricing.firstSundays}
+                              </p>
+                            </>
+                          }
+                          annual={
+                            <>
+                              <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                                {annualLabel}
+                              </span>
+                              <span className="text-primary ml-2 text-2xl font-extrabold">
+                                {c.pricing.free}
+                              </span>
+                              <p className="text-primary mt-0.5 text-xs font-bold tracking-wide uppercase">
+                                {c.pricing.firstSundays}
+                              </p>
+                              {perMonthLabel && savingLabel && (
+                                <p className="text-muted-foreground mt-1 text-xs">
+                                  {c.pricing.annualEquivalent.replace(
+                                    "{price}",
+                                    perMonthLabel,
+                                  )}{" "}
+                                  ·{" "}
+                                  <span className="text-foreground font-semibold">
+                                    {c.pricing.annualSaving.replace(
+                                      "{price}",
+                                      savingLabel,
+                                    )}
+                                  </span>
+                                </p>
+                              )}
+                            </>
+                          }
+                        />
                       ) : (
                         <span className="text-3xl font-extrabold tracking-tight">
                           {p.priceMonthly === null ? "—" : priceLabel}
@@ -539,6 +635,7 @@ export default async function LandingPage({ searchParams }: PageProps) {
             </p>
           </div>
         </section>
+        </PriceCycleProvider>
 
         {/* ---------------------------------------------------------------
             FAQ — rendered and emitted as FAQPage structured data

@@ -6,6 +6,13 @@ import { payment, supportTicket, supportMessage } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { effectivePrice, activatePlan } from "@/lib/billing";
+import {
+  asCycle,
+  cycleMonths,
+  cycleTotal,
+  type BillingCycle,
+} from "@/lib/billing-cycle";
+import { getAnnualFreeMonths } from "@/lib/pricing";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { priceForCountry, planAmountLabel } from "@/lib/plan-price";
 import { notifySupport } from "@/lib/support";
@@ -18,7 +25,24 @@ export type CheckoutResult =
   | { ok: true; url?: string; activated?: boolean }
   | { ok: false; error: string };
 
-export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
+/**
+ * Start a payment for one plan, for a month or for a year.
+ *
+ * The cycle decides two numbers and nothing else: how much is charged, and how
+ * many months the plan is then paid up for. Both come from `billing-cycle.ts`,
+ * which is the same module the pricing page and the billing screen read — so
+ * the figure a church was shown is the figure its card is charged, and the
+ * `periodMonths` on the row is what the Partner ledger later prices the
+ * commission across.
+ *
+ * `cycle` is parsed rather than trusted: it arrives from a client component,
+ * and `asCycle` means an unexpected value bills a month rather than throwing
+ * or, worse, billing a year.
+ */
+export async function startCheckout(
+  plan: PlanId,
+  cycleInput: BillingCycle | string = "monthly",
+): Promise<CheckoutResult> {
   if (!["starter", "growth", "pro"].includes(plan))
     return { ok: false, error: "Choose a valid plan." };
 
@@ -26,13 +50,24 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to manage billing." };
 
-  const price = await effectivePrice(plan, c.planDiscountPct);
-  if (price === null)
+  const cycle = asCycle(cycleInput);
+  const monthly = await effectivePrice(plan, c.planDiscountPct);
+  if (monthly === null)
     return { ok: false, error: "That plan is custom — please contact us." };
+
+  const freeMonths = await getAnnualFreeMonths();
+  const months = cycleMonths(cycle);
+  /*
+   * The whole charge, not the monthly one. A year is ten months of money for
+   * twelve months of service, and the multiplication happens HERE rather than
+   * on the page: a total computed in a client component is a total a browser
+   * can edit.
+   */
+  const price = cycleTotal(monthly, cycle, freeMonths) ?? 0;
 
   // Free plan or 100% discount → activate immediately, no payment.
   if (price === 0) {
-    await activatePlan(c.id, plan, 1);
+    await activatePlan(c.id, plan, months);
     await db.insert(payment).values({
       churchId: c.id,
       plan,
@@ -41,7 +76,7 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
       gateway: "manual",
       reference: `FREE-${c.id.slice(0, 8)}-${Date.now()}`,
       status: "success",
-      periodMonths: 1,
+      periodMonths: months,
       note: c.planDiscountPct >= 100 ? "100% discount" : "Free plan",
       createdBy: user.id,
       paidAt: new Date(),
@@ -53,7 +88,7 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
       targetType: "church",
       targetId: c.id,
       targetLabel: plan,
-      meta: { plan, price: 0, discountPct: c.planDiscountPct },
+      meta: { plan, price: 0, discountPct: c.planDiscountPct, cycle, months },
       severity: "critical",
     });
 
@@ -76,7 +111,18 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
    * payment row, and the audit line. Passing `price` to any of the three would
    * bill the Nigerian figure and eat the fee silently.
    */
+  /*
+   * Priced ONCE, on the whole charge. Which is also why paying annually is
+   * cheaper again for a church abroad: the international card surcharge is a
+   * flat amount per transaction, and a year is one transaction rather than
+   * twelve.
+   */
   const priced = await priceForCountry(price, c.country);
+
+  const annualNote =
+    cycle === "annual"
+      ? `Annual — ${months} months, ${freeMonths} free (₦${monthly.toLocaleString()}/mo list)`
+      : null;
 
   const reference = `FI-${c.id.slice(0, 8)}-${plan}-${Date.now()}`;
   await db.insert(payment).values({
@@ -87,13 +133,21 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
     gateway: "paystack",
     reference,
     status: "pending",
-    periodMonths: 1,
+    // What the Partner ledger prices its commission across, and what
+    // `activatePlan` extends the renewal by once this clears.
+    periodMonths: months,
     createdBy: user.id,
     // Recorded on the row so a refund or a query months later can see why the
     // amount is not the list price, without re-running today's exchange rate.
-    note: priced.international
-      ? `International card fee included (₦${priced.surchargeNgn.toLocaleString()}) — shown to the church as ${planAmountLabel(priced.displayAmount, priced.displayCurrency)}`
-      : null,
+    note:
+      [
+        annualNote,
+        priced.international
+          ? `International card fee included (₦${priced.surchargeNgn.toLocaleString()}) — shown to the church as ${planAmountLabel(priced.displayAmount, priced.displayCurrency)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null,
   });
 
   const init = await paystackInit({
@@ -104,6 +158,8 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
     metadata: {
       churchId: c.id,
       plan,
+      cycle,
+      months,
       country: c.country ?? null,
       baseNgn: priced.baseNgn,
       surchargeNgn: priced.surchargeNgn,
@@ -116,11 +172,13 @@ export async function startCheckout(plan: PlanId): Promise<CheckoutResult> {
   await audit({
     churchId: c.id,
     action: "billing.checkout.create",
-    summary: `Started checkout for the ${plan} plan (₦${priced.chargeNgn.toLocaleString()})`,
+    summary: `Started checkout for the ${plan} plan, ${cycle === "annual" ? `${months} months` : "1 month"} (₦${priced.chargeNgn.toLocaleString()})`,
     targetType: "payment",
     targetLabel: reference,
     meta: {
       plan,
+      cycle,
+      months,
       price: priced.chargeNgn,
       baseNgn: priced.baseNgn,
       surchargeNgn: priced.surchargeNgn,

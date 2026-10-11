@@ -1,5 +1,9 @@
 import "server-only";
 import { PLANS, PLAN_BY_ID, type Plan, type PlanId } from "@/lib/plans";
+import {
+  DEFAULT_ANNUAL_FREE_MONTHS,
+  normaliseFreeMonths,
+} from "@/lib/billing-cycle";
 import { getSetting, setSetting } from "@/lib/platform-settings";
 import { formatBytes, MB, planStorageBytes } from "@/lib/storage-bytes";
 import {
@@ -84,6 +88,32 @@ export async function getPlans(): Promise<Plan[]> {
 /** Persist a plan's monthly price (admin only — caller must authorize). */
 export async function setPlanPrice(id: PlanId, price: number): Promise<void> {
   await setSetting(planPriceKey(id), String(Math.max(0, Math.round(price))));
+}
+
+/* ----- Annual billing (admin-managed) ----- */
+
+/*
+ * How many months a church gets free for paying a year up front.
+ *
+ * Admin-managed for the same reason every other number here is: the size of
+ * the annual discount is a commercial decision that gets revisited, and it
+ * decides a charge on four surfaces at once — the landing page, the pricing
+ * page, the billing screen and Paystack. One setting, read by all four, so
+ * they cannot disagree. Two is the shipped default: twelve months of service
+ * for ten months of money.
+ */
+export const ANNUAL_FREE_MONTHS_KEY = "annual_free_months";
+
+export async function getAnnualFreeMonths(): Promise<number> {
+  // An empty stored value means "no override", not zero — and zero here would
+  // silently switch the whole offer off.
+  const raw = (await getSetting(ANNUAL_FREE_MONTHS_KEY, "")).trim();
+  if (raw === "") return DEFAULT_ANNUAL_FREE_MONTHS;
+  return normaliseFreeMonths(raw);
+}
+
+export async function setAnnualFreeMonths(months: number): Promise<void> {
+  await setSetting(ANNUAL_FREE_MONTHS_KEY, String(normaliseFreeMonths(months)));
 }
 
 /* ----- Plan feature lists (admin-managed) ----- */

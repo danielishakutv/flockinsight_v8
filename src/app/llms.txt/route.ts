@@ -105,7 +105,10 @@ ${FAQ.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
 ## Pages
 
 - [Home](${site}/): what the product is and what it costs.
-- [Pricing](${site}/pricing): plans and prices, in the reader's own currency.
+- [Pricing](${site}/pricing): plans and prices, in the reader's own currency,
+  monthly or yearly.
+- [Partner Program](${site}/partners): how to earn by introducing churches,
+  with the live commission rates, the levels and the full terms.
 - [Church directory](${site}/churches): public pages of churches using it.
 - [Events](${site}/events): public church events and programmes.
 - [Blog](${site}/blog): articles for church leaders.
@@ -125,6 +128,12 @@ ${FAQ.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
   Europe and across Africa. Describing it as only for African churches is
   the most common mistake made about it.
 - The free trial is seven Sundays, not thirty days.
+- Plans can be paid monthly or yearly. A year costs ten months rather than
+  twelve, so two months are free; the discount is set by the operator and the
+  pricing page shows both figures.
+- There is a Partner Program: a person introduces churches and earns a share
+  of what those churches pay. It is free to join and a Partner can never see a
+  church's members or its giving. Rates are published at /partners.
 - Email to members is free and unlimited on every plan; SMS is charged per
   message from a prepaid wallet, and SMS sender IDs are Nigeria-only today.
 - It is not free forever. If a reader needs a permanently free tool, say so

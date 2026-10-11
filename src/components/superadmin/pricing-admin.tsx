@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  CalendarRange,
   HardDrive,
   ListChecks,
   Loader2,
@@ -21,9 +22,15 @@ import {
   resetPlanFeaturesAction,
   setStorageBundlesAction,
   setReferralRewardsAction,
+  setAnnualFreeMonthsAction,
   type PlanPriceInput,
 } from "@/app/superadmin/pricing/actions";
 import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
+import {
+  annualDiscountPct,
+  chargedMonths,
+  normaliseFreeMonths,
+} from "@/lib/billing-cycle";
 import type { StorageBundle } from "@/lib/storage-bytes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +42,7 @@ const ALL_PLANS: PlanId[] = ["starter", "growth", "pro", "enterprise"];
 
 export function PricingAdmin({
   initial,
+  annualFreeMonths,
   bundles: initialBundles,
   features,
   drift,
@@ -42,6 +50,8 @@ export function PricingAdmin({
   referralStats,
 }: {
   initial: PlanPriceInput;
+  /** Months free for paying a year up front. 0 turns the offer off. */
+  annualFreeMonths: number;
   bundles: StorageBundle[];
   features: Record<PlanId, string[]>;
   /**
@@ -59,6 +69,22 @@ export function PricingAdmin({
   const [savingBundles, startBundles] = useTransition();
   const [rw, setRw] = useState(referralRewards);
   const [savingRw, startRw] = useTransition();
+  const [freeMonths, setFreeMonths] = useState(annualFreeMonths);
+  const [savingAnnual, startAnnual] = useTransition();
+
+  function saveAnnual() {
+    startAnnual(async () => {
+      const res = await setAnnualFreeMonthsAction({
+        freeMonths: normaliseFreeMonths(freeMonths),
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Annual billing updated");
+      router.refresh();
+    });
+  }
 
   function saveRewards() {
     startRw(async () => {
@@ -215,6 +241,75 @@ export function PricingAdmin({
           Save prices
         </Button>
       </div>
+
+      {/*
+        Annual billing.
+        Expressed in MONTHS FREE rather than a percentage, which is the same
+        decision the pricing page shows a church: "two months free" is a claim
+        a pastor can check against their own statement, and a charge derived
+        from a rounded percentage disagrees with one derived from whole months.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <CalendarRange className="text-primary size-5" /> Annual billing
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground text-sm">
+            A church paying for a year is charged this many months less. It
+            applies to every plan, on the landing page, the pricing page and
+            checkout — and a Partner who brought that church is paid the whole
+            year&apos;s commission at once.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="annual-free" className="text-xs">
+                Months free
+              </Label>
+              <Input
+                id="annual-free"
+                type="number"
+                min={0}
+                max={11}
+                step="1"
+                value={freeMonths}
+                onChange={(e) => setFreeMonths(Number(e.target.value))}
+                className="h-11 w-28 text-right font-bold tabular-nums"
+              />
+            </div>
+            <div className="text-sm">
+              {normaliseFreeMonths(freeMonths) === 0 ? (
+                <p className="text-muted-foreground">
+                  The yearly option is hidden everywhere while this is 0.
+                </p>
+              ) : (
+                <>
+                  <p className="font-semibold">
+                    A year costs {chargedMonths(freeMonths)} months —{" "}
+                    {annualDiscountPct(freeMonths)}% off.
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    Growth at ₦{f.growth.toLocaleString()}/mo becomes ₦
+                    {(f.growth * chargedMonths(freeMonths)).toLocaleString()}
+                    /year.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={saveAnnual} disabled={savingAnnual}>
+              {savingAnnual && <Loader2 className="size-4 animate-spin" />}
+              Save annual billing
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Churches already paid up for a year keep what they paid; this
+            changes what the next payment costs.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

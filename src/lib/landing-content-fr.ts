@@ -204,6 +204,14 @@ export const fr: LandingContent = {
       a: "Chaque église bénéficie de ses sept premiers dimanches gratuitement, sans carte bancaire. Ensuite, des formules payantes en naira se distinguent principalement par le nombre de membres que vous pouvez gérer. L'e-mail est gratuit et illimité sur toutes les formules ; les SMS sont facturés au message depuis un portefeuille que vous rechargez.",
     },
     {
+      q: "Est-ce moins cher de payer à l’année ?",
+      a: "Oui — une année coûte dix mois au lieu de douze : deux mois sont offerts, et c’est un seul paiement au lieu de douze. La page des tarifs vous permet de basculer entre mensuel et annuel pour voir les deux montants avant de choisir, et une église hors du Nigeria économise aussi onze fois les frais de carte.",
+    },
+    {
+      q: "Puis-je gagner de l’argent en présentant d’autres églises ?",
+      a: "Oui. Le programme Partenaires FlockInsight vous verse une part de ce que paie chaque église que vous présentez — sur ses deux premiers mois, puis une part plus petite de chaque mois pendant un an. L’adhésion est gratuite, sans quota, et un partenaire ne voit jamais les membres ni les dons d’une église. Les taux, les niveaux et les conditions figurent sur la page du programme Partenaires.",
+    },
+    {
       q: "Est-ce que cela fonctionne sur un téléphone ?",
       a: "Oui, et c'est conçu d'abord pour le téléphone. Vous pouvez l'installer sur votre écran d'accueil pour qu'il s'ouvre comme une application. La saisie de la présence est pensée pour être faite d'une seule main, debout.",
     },
@@ -261,6 +269,12 @@ export const fr: LandingContent = {
     getStarted: "Commencer",
     contactUs: "Nous contacter",
     perMonth: "/mois",
+    perYear: "/an",
+    monthly: "Mensuel",
+    annual: "Annuel",
+    annualSave: "Payez à l’année · {months} mois offerts",
+    annualEquivalent: "Soit {price}/mois",
+    annualSaving: "Vous économisez {price}",
     customTitle:
       "Besoin d’une formule sur mesure pour une dénomination ou un ministère multi-sites ?",
     talkToUs: "Parlons-en",

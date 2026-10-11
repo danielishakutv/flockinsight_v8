@@ -82,6 +82,9 @@ const PAGES = [
   ["12-compare-churchsuite", "/compare/churchsuite-alternative"],
   ["13-compare-free", "/compare/free-church-management-software"],
   ["14-churches-directory", "/churches"],
+  // The Partner programme: long, table-heavy, and the one public page that
+  // quotes money a person is being promised.
+  ["17-partners", "/partners"],
   ["15-landing-french", "/?lang=fr"],
   ["16-landing-portuguese", "/?lang=pt"],
 ];

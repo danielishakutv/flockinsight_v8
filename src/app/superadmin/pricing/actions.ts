@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   planFeatureDrift,
+  setAnnualFreeMonths,
   resetPlanCopy,
   resetPlanFeatures,
   setPlanEmails,
@@ -51,6 +52,47 @@ export async function setPlanPrices(input: PlanPriceInput): Promise<ActionResult
   // Refresh the public surfaces that show prices.
   revalidatePath("/");
   revalidatePath("/pricing");
+  revalidatePath("/superadmin/pricing");
+  return { ok: true };
+}
+
+/**
+ * How many months a church gets free for paying a year up front.
+ *
+ * Capped at 11 by the schema and again by `normaliseFreeMonths`, because 12
+ * free months out of 12 is the whole product given away by a typo — the kind
+ * of single keystroke that is worth refusing in two places.
+ */
+const annualSchema = z.object({ freeMonths: z.number().min(0).max(11) });
+
+export async function setAnnualFreeMonthsAction(
+  input: z.input<typeof annualSchema>,
+): Promise<ActionResult> {
+  const admin = await requirePlatform("platform.pricing.manage");
+  const parsed = annualSchema.safeParse(input);
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid number of months",
+    };
+
+  const { freeMonths } = parsed.data;
+  await setAnnualFreeMonths(freeMonths);
+
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "set_pricing",
+    summary:
+      freeMonths === 0
+        ? "Turned off the annual billing discount"
+        : `Annual billing: ${freeMonths} month${freeMonths === 1 ? "" : "s"} free — a year now costs ${12 - freeMonths} months`,
+  });
+
+  // Every surface that quotes a yearly price.
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/settings/billing");
   revalidatePath("/superadmin/pricing");
   return { ok: true };
 }

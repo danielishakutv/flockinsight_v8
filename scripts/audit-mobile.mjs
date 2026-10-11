@@ -101,6 +101,9 @@ const PUBLIC_PAGES = [
   "/signup",
   "/forgot-password",
   "/pricing",
+  // The Partner programme: a long page of tables and prose, which is exactly
+  // the shape that overflows a 320px viewport.
+  "/partners",
   "/changelog",
   "/churches",
   "/events",

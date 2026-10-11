@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Handshake } from "lucide-react";
 import { requireUser } from "@/lib/session";
@@ -44,7 +45,11 @@ export default async function PartnerJoinPage() {
           </li>
           <li>
             You earn <strong>{(base.firstBps / 100).toFixed(0)}%</strong> of each
-            church&rsquo;s first two payments.
+            church&rsquo;s first two months.
+            {" "}
+            A church that pays for a <strong>whole year up front</strong> earns
+            you that year&rsquo;s commission in one go, the day it clears —
+            nothing waits for them to pay again.
             {rates.trailBps > 0 && (
               <>
                 {" "}
@@ -77,6 +82,15 @@ export default async function PartnerJoinPage() {
           </li>
         </ul>
       </div>
+
+      <p className="text-muted-foreground text-sm">
+        The full programme — every rate, the levels, how withdrawals are
+        approved and the terms you are agreeing to — is published at{" "}
+        <Link href="/partners" className="text-primary font-semibold underline">
+          flockinsight.com/partners
+        </Link>
+        . Worth a read before you apply.
+      </p>
 
       <PartnerJoin defaultName={user.name ?? ""} />
     </div>

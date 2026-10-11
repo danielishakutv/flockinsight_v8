@@ -92,6 +92,7 @@ export default async function PartnerPage() {
           status: e.status,
           payoutId: e.payoutId,
           churchName: e.churchName,
+          note: e.note,
           createdAt: e.createdAt.toISOString(),
         }))}
         payouts={payouts.map((p) => ({

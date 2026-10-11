@@ -1,5 +1,6 @@
 import {
   allPlanCopyOverridden,
+  getAnnualFreeMonths,
   allPlanFeatureDrift,
   getAllPlanEmails,
   getAllPlanFeatures,
@@ -18,6 +19,7 @@ export default async function SuperadminPricingPage() {
   await requirePlatform("platform.pricing.manage");
   const [
     prices,
+    annualFreeMonths,
     bundles,
     features,
     storageMb,
@@ -29,6 +31,7 @@ export default async function SuperadminPricingPage() {
   ] =
     await Promise.all([
       getPlanPrices(),
+      getAnnualFreeMonths(),
       getStorageBundles(),
       getAllPlanFeatures(),
       getAllPlanStorageMb(),
@@ -46,6 +49,7 @@ export default async function SuperadminPricingPage() {
           growth: prices.growth ?? 0,
           pro: prices.pro ?? 0,
         }}
+        annualFreeMonths={annualFreeMonths}
         bundles={bundles}
         features={features}
         drift={drift}

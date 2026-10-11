@@ -1,6 +1,19 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -13,7 +26,8 @@ import {
 } from "@/db/schema";
 import {
   DEFAULT_PARTNER_RATES,
-  earningFor,
+  earningNote,
+  earningsForPayment,
   generatePartnerCode,
   normalisePartnerCode,
   normaliseRates,
@@ -181,10 +195,26 @@ export async function attributeChurch(opts: {
  * Idempotence is a unique index on (payment, kind) rather than a check-then-
  * insert, so two replayed callbacks racing each other cannot both win.
  *
- * The payment NUMBER is counted from the church's successful payments, which is
- * what decides whether this is the first commission, the second, or the trail.
+ * ## It counts MONTHS, not payments
+ *
+ * What decides whether this earns the first commission, the second or the
+ * trail is which month of the subscription is being paid for — and one payment
+ * is not one month. A church paying for a year hands over a single payment
+ * covering twelve of them, and counting payments made that payment the
+ * church's "first" for ever: the Partner earned one commission, waited a year
+ * for the second, and never saw a month of trail. So the months already bought
+ * are summed from `periodMonths`, and this payment is priced across the months
+ * it covers — which may award the first, the second AND the trail in one go.
+ *
  * Counting rather than storing a flag means a refunded or corrected payment
  * changes the answer, instead of leaving a flag that disagrees with the money.
+ *
+ * ## A payment of zero is not a payment
+ *
+ * A free activation, a 100% discount and an admin setting a plan by hand all
+ * record a successful payment of 0. Counted as a month, the church's first
+ * real payment arrives as month two and the first commission is lost — paid to
+ * nobody, for a payment that never happened. Only money counts.
  */
 export async function awardPartnerCommission(
   paymentId: string,
@@ -197,7 +227,9 @@ export async function awardPartnerCommission(
         amount: payment.amount,
         currency: payment.currency,
         status: payment.status,
+        periodMonths: payment.periodMonths,
         paidAt: payment.paidAt,
+        createdAt: payment.createdAt,
       })
       .from(payment)
       .where(eq(payment.id, paymentId))
@@ -226,56 +258,115 @@ export async function awardPartnerCommission(
       return { awarded: false, reason: "partner is suspended" };
     }
 
-    // Which successful payment of this church's this is, counting from one.
+    /*
+     * How many months of subscription this church has already paid for, so
+     * this payment can be priced across the months it covers.
+     *
+     * Strictly EARLIER payments only, and "earlier" has to be a total order
+     * because the consequence of a tie is money. Two payments paid in the same
+     * microsecond is rare; two paid at a timestamp somebody TYPED — a manual
+     * bank transfer recorded with a date rather than a time, which this
+     * platform does constantly — is not rare at all, because every one of
+     * those lands at midday exactly.
+     *
+     * With a plain `<=` both rows count each other and both come out as the
+     * second payment, so the first commission is paid to nobody. With a plain
+     * `<` neither counts the other and both claim the first commission, and
+     * the Partner is paid it twice.
+     *
+     * So it falls through to `created_at` — the order the rows were WRITTEN,
+     * which is the order the money actually arrived in — and then to the id,
+     * which cannot tie. The id alone was not enough: it is a random uuid, so
+     * the row written second had an even chance of sorting first, and which of
+     * two same-day payments earned the first commission came down to a coin
+     * toss. `partners-annual.db-check.ts` is what caught that.
+     */
+    const months = Math.max(1, Number(pay.periodMonths) || 1);
     const [counted] = await db
-      .select({ c: sql<number>`count(*)::int` })
+      .select({ m: sql<number>`coalesce(sum(${payment.periodMonths}), 0)::int` })
       .from(payment)
       .where(
         and(
           eq(payment.churchId, pay.churchId),
           eq(payment.status, "success"),
+          // Only money. A zero-naira activation is not a month the Partner
+          // earns on, and counting it would consume the first commission.
+          gt(payment.amount, 0),
           pay.paidAt
-            ? sql`${payment.paidAt} <= ${pay.paidAt}`
-            : sql`true`,
+            ? or(
+                lt(payment.paidAt, pay.paidAt),
+                and(
+                  eq(payment.paidAt, pay.paidAt),
+                  or(
+                    lt(payment.createdAt, pay.createdAt),
+                    and(
+                      eq(payment.createdAt, pay.createdAt),
+                      lt(payment.id, pay.id),
+                    ),
+                  ),
+                ),
+              )
+            : ne(payment.id, pay.id),
         ),
       );
-    const paymentNumber = Math.max(1, Number(counted?.c ?? 1));
+    const firstMonth = Math.max(1, Number(counted?.m ?? 0) + 1);
 
     const rates = await getPartnerRates();
     const tier = tierFor(rates, await livePayingChurches(p.id, rates), p.tierOverride);
-    const earned = earningFor({
+    const lines = earningsForPayment({
       rates,
       tier,
       amount: Number(pay.amount),
-      paymentNumber,
+      firstMonth,
+      months,
     });
-    if (!earned) return { awarded: false, reason: "nothing earned at this point" };
+    if (lines.length === 0) {
+      return { awarded: false, reason: "nothing earned at this point" };
+    }
 
     /*
      * Available straight away, because the holding-back is already expressed
-     * by WHICH payment earns what: the second commission is not released on a
-     * timer, it is simply not earned until the second payment clears. A
-     * "pending" status is left in the schema for a future rule that needs it
-     * (a refund window, say) rather than used to fake one now.
+     * by WHICH MONTH earns what: the second commission is not released on a
+     * timer, it is simply not earned until the church has paid for its second
+     * month — which a church paying for a year has already done, today, which
+     * is the whole point. A "pending" status is left in the schema for a
+     * future rule that needs it (a refund window, say) rather than used to
+     * fake one now.
      */
     const inserted = await db
       .insert(partnerEarning)
-      .values({
-        partnerId: p.id,
-        churchId: pay.churchId,
-        paymentId: pay.id,
-        kind: earned.kind,
-        amount: earned.amount,
-        currency: pay.currency,
-        rateBps: earned.rateBps,
-        status: "available",
-      })
+      .values(
+        lines.map((line) => ({
+          partnerId: p.id,
+          churchId: pay.churchId,
+          paymentId: pay.id,
+          kind: line.kind,
+          amount: line.amount,
+          currency: pay.currency,
+          rateBps: line.rateBps,
+          status: "available" as const,
+          // Why this row is the size it is, for a payment covering several
+          // months. Null for an ordinary monthly one, where there is nothing
+          // to explain.
+          note: earningNote(line, months),
+        })),
+      )
+      /*
+       * One row per kind, which is what keeps the unique index carrying
+       * idempotence: a replayed callback inserting the same three kinds
+       * conflicts on all three and awards nothing. It is also why the months
+       * of one kind are summed into a single row upstream rather than
+       * inserted one per month.
+       */
       .onConflictDoNothing({
         target: [partnerEarning.paymentId, partnerEarning.kind],
       })
       .returning({ id: partnerEarning.id });
 
-    return { awarded: inserted.length > 0, reason: inserted.length ? undefined : "already awarded" };
+    return {
+      awarded: inserted.length > 0,
+      reason: inserted.length ? undefined : "already awarded",
+    };
   } catch (e) {
     // Logged and swallowed, deliberately: the church has paid, and a
     // commission that failed to record must not turn that into a failed
@@ -424,6 +515,10 @@ export async function partnerEarnings(partnerId: string, limit = 200) {
       currency: partnerEarning.currency,
       rateBps: partnerEarning.rateBps,
       status: partnerEarning.status,
+      // Set only when one payment covered several months — "months 3–12 of a
+      // 12-month payment". Without it, a Partner looking at an annual church
+      // sees three rows in one day and has no way to tell what each is for.
+      note: partnerEarning.note,
       // So the list can say "in a request" rather than repeating "available"
       // for money the Partner has already asked for.
       payoutId: partnerEarning.payoutId,

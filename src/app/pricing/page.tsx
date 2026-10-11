@@ -1,14 +1,21 @@
 import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
-import { getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { annualTotal } from "@/lib/billing-cycle";
 import { landingContent } from "@/lib/landing-content";
 import { getLocale } from "@/lib/i18n/server";
 import {
   currencyNoteFor,
+  planAmountLabel,
   planPriceLabelFor,
   pricesForCountry,
   requestCountry,
 } from "@/lib/plan-price";
+import {
+  CyclePrice,
+  PriceCycleProvider,
+  PriceCycleToggle,
+} from "@/components/landing/price-cycle";
 import { PublicHeader } from "@/components/landing/public-header";
 import { PublicFooter } from "@/components/landing/public-footer";
 import { PromoPopup } from "@/components/public/promo-popup";
@@ -37,18 +44,36 @@ export default async function PricingPage() {
    * renders is the page that visitor should see — no flash of naira, and no
    * client-side conversion that could disagree with what checkout charges.
    */
-  const [plans, locale, country] = await Promise.all([
+  const [plans, locale, country, freeMonths] = await Promise.all([
     getPlans(),
     getLocale(),
     requestCountry(),
+    getAnnualFreeMonths(),
   ]);
   const content = landingContent(locale);
   const t = content.pricing;
   const nav = content.nav;
-  const priced = await pricesForCountry(
-    Object.fromEntries(plans.map((p) => [p.id, p.priceMonthly])),
-    country,
-  );
+  /*
+   * Both cycles, priced on the server, in the visitor's currency.
+   *
+   * The yearly figure is a SEPARATE conversion rather than the monthly one
+   * times ten, because the international card surcharge is a flat amount per
+   * transaction: a year is one transaction, so a church abroad saves the two
+   * free months and eleven surcharges. Multiplying the monthly label would
+   * quietly overstate the yearly price and understate the offer.
+   */
+  const [priced, pricedAnnual] = await Promise.all([
+    pricesForCountry(
+      Object.fromEntries(plans.map((p) => [p.id, p.priceMonthly])),
+      country,
+    ),
+    pricesForCountry(
+      Object.fromEntries(
+        plans.map((p) => [p.id, annualTotal(p.priceMonthly, freeMonths)]),
+      ),
+      country,
+    ),
+  ]);
   const currencyNote = currencyNoteFor(priced, t);
 
   return (
@@ -64,6 +89,7 @@ export default async function PricingPage() {
       */}
       <PublicHeader nav={nav} />
 
+      <PriceCycleProvider>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 lg:px-8">
         <div className="mx-auto max-w-2xl py-10 text-center lg:py-16">
           <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
@@ -75,13 +101,50 @@ export default async function PricingPage() {
           </div>
         </div>
 
+        {freeMonths > 0 && (
+          <PriceCycleToggle
+            className="mb-8"
+            monthlyLabel={t.monthly}
+            annualLabel={t.annual}
+            savingLabel={t.annualSave.replace("{months}", String(freeMonths))}
+          />
+        )}
+
         <div className="grid gap-5 lg:grid-cols-4">
           {plans.map((p) => {
             const price = priced[p.id];
+            const annual = pricedAnnual[p.id];
             const label = price
               ? planPriceLabelFor(price, { free: t.free, perMonth: t.perMonth })
               : "—";
+            const annualLabel = annual
+              ? planPriceLabelFor(annual, { free: t.free, perMonth: t.perYear })
+              : "—";
             const paid = p.priceMonthly !== null && p.priceMonthly > 0;
+            /*
+             * The two lines under a yearly price, in the visitor's own money.
+             *
+             * The saving is the difference between the two totals rather than
+             * "two months of the monthly price" — for a church abroad those
+             * are not the same number, and the real one is bigger.
+             */
+            const perMonthLabel =
+              paid && annual
+                ? planAmountLabel(
+                    Math.round(annual.displayAmount / 12),
+                    annual.displayCurrency,
+                  )
+                : null;
+            const savingLabel =
+              paid && annual && price
+                ? planAmountLabel(
+                    Math.max(
+                      0,
+                      price.displayAmount * 12 - annual.displayAmount,
+                    ),
+                    annual.displayCurrency,
+                  )
+                : null;
             return (
               <div
                 key={p.id}
@@ -101,17 +164,46 @@ export default async function PricingPage() {
                 <p className="text-muted-foreground mt-1 text-sm">{p.tagline}</p>
                 <div className="mt-4">
                   {paid ? (
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
-                        {label}
-                      </span>
-                      <span className="text-primary text-2xl font-extrabold">
-                        {t.free}
-                      </span>
-                      <span className="text-primary basis-full text-xs font-bold uppercase tracking-wide">
-                        {t.firstSundays}
-                      </span>
-                    </div>
+                    <CyclePrice
+                      monthly={
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                            {label}
+                          </span>
+                          <span className="text-primary text-2xl font-extrabold">
+                            {t.free}
+                          </span>
+                          <span className="text-primary basis-full text-xs font-bold tracking-wide uppercase">
+                            {t.firstSundays}
+                          </span>
+                        </div>
+                      }
+                      annual={
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-muted-foreground text-xl font-bold line-through decoration-2">
+                            {annualLabel}
+                          </span>
+                          <span className="text-primary text-2xl font-extrabold">
+                            {t.free}
+                          </span>
+                          <span className="text-primary basis-full text-xs font-bold tracking-wide uppercase">
+                            {t.firstSundays}
+                          </span>
+                          {perMonthLabel && savingLabel && (
+                            <span className="text-muted-foreground basis-full text-xs">
+                              {t.annualEquivalent.replace(
+                                "{price}",
+                                perMonthLabel,
+                              )}{" "}
+                              ·{" "}
+                              <span className="text-foreground font-semibold">
+                                {t.annualSaving.replace("{price}", savingLabel)}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      }
+                    />
                   ) : (
                     <span className="text-3xl font-extrabold tracking-tight">
                       {p.priceMonthly === null ? "—" : label}
@@ -168,7 +260,24 @@ export default async function PricingPage() {
           </Link>
           .
         </p>
+
+        {/*
+          Not everybody who reads a pricing page is buying. Administrators,
+          resellers and trainers read it to work out whether they can sell it,
+          and this is the one line that answers them.
+        */}
+        <p className="text-muted-foreground mt-3 text-center text-sm">
+          Bringing churches onto FlockInsight yourself?{" "}
+          <Link
+            href="/partners"
+            className="text-primary font-semibold underline"
+          >
+            Earn with the Partner Program
+          </Link>
+          .
+        </p>
       </main>
+      </PriceCycleProvider>
 
       <PublicFooter
         footer={content.footer}

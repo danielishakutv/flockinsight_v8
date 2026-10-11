@@ -92,6 +92,14 @@ export function PublicFooter({
             <FooterLink href="/changelog">{footer.whatsNew}</FooterLink>
             <FooterLink href="/roadmap">{footer.roadmap}</FooterLink>
             <FooterLink href="/demo">{footer.bookWalkthrough}</FooterLink>
+            {/*
+              The Partner programme, in the footer of every public page.
+              It is how somebody who is not a church — an administrator, a
+              reseller, a student with a list of churches — finds a reason to
+              be on this site at all, and the page it points at is the only
+              place the commission terms are published.
+            */}
+            <FooterLink href="/partners">Partner Program</FooterLink>
             <FooterLink href="/signup">{pricing.getStarted}</FooterLink>
             <li>
               <a

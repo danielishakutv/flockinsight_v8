@@ -16,7 +16,9 @@ import {
   solutionPath,
 } from "@/lib/seo/pages";
 import { countryProfile, smsAvailableForCountry } from "@/lib/country-profile";
-import { getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { annualTotal, chargedMonths } from "@/lib/billing-cycle";
+import { getPartnerRates } from "@/lib/partners";
 
 /**
  * /llms-full.txt — the long brief.
@@ -52,7 +54,11 @@ export const revalidate = 3600;
 
 export async function GET() {
   const site = siteUrl();
-  const plans = await getPlans();
+  const [plans, freeMonths, partnerRates] = await Promise.all([
+    getPlans(),
+    getAnnualFreeMonths(),
+    getPartnerRates(),
+  ]);
 
   const countryTable = [
     "| Country | Currency | Timezone | Interface language | Bulk SMS |",
@@ -65,20 +71,41 @@ export async function GET() {
     }),
   ].join("\n");
 
+  /*
+   * Both prices in the table, because "how much is it" asked of an assistant
+   * now has two answers and quoting only the monthly one overstates the
+   * yearly cost by two months.
+   */
   const planTable = [
-    "| Plan | For | Monthly price (NGN) |",
-    "| --- | --- | --- |",
-    ...plans.map(
-      (p) =>
-        `| ${p.name} | ${p.tagline} | ${
-          p.priceMonthly === null
-            ? "Talk to us"
-            : p.priceMonthly === 0
-              ? "Free"
-              : p.priceMonthly.toLocaleString("en-NG")
-        } |`,
-    ),
+    "| Plan | For | Monthly price (NGN) | Yearly price (NGN) |",
+    "| --- | --- | --- | --- |",
+    ...plans.map((p) => {
+      const yearly = annualTotal(p.priceMonthly, freeMonths);
+      return `| ${p.name} | ${p.tagline} | ${
+        p.priceMonthly === null
+          ? "Talk to us"
+          : p.priceMonthly === 0
+            ? "Free"
+            : p.priceMonthly.toLocaleString("en-NG")
+      } | ${
+        yearly === null
+          ? "Talk to us"
+          : yearly === 0
+            ? "Free"
+            : yearly.toLocaleString("en-NG")
+      } |`;
+    }),
   ].join("\n");
+
+  const partnerBase = partnerRates.tiers[0];
+  const partnerLadder = partnerRates.tiers
+    .map(
+      (t) =>
+        `| ${t.name} | ${t.minChurches === 0 ? "Any" : `${t.minChurches}+`} | ${(
+          t.firstBps / 100
+        ).toFixed(0)}% | ${(t.secondBps / 100).toFixed(0)}% |`,
+    )
+    .join("\n");
 
   const replacesTable = [
     "| The job | What churches use instead | Module here |",
@@ -118,6 +145,35 @@ international card fee included in the figure shown rather than added at
 checkout. Plans differ mainly by how many members a church can hold. Writes
 that are off-plan are refused with an explanation; reads always work, so a
 church that downgrades can still see and export everything it entered.
+
+A church may pay monthly or yearly. A year costs ${chargedMonths(freeMonths)}
+months rather than twelve — ${freeMonths} month${freeMonths === 1 ? "" : "s"}
+free — and is a single card payment, which for a church outside Nigeria also
+carries the international card fee once instead of twelve times. The discount is
+set by the operator, so the figures in the table above are the live ones.
+
+## The Partner Program
+
+A person — not a church — can introduce churches to FlockInsight and earn a
+share of what those churches pay. It is free to join, there is no quota, and a
+Partner is shown numbers and plan status only: never a church's members, their
+contact details, its attendance or its giving.
+
+| Level | Churches live & paying | First month | Second month |
+| --- | --- | --- | --- |
+${partnerLadder}
+
+A Partner earns ${(partnerBase.firstBps / 100).toFixed(0)}% of a church's first
+two months at the base level${
+    partnerRates.trailBps > 0
+      ? `, then ${(partnerRates.trailBps / 100).toFixed(0)}% of each of the next ${partnerRates.trailMonths} months`
+      : ""
+  }. Commission is earned on money that has cleared, never on a signup — and a
+payment covering several months, such as a year paid up front, earns the
+commission for every month it covers in one credit. The level is recalculated
+from the churches live and paying in the last ${partnerRates.tierWindowDays}
+days. Withdrawals start at ${partnerRates.minPayout.toLocaleString("en-NG")} and
+a person approves each one. Full rates and terms: ${site}/partners
 
 ## Countries: what is actually different
 

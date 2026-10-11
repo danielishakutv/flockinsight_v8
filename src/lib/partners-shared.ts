@@ -158,16 +158,148 @@ export function applyRate(amount: number, bps: number): number {
 export type EarningKind = "first" | "second" | "trail" | "bonus";
 
 /**
- * What a Partner earns from one payment by one of their churches.
+ * Which commission one MONTH of a subscription earns, and at what rate.
  *
- * `paymentNumber` is which successful payment this is for that church,
- * counting from one — so the caller's job is to count, and this function's job
- * is to price. Returns null when nothing is earned, which is the ordinary
- * answer once the trail has run out.
+ * Months rather than payments, because a payment is not always a month: a
+ * church paying for a year hands over one payment covering twelve of them.
+ * Returns null for a month that earns nothing, which is the ordinary answer
+ * once the trail has run out.
  *
- * The trail starts at the THIRD payment, because the first two already carry
- * the big commission. Paying both on the same payment would be paying twice
- * for one event.
+ * The trail starts at the THIRD month, because the first two already carry the
+ * big commission. Paying both for the same month would be paying twice for one
+ * event.
+ */
+function rateForMonth(
+  rates: PartnerRates,
+  tier: PartnerTier,
+  monthNumber: number,
+): { kind: EarningKind; rateBps: number } | null {
+  if (!Number.isFinite(monthNumber) || monthNumber < 1) return null;
+  if (monthNumber === 1) return { kind: "first", rateBps: tier.firstBps };
+  if (monthNumber === 2) return { kind: "second", rateBps: tier.secondBps };
+
+  const trailMonth = monthNumber - 2;
+  if (rates.trailBps <= 0 || trailMonth > rates.trailMonths) return null;
+  return { kind: "trail", rateBps: rates.trailBps };
+}
+
+/** One commission row: a kind, a rate, and how many months it covers. */
+export type EarningLine = {
+  kind: EarningKind;
+  amount: number;
+  rateBps: number;
+  /** How many months of the subscription this line was computed over. */
+  months: number;
+  /** The first and last month of the subscription it covers, inclusive. */
+  fromMonth: number;
+  toMonth: number;
+};
+
+/**
+ * Everything a Partner earns from ONE payment, which may cover many months.
+ *
+ * ## Why this exists, and what it fixes
+ *
+ * A church paying for a year makes a single payment. Counted as one payment it
+ * earned the Partner one commission — the first — and then the Partner waited
+ * a whole year for the second, and never saw a single month of trail, because
+ * by the time the second payment arrived the trail window had been consumed by
+ * nothing. The Partner who closed the better deal, a year of committed revenue
+ * up front, was paid a quarter of what they would have earned from the same
+ * church paying monthly. That is backwards, and it is the reason this function
+ * replaced the one-payment-one-commission version.
+ *
+ * So an annual payment is priced as what it actually is: the twelve months it
+ * buys. `firstMonth` is the first month of the subscription this payment pays
+ * for, counting from one, and `months` is how many it covers. Each covered
+ * month is priced on its own — first, second, trail or nothing — and the
+ * Partner is paid the lot at once, now, rather than in instalments that depend
+ * on the church returning.
+ *
+ * ## The base is what the church actually paid
+ *
+ * Divided across the months it covers, which keeps the Partner's share of
+ * REVENUE identical whichever way the church pays. Twelve months at ₦10,000 is
+ * ₦120,000 and earns 40% + 40% + ten months of 5%; the same year bought at the
+ * annual price is ₦100,000 and earns 40% + 40% + ten months of 5% of a
+ * proportionally smaller month. The Partner does not profit from the discount
+ * the church got, and does not pay for it either — they are simply paid now.
+ *
+ * ## Why the lines are grouped
+ *
+ * `partner_earning_once_idx` is unique on (payment, kind), which is what makes
+ * awarding idempotent against a replayed gateway callback. Ten separate trail
+ * rows for one payment cannot exist, and should not: they would be ten rows
+ * saying the same thing. So the months of each kind are summed into ONE base
+ * and the rate is applied ONCE, which also means the money is rounded once —
+ * the rule the whole module is built on.
+ */
+export function earningsForPayment(opts: {
+  rates: PartnerRates;
+  tier: PartnerTier;
+  /** The whole payment, in major units. */
+  amount: number;
+  /** The first month of the subscription this payment covers, from one. */
+  firstMonth: number;
+  /** How many months it covers. 1 for a monthly payment, 12 for a year. */
+  months: number;
+}): EarningLine[] {
+  const { rates, tier, amount, firstMonth } = opts;
+  const months = Math.max(1, Math.round(opts.months || 1));
+  if (!Number.isFinite(amount) || amount <= 0) return [];
+  if (!Number.isFinite(firstMonth) || firstMonth < 1) return [];
+
+  const perMonth = amount / months;
+
+  // Grouped by kind AND rate: a rate cannot change inside one payment today,
+  // but grouping on both means it could without quietly mixing two rates into
+  // one row that can no longer be explained.
+  const groups = new Map<
+    string,
+    { kind: EarningKind; rateBps: number; months: number; from: number; to: number }
+  >();
+
+  for (let i = 0; i < months; i++) {
+    const monthNumber = firstMonth + i;
+    const rate = rateForMonth(rates, tier, monthNumber);
+    if (!rate) continue;
+    const key = `${rate.kind}:${rate.rateBps}`;
+    const g = groups.get(key);
+    if (g) {
+      g.months += 1;
+      g.to = monthNumber;
+    } else {
+      groups.set(key, {
+        kind: rate.kind,
+        rateBps: rate.rateBps,
+        months: 1,
+        from: monthNumber,
+        to: monthNumber,
+      });
+    }
+  }
+
+  const order: EarningKind[] = ["first", "second", "trail", "bonus"];
+  return [...groups.values()]
+    .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
+    .map((g) => ({
+      kind: g.kind,
+      // Rounded once, here, over every month of this kind together.
+      amount: applyRate(perMonth * g.months, g.rateBps),
+      rateBps: g.rateBps,
+      months: g.months,
+      fromMonth: g.from,
+      toMonth: g.to,
+    }))
+    .filter((line) => line.amount > 0);
+}
+
+/**
+ * What a Partner earns from one payment covering one month.
+ *
+ * Kept because a monthly payment is still the common case and reads better as
+ * one answer than as a list of one. `paymentNumber` is which month of the
+ * subscription it pays for, counting from one.
  */
 export function earningFor(opts: {
   rates: PartnerRates;
@@ -175,23 +307,32 @@ export function earningFor(opts: {
   amount: number;
   paymentNumber: number;
 }): { kind: EarningKind; amount: number; rateBps: number } | null {
-  const { rates, tier, amount, paymentNumber } = opts;
-  if (!Number.isFinite(paymentNumber) || paymentNumber < 1) return null;
+  const [line] = earningsForPayment({
+    rates: opts.rates,
+    tier: opts.tier,
+    amount: opts.amount,
+    firstMonth: opts.paymentNumber,
+    months: 1,
+  });
+  if (!line) return null;
+  return { kind: line.kind, amount: line.amount, rateBps: line.rateBps };
+}
 
-  if (paymentNumber === 1) {
-    const value = applyRate(amount, tier.firstBps);
-    return value > 0 ? { kind: "first", amount: value, rateBps: tier.firstBps } : null;
-  }
-  if (paymentNumber === 2) {
-    const value = applyRate(amount, tier.secondBps);
-    return value > 0 ? { kind: "second", amount: value, rateBps: tier.secondBps } : null;
-  }
-
-  // The trail: every payment after the first two, for a while.
-  const trailPayment = paymentNumber - 2;
-  if (rates.trailBps <= 0 || trailPayment > rates.trailMonths) return null;
-  const value = applyRate(amount, rates.trailBps);
-  return value > 0 ? { kind: "trail", amount: value, rateBps: rates.trailBps } : null;
+/**
+ * The sentence stored on an earning that covers more than one month.
+ *
+ * Null for an ordinary monthly payment: there is nothing to explain, and a
+ * ledger that annotates every row stops being readable. For an annual payment
+ * it is the difference between "₦4,167 trail" and "₦4,167 — months 3–12 of a
+ * 12-month payment, 5% of each", which is the question a Partner asks.
+ */
+export function earningNote(line: EarningLine, paymentMonths: number): string | null {
+  if (paymentMonths <= 1) return null;
+  const span =
+    line.months === 1
+      ? `month ${line.fromMonth}`
+      : `months ${line.fromMonth}–${line.toMonth}`;
+  return `${span} of a ${paymentMonths}-month payment · ${line.months} × ${(line.rateBps / 100).toFixed(line.rateBps % 100 === 0 ? 0 : 2)}%`;
 }
 
 export type EarningRow = {

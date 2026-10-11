@@ -4,6 +4,8 @@ import {
   canWithdraw,
   DEFAULT_PARTNER_RATES,
   earningFor,
+  earningNote,
+  earningsForPayment,
   generatePartnerCode,
   normalisePartnerCode,
   normaliseRates,
@@ -108,6 +110,202 @@ describe("what a payment earns", () => {
     expect(
       earningFor({ rates, tier: base, amount: 1000, paymentNumber: NaN }),
     ).toBeNull();
+  });
+});
+
+describe("a payment that covers a whole year", () => {
+  /*
+   * The thing this file exists for. A church paying for a year makes ONE
+   * payment, and before `earningsForPayment` that payment earned one
+   * commission — the first — and the Partner then waited a year for the second
+   * and never saw a month of trail. The Partner who closed the better deal was
+   * paid a quarter of what the same church paying monthly would have paid
+   * them.
+   */
+  const annual = 100_000; // ₦10,000/mo with two months free
+
+  it("pays the first, the second and every month of trail at once", () => {
+    const lines = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 1,
+      months: 12,
+    });
+
+    expect(lines.map((l) => l.kind)).toEqual(["first", "second", "trail"]);
+
+    const perMonth = annual / 12; // 8,333.33…
+    expect(lines[0]).toMatchObject({ months: 1, fromMonth: 1, toMonth: 1, rateBps: 4000 });
+    expect(lines[0].amount).toBe(applyRate(perMonth, 4000));
+    expect(lines[1]).toMatchObject({ months: 1, fromMonth: 2, toMonth: 2, rateBps: 4000 });
+    // Months 3–12: ten months of trail, in one row, rounded once.
+    expect(lines[2]).toMatchObject({
+      kind: "trail",
+      months: 10,
+      fromMonth: 3,
+      toMonth: 12,
+      rateBps: 500,
+    });
+    expect(lines[2].amount).toBe(applyRate(perMonth * 10, 500));
+  });
+
+  it("pays the Partner the same share of revenue either way", () => {
+    // The whole fairness claim, as arithmetic. A year bought monthly at
+    // ₦10,000 and the same year bought annually at ₦100,000 must earn the
+    // same PROPORTION — the Partner neither profits from the church's
+    // discount nor pays for it.
+    const monthlyRun = Array.from({ length: 12 }, (_, i) =>
+      earningFor({ rates, tier: base, amount: 10_000, paymentNumber: i + 1 }),
+    );
+    const monthlyEarned = monthlyRun.reduce((sum, e) => sum + (e?.amount ?? 0), 0);
+    const monthlyRevenue = 120_000;
+
+    const annualEarned = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 1,
+      months: 12,
+    }).reduce((sum, l) => sum + l.amount, 0);
+
+    const shareMonthly = monthlyEarned / monthlyRevenue;
+    const shareAnnual = annualEarned / annual;
+    expect(shareAnnual).toBeCloseTo(shareMonthly, 6);
+  });
+
+  it("is neither of the two things a single payment could have meant", () => {
+    /*
+     * Both of the obvious readings of an annual payment are wrong, in opposite
+     * directions, and this is the test that pins the rule down.
+     *
+     * Treating it as ONE payment pays 40% of the whole year — ₦40,000 of a
+     * ₦100,000 payment — which is four times what the same church paying
+     * monthly earns its Partner, and is the commission bill that would make
+     * annual billing unprofitable to sell.
+     *
+     * Treating it as the first payment ONLY, and then waiting for the church
+     * to pay again, pays the Partner for one month out of twelve and lets the
+     * trail window expire unused.
+     *
+     * The rule is the middle one, and it is the only one that does not depend
+     * on how the church chose to pay: twelve monthly commissions, paid now.
+     */
+    const asOnePayment = earningFor({
+      rates,
+      tier: base,
+      amount: annual,
+      paymentNumber: 1,
+    })!;
+    expect(asOnePayment.amount).toBe(40_000);
+
+    const monthlyRun = Array.from({ length: 12 }, (_, i) =>
+      earningFor({ rates, tier: base, amount: 10_000, paymentNumber: i + 1 }),
+    ).reduce((sum, e) => sum + (e?.amount ?? 0), 0);
+
+    const now = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 1,
+      months: 12,
+    }).reduce((sum, l) => sum + l.amount, 0);
+
+    expect(now).toBeCloseTo(10_833.33, 2);
+    expect(now).toBeLessThan(asOnePayment.amount);
+    // The same share of revenue as the twelve-month monthly run: ₦13,000 of
+    // ₦120,000 there, ₦10,833 of ₦100,000 here.
+    expect(monthlyRun).toBe(13_000);
+    expect(now / annual).toBeCloseTo(monthlyRun / 120_000, 6);
+  });
+
+  it("carries on from where a monthly church left off", () => {
+    // Paid once monthly, then upgraded to a year: month 1 is spent, so the
+    // year covers months 2–13 and the second commission is earned now.
+    const lines = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 2,
+      months: 12,
+    });
+    expect(lines.map((l) => l.kind)).toEqual(["second", "trail"]);
+    expect(lines[1]).toMatchObject({ months: 11, fromMonth: 3, toMonth: 13 });
+  });
+
+  it("stops at the end of the trail window, not at the end of the year", () => {
+    // A second annual payment covers months 13–24. The trail runs for twelve
+    // months after the first two, so only 13 and 14 are inside it.
+    const lines = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 13,
+      months: 12,
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ kind: "trail", months: 2, fromMonth: 13, toMonth: 14 });
+  });
+
+  it("earns nothing once the whole year is past the window", () => {
+    expect(
+      earningsForPayment({
+        rates,
+        tier: base,
+        amount: annual,
+        firstMonth: 25,
+        months: 12,
+      }),
+    ).toEqual([]);
+  });
+
+  it("earns nothing from a payment of nothing", () => {
+    // A free activation or a 100% discount is recorded as a successful
+    // payment of zero. It must not consume the first commission.
+    expect(
+      earningsForPayment({ rates, tier: base, amount: 0, firstMonth: 1, months: 12 }),
+    ).toEqual([]);
+  });
+
+  it("refuses a month number that makes no sense", () => {
+    expect(
+      earningsForPayment({ rates, tier: base, amount: annual, firstMonth: 0, months: 12 }),
+    ).toEqual([]);
+    expect(
+      earningsForPayment({ rates, tier: base, amount: annual, firstMonth: NaN, months: 12 }),
+    ).toEqual([]);
+  });
+
+  it("treats a payment with no stated period as one month", () => {
+    const lines = earningsForPayment({
+      rates,
+      tier: base,
+      amount: 10_000,
+      firstMonth: 1,
+      months: 0,
+    });
+    expect(lines).toEqual([
+      {
+        kind: "first",
+        amount: 4000,
+        rateBps: 4000,
+        months: 1,
+        fromMonth: 1,
+        toMonth: 1,
+      },
+    ]);
+  });
+
+  it("explains itself on the ledger, and says nothing for a monthly payment", () => {
+    const [, , trail] = earningsForPayment({
+      rates,
+      tier: base,
+      amount: annual,
+      firstMonth: 1,
+      months: 12,
+    });
+    expect(earningNote(trail, 12)).toBe("months 3–12 of a 12-month payment · 10 × 5%");
+    expect(earningNote(trail, 1)).toBeNull();
   });
 });
 
