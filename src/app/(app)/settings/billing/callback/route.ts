@@ -5,6 +5,7 @@ import { payment } from "@/db/schema";
 import { paystackVerify } from "@/lib/paystack";
 import { activatePlan } from "@/lib/billing";
 import { awardReferralIfDue } from "@/lib/referrals";
+import { awardPartnerCommission } from "@/lib/partners";
 import type { PlanId } from "@/lib/plans";
 
 // Paystack redirects the browser here after checkout.
@@ -33,6 +34,15 @@ export async function GET(request: Request) {
     // a replayed callback — which Paystack does send — cannot pay twice, and
     // it never throws, so a bonus failure can't fail a successful payment.
     await awardReferralIfDue(p.churchId);
+    /*
+     * And the Partner's commission, for the same reason and with the same two
+     * properties: idempotent, because Paystack replays this callback, and it
+     * never throws, because a commission that failed to record must not turn
+     * a payment the church has already made into a failed one. Which payment
+     * of theirs this is decides whether it earns the first commission, the
+     * second, or the trail.
+     */
+    await awardPartnerCommission(p.id);
     redirect("/settings/billing?status=success");
   }
 

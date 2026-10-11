@@ -17,6 +17,8 @@ import { slugify, randomSuffix } from "@/lib/slug";
 import { ensureMemberForUser } from "@/lib/member-link";
 import { trialEndDate } from "@/lib/trial";
 import { REFERRAL_COOKIE } from "@/lib/referral";
+import { PARTNER_COOKIE } from "@/lib/partner-link";
+import { attributeChurch } from "@/lib/partners";
 
 export type SignUpResult =
   | { ok: true; signedIn: boolean }
@@ -128,6 +130,16 @@ export async function createChurchAccount(input: {
     return row?.id ?? null;
   })();
 
+  /*
+   * And which PARTNER brought them, if any — the field agent who signs
+   * churches up and earns on what they pay. Set by /a/<code> up to 30 days
+   * ago, and read here rather than trusted from the client.
+   *
+   * Separate from the church-to-church referral above, and both can be true:
+   * one church may recommend another while an agent walks them through it.
+   */
+  const partnerCode = (await cookies()).get(PARTNER_COOKIE)?.value ?? null;
+
   for (let attempt = 0; ; attempt++) {
     try {
       await db.transaction(async (tx) => {
@@ -222,6 +234,22 @@ export async function createChurchAccount(input: {
   // The owner is also a person in the congregation — create their member
   // profile so they aren't duplicated later.
   await ensureMemberForUser(churchId, userId);
+
+  /*
+   * Credit the Partner who brought them, if a code was captured.
+   *
+   * Outside the transaction and never allowed to throw: the church exists and
+   * its owner is in place, and a failure to record who referred them must not
+   * undo that. Attribution is decided once — the table is unique on the church
+   * — so a replay cannot re-point it, and an unknown code simply does nothing.
+   */
+  if (partnerCode) {
+    try {
+      await attributeChurch({ churchId, code: partnerCode, source: "link" });
+    } catch (e) {
+      console.error("[partners] could not record who referred this church", e);
+    }
+  }
 
   // 3) If sign-up created a session (verification disabled → auto sign-in),
   //    point it at the new church so the user lands in-context. When

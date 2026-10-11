@@ -13,6 +13,7 @@ import {
   Church,
   ClipboardList,
   Database,
+  Handshake,
   HeartPulse,
   Image as ImageIcon,
   LayoutDashboard,
@@ -49,6 +50,7 @@ import { useMounted, useStoredValue, writeStoredValue } from "@/lib/client-state
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   HeartPulse,
+  Handshake,
   BarChart3,
   ClipboardList,
   Telescope,

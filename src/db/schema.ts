@@ -3267,6 +3267,196 @@ export const branchGroup = pgTable(
   ],
 );
 
+
+/* ============================================================
+ * Partners — the field agents who sign churches up
+ *
+ * A Partner is a PERSON, not a church: a field agent who brings churches to
+ * the platform on a referral link or signs them up directly, and earns on what
+ * those churches actually pay. So a partner row hangs off a `user`, never off
+ * a `church`, and a Partner never gets church-scoped access to anything.
+ *
+ * The one line that shapes the whole module: **a Partner may see numbers and
+ * plan status about the churches they signed, and never a member.** Everything
+ * here is built so that is structurally true rather than remembered.
+ *
+ * Money is a LEDGER, not a balance. Each earning is its own row carrying the
+ * payment it came from and the rate that was used, and a balance is the sum of
+ * rows. A stored balance would be one bad update away from being wrong with
+ * nothing to reconcile against; rows can always be added up again and always
+ * say why they exist.
+ *
+ * Not to be confused with `referral*`, which is a church recommending another
+ * church for SMS credit. This is cash to an agent.
+ * ========================================================== */
+
+export const partnerStatusEnum = pgEnum("partner_status", [
+  "pending", // applied, not yet approved
+  "active",
+  "suspended",
+]);
+
+export const partner = pgTable(
+  "partner",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Their login. One partner per user. */
+    userId: text()
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * The code in their referral link, and what they quote on the phone.
+     *
+     * Short, unambiguous, and read out loud — so it uses the same alphabet as
+     * a meeting code: no vowels, no 0/O, no 1/I/L.
+     */
+    code: text().notNull().unique(),
+    displayName: text().notNull(),
+    phone: text(),
+    /** Verified, not merely entered: a payout goes to a person we reached. */
+    phoneVerifiedAt: timestamp({ withTimezone: true }),
+    emailVerifiedAt: timestamp({ withTimezone: true }),
+    status: partnerStatusEnum().notNull().default("pending"),
+    /** Where a payout is sent. Snapshotted onto each payout as well. */
+    bankName: text(),
+    bankAccountNumber: text(),
+    bankAccountName: text(),
+    /**
+     * A tier set by hand, overriding the one earned.
+     *
+     * Normally the tier is COMPUTED from how many of their churches are live
+     * and paying, because a stored tier is a number that silently stops being
+     * true. This is for the cases a rule cannot see: a founding agent, a
+     * negotiated deal.
+     */
+    tierOverride: text(),
+    note: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index("partner_status_idx").on(t.status)],
+);
+
+/**
+ * Which Partner brought which church. One church, one Partner, for ever.
+ *
+ * Unique on the church: attribution is decided once, when they sign up, and is
+ * never re-pointed afterwards. Two agents arguing over the same church is a
+ * conversation for people, not something the ledger should be able to express.
+ */
+export const partnerReferral = pgTable(
+  "partner_referral",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    partnerId: uuid()
+      .notNull()
+      .references(() => partner.id, { onDelete: "cascade" }),
+    churchId: text()
+      .notNull()
+      .unique()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** "link" — they followed the referral URL; "portal" — the agent signed them up. */
+    source: text().notNull().default("link"),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("partner_referral_partner_idx").on(t.partnerId)],
+);
+
+export const partnerEarningKindEnum = pgEnum("partner_earning_kind", [
+  "first", // commission on the church's first payment
+  "second", // commission on the second
+  "trail", // the recurring slice, for a while after
+  "bonus", // a volume bonus, or anything granted by hand
+]);
+
+export const partnerEarningStatusEnum = pgEnum("partner_earning_status", [
+  "pending", // earned, not yet withdrawable
+  "available",
+  "paid",
+  "cancelled",
+]);
+
+export const partnerEarning = pgTable(
+  "partner_earning",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    partnerId: uuid()
+      .notNull()
+      .references(() => partner.id, { onDelete: "cascade" }),
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    /**
+     * The payment this came out of.
+     *
+     * Unique together with the kind, which is what makes awarding idempotent:
+     * a replayed gateway callback cannot pay the same commission twice. This is
+     * the single most important constraint in the module.
+     */
+    paymentId: uuid().references(() => payment.id, { onDelete: "set null" }),
+    kind: partnerEarningKindEnum().notNull(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull().default("NGN"),
+    /** The rate actually used, in basis points, so an old row can be explained. */
+    rateBps: integer().notNull().default(0),
+    status: partnerEarningStatusEnum().notNull().default("pending"),
+    /** When it becomes withdrawable. Null means "as soon as it is available". */
+    availableAt: timestamp({ withTimezone: true }),
+    payoutId: uuid(),
+    note: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("partner_earning_partner_idx").on(t.partnerId, t.status),
+    uniqueIndex("partner_earning_once_idx").on(t.paymentId, t.kind),
+  ],
+);
+
+export const partnerPayoutStatusEnum = pgEnum("partner_payout_status", [
+  "requested",
+  "approved",
+  "paid",
+  "rejected",
+]);
+
+/**
+ * A withdrawal, and where it went.
+ *
+ * The bank details are copied onto the row rather than read from the partner:
+ * a payout is a record of money that left, and it must still say where it went
+ * after somebody edits their account number.
+ *
+ * Nothing here moves money by itself. A request is approved and marked paid by
+ * a human in superadmin, against a transfer they made. Automating the transfer
+ * is a separate decision with its own risks, and night one of a commission
+ * system is not when to take it.
+ */
+export const partnerPayout = pgTable(
+  "partner_payout",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    partnerId: uuid()
+      .notNull()
+      .references(() => partner.id, { onDelete: "cascade" }),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull().default("NGN"),
+    status: partnerPayoutStatusEnum().notNull().default("requested"),
+    bankName: text(),
+    bankAccountNumber: text(),
+    bankAccountName: text(),
+    /** The transfer reference, once somebody has actually sent it. */
+    reference: text(),
+    note: text(),
+    decidedBy: text().references(() => user.id, { onDelete: "set null" }),
+    requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp({ withTimezone: true }),
+    paidAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index("partner_payout_partner_idx").on(t.partnerId, t.status)],
+);
+
 /* ============================================================
  * Type helpers
  * ========================================================== */
@@ -3274,6 +3464,10 @@ export const branchGroup = pgTable(
 export type Denomination = typeof denomination.$inferSelect;
 export type BranchRequest = typeof branchRequest.$inferSelect;
 export type BranchGroup = typeof branchGroup.$inferSelect;
+export type Partner = typeof partner.$inferSelect;
+export type NewPartner = typeof partner.$inferInsert;
+export type PartnerEarning = typeof partnerEarning.$inferSelect;
+export type PartnerPayout = typeof partnerPayout.$inferSelect;
 export type NewBranchGroup = typeof branchGroup.$inferInsert;
 export type HqReportSetting = typeof hqReportSetting.$inferSelect;
 export type Lead = typeof lead.$inferSelect;

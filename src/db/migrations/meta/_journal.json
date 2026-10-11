@@ -708,6 +708,13 @@
       "when": 1791673360284,
       "tag": "0100_branch_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1791675407203,
+      "tag": "0101_partners",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,22 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.75.0",
+    date: "2026-10-11",
+    summary:
+      "FlockInsight Partners: field agents can bring churches onto the platform with their own referral link, see how each one is doing, and earn on what those churches pay — with a wallet they can withdraw from.",
+    changes: {
+      Added: [
+        "The Partner programme. A Partner gets a short referral code and link; any church that signs up within 30 days of following it is credited to them, and they earn a share of that church’s first two payments and then a smaller share of every payment for a year.",
+        "A Partner dashboard with a wallet you can hide with one tap — useful when you are sitting in front of the pastor you are signing up. Available, pending, paid out and lifetime, with every earning listed and what rate it was paid at.",
+        "Withdraw to your bank account once you have the minimum. We verify your email and phone first, and tell you exactly why the button is off when it is.",
+        "Every church a Partner brought, with its plan, whether it is paying and what they earned from it — and never its members or its giving.",
+        "A Partner can raise a support ticket on behalf of any church they brought, and support can see it came from the Partner rather than the church.",
+        "Superadmin: set the rates and the tiers, approve Partners, and work the withdrawal queue. Marking a withdrawal paid needs the transfer reference so it can be reconciled; rejecting one returns the money to the Partner rather than destroying it.",
+      ],
+    },
+  },
+  {
     version: "0.74.0",
     date: "2026-10-11",
     summary:
