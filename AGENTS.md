@@ -122,7 +122,7 @@ The Members form still defaults to active, deliberately: a church adding real
 members there is right to get it. It now carries a line pointing at
 `/first-timers` instead.
 
-# Three traps that have already cost real bugs
+# Four traps that have already cost real bugs
 
 **A raw `sql` template drops the table qualifier when the query has no join.**
 So a correlated subquery like
@@ -148,6 +148,20 @@ Nothing threw and nothing was logged; the glyph simply was not there. The PDFs
 now embed Noto Sans (`src/lib/pdf-font.ts`, registered once from
 `lib/pdf-chrome`), which also has no arrows: `→` draws an empty box the same
 silent way. `src/lib/pdf-font.test.ts` reads the .ttf files and fails on both.
+
+**`db.transaction` is not isolation.** Postgres runs READ COMMITTED, so
+wrapping "find what is free, then claim it" in one transaction does **not** stop
+two requests claiming the same row: each selects the same rows, neither sees the
+other's uncommitted write, and the second UPDATE waits for the first to commit
+and then overwrites it. Silently. `requestPayout` shipped this way and its own
+docstring said it was impossible — two taps would have made two withdrawal
+requests for one balance. Any claim path (payouts, a credit, a seat, a slot)
+needs all three: `.for("update")` on the select, the same predicate repeated in
+the UPDATE with a `.returning()` count checked against what you meant to claim,
+and a database constraint for the rule itself. Prove it with two deliberately
+interleaved transactions over a SINGLE contested row — `Promise.all` that
+happens to serialise passes whether the bug is there or not. See
+`src/lib/partners.db-check.ts` (`pnpm test:db`).
 
 **A WebRTC connection in a mesh must never be renegotiated mid-call.** Both
 ends of a pair reach the same verdict about the same network at the same
