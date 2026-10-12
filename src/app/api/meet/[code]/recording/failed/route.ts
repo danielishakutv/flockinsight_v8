@@ -1,7 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { meetingRecording } from "@/db/schema";
-import { authenticatePeer, getMeetingByCode } from "@/lib/meetings";
+import {
+  authenticatePeer,
+  getMeetingByCode,
+  STALLED_GONE_QUIET,
+  STALLED_NEVER_STOPPED,
+} from "@/lib/meetings";
 import { isHostRole } from "@/lib/meetings-shared";
 import { fail, json } from "@/lib/meeting-api";
 import { audit } from "@/lib/audit";
@@ -28,6 +33,13 @@ export const runtime = "nodejs";
  * browser's vault: this records the failure, it does not give up on the
  * recording.
  */
+/** Every sentence the sweep has ever left on a row, including before it was fixed. */
+const SWEEP_WORDS = [
+  STALLED_NEVER_STOPPED,
+  STALLED_GONE_QUIET,
+  "The upload never finished — the browser was closed or lost its connection. Your copy may still be on the device that recorded it.",
+] as const;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ code: string }> },
@@ -70,7 +82,10 @@ export async function POST(
    * The second part matters: a slow "complete" and a retry's failure report can
    * arrive in either order, and marking a recording that is safely in the
    * library as failed would be a lie in the more alarming direction. Only a row
-   * still claiming to be uploading is moved.
+   * still claiming to be uploading is moved — or one the stalled-recording
+   * SWEEP marked failed, whose words are the server's guess. The host's own
+   * report of what happened replaces the guess, and gets its audit entry; it
+   * used to be dropped silently because the row was no longer "uploading".
    */
   const [row] = await db
     .update(meetingRecording)
@@ -79,7 +94,13 @@ export async function POST(
       and(
         eq(meetingRecording.id, recordingId),
         eq(meetingRecording.churchId, m.churchId),
-        eq(meetingRecording.status, "uploading"),
+        or(
+          eq(meetingRecording.status, "uploading"),
+          and(
+            eq(meetingRecording.status, "failed"),
+            inArray(meetingRecording.error, [...SWEEP_WORDS]),
+          ),
+        ),
       ),
     )
     .returning({ id: meetingRecording.id, mode: meetingRecording.mode });

@@ -391,7 +391,8 @@ export function FacilitiesBrowser({
 
           <section>
             <h2 className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
-              Everything · {bookings.length}
+              {/* Not "everything": the page loads from three months back. */}
+              Recent and upcoming · {bookings.length}
             </h2>
             <ul className="mt-1 divide-y rounded-xl border">
               {bookings.map((b) => {

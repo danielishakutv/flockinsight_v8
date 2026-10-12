@@ -28,6 +28,8 @@ import {
 import { siteUrl } from "@/lib/site";
 import { sendChurchSms } from "@/lib/church-sms";
 import { sendEmail, emailLayout } from "@/lib/mailer";
+import { isStorableDate } from "@/lib/birthday";
+import { preserveInviterNames } from "@/lib/first-timer-intake";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -39,13 +41,18 @@ const emptyToNull = (v: unknown) =>
 const optText = (max: number) =>
   z.preprocess(emptyToNull, z.string().trim().max(max).nullable());
 
-const optDate = z.preprocess(
-  emptyToNull,
-  z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
-    .nullable(),
-);
+/*
+ * A day that exists, not just the right shape. "1990-02-29" matched the regex
+ * and was then refused by Postgres inside the save, which came back to the
+ * person as "Could not save member." with no hint which field was wrong.
+ * `isStorableDate` also accepts the year-unknown birthday sentinel (0004).
+ */
+const realDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
+  .refine(isStorableDate, "That date doesn't exist — check the day and month.");
+
+const optDate = z.preprocess(emptyToNull, realDate.nullable());
 
 const memberSchema = z.object({
   id: z.string().uuid().optional(),
@@ -75,7 +82,7 @@ const memberSchema = z.object({
     .array(
       z.object({
         label: z.string().trim().min(1).max(60),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+        date: realDate,
       }),
     )
     .max(12)
@@ -499,10 +506,15 @@ export async function deleteMembers(ids: string[]): Promise<BulkResult> {
   if (!(await can("members.manage")))
     return { ok: false, error: "You don't have permission to do that." };
   try {
-    const rows = await db
-      .delete(member)
-      .where(and(inArray(member.id, clean.ids), eq(member.churchId, church.id)))
-      .returning({ id: member.id, firstName: member.firstName, lastName: member.lastName });
+    // Their names go onto anyone they invited first, in the same transaction,
+    // or the delete erases the inviter from every first-timer they brought.
+    const rows = await db.transaction(async (tx) => {
+      await preserveInviterNames(tx, church.id, clean.ids);
+      return tx
+        .delete(member)
+        .where(and(inArray(member.id, clean.ids), eq(member.churchId, church.id)))
+        .returning({ id: member.id, firstName: member.firstName, lastName: member.lastName });
+    });
     revalidatePath("/members");
     revalidatePath("/dashboard");
 
@@ -545,16 +557,19 @@ export async function deleteMember(id: string): Promise<ActionResult> {
   if (!(await can("members.manage")))
     return { ok: false, error: "You don't have permission to do that." };
   try {
-    const [row] = await db
-      .delete(member)
-      .where(and(eq(member.id, id), eq(member.churchId, church.id)))
-      .returning({
-        id: member.id,
-        firstName: member.firstName,
-        lastName: member.lastName,
-        phone: member.phone,
-        email: member.email,
-      });
+    const [row] = await db.transaction(async (tx) => {
+      await preserveInviterNames(tx, church.id, [id]);
+      return tx
+        .delete(member)
+        .where(and(eq(member.id, id), eq(member.churchId, church.id)))
+        .returning({
+          id: member.id,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          phone: member.phone,
+          email: member.email,
+        });
+    });
     if (!row) return { ok: false, error: "Member not found." };
 
     const who = [row.firstName, row.lastName].filter(Boolean).join(" ");

@@ -93,8 +93,17 @@ const PROFILES: Record<string, CountryProfile> = {
   Angola: { currency: "AOA", locale: "pt", dial: "244", tz: "Africa/Luanda" },
 
   // ---- East Africa
-  Kenya: { currency: "KES", locale: "sw", dial: "254", tz: "Africa/Nairobi" },
-  Tanzania: { currency: "TZS", locale: "sw", dial: "255", tz: "Africa/Dar_es_Salaam" },
+  /*
+   * English, not Swahili, for now. The Swahili dictionary covers roughly a
+   * third of the app and is unreviewed, so starting a Kenyan pastor in it gave
+   * every screen a mixture of two languages — and church administration in
+   * Kenya and Tanzania is overwhelmingly done in English anyway. Swahili stays
+   * one click away in Settings → Language. Put "sw" back only once the
+   * dictionary is complete: country-profile.test.ts holds every non-English
+   * default to that.
+   */
+  Kenya: { currency: "KES", locale: "en", dial: "254", tz: "Africa/Nairobi" },
+  Tanzania: { currency: "TZS", locale: "en", dial: "255", tz: "Africa/Dar_es_Salaam" },
   Uganda: { currency: "UGX", locale: "en", dial: "256", tz: "Africa/Kampala" },
   Rwanda: { currency: "RWF", locale: "fr", dial: "250", tz: "Africa/Kigali" },
   Burundi: { currency: "BIF", locale: "fr", dial: "257", tz: "Africa/Bujumbura" },
@@ -186,6 +195,135 @@ export function knownTimezones(): string[] {
   const all = new Set(Object.values(PROFILES).map((p) => p.tz));
   all.add("UTC");
   return [...all].sort();
+}
+
+/* ============================================================
+ * Numbering plans
+ * ========================================================== */
+
+/**
+ * How many digits a national number has, per dial code — the part after the
+ * country code, with any trunk zero taken off.
+ *
+ * Without this the phone helpers knew only "seven digits or more", which was
+ * kinder than Nigeria-only rules to a Mozambican and worse for everybody in
+ * Nigeria: "0803123456", one digit short, used to be refused and was then
+ * accepted and stored as a number no message could ever reach. Worse, seven
+ * digits counted as a whole national number for duplicate detection, so a
+ * mistyped "8031234" matched any member whose phone happened to end in those
+ * digits — and on /join that sent a stranger's verification code to them.
+ *
+ * Keyed by dial code rather than by country because that is what a numbering
+ * plan belongs to (the US and Canada share +1), and what every caller has.
+ * Ranges are deliberately a little generous where a country still has
+ * landlines or a recent change of length in use; Nigeria is exact, because
+ * Termii would refuse anything else. A dial code absent here gets
+ * {@link DEFAULT_NATIONAL_LENGTH}. country-profile.test.ts holds every dial
+ * code in PROFILES to having an entry, so a new country cannot quietly fall
+ * back to the loose default.
+ */
+const NATIONAL_LENGTH: Record<string, readonly [number, number]> = {
+  // West Africa
+  "234": [10, 10], // Nigeria
+  "233": [9, 9], // Ghana
+  "232": [8, 8], // Sierra Leone
+  "231": [7, 9], // Liberia
+  "220": [7, 7], // Gambia
+  "224": [8, 9], // Guinea
+  "221": [9, 9], // Senegal
+  "225": [8, 10], // Côte d'Ivoire: ten since 2021, eight still written
+  "223": [8, 8], // Mali
+  "226": [8, 8], // Burkina Faso
+  "229": [8, 10], // Benin: ten since 2024
+  "228": [8, 8], // Togo
+  "227": [8, 8], // Niger
+  "245": [7, 9], // Guinea-Bissau
+  "238": [7, 7], // Cabo Verde
+  // Central Africa
+  "237": [9, 9], // Cameroon
+  "235": [8, 8], // Chad
+  "236": [8, 8], // Central African Republic
+  "241": [7, 8], // Gabon
+  "242": [8, 9], // Republic of the Congo
+  "243": [9, 9], // DR Congo
+  "240": [9, 9], // Equatorial Guinea
+  "244": [9, 9], // Angola
+  // East Africa
+  "254": [9, 9], // Kenya
+  "255": [9, 9], // Tanzania
+  "256": [9, 9], // Uganda
+  "250": [9, 9], // Rwanda
+  "257": [8, 8], // Burundi
+  "251": [9, 9], // Ethiopia
+  "211": [9, 9], // South Sudan
+  "252": [7, 9], // Somalia
+  // Southern Africa
+  "258": [8, 9], // Mozambique: nine for a mobile, eight for a landline
+  "27": [9, 9], // South Africa
+  "260": [9, 9], // Zambia
+  "263": [7, 10], // Zimbabwe
+  "265": [7, 9], // Malawi
+  "267": [7, 8], // Botswana
+  "264": [8, 9], // Namibia
+  "266": [8, 8], // Lesotho
+  "268": [8, 8], // Eswatini
+  "239": [7, 7], // São Tomé and Príncipe
+  // North Africa
+  "20": [8, 10], // Egypt
+  "212": [9, 9], // Morocco
+  "213": [8, 9], // Algeria
+  "216": [8, 8], // Tunisia
+  "218": [8, 9], // Libya
+  "249": [9, 9], // Sudan
+  // Where the diaspora is
+  "44": [9, 10], // United Kingdom
+  "1": [10, 10], // United States, Canada
+  "33": [9, 9], // France
+  "32": [8, 9], // Belgium
+  "351": [9, 9], // Portugal
+  "55": [10, 11], // Brazil
+  "49": [7, 12], // Germany
+  "353": [7, 9], // Ireland
+  "31": [9, 9], // Netherlands
+  "39": [7, 11], // Italy
+  "34": [9, 9], // Spain
+  "61": [9, 9], // Australia
+};
+
+/** For a dial code we have no plan for: anything a real number could be. */
+export const DEFAULT_NATIONAL_LENGTH: readonly [number, number] = [7, 12];
+
+/** [shortest, longest] national number for a dial code (digits only). */
+export function nationalLengthForDial(dial: string | null | undefined): readonly [number, number] {
+  const code = (dial ?? "").replace(/\D/g, "");
+  return NATIONAL_LENGTH[code] ?? DEFAULT_NATIONAL_LENGTH;
+}
+
+/** Whether a dial code has a numbering plan of its own here. For the test. */
+export function hasNumberingPlan(dial: string): boolean {
+  return dial in NATIONAL_LENGTH;
+}
+
+/**
+ * True when `Intl` accepts this exact string as a timezone — the test every
+ * clock in the app will put it to.
+ *
+ * A church's timezone used to be saved as any 1–64 character string. "GMT+2"
+ * or "Africa/Maputo " (trailing space) was accepted, and the next hourly
+ * celebrations run threw `RangeError: Invalid time zone` inside its loop over
+ * churches — so every church after that one got no birthday greetings. The
+ * settings form now refuses such a value, and the crons ask this before they
+ * ask what time it is.
+ */
+export function isValidTimeZone(tz: string | null | undefined): tz is string {
+  if (!tz || tz.trim() !== tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    // The throw IS the answer: Intl raises RangeError for a zone it does not know.
+    return false;
+  }
 }
 
 /* ============================================================

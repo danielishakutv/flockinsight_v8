@@ -4,6 +4,7 @@ import { z } from "zod";
 import { startOnlineGift } from "@/lib/online-giving";
 import { auditGuest } from "@/lib/audit";
 import { getPublicGivingLink } from "@/lib/online-giving";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export type GiveResult =
   | { ok: true; checkoutUrl: string }
@@ -27,7 +28,24 @@ const schema = z.object({
   email: z.string().trim().max(254),
   phone: z.string().trim().max(40).optional(),
   note: z.string().trim().max(300).optional(),
+  // Honeypot: a field people never see. Optional so the current form, which
+  // does not send it yet, keeps working.
+  hp: z.string().max(200).optional(),
 });
+
+/*
+ * Each start writes an online_payment row and an audit row, and calls
+ * transaction/initialize on the CHURCH's own Paystack, Flutterwave or Monnify
+ * account. Unlimited, a script could bury the church's payments list and
+ * gateway dashboard in abandoned attempts and trip the provider's own rate or
+ * fraud limits on that merchant account — blocking real Sunday giving.
+ *
+ * Per address (a congregation on one wifi still gets plenty) and per link (a
+ * bound on the total from many addresses). The same in-memory limiter as /p
+ * and /welcome.
+ */
+const GIVE_PER_IP = { limit: 10, windowMs: 10 * 60_000 };
+const GIVE_PER_LINK = { limit: 120, windowMs: 10 * 60_000 };
 
 export async function startGift(
   input: z.input<typeof schema>,
@@ -36,6 +54,22 @@ export async function startGift(
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
   const d = parsed.data;
+
+  // A filled honeypot gets a vague failure and nothing is written or called.
+  if (d.hp && d.hp.trim() !== "")
+    return { ok: false, error: "Something went wrong. Please try again." };
+
+  const ip = await clientIp();
+  if (
+    !rateLimit(`give:${ip}`, GIVE_PER_IP.limit, GIVE_PER_IP.windowMs).ok ||
+    !rateLimit(`give-link:${d.slug}`, GIVE_PER_LINK.limit, GIVE_PER_LINK.windowMs).ok
+  ) {
+    return {
+      ok: false,
+      error:
+        "Too many attempts just now. Please wait a few minutes and try again.",
+    };
+  }
 
   const res = await startOnlineGift({
     slug: d.slug,

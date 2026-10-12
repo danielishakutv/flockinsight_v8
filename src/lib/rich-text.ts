@@ -57,6 +57,17 @@ const COMMON_ATTRS = [
 
 const CONFIG: sanitizeHtml.IOptions = {
   allowedTags: ALLOWED_TAGS,
+  /*
+   * <style> is allowed on purpose, so a pasted template keeps its media
+   * queries. sanitize-html calls that "vulnerable" and, without this flag,
+   * prints a multi-line warning on EVERY call - two per recipient of an email
+   * broadcast, burying real errors in the production log. The flag changes no
+   * sanitising at all (it only gates that warning). The risk it names is
+   * handled here instead: <style> content is raw text that ends at </style>,
+   * hardenCss strips everything in CSS that fetches or executes, inside
+   * <style> blocks and style attributes alike, and EVENT_ATTR strips handlers.
+   */
+  allowVulnerableTags: true,
   allowedAttributes: {
     "*": COMMON_ATTRS,
     a: [...COMMON_ATTRS, "href", "target", "rel"],

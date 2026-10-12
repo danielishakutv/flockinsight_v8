@@ -47,9 +47,21 @@ export default async function FacilitiesPage() {
   const from = new Date(now.getFullYear(), now.getMonth() - 3, 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 4, 1);
 
-  const [places, bookings, closures, calendar, memberRows] = await Promise.all([
+  /*
+   * The list is two queries, merged, and neither is "the first 500".
+   *
+   * It used to be `listBookings({ limit: 500 })` — oldest first, no window — so
+   * once a church passed 500 bookings it was shown its 500 OLDEST: new requests
+   * waiting for approval and next week's bookings fell off the end, the
+   * approval panel never appeared, and only the badge (a separate count) knew
+   * there was anything to decide. Now: everything from the calendar's window
+   * onward (latest kept if it ever fills), plus every request still waiting
+   * however far out it is.
+   */
+  const [places, recentBookings, openRequests, closures, calendar, memberRows] = await Promise.all([
     listFacilities(church.id),
-    listBookings(church.id, { limit: 500 }),
+    listBookings(church.id, { from, limit: 1000, order: "desc" }),
+    listBookings(church.id, { statuses: ["requested"], limit: 5000 }),
     listClosures(church.id, { from, to }),
     calendarFor(church.id, from, to),
     db
@@ -63,6 +75,11 @@ export default async function FacilitiesPage() {
       .orderBy(asc(member.firstName), asc(member.lastName))
       .limit(5000),
   ]);
+
+  const seen = new Set<string>();
+  const bookings = [...openRequests, ...recentBookings]
+    .filter((b) => (seen.has(b.id) ? false : (seen.add(b.id), true)))
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
   const facilities: FacilityCard[] = places.map((f) => ({
     id: f.id,

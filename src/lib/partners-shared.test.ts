@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { normalizePhone } from "@/lib/sms";
 import {
   applyRate,
+  bankChangeKeepsVerification,
+  BANK_CHANGE_FRESH_MS,
+  bankDetailsChanged,
+  canonicalPhone,
   canWithdraw,
+  commissionBase,
   DEFAULT_PARTNER_RATES,
+  dropRepeatedOneOffs,
+  maskAccount,
+  partnerProgramDescription,
+  payoutTransitionAllowed,
+  payoutTransitionError,
+  takeForPayout,
   earningFor,
   earningNote,
   earningsForPayment,
@@ -604,7 +616,286 @@ describe("otpDestination", () => {
   });
 
   it("strips the punctuation people type into a phone number", () => {
-    expect(otpDestination("phone", "+234 (801) 234-5678")).toBe("+2348012345678");
-    expect(otpDestination("phone", "0801 234 5678")).toBe("08012345678");
+    expect(otpDestination("phone", "+234 (801) 234-5678")).toBe("2348012345678");
+    expect(otpDestination("phone", "0801 234 5678")).toBe("2348012345678");
+  });
+
+  /*
+   * One phone, one destination. While "0801…" and "+234801…" were different
+   * strings, the limit on codes per destination was a separate limit for each
+   * spelling — and every spelling was one more free SMS on our balance.
+   */
+  it("spells the same phone the same way however it was typed", () => {
+    const forms = [
+      "08012345678",
+      "+2348012345678",
+      "2348012345678",
+      "8012345678",
+      "+234 801 234 5678",
+    ];
+    const seen = new Set(forms.map((f) => otpDestination("phone", f)));
+    expect([...seen]).toEqual(["2348012345678"]);
+  });
+
+  it("agrees with the SMS gateway's own normaliser", () => {
+    for (const raw of [
+      "08012345678",
+      "+2348012345678",
+      "8012345678",
+      "0801234567", // too short
+      "234801234567", // too short
+      "+254 712 345 678", // Kenya, passed through
+      "abc",
+      "",
+    ]) {
+      expect(canonicalPhone(raw), raw).toBe(normalizePhone(raw) ?? "");
+    }
+  });
+
+  it("refuses something that cannot be a number", () => {
+    expect(otpDestination("phone", "12345")).toBe("");
+    expect(otpDestination("phone", "call me")).toBe("");
+  });
+});
+
+/* ============================================================
+ * Fixes from the October audit
+ * ========================================================== */
+
+describe("the commission base", () => {
+  /*
+   * A Kenyan church on Growth pays ₦10,000 of plan and ₦4,000 of card-fee
+   * surcharge and rounding. 40% of ₦14,000 paid the Partner out of the money
+   * that exists to pay Paystack's international fee.
+   */
+  it("leaves the international surcharge out", () => {
+    expect(commissionBase(14_000, 4000)).toBe(10_000);
+    const first = earningFor({
+      rates,
+      tier: base,
+      amount: commissionBase(14_000, 4000),
+      paymentNumber: 1,
+    });
+    expect(first?.amount).toBe(4000);
+    expect(commissionBase(8000, 3000)).toBe(5000);
+  });
+
+  it("is the whole amount when there is no surcharge", () => {
+    expect(commissionBase(10_000, 0)).toBe(10_000);
+    expect(commissionBase(10_000, null)).toBe(10_000);
+    expect(commissionBase(10_000)).toBe(10_000);
+  });
+
+  it("never goes below zero, and never pays on nothing", () => {
+    expect(commissionBase(3000, 5000)).toBe(0);
+    expect(commissionBase(0, 0)).toBe(0);
+    expect(commissionBase(Number.NaN, 0)).toBe(0);
+    // A nonsense negative surcharge cannot ADD to the base.
+    expect(commissionBase(10_000, -500)).toBe(10_000);
+  });
+});
+
+describe("a church earns its first and second commission once", () => {
+  const priced = earningsForPayment({
+    rates,
+    tier: base,
+    amount: 120_000,
+    firstMonth: 1,
+    months: 12,
+  });
+
+  it("drops a first or second the church already earned on another payment", () => {
+    const { kept, dropped } = dropRepeatedOneOffs(priced, ["first", "second"]);
+    expect(kept.map((l) => l.kind)).toEqual(["trail"]);
+    expect(dropped.map((l) => l.kind)).toEqual(["first", "second"]);
+  });
+
+  it("drops only the kind already earned", () => {
+    const { kept } = dropRepeatedOneOffs(priced, ["first"]);
+    expect(kept.map((l) => l.kind)).toEqual(["second", "trail"]);
+  });
+
+  it("never touches the trail, which many payments legitimately carry", () => {
+    const trailOnly = earningsForPayment({
+      rates,
+      tier: base,
+      amount: 10_000,
+      firstMonth: 5,
+      months: 1,
+    });
+    expect(dropRepeatedOneOffs(trailOnly, ["first", "second", "trail"]).kept).toEqual(
+      trailOnly,
+    );
+  });
+
+  it("keeps everything for a church with nothing earned yet", () => {
+    expect(dropRepeatedOneOffs(priced, []).kept).toEqual(priced);
+  });
+});
+
+describe("which earnings a withdrawal takes", () => {
+  it("takes whole rows, oldest first, until the request is covered", () => {
+    const res = takeForPayout(
+      [
+        { id: "a", amount: 5000 },
+        { id: "b", amount: 5000 },
+        { id: "c", amount: 5000 },
+      ],
+      7000,
+    );
+    expect(res).toEqual({ ids: ["a", "b"], total: 10_000 });
+  });
+
+  /*
+   * The bug this exists for: rows +10,000 (old), -10,000 (a reversal), +5,000.
+   * The balance is 5,000. Oldest-first alone took the +10,000, stopped, and
+   * paid out 10,000 — twice the balance, with the debt left behind.
+   */
+  it("always settles a reversal inside the withdrawal it is owed against", () => {
+    const res = takeForPayout(
+      [
+        { id: "old", amount: 10_000 },
+        { id: "debt", amount: -10_000 },
+        { id: "new", amount: 5000 },
+      ],
+      5000,
+    );
+    expect(res?.ids).toContain("debt");
+    expect(res?.total).toBe(5000);
+  });
+
+  it("refuses when the debts leave too little to cover the request", () => {
+    expect(
+      takeForPayout(
+        [
+          { id: "a", amount: 5000 },
+          { id: "debt", amount: -4000 },
+        ],
+        2000,
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses nothing, and a balance that nets to nothing", () => {
+    expect(takeForPayout([], 1000)).toBeNull();
+    expect(takeForPayout([{ id: "a", amount: 1000 }], 0)).toBeNull();
+    expect(
+      takeForPayout(
+        [
+          { id: "a", amount: 1000 },
+          { id: "d", amount: -1000 },
+        ],
+        1000,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("the wallet with a reversal in it", () => {
+  it("counts a reversal against what is available", () => {
+    const t = walletTotals([
+      { amount: 10_000, status: "paid", payoutId: "p1" },
+      { amount: -4000, status: "available", payoutId: null },
+      { amount: 6000, status: "available", payoutId: null },
+      { amount: 4000, status: "cancelled" },
+    ]);
+    expect(t.available).toBe(2000);
+    expect(t.paid).toBe(10_000);
+    expect(t.lifetime).toBe(12_000);
+  });
+});
+
+describe("deciding a withdrawal", () => {
+  it("approves only a fresh request", () => {
+    expect(payoutTransitionAllowed("requested", "approved")).toBe(true);
+    expect(payoutTransitionAllowed("approved", "approved")).toBe(false);
+    expect(payoutTransitionAllowed("rejected", "approved")).toBe(false);
+    expect(payoutTransitionAllowed("paid", "approved")).toBe(false);
+  });
+
+  it("pays an open request, approved or not", () => {
+    expect(payoutTransitionAllowed("approved", "paid")).toBe(true);
+    // "Paid" is recorded after the transfer has gone. Refusing it then left
+    // the ledger saying "requested" about money already sent, and the queue
+    // offers "Mark paid" on every open row.
+    expect(payoutTransitionAllowed("requested", "paid")).toBe(true);
+    // The stale tab: a request rejected (its earnings handed back and
+    // claimed again by a new request) must never then be marked paid.
+    expect(payoutTransitionAllowed("rejected", "paid")).toBe(false);
+    expect(payoutTransitionAllowed("paid", "paid")).toBe(false);
+  });
+
+  it("rejects an open request, never a paid one", () => {
+    expect(payoutTransitionAllowed("requested", "rejected")).toBe(true);
+    expect(payoutTransitionAllowed("approved", "rejected")).toBe(true);
+    // Rejecting a paid request handed paid money back to "available".
+    expect(payoutTransitionAllowed("paid", "rejected")).toBe(false);
+    expect(payoutTransitionAllowed("rejected", "rejected")).toBe(false);
+  });
+
+  it("says why, in words the person at the queue can act on", () => {
+    expect(payoutTransitionError("paid", "rejected")).toMatch(/already paid/);
+    expect(payoutTransitionError("rejected", "paid")).toMatch(/rejected/);
+  });
+});
+
+describe("changing where the money goes", () => {
+  const before = {
+    bankName: "Zenith Bank",
+    bankAccountNumber: "0123456789",
+    bankAccountName: "Ada Obi",
+  };
+
+  it("notices a different account, and not the same one saved again", () => {
+    expect(bankDetailsChanged(before, { ...before })).toBe(false);
+    expect(bankDetailsChanged(before, { ...before, bankName: " zenith  bank " })).toBe(false);
+    expect(bankDetailsChanged(before, { ...before, bankAccountNumber: "9876543210" })).toBe(
+      true,
+    );
+    expect(bankDetailsChanged(before, { ...before, bankAccountName: "Someone Else" })).toBe(
+      true,
+    );
+    expect(
+      bankDetailsChanged(
+        { bankName: null, bankAccountNumber: null, bankAccountName: null },
+        before,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the email verification only when a code was confirmed just now", () => {
+    const now = new Date("2026-10-12T12:00:00Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms);
+    expect(bankChangeKeepsVerification(ago(60_000), now)).toBe(true);
+    expect(bankChangeKeepsVerification(ago(BANK_CHANGE_FRESH_MS + 1), now)).toBe(false);
+    // Verified last month says nothing about who holds the session today.
+    expect(bankChangeKeepsVerification(new Date("2026-09-01T00:00:00Z"), now)).toBe(false);
+    expect(bankChangeKeepsVerification(null, now)).toBe(false);
+    // A timestamp from the future is not a fresh code.
+    expect(bankChangeKeepsVerification(ago(-60_000), now)).toBe(false);
+  });
+
+  it("shows only the last four digits of an account in a message", () => {
+    expect(maskAccount("0123456789")).toBe("****6789");
+    expect(maskAccount(null)).toBe("****");
+  });
+});
+
+describe("the programme's description", () => {
+  it("says how long the trail lasts, never 'for as long as they stay'", () => {
+    const d = partnerProgramDescription(rates);
+    expect(d).toMatch(/first two months/);
+    expect(d).toContain(`${rates.trailMonths} months`);
+    expect(d).not.toMatch(/as long as/i);
+  });
+
+  it("follows the live rates", () => {
+    const d = partnerProgramDescription({ ...rates, trailBps: 750, trailMonths: 6 });
+    expect(d).toContain("7.5%");
+    expect(d).toContain("6 months");
+  });
+
+  it("promises no trail when there is none", () => {
+    expect(partnerProgramDescription({ ...rates, trailBps: 0 })).not.toMatch(/every payment|next \d+ months/);
   });
 });

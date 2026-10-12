@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { reminderSetting, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { can } from "@/lib/permissions";
 import { RemindersForm } from "@/components/settings/reminders-form";
 import { REMINDER_DEFAULTS } from "@/lib/reminder-defaults";
@@ -44,6 +45,7 @@ export default async function RemindersSettingsPage() {
       serviceCount={services.length}
       timezone={church.timezone}
       smsApproved={church.smsSenderStatus === "approved"}
+      smsAvailable={smsAvailableForCountry(church.country)}
       smsBalance={church.walletBalance}
     />
   );

@@ -1,10 +1,10 @@
-import { requireChurch } from "@/lib/session";
-import { refuseWithoutFeature } from "@/lib/entitlements-server";
-import { can } from "@/lib/permissions";
+import { churchForApi, refusalResponse } from "@/lib/api-church";
 import { isCloudinaryConfigured, MAX_ASSET_BYTES } from "@/lib/cloudinary";
+import { LIBRARY_FORBIDDEN } from "@/lib/media-upload-rules";
 import {
   AVATAR_KIND,
-  permForKind,
+  canUploadKind,
+  refuseUploadKind,
   storeMedia,
   type MediaKind,
   MEDIA_KINDS,
@@ -60,7 +60,9 @@ function json(data: unknown, status = 200) {
 
 // POST /api/media/upload  (multipart: file, kind, title?)  -> { ok, ... }
 export async function POST(request: Request) {
-  const { church, user } = await requireChurch();
+  const who = await churchForApi();
+  if (!who.ok) return refusalResponse(who);
+  const { church, user } = who;
 
   if (!isCloudinaryConfigured())
     return json(
@@ -94,8 +96,8 @@ export async function POST(request: Request) {
    * settings.manage to change a profile picture would mean the people most
    * likely to have one (a member given a staff login) are the ones who cannot.
    */
-  if (kind !== AVATAR_KIND && !(await can(permForKind(kind))))
-    return json({ ok: false, error: "You can't upload this." }, 403);
+  if (kind !== AVATAR_KIND && !(await canUploadKind(kind)))
+    return json({ ok: false, code: "forbidden", error: LIBRARY_FORBIDDEN }, 403);
 
   /*
    * The sermon library is the Pro part of media, not media itself.
@@ -106,10 +108,8 @@ export async function POST(request: Request) {
    * most of what is actually in there. What Pro sells is keeping SERMONS: audio,
    * video and slides with their own watch pages. So the gate is on that kind.
    */
-  if (kind === "sermon") {
-    const gate = await refuseWithoutFeature("mediaLibrary");
-    if (gate) return json(gate, 403);
-  }
+  const gate = await refuseUploadKind(kind);
+  if (gate) return json(gate, 403);
 
   if (!isAllowedMime(file.type))
     return json({ ok: false, error: "That file type isn't supported." }, 400);

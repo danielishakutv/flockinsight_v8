@@ -10,6 +10,7 @@ import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
+import { zMoney, zOptionalMoney } from "@/lib/money-zod";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -23,15 +24,9 @@ const optDate = z.preprocess(
   emptyToNull,
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date").nullable(),
 );
-const optAmount = z.preprocess(
-  (v) =>
-    v === "" || v == null
-      ? null
-      : typeof v === "string"
-        ? Number(v.replace(/,/g, ""))
-        : v,
-  z.number().positive("Amount must be greater than 0").max(1_000_000_000_000).nullable(),
-);
+// Read by the platform's one money parser, so "1500,50" from a comma-decimal
+// keypad is 1500.50 and never 150050.
+const optAmount = zOptionalMoney();
 
 const NO_PERM = { ok: false as const, error: "You don't have permission to manage giving." };
 
@@ -171,10 +166,7 @@ const pledgeSchema = z.object({
   projectId: z.string().uuid(),
   memberId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
   giverName: optText(160),
-  amount: z.preprocess(
-    (v) => (typeof v === "string" ? Number(v.replace(/,/g, "")) : v),
-    z.number({ message: "Enter an amount" }).positive("Amount must be greater than 0").max(1_000_000_000_000),
-  ),
+  amount: zMoney(),
   cadence: z
     .enum(["one_time", "weekly", "monthly", "quarterly", "yearly", "custom"])
     .default("one_time"),

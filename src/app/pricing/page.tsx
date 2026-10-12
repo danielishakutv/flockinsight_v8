@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
 import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
 import { annualTotal } from "@/lib/billing-cycle";
 import { landingContent } from "@/lib/landing-content";
-import { getLocale } from "@/lib/i18n/server";
+import {
+  canonicalFor,
+  languageAlternates,
+  marketingLocale,
+} from "@/lib/seo/alternates";
 import {
   currencyNoteFor,
   planAmountLabel,
@@ -31,13 +36,37 @@ import { cn } from "@/lib/utils";
  */
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Pricing",
-  description:
-    "Simple, affordable plans for churches of every size — built for Nigeria and Africa. Start free.",
+type PageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function PricingPage() {
+/*
+ * The language comes from `?lang=` first, exactly as on the home page.
+ *
+ * The sitemap advertises /pricing?lang=pt and ?lang=fr as the Portuguese and
+ * French pricing pages, but the page only read the cookie and the browser's
+ * language — so Googlebot, and a pastor in Maputo following a Portuguese
+ * link with an English browser, were served English at the Portuguese URL.
+ * The canonical follows the language for the same reason it does on "/":
+ * pointing ?lang=pt at /pricing would tell the index to drop it as a
+ * duplicate.
+ */
+export async function generateMetadata({
+  searchParams,
+}: PageProps): Promise<Metadata> {
+  const locale = await marketingLocale(searchParams);
+  return {
+    title: "Pricing",
+    description:
+      "Simple, affordable plans for churches of every size — built for Nigeria and Africa. Start free.",
+    alternates: {
+      canonical: canonicalFor("/pricing", locale),
+      languages: languageAlternates("/pricing"),
+    },
+  };
+}
+
+export default async function PricingPage({ searchParams }: PageProps) {
   /*
    * Three things vary by visitor here: the language, the currency, and the
    * total. All three are resolved on the server in one pass, so the page that
@@ -46,7 +75,7 @@ export default async function PricingPage() {
    */
   const [plans, locale, country, freeMonths] = await Promise.all([
     getPlans(),
-    getLocale(),
+    marketingLocale(searchParams),
     requestCountry(),
     getAnnualFreeMonths(),
   ]);

@@ -7,6 +7,7 @@ import { Loader2, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { startWalletTopup } from "@/app/(app)/settings/wallet/actions";
 import { formatMoney } from "@/lib/money";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,13 +46,11 @@ const CATEGORY_LABEL: Record<Txn["category"], string> = {
 
 export function WalletSettings({
   balance,
-  currency,
   paymentsEnabled,
   payStatus,
   txns,
 }: {
   balance: number;
-  currency: string;
   paymentsEnabled: boolean;
   payStatus: string | null;
   txns: Txn[];
@@ -62,12 +61,31 @@ export function WalletSettings({
   const [amount, setAmount] = useState("1000");
   const [paying, setPaying] = useState(false);
   const toasted = useRef(false);
+  // The wallet is naira for every church; see lib/wallet-currency.ts.
+  const currency = WALLET_CURRENCY;
+
+  // Back from Paystack into a page restored from the bfcache: let the dialog
+  // close and the button work again.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPaying(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
 
   useEffect(() => {
     if (toasted.current || !payStatus) return;
     toasted.current = true;
     if (payStatus === "success") toast.success(t("settings.walletToppedUp"));
     else if (payStatus === "failed") toast.error(t("settings.paymentFailedOrCancelled"));
+    // Not a failure: a transfer still in flight, or Paystack slow to answer.
+    // The webhook credits it; "failed" here is how people came to pay twice.
+    else if (payStatus === "pending")
+      toast.info(
+        "Your top-up is being confirmed. Your wallet is credited by itself as soon as Paystack confirms it — there is no need to pay again.",
+        { duration: 10_000 },
+      );
     else if (payStatus === "error") toast.error(t("settings.somethingWentWrong"));
     router.replace("/settings/wallet");
   }, [payStatus, router, t]);
@@ -77,12 +95,31 @@ export function WalletSettings({
     if (!Number.isFinite(amt) || amt < 100)
       return toast.error(t("settings.minimumTopUpIs100"));
     setPaying(true);
-    const res = await startWalletTopup(amt);
+    let res: Awaited<ReturnType<typeof startWalletTopup>>;
+    try {
+      res = await startWalletTopup(amt);
+    } catch (e) {
+      /*
+       * A lost signal, or a tab older than the last deploy. The dialog cannot
+       * be closed while `paying` is set, so leaving it set here trapped the
+       * person behind a spinner with no way out but a reload.
+       */
+      console.error("wallet top-up: could not start checkout", e);
+      setPaying(false);
+      toast.error(
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "You appear to be offline. Check your connection and try again. Nothing was charged."
+          : "We couldn't reach FlockInsight. Reload the page (the app may have just been updated) and try again. Nothing was charged.",
+      );
+      return;
+    }
     if (!res.ok) {
       toast.error(res.error);
       setPaying(false);
       return;
     }
+    // `paying` stays set while the browser leaves for Paystack, so a second
+    // tap cannot open a second checkout.
     window.location.href = res.url; // to Paystack
   }
 

@@ -7,6 +7,7 @@ import {
   Bell,
   Check,
   Church,
+  Handshake,
   Laptop,
   LogOut,
   Moon,
@@ -51,6 +52,7 @@ export function UserMenu({
   image,
   className,
   isSuperAdmin = false,
+  isPartner = false,
   churches = [],
   activeChurchId = null,
 }: {
@@ -60,6 +62,8 @@ export function UserMenu({
   image?: string | null;
   className?: string;
   isSuperAdmin?: boolean;
+  /** In the Partner programme: the way across to their Partner dashboard. */
+  isPartner?: boolean;
   /**
    * Every church this person is staff in. One or none means no switcher —
    * showing a list of one is noise in a menu that is already busy.
@@ -172,6 +176,14 @@ export function UserMenu({
             <Link href="/superadmin">
               <Shield />
               {t("nav.platformAdmin")}
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {isPartner && (
+          <DropdownMenuItem asChild>
+            <Link href="/partner">
+              <Handshake />
+              {t("nav.partnerDashboard")}
             </Link>
           </DropdownMenuItem>
         )}

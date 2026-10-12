@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { followUpInteraction, member, staff, user } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -14,6 +14,23 @@ import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
 import { audit } from "@/lib/audit";
 import { escapeHtml } from "@/lib/html-escape";
+
+/*
+ * The first real contact moves somebody out of "new".
+ *
+ * `null` and `new` are the same untouched state — `effectiveStatus()` in the
+ * list already reads them so — but this used to be `m.followUpStatus ??
+ * "contacted"`, which only advanced a null. Everybody registered through the
+ * first-timers door starts as `new`, not null, so a team could call a visitor
+ * five times and the "New" filter would still list them as never touched.
+ *
+ * Decided in the UPDATE rather than from the row read a moment earlier, so a
+ * status somebody changed in between (to "member", say) is never overwritten
+ * with what this request happened to see. A single-table UPDATE, so the bare
+ * column names cannot bind to anything else (the raw-sql qualifier trap in
+ * AGENTS.md needs a subquery to bite).
+ */
+const FIRST_TOUCH_STATUS = sql`case when ${member.followUpStatus} is null or ${member.followUpStatus} = 'new' then 'contacted'::follow_up_status else ${member.followUpStatus} end`;
 
 export type ActionResult =
   | { ok: true }
@@ -93,10 +110,11 @@ export async function logInteraction(
         .update(member)
         .set({
           lastContactedAt: new Date(),
-          // First touch moves an untracked person into "contacted".
-          followUpStatus: m.followUpStatus ?? "contacted",
+          // A private note is the team talking among itself, not contact with
+          // the person, so it leaves them where they were.
+          ...(d.type === "note" ? {} : { followUpStatus: FIRST_TOUCH_STATUS }),
         })
-        .where(eq(member.id, d.memberId));
+        .where(and(eq(member.id, d.memberId), eq(member.churchId, church.id)));
     });
     await audit({
       churchId: church.id,
@@ -183,9 +201,9 @@ export async function sendSmsToMember(
         .update(member)
         .set({
           lastContactedAt: new Date(),
-          followUpStatus: m.followUpStatus ?? "contacted",
+          followUpStatus: FIRST_TOUCH_STATUS,
         })
-        .where(eq(member.id, memberId));
+        .where(and(eq(member.id, memberId), eq(member.churchId, church.id)));
     });
   } catch (e) {
     // The SMS was sent; just couldn't log it. Don't fail the user action.

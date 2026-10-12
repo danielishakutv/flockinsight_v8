@@ -34,7 +34,7 @@ export default async function WalletSettingsPage({
 
   // Re-read the live balance (c may be cached from the request).
   const [row] = await db
-    .select({ balance: church.walletBalance, currency: church.currency })
+    .select({ balance: church.walletBalance })
     .from(church)
     .where(eq(church.id, c.id))
     .limit(1);
@@ -42,7 +42,6 @@ export default async function WalletSettingsPage({
   return (
     <WalletSettings
       balance={Number(row?.balance ?? 0)}
-      currency={row?.currency ?? "NGN"}
       paymentsEnabled={isPaystackConfigured()}
       payStatus={status ?? null}
       txns={txns.map((t) => ({

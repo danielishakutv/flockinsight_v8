@@ -5,6 +5,7 @@ import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { SmsSettings } from "@/components/settings/sms-settings";
 
 export const metadata = { title: "SMS · Settings" };
@@ -26,7 +27,6 @@ export default async function SmsSettingsPage({
         stage: church.smsSenderStage,
         note: church.smsSenderNote,
         balance: church.walletBalance,
-        currency: church.currency,
       })
       .from(church)
       .where(eq(church.id, c.id))
@@ -56,7 +56,8 @@ export default async function SmsSettingsPage({
       country={c.country}
       note={row.note}
       balance={row.balance}
-      currency={row.currency}
+      // SMS credit is the naira wallet, for every church (lib/wallet-currency).
+      currency={WALLET_CURRENCY}
       price={price}
       payStatus={status ?? null}
       txns={txns.map((t) => ({

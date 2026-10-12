@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "./auth";
 import { readActAsCookie } from "./impersonation";
 import { db } from "@/db";
-import { church, staff, user } from "@/db/schema";
+import { church, partner, platformRole, staff, user } from "@/db/schema";
 
 /**
  * Returns the current Better Auth session (user + session) or null.
@@ -18,22 +18,86 @@ export const getSession = cache(async () => {
 
 /**
  * Require an authenticated user. Redirects to /login if absent.
+ *
+ * `returnTo` is where the login page sends them afterwards. Pages outside the
+ * proxy's matcher (the Partner pages) must pass it: without one, somebody who
+ * followed a link to `/partner/join` signed in and landed on their church
+ * dashboard with no way back to what they had come to do.
  */
-export async function requireUser() {
+export async function requireUser(returnTo?: string) {
   const data = await getSession();
-  if (!data?.user) redirect("/login");
+  if (!data?.user) {
+    redirect(
+      returnTo ? `/login?redirect=${encodeURIComponent(returnTo)}` : "/login",
+    );
+  }
   return data;
 }
 
 /**
+ * Is this person in the Partner programme?
+ *
+ * Asked where "no church" used to mean only "has not finished signing up":
+ * a Partner has an account and, deliberately, no church — sending them to
+ * "Set up your church" on every sign-in made the one account type that is
+ * meant to live outside a church look like a broken church sign-up.
+ */
+export const getIsPartner = cache(async (): Promise<boolean> => {
+  const data = await getSession();
+  if (!data?.user) return false;
+  const [row] = await db
+    .select({ id: partner.id })
+    .from(partner)
+    .where(eq(partner.userId, data.user.id))
+    .limit(1);
+  return !!row;
+});
+
+/** Where somebody with no church goes: their Partner dashboard, or set one up. */
+async function noChurchPath(): Promise<string> {
+  return (await getIsPartner()) ? "/partner" : "/onboarding";
+}
+
+/**
+ * May this admin act as a church RIGHT NOW?
+ *
+ * Not just "is a superadmin": acting as a church is `platform.churches.manage`,
+ * the same permission `impersonateChurch` demanded on the way in. Checking only
+ * the flag meant an admin whose role lost that permission mid-impersonation
+ * kept owner powers until the 8-hour cookie ran out — a downgrade that did not
+ * take effect. Read here directly (not via lib/platform-access, which imports
+ * this file) so a role edit applies on the very next request.
+ */
+const ACT_AS_PERMISSION = "platform.churches.manage";
+const canActAsChurch = cache(async (): Promise<boolean> => {
+  const data = await getSession();
+  if (!data?.user) return false;
+  const [row] = await db
+    .select({
+      isSuperAdmin: user.isSuperAdmin,
+      roleId: user.platformRoleId,
+      permissions: platformRole.permissions,
+    })
+    .from(user)
+    .leftJoin(platformRole, eq(platformRole.id, user.platformRoleId))
+    .where(eq(user.id, data.user.id))
+    .limit(1);
+  if (!row?.isSuperAdmin) return false;
+  // No role = unrestricted, as in platformAccess().
+  if (row.roleId === null) return true;
+  return (row.permissions ?? []).includes(ACT_AS_PERMISSION);
+});
+
+/**
  * The church a superadmin is currently "acting as" (operating on behalf of),
- * or null. Honoured ONLY for superadmins, and only when the target church
- * still exists — so a forged cookie from a normal user is worthless.
+ * or null. Honoured ONLY for superadmins who still hold the permission to act
+ * as a church, and only when the target church still exists — so a forged
+ * cookie from a normal user, or a stale one from a demoted admin, is worthless.
  */
 export const getActAsChurchId = cache(async (): Promise<string | null> => {
   const churchId = await readActAsCookie();
   if (!churchId) return null;
-  if (!(await getIsSuperAdmin())) return null;
+  if (!(await canActAsChurch())) return null;
   const [row] = await db
     .select({ id: church.id })
     .from(church)
@@ -141,7 +205,17 @@ export const requireChurch = cache(async () => {
     if (!ownChurch) redirect("/superadmin");
   }
 
-  if (!activeChurchId) redirect("/onboarding");
+  /*
+   * No church selected is not the same as no church. A pointer can be null
+   * because a seat elsewhere was taken away (lib/session-pointer.ts re-aims
+   * them, but a session from before that, or one cleared by hand, may still
+   * be empty) — and /onboarding would then offer somebody who belongs to a
+   * church the chance to create a duplicate with a fresh trial.
+   */
+  if (!activeChurchId) {
+    const mine = await getMyChurches();
+    redirect(mine.length > 0 ? "/select-church" : await noChurchPath());
+  }
 
   const [activeChurch] = await db
     .select()
@@ -149,7 +223,11 @@ export const requireChurch = cache(async () => {
     .where(eq(church.id, activeChurchId))
     .limit(1);
 
-  if (!activeChurch) redirect("/onboarding");
+  // The church it points at is gone: the same choice as no pointer at all.
+  if (!activeChurch) {
+    const mine = await getMyChurches();
+    redirect(mine.length > 0 ? "/select-church" : await noChurchPath());
+  }
 
   /*
    * The active church must be one of theirs.
@@ -160,15 +238,19 @@ export const requireChurch = cache(async () => {
    * with every permission check failing, which looks like the app breaking
    * rather than like access ending.
    *
-   * Narrow on purpose: only redirected when they DO belong somewhere else, so
-   * there is a real choice to offer. With no memberships at all this changes
-   * nothing, because this is also the path a church's own owner takes in the
-   * seconds between creating a church and the staff row landing.
+   * This used to redirect only when they belonged somewhere ELSE, to cover an
+   * owner "in the seconds between creating a church and the staff row
+   * landing". No such window exists any more — signup inserts the staff row in
+   * the same transaction, before it sets the active church, and the org
+   * plugin's create writes the owner row before set-active can be called — and
+   * the narrow rule let a volunteer removed from their only church keep
+   * opening its exports until their session expired. So: a genuine (non-temp)
+   * seat in THIS church, or out. Superadmins acting-as are exempt via actAsId.
    */
   if (!actAsId) {
     const mine = await getMyChurches();
-    if (mine.length > 0 && !mine.some((c) => c.id === activeChurch.id)) {
-      redirect("/select-church");
+    if (!mine.some((c) => c.id === activeChurch.id)) {
+      redirect(mine.length > 0 ? "/select-church" : await noChurchPath());
     }
   }
   // Don't bounce an acting-as superadmin out of a suspended church — they may

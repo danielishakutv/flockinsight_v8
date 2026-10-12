@@ -59,34 +59,64 @@ export function currencySymbol(code: string): string {
   return CURRENCIES.find((c) => c.code === code)?.symbol ?? code;
 }
 
+/*
+ * ONE shape for money, everywhere it is drawn.
+ *
+ * Every formatter below used to hand the locale to the runtime
+ * (`Intl.NumberFormat(undefined, …)`), which means "whatever machine this
+ * happens to run on". The server is Node in en-US; a Mozambican pastor's phone
+ * is pt-MZ. The same 1,234,567.50 meticais then rendered as
+ * "MZN 1,234,567.50" in the HTML and "1 234 567,50 MTn" once a client
+ * component hydrated — a figure changing shape in front of the person reading
+ * it, and a React hydration failure (#418) on every page that showed one, which
+ * throws the server-rendered page away and draws it again from scratch.
+ *
+ * So the digits are always grouped the same way (en-US: the convention every
+ * currency here is already printed with on Paystack receipts and bank
+ * statements in this market), and the symbol comes from our own table rather
+ * than from CLDR, whose narrow symbols differ by locale AND by ICU version.
+ * Deterministic on the server, in every browser, in a PDF and in an email.
+ *
+ * A one-character symbol sits against the number (₦1,500.00, $20.00); a
+ * longer one gets a space (KSh 1,500.00, MT 1,500.00), which is how they are
+ * written where they are spent.
+ */
+const DIGITS = new Map<string, Intl.NumberFormat>();
+
+function digits(min: number, max: number, compact = false): Intl.NumberFormat {
+  const key = `${min}|${max}|${compact}`;
+  let f = DIGITS.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: min,
+      maximumFractionDigits: max,
+      ...(compact ? { notation: "compact" as const } : {}),
+    });
+    DIGITS.set(key, f);
+  }
+  return f;
+}
+
+function withSymbol(amount: number, currency: string, body: string): string {
+  const symbol = currencySymbol(currency);
+  const sign = amount < 0 ? "-" : "";
+  const gap = [...symbol].length > 1 ? " " : "";
+  return `${sign}${symbol}${gap}${body}`;
+}
+
+function safe(amount: number): number {
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 /** Format an amount as currency, e.g. formatMoney(1500, "NGN") -> "₦1,500.00". */
 export function formatMoney(
   amount: number,
   currency: string = DEFAULT_CURRENCY,
 ): string {
-  try {
-    // narrowSymbol, not the default: with the runtime locale left to decide,
-    // the SAME amount rendered "₦2,000.00" on the server (Node) and
-    // "NGN 2,000.00" in the browser, so a figure could change shape between
-    // the page and a client component beside it. narrowSymbol asks for the
-    // symbol whatever the locale, which is what a Nigerian church expects to
-    // see either way.
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      currencyDisplay: "narrowSymbol",
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    // Unknown currency code — fall back to symbol + grouped number.
-    return `${currencySymbol(currency)}${amount.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
+  const n = safe(amount);
+  return withSymbol(n, currency, digits(2, 2).format(Math.abs(n)));
 }
 
-/** Compact format for stat cards, e.g. "₦1.2M". Falls back to full format. */
 /**
  * Money for a sentence, rather than for a column.
  *
@@ -103,36 +133,20 @@ export function formatMoneyPlain(
   amount: number,
   currency: string = DEFAULT_CURRENCY,
 ): string {
-  const whole = Number.isInteger(amount);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      currencyDisplay: "narrowSymbol",
-      minimumFractionDigits: whole ? 0 : 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${currencySymbol(currency)}${amount.toLocaleString(undefined, {
-      minimumFractionDigits: whole ? 0 : 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
+  const n = safe(amount);
+  const whole = Number.isInteger(n);
+  return withSymbol(
+    n,
+    currency,
+    digits(whole ? 0 : 2, 2).format(Math.abs(n)),
+  );
 }
 
+/** Compact format for stat cards, e.g. "₦1.2M". */
 export function formatMoneyCompact(
   amount: number,
   currency: string = DEFAULT_CURRENCY,
 ): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      currencyDisplay: "narrowSymbol",
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(amount);
-  } catch {
-    return formatMoney(amount, currency);
-  }
+  const n = safe(amount);
+  return withSymbol(n, currency, digits(0, 1, true).format(Math.abs(n)));
 }

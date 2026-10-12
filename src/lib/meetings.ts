@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -1654,9 +1654,69 @@ export async function admitParticipant(meetingId: string, participantId: string)
     .where(
       and(eq(meetingParticipant.id, participantId), eq(meetingParticipant.meetingId, meetingId)),
     )
-    .returning({ peerId: meetingParticipant.peerId, name: meetingParticipant.displayName });
+    .returning({
+      peerId: meetingParticipant.peerId,
+      name: meetingParticipant.displayName,
+      joinedAt: meetingParticipant.joinedAt,
+    });
   if (row) await refreshPeak(meetingId);
   return row ?? null;
+}
+
+/**
+ * Hand somebody just let in from the lobby the chat from before they knocked.
+ *
+ * /join no longer gives the chat history to a peer still in the lobby (it is
+ * the room's conversation, and they may never be let in). Without this, every
+ * guest admitted from the lobby saw an empty chat for everything said before
+ * they arrived. Messages posted WHILE they waited already reach them: a
+ * waiting peer's cursor does not move, so its first poll inside reads every
+ * signal since it joined. What is missing is only what came before /join, and
+ * that is what this sends — as ordinary "chat" signals addressed to that one
+ * peer, which the client already merges by id, so a message that arrives both
+ * ways shows once.
+ *
+ * The most recent `limit`, oldest first. postSignals takes at most 60 per
+ * call, so they go in batches, in order.
+ */
+export async function sendChatHistoryTo(
+  meetingId: string,
+  fromPeer: string,
+  toPeer: string,
+  before: Date,
+  limit = 200,
+): Promise<number> {
+  const rows = await db
+    .select({
+      id: meetingMessage.id,
+      authorName: meetingMessage.authorName,
+      body: meetingMessage.body,
+      kind: meetingMessage.kind,
+      createdAt: meetingMessage.createdAt,
+    })
+    .from(meetingMessage)
+    .where(and(eq(meetingMessage.meetingId, meetingId), lt(meetingMessage.createdAt, before)))
+    .orderBy(desc(meetingMessage.createdAt))
+    .limit(limit);
+  rows.reverse();
+  for (let i = 0; i < rows.length; i += 60) {
+    await postSignals(
+      meetingId,
+      fromPeer,
+      rows.slice(i, i + 60).map((x) => ({
+        toPeer,
+        type: "chat" as const,
+        payload: {
+          id: x.id,
+          authorName: x.authorName,
+          body: x.body,
+          kind: x.kind,
+          createdAt: x.createdAt.toISOString(),
+        },
+      })),
+    );
+  }
+  return rows.length;
 }
 
 /**
@@ -1796,6 +1856,7 @@ export async function startRecordingRow(opts: {
       mode: opts.mode,
       status: "uploading",
       startedAt: new Date(),
+      lastActivityAt: new Date(),
       createdBy: opts.createdBy,
     })
     .returning({ id: meetingRecording.id });
@@ -1803,66 +1864,212 @@ export async function startRecordingRow(opts: {
 }
 
 /**
+ * The words the sweep leaves on a row it gives up on. Exported so the client's
+ * own failure report can recognise a row the SWEEP marked, and replace this
+ * guess with what actually happened.
+ */
+export const STALLED_NEVER_STOPPED =
+  "The recording never reached the server — the device that was recording closed or lost its connection before the recording was stopped.";
+export const STALLED_GONE_QUIET =
+  "Not uploaded yet — nothing has arrived from the device that made this recording for a week. If it is still on that device, open FlockInsight there, signed in, and it will finish uploading.";
+
+/**
  * Recordings that claim to still be uploading, long after anything could be.
  *
- * The client reports its own failures now, but there is one case where it never
- * can: the browser is gone. The laptop lid closes mid-upload, the tab is killed,
- * the phone drops the connection for good. The row it created at the start of
- * the recording then sits at "uploading" for ever — which is precisely the state
- * that made eleven production recordings look fine and be nothing.
+ * The client reports its own failures, but there is one case where it never
+ * can: the browser is gone. The row it created when Record was pressed then
+ * sits at "uploading" for ever — the state that made eleven production
+ * recordings look fine and be nothing. So the server decides for itself.
  *
- * So the server decides for itself. A recording that has been "uploading" for
- * longer than any real upload takes is not uploading; it is lost, and saying so
- * is the whole point. Thirty minutes is deliberately generous — an hour of video
- * on a weak Nigerian connection is a genuinely long upload, and marking a live
- * one as failed would be its own kind of lie.
+ * WHAT IT JUDGES ON. Not on how long ago Record was pressed. That was the old
+ * rule — "uploading" for over thirty minutes means lost — and a genuine
+ * recording is "uploading" for its whole length: every Sunday service longer
+ * than half an hour was marked failed while the host was still recording it,
+ * and stayed "failed" for the hours its upload legitimately took afterwards.
+ * Now it takes evidence of inactivity, and there are only two kinds:
  *
- * The file is not touched. It is still in the host's browser vault, and the
- * Unsaved recordings panel still offers it back; this only corrects the claim.
+ *   - NEVER STOPPED, and the meeting is over. Stop writes `stoppedAt`, and the
+ *     room stops a running recorder as the call ends; a recording with neither
+ *     is one whose tab died mid-meeting. Judged `afterEndMinutes` after the
+ *     meeting ended AND after the last sign of life, so a device that is still
+ *     sending chunks is never called lost.
+ *   - STOPPED, and then silent for `silentDays`. The upload resumes across
+ *     sessions, days apart on a poor connection, and every chunk touches
+ *     `lastActivityAt`; a week of nothing is the point at which the church is
+ *     owed a sentence instead of a spinner. The words do not claim the file is
+ *     gone, because it may well still be on the device.
+ *
+ * The file is not touched, and a later upload still completes the row: this
+ * only corrects the claim.
  */
 export async function failStalledRecordings(
-  olderThanMinutes = 30,
+  afterEndMinutes = 30,
   now: Date = new Date(),
+  silentDays = 7,
 ): Promise<number> {
-  const cutoff = new Date(now.getTime() - olderThanMinutes * 60_000);
+  const endedBefore = new Date(now.getTime() - afterEndMinutes * 60_000);
+  const silentBefore = new Date(now.getTime() - silentDays * 86_400_000);
+  /*
+   * The last sign of life. Used inside a query WITH a join, so drizzle
+   * qualifies every column — not the join-less correlated shape that silently
+   * binds both names to one table (see AGENTS.md).
+   */
+  const lastSeen = sql`coalesce(${meetingRecording.lastActivityAt}, ${meetingRecording.startedAt}, ${meetingRecording.createdAt})`;
 
-  const rows = await db
-    .update(meetingRecording)
-    .set({
-      status: "failed",
-      error:
-        "The upload never finished — the browser was closed or lost its connection. Your copy may still be on the device that recorded it.",
-    })
+  const candidates = await db
+    .select({ id: meetingRecording.id, stoppedAt: meetingRecording.stoppedAt })
+    .from(meetingRecording)
+    .innerJoin(
+      meeting,
+      and(eq(meeting.id, meetingRecording.meetingId), eq(meeting.churchId, meetingRecording.churchId)),
+    )
     .where(
       and(
         eq(meetingRecording.status, "uploading"),
-        lt(meetingRecording.createdAt, cutoff),
+        or(
+          and(
+            isNull(meetingRecording.stoppedAt),
+            eq(meeting.status, "ended"),
+            sql`coalesce(${meeting.endedAt}, ${lastSeen}) < ${endedBefore}`,
+            sql`${lastSeen} < ${endedBefore}`,
+          ),
+          and(isNotNull(meetingRecording.stoppedAt), sql`${lastSeen} < ${silentBefore}`),
+        ),
       ),
     )
-    .returning({ id: meetingRecording.id, churchId: meetingRecording.churchId });
+    .limit(500);
 
-  if (rows.length > 0) {
-    // One line per sweep, not per row: this is a number somebody should watch,
-    // and a run that suddenly marks twenty is a different story from one that
-    // marks one.
-    console.error(
-      `[meetings] marked ${rows.length} stalled recording(s) as failed (stuck "uploading" for over ${olderThanMinutes}m)`,
-    );
+  const groups: Array<[string[], string]> = [
+    [candidates.filter((c) => !c.stoppedAt).map((c) => c.id), STALLED_NEVER_STOPPED],
+    [candidates.filter((c) => c.stoppedAt).map((c) => c.id), STALLED_GONE_QUIET],
+  ];
+  let marked = 0;
+  for (const [ids, error] of groups) {
+    if (ids.length === 0) continue;
+    /*
+     * The status is repeated in the UPDATE: a chunk upload finishing between
+     * the select and here has moved the row to "ready", and must win.
+     */
+    const rows = await db
+      .update(meetingRecording)
+      .set({ status: "failed", error })
+      .where(and(inArray(meetingRecording.id, ids), eq(meetingRecording.status, "uploading")))
+      .returning({ id: meetingRecording.id });
+    marked += rows.length;
   }
+
+  if (marked > 0) {
+    // One line per sweep, not per row: this is a number somebody should watch.
+    console.error(`[meetings] marked ${marked} stalled recording(s) as failed`);
+  }
+  return marked;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The host pressed Stop. The recording is now a file on a device waiting to be
+ * sent, not a capture in progress — and the sweep needs to know which.
+ *
+ * Every row of this meeting still "uploading" and not yet stopped, unless the
+ * client named one: an older client never sends the id, and a meeting has one
+ * recorder at a time, so "the unstopped ones" is the same set.
+ */
+export async function markRecordingStopped(opts: {
+  meetingId: string;
+  churchId: string;
+  recordingId?: string | null;
+}): Promise<number> {
+  const named = opts.recordingId && UUID_RE.test(opts.recordingId) ? opts.recordingId : null;
+  const rows = await db
+    .update(meetingRecording)
+    .set({ stoppedAt: new Date(), lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(meetingRecording.meetingId, opts.meetingId),
+        eq(meetingRecording.churchId, opts.churchId),
+        eq(meetingRecording.status, "uploading"),
+        isNull(meetingRecording.stoppedAt),
+        named ? eq(meetingRecording.id, named) : undefined,
+      ),
+    )
+    .returning({ id: meetingRecording.id });
   return rows.length;
 }
 
-export async function completeRecording(opts: {
-  id: string;
-  churchId: string;
-  mediaId?: string | null;
-  url?: string | null;
-  bytes?: number;
-  durationSec?: number;
-  status: "ready" | "failed" | "local-only";
-  error?: string | null;
-}): Promise<void> {
+/** A chunk of this recording reached the server: it is alive. */
+export async function touchRecording(recordingId: string, churchId: string): Promise<void> {
+  if (!UUID_RE.test(recordingId)) return;
   await db
+    .update(meetingRecording)
+    .set({ lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(meetingRecording.id, recordingId),
+        eq(meetingRecording.churchId, churchId),
+        inArray(meetingRecording.status, ["uploading", "failed"]),
+      ),
+    );
+}
+
+/**
+ * What the server knows about a recording an upload says it is, read WITHOUT a
+ * church filter — the upload is routed by this, so it has to be found whichever
+ * church the browser has open. Null when there is no such recording.
+ */
+export async function recordingUploadFacts(recordingId: string) {
+  if (!UUID_RE.test(recordingId)) return null;
+  const [row] = await db
+    .select({
+      id: meetingRecording.id,
+      churchId: meetingRecording.churchId,
+      status: meetingRecording.status,
+      mediaId: meetingRecording.mediaId,
+      recordedBy: meetingRecording.createdBy,
+      hostUserId: meeting.hostUserId,
+      meetingCreatedBy: meeting.createdBy,
+      churchName: church.name,
+      churchStatus: church.status,
+      storageExtraBytes: church.storageExtraBytes,
+    })
+    .from(meetingRecording)
+    .innerJoin(
+      meeting,
+      and(eq(meeting.id, meetingRecording.meetingId), eq(meeting.churchId, meetingRecording.churchId)),
+    )
+    .innerJoin(church, eq(church.id, meetingRecording.churchId))
+    .where(eq(meetingRecording.id, recordingId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** `db`, or the transaction a caller is already inside. */
+type Executor = Pick<typeof db, "update">;
+
+/**
+ * Close a recording row out. Returns how many rows it changed — 0 means the
+ * recording was not there to complete (wrong church, gone, or already in the
+ * library), and a caller that has just filed a file for it must not say "saved".
+ *
+ * Moves a row only from "uploading", or from "failed": the sweep may have given
+ * up on an upload that then finished, and the finished file is the truth. A row
+ * already "ready" is never overwritten, so a duplicate finish cannot repoint it.
+ */
+export async function completeRecording(
+  opts: {
+    id: string;
+    churchId: string;
+    mediaId?: string | null;
+    url?: string | null;
+    bytes?: number;
+    durationSec?: number;
+    status: "ready" | "failed" | "local-only";
+    error?: string | null;
+  },
+  executor: Executor = db,
+): Promise<number> {
+  if (!UUID_RE.test(opts.id)) return 0;
+  const rows = await executor
     .update(meetingRecording)
     .set({
       mediaId: opts.mediaId ?? null,
@@ -1871,8 +2078,15 @@ export async function completeRecording(opts: {
       durationSec: opts.durationSec ?? 0,
       status: opts.status,
       error: opts.error ?? null,
+      lastActivityAt: new Date(),
     })
     .where(
-      and(eq(meetingRecording.id, opts.id), eq(meetingRecording.churchId, opts.churchId)),
-    );
+      and(
+        eq(meetingRecording.id, opts.id),
+        eq(meetingRecording.churchId, opts.churchId),
+        inArray(meetingRecording.status, ["uploading", "failed"]),
+      ),
+    )
+    .returning({ id: meetingRecording.id });
+  return rows.length;
 }

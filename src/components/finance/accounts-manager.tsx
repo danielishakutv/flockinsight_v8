@@ -49,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 
 export type AccountRow = {
@@ -431,6 +432,11 @@ export function AccountsManager({
                   value={form.openingBalance}
                   onChange={(e) => set({ openingBalance: e.target.value })}
                   placeholder="0.00"
+                />
+                <AmountPreview
+                  value={form.openingBalance}
+                  currency={currency}
+                  options={{ allowZero: true, allowNegative: true }}
                 />
                 <p className="text-muted-foreground text-xs">
                   What it held before you started recording here, so the balance

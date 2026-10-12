@@ -124,10 +124,11 @@ export default async function LivestreamsPage() {
                 </div>
 
                 <p className="text-muted-foreground mt-2 text-xs">
+                  {/* In the church's clock: this renders on the server. */}
                   {s.startedAt
-                    ? `Started ${s.startedAt.toLocaleString()}`
+                    ? `Started ${s.startedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: church.timezone })}`
                     : s.scheduledFor
-                      ? `Scheduled for ${s.scheduledFor.toLocaleString()}`
+                      ? `Scheduled for ${s.scheduledFor.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: church.timezone })}`
                       : "Not scheduled"}
                 </p>
 

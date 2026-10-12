@@ -240,6 +240,13 @@ export default async function CommunicationHistoryPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="secondary">{meta?.label ?? r.channel}</Badge>
                         <span className="text-sm font-semibold">{r.audience}</span>
+                        {/* Its own badge, so a send still going - or one a
+                            restart cut short - never reads as a finished
+                            send that reached only some people. */}
+                        {r.state === "sending" && <Badge variant="outline">Sending…</Badge>}
+                        {r.state === "interrupted" && (
+                          <Badge variant="destructive">Interrupted</Badge>
+                        )}
                         {r.failed > 0 && (
                           <Badge variant="destructive">
                             {r.failed} failed

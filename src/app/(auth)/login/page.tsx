@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { signIn, authClient } from "@/lib/auth-client";
 import { landingPath } from "@/app/select-church/actions";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,8 +29,21 @@ function LoginForm() {
    * An explicit ?redirect= always wins: somebody following an invite link is
    * going where the link said. Without one, where to land is the server's
    * question to answer — see landingPath().
+   *
+   * Only a path on this site counts (safeRedirectPath). A raw value let a link
+   * like /login?redirect=https://lookalike.example send someone off-site the
+   * moment they had signed in on the real domain.
    */
-  const explicitRedirect = params.get("redirect");
+  const explicitRedirect = safeRedirectPath(params.get("redirect"));
+  /*
+   * Sent here from a Partner page. Same login, same form — one account can be
+   * a Partner and run a church — but the words and the "new here" door should
+   * match what the person came for, not offer a pastor's sign-up to an agent.
+   */
+  const forPartner =
+    explicitRedirect === "/partner" ||
+    (explicitRedirect?.startsWith("/partner/") ?? false) ||
+    (explicitRedirect?.startsWith("/partner?") ?? false);
   const [loading, setLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
@@ -89,7 +103,11 @@ function LoginForm() {
     <Card className="shadow-lg">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">{t("common.welcomeBack")}</CardTitle>
-        <CardDescription>{t("common.logInToYourFlockinsight")}</CardDescription>
+        <CardDescription>
+          {forPartner
+            ? t("auth.logInForPartner")
+            : t("common.logInToYourFlockinsight")}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {unverifiedEmail && (
@@ -150,22 +168,53 @@ function LoginForm() {
           </Button>
         </form>
 
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          New here?{" "}
-          <Link
-            href="/signup"
-            className="text-primary font-semibold hover:underline"
-          >
-            Create your church account
-          </Link>
-        </p>
+        {/*
+          Two doors, because there are two kinds of new account: a church
+          (which creates the church) and a Partner (which creates no church).
+          Staff never sign up here — they are invited by their church, and the
+          invitation carries them to their own sign-up.
+        */}
+        {forPartner ? (
+          <p className="text-muted-foreground mt-6 text-center text-sm">
+            {t("auth.noPartnerAccount")}{" "}
+            <Link
+              href="/partner/join"
+              className="text-primary font-semibold hover:underline"
+            >
+              {t("auth.createPartnerAccount")}
+            </Link>
+          </p>
+        ) : (
+          <div className="text-muted-foreground mt-6 space-y-1.5 text-center text-sm">
+            <p>
+              New here?{" "}
+              <Link
+                href="/signup"
+                className="text-primary font-semibold hover:underline"
+              >
+                Create your church account
+              </Link>
+            </p>
+            <p className="text-xs">
+              {t("auth.bringingChurches")}{" "}
+              <Link
+                href="/partner/join"
+                className="text-primary font-semibold hover:underline"
+              >
+                {t("auth.becomeAPartner")}
+              </Link>
+            </p>
+          </div>
+        )}
 
-        <div className="bg-muted/50 mt-6 rounded-lg p-3 text-center text-xs">
-          <span className="text-muted-foreground">{t("common.demoLogin")}</span>
-          <span className="font-mono font-medium">
-            demo@flockinsight.app / demo1234
-          </span>
-        </div>
+        {!forPartner && (
+          <div className="bg-muted/50 mt-6 rounded-lg p-3 text-center text-xs">
+            <span className="text-muted-foreground">{t("common.demoLogin")}</span>
+            <span className="font-mono font-medium">
+              demo@flockinsight.app / demo1234
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

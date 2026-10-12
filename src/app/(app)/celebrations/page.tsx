@@ -18,7 +18,7 @@ export default async function CelebrationsPage() {
   await requireCan("members.view");
   const canSettings = await can("settings.manage");
 
-  const items = await getUpcomingCelebrations(church.id, WINDOW_DAYS);
+  const items = await getUpcomingCelebrations(church.id, WINDOW_DAYS, church.timezone);
 
   return (
     <PageContainer>

@@ -28,18 +28,14 @@ const INTL_FALLBACK: Partial<Record<LocaleCode, string>> = {
 };
 
 function tagFor(locale: LocaleCode): string {
-  const info = localeInfo(locale);
-  const preferred = info.intl;
-  try {
-    // Does this runtime actually have data for it? `supportedLocalesOf` answers
-    // without throwing, and an empty result means it would have fallen back.
-    if (Intl.DateTimeFormat.supportedLocalesOf([preferred]).length > 0) {
-      return preferred;
-    }
-  } catch {
-    /* fall through to the mapping */
-  }
-  return INTL_FALLBACK[locale] ?? "en-GB";
+  /*
+   * The mapping is applied unconditionally rather than only when this runtime
+   * lacks the data. Asking (`supportedLocalesOf`) gave a different answer in
+   * Node than in Chrome for Hausa and Yoruba, so the server and the browser
+   * picked different tags for the same reader and drew different month names:
+   * a hydration failure for exactly the churches these locales exist for.
+   */
+  return INTL_FALLBACK[locale] ?? localeInfo(locale).intl ?? "en-GB";
 }
 
 /** Cached per locale+shape: building an Intl formatter is not cheap. */
@@ -58,10 +54,29 @@ function dateFormatter(
   return f;
 }
 
+/*
+ * THE TIMEZONE IS AN ARGUMENT, never the machine's.
+ *
+ * Left out, `Intl` uses the runtime's own zone, and the production server is
+ * in Europe/Berlin while the phone reading the page is in Lagos, Nairobi or
+ * Maputo. A time rendered by a client component then said one thing in the
+ * HTML and another after hydration (React error #418, which discards the
+ * server-rendered page), and a date near midnight could be a different DAY.
+ * Pass the church's own zone (`church.timezone`, from country-profile.ts);
+ * the client hook `useFormat()` does this for you.
+ */
+function zoned(
+  options: Intl.DateTimeFormatOptions,
+  timeZone?: string,
+): Intl.DateTimeFormatOptions {
+  return timeZone ? { ...options, timeZone } : options;
+}
+
 export function formatDate(
   value: Date | string | number,
   locale: LocaleCode,
   style: "short" | "medium" | "long" = "medium",
+  timeZone?: string,
 ): string {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
@@ -71,28 +86,58 @@ export function formatDate(
       : style === "long"
         ? { weekday: "long", day: "numeric", month: "long", year: "numeric" }
         : { day: "numeric", month: "short", year: "numeric" };
-  return dateFormatter(locale, options).format(d);
+  return dateFormatter(locale, zoned(options, timeZone)).format(d);
 }
 
-export function formatTime(value: Date | string | number, locale: LocaleCode): string {
+export function formatTime(
+  value: Date | string | number,
+  locale: LocaleCode,
+  timeZone?: string,
+): string {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return dateFormatter(locale, { hour: "2-digit", minute: "2-digit" }).format(d);
+  return dateFormatter(
+    locale,
+    zoned({ hour: "2-digit", minute: "2-digit" }, timeZone),
+  ).format(d);
 }
 
 export function formatDateTime(
   value: Date | string | number,
   locale: LocaleCode,
+  timeZone?: string,
 ): string {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return dateFormatter(locale, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
+  return dateFormatter(
+    locale,
+    zoned(
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+      timeZone,
+    ),
+  ).format(d);
+}
+
+/**
+ * Any other shape, still in an explicit locale and zone, for the call sites
+ * that need a weekday alone or a month and year and would otherwise reach for
+ * `toLocaleDateString(undefined, ...)`.
+ */
+export function formatWith(
+  value: Date | string | number,
+  locale: LocaleCode,
+  options: Intl.DateTimeFormatOptions,
+  timeZone?: string,
+): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return dateFormatter(locale, zoned(options, timeZone)).format(d);
 }
 
 export function formatNumber(value: number, locale: LocaleCode): string {

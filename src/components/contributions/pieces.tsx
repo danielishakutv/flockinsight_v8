@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { formatMoney } from "@/lib/money";
 import {
   progressPct,
@@ -253,6 +254,10 @@ export function Figure({
  * grouped "5,000" people type out of habit, silently drops the value on some
  * Android keyboards, and puts spinner arrows next to a figure where a mis-click
  * changes money. `parseAmount` handles the commas instead.
+ *
+ * Pass `currency` and the field shows what it will save as it is typed
+ * ("= MT 1,500.50"), from the same parser the server runs, so a comma typed as
+ * a decimal point is never silently read as a thousands separator.
  */
 export function MoneyInput({
   id,
@@ -265,6 +270,8 @@ export function MoneyInput({
   disabled,
   className,
   "aria-describedby": describedBy,
+  currency,
+  allowZero,
 }: {
   id?: string;
   name?: string;
@@ -276,31 +283,45 @@ export function MoneyInput({
   disabled?: boolean;
   className?: string;
   "aria-describedby"?: string;
+  /** The church's currency code; turns on the "what will be saved" line. */
+  currency?: string;
+  /** For a field where 0 is a real answer (an optional target). */
+  allowZero?: boolean;
 }) {
   return (
-    <div className={cn("relative", className)}>
-      {currencyPrefix && (
-        <span
-          aria-hidden
-          className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold"
-        >
-          {currencyPrefix}
-        </span>
+    <div className={className}>
+      <div className="relative">
+        {currencyPrefix && (
+          <span
+            aria-hidden
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold"
+          >
+            {currencyPrefix}
+          </span>
+        )}
+        <Input
+          id={id}
+          name={name}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          required={required}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          className={cn("tabular-nums", currencyPrefix && "pl-9")}
+        />
+      </div>
+      {currency && (
+        <AmountPreview
+          value={value}
+          currency={currency}
+          options={allowZero ? { allowZero: true } : undefined}
+          className="mt-1"
+        />
       )}
-      <Input
-        id={id}
-        name={name}
-        type="text"
-        inputMode="decimal"
-        autoComplete="off"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required={required}
-        disabled={disabled}
-        aria-describedby={describedBy}
-        className={cn("tabular-nums", currencyPrefix && "pl-9")}
-      />
     </div>
   );
 }

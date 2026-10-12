@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { getChurchBrand } from "@/lib/pdf-brand";
 import {
   getAttendanceRows,
@@ -23,6 +24,11 @@ export async function emailAttendanceReport(
   recipient: string,
 ): Promise<EmailReportResult> {
   const { church } = await requireChurch();
+  // Called directly, a server action skips the /attendance page's guard — and
+  // this one emails the report to any address typed in.
+  if (!(await can("attendance.view"))) {
+    return { ok: false, error: "You don't have permission to view attendance." };
+  }
 
   const to = recipient.trim();
   if (!z.string().email().safeParse(to).success) {

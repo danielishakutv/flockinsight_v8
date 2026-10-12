@@ -188,10 +188,27 @@ export async function POST(
     .where(eq(church.id, m.churchId))
     .limit(1);
 
+  /*
+   * Only somebody already IN the room is shown what is in it.
+   *
+   * A guest knocking at a lobby used to receive, in this one response, the
+   * last 200 chat messages, every participant's name and account, the slides
+   * and the stage — before the host had decided anything, and whether or not
+   * they were ever let in. /sync already withheld all of it from a waiting
+   * peer; this was the one door left open. The roster, stage and slides arrive
+   * on the first poll after admission, as they do for everybody. The chat
+   * from before they knocked is sent to them, and only them, at the moment the
+   * host admits them (`sendChatHistoryTo`), so the current client needs no
+   * change to see it; /sync's `history: true` asks for the same thing.
+   *
+   * ICE stays: the client cannot build its connection without it, and the
+   * credentials are short-lived and scoped to this meeting.
+   */
+  const admitted = me.admitted;
   const [people, cursor, messages] = await Promise.all([
-    roster(m.id),
+    admitted ? roster(m.id) : Promise.resolve([]),
     signalCursor(m.id),
-    m.allowChat ? listMessages(m.id, 200) : Promise.resolve([]),
+    admitted && m.allowChat ? listMessages(m.id, 200) : Promise.resolve([]),
   ]);
 
   const entry = {
@@ -263,8 +280,8 @@ export async function POST(
     },
     ice: await resolveIceConfig(`m-${m.code}`),
     roster: people,
-    stage: parseStage(m.stage),
-    slides: m.slides ?? [],
+    stage: parseStage(admitted ? m.stage : null),
+    slides: admitted ? (m.slides ?? []) : [],
     messages: messages.map((x) => ({ ...x, createdAt: x.createdAt.toISOString() })),
     cursor,
     heartbeatMs: HEARTBEAT_MS,

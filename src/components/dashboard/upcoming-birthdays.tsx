@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Cake } from "lucide-react";
 import { db } from "@/db";
 import { member } from "@/db/schema";
+import { celebrationWindow, displayZone, windowLookup } from "@/lib/celebration-window";
+import { churchDisplayZone } from "@/lib/celebrations";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Card,
@@ -30,21 +32,27 @@ function initials(first: string, last: string | null) {
   return [first?.[0], last?.[0]].filter(Boolean).join("").toUpperCase();
 }
 
-export async function UpcomingBirthdays({ churchId }: { churchId: string }) {
-  const today = new Date();
-  // Next 14 days as MM-DD keys (handles month/year rollover naturally).
-  const window: { key: string; offset: number; label: string }[] = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    window.push({
-      key: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-      offset: i,
-      label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : `${MONTHS[d.getMonth()]} ${d.getDate()}`,
-    });
-  }
-  const keys = window.map((w) => w.key);
-  const meta = new Map(window.map((w) => [w.key, w]));
+/**
+ * The next fortnight's birthdays, where "Today" is today where the church is.
+ *
+ * Pass the church's `timezone` when the page already has it; otherwise it is
+ * read. The window used to be the server's (UTC) calendar, so a Nairobi church
+ * saw yesterday's birthdays as "Today" until 3am — and the cron, which greets
+ * by the church's own clock, disagreed with the dashboard about who was due.
+ */
+export async function UpcomingBirthdays({
+  churchId,
+  timezone,
+}: {
+  churchId: string;
+  timezone?: string;
+}) {
+  const tz = timezone !== undefined ? displayZone(timezone) : await churchDisplayZone(churchId);
+  // 14 days of MM-DD keys, with 29 Feb landing on the 28th in a common year.
+  const meta = windowLookup(celebrationWindow(tz, 14));
+  const keys = [...meta.keys()];
+  const mmdd = sql<string>`to_char(${member.dateOfBirth}, 'MM-DD')`;
+  const todayKey = keys[0];
 
   const rows = await db
     .select({
@@ -58,17 +66,32 @@ export async function UpcomingBirthdays({ churchId }: { churchId: string }) {
       and(
         eq(member.churchId, churchId),
         isNotNull(member.dateOfBirth),
-        inArray(sql`to_char(${member.dateOfBirth}, 'MM-DD')`, keys),
+        inArray(mmdd, keys),
       ),
     )
+    /*
+     * Nearest first, IN SQL, so the cap below only ever cuts from the far end
+     * of the fortnight. It used to be an unordered LIMIT 30, which in a large
+     * church could leave out today's own celebrants. MM-DD from today onwards
+     * sorts first; a window running over New Year puts January after it.
+     */
+    .orderBy(sql`(${mmdd} < ${todayKey})`, asc(mmdd))
     .limit(30);
 
   if (rows.length === 0) return null;
 
   const people = rows
     .map((r) => {
-      const key = (r.dob ?? "").slice(5); // MM-DD
-      return { ...r, ...(meta.get(key) ?? { offset: 99, label: "" }) };
+      const w = meta.get((r.dob ?? "").slice(5)); // MM-DD
+      const offset = w?.offset ?? 99;
+      const label = !w
+        ? ""
+        : offset === 0
+          ? "Today"
+          : offset === 1
+            ? "Tomorrow"
+            : `${MONTHS[w.month]} ${w.day}`;
+      return { ...r, offset, label };
     })
     .sort((a, b) => a.offset - b.offset)
     .slice(0, 6);

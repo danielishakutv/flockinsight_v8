@@ -1,23 +1,46 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Handshake } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { getMyChurches, getSession } from "@/lib/session";
 import { getPartnerRates, partnerForUser } from "@/lib/partners";
-import { PartnerJoin } from "@/components/partners/partner-join";
+import {
+  PartnerJoin,
+  PartnerSignup,
+} from "@/components/partners/partner-join";
 
-export const metadata = { title: "Become a Partner" };
+export const metadata = {
+  title: "Become a Partner",
+  // A sign-up form, not a page to rank: /partners is the one that explains.
+  robots: { index: false },
+};
 export const dynamic = "force-dynamic";
 
 /**
- * What the programme is, and the one form that joins it.
+ * What the programme is, and the form that joins it.
+ *
+ * Open to everybody. It used to call `requireUser()`, so the link every
+ * Partner page and the public /partners page points at sent a newcomer to a
+ * login screen for an account they did not have — and, once they had signed
+ * in, dropped them on their church dashboard instead of back here.
+ *
+ * Who is looking decides the form:
+ *
+ * - signed out: create a Partner account (no church), or log in with the
+ *   account you already have and come back here;
+ * - signed in: join with THIS account. A church owner, a member of staff or
+ *   a platform operator becomes a Partner on the same login, with their
+ *   church access untouched;
+ * - already a Partner: the dashboard.
  *
  * The rates are read from the live settings rather than written into the copy,
  * so a superadmin changing the ladder changes what this page promises. A page
  * that advertises 40% while the system pays 35% is worse than no page.
  */
 export default async function PartnerJoinPage() {
-  const { user } = await requireUser();
-  if (await partnerForUser(user.id)) redirect("/partner");
+  const session = await getSession();
+  const user = session?.user ?? null;
+  if (user && (await partnerForUser(user.id))) redirect("/partner");
+  const churches = user ? await getMyChurches() : [];
 
   const rates = await getPartnerRates();
   const base = rates.tiers[0];
@@ -92,7 +115,15 @@ export default async function PartnerJoinPage() {
         . Worth a read before you apply.
       </p>
 
-      <PartnerJoin defaultName={user.name ?? ""} />
+      {user ? (
+        <PartnerJoin
+          defaultName={user.name ?? ""}
+          email={user.email ?? ""}
+          churchNames={churches.map((c) => c.name)}
+        />
+      ) : (
+        <PartnerSignup />
+      )}
     </div>
   );
 }

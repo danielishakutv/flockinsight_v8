@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { reminderSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
@@ -41,7 +42,15 @@ export async function saveReminders(input: ReminderInput): Promise<ActionResult>
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
-  const d = parsed.data;
+  /*
+   * SMS only where it can be delivered (lib/country-profile.ts). The form no
+   * longer offers it elsewhere; this stops a stale or hand-posted "on"
+   * being saved, which had the cron try, be refused, and reach nobody.
+   */
+  const d = {
+    ...parsed.data,
+    sms: parsed.data.sms && smsAvailableForCountry(church.country),
+  };
 
   await db
     .insert(reminderSetting)

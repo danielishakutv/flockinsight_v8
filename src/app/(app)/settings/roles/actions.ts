@@ -6,8 +6,13 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { role, staff } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { ALL_PERMISSIONS, can } from "@/lib/permissions";
-import { betterAuthRoleFor } from "@/lib/staff-access";
+import { ALL_PERMISSIONS, can, getAccess } from "@/lib/permissions";
+import {
+  TEAM_MANAGE_PERMISSION,
+  betterAuthRoleFor,
+  orgRoleAfterClearingRole,
+} from "@/lib/staff-access";
+import { deleteChurchRole, syncRoleHolders } from "@/lib/role-sync";
 import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -31,6 +36,35 @@ async function guard() {
     return { ctx, error: "You don't have permission to manage roles." as const };
   }
   return { ctx, error: null };
+}
+
+const SELF_LOCKOUT =
+  "You can't remove your own team management access — ask the church owner to change your role.";
+
+/**
+ * The church role the caller themselves is on, or null — and whether they are
+ * the owner (or a superadmin acting as one), who can never lock themselves out.
+ *
+ * Changing a role now changes its holders' access for real (see
+ * lib/role-sync.ts), so editing or deleting your OWN role can take team
+ * management away from you — recoverable only by the owner. Refused, like the
+ * same move in assignRole.
+ */
+async function callerSeat(churchId: string, userId: string) {
+  const access = await getAccess();
+  if (access.isOwner) return { isOwner: true, roleId: null as string | null };
+  const [me] = await db
+    .select({ roleId: staff.roleId })
+    .from(staff)
+    .where(
+      and(
+        eq(staff.organizationId, churchId),
+        eq(staff.userId, userId),
+        eq(staff.temp, false),
+      ),
+    )
+    .limit(1);
+  return { isOwner: false, roleId: me?.roleId ?? null };
 }
 
 export async function createRole(input: {
@@ -103,17 +137,43 @@ export async function updateRole(input: {
   if (existing.isSystem)
     return { ok: false, error: "The Owner role can't be changed." };
 
+  const me = await callerSeat(ctx.church.id, ctx.user.id);
+  if (
+    !me.isOwner &&
+    me.roleId === input.id &&
+    !parsed.data.permissions.includes(TEAM_MANAGE_PERMISSION)
+  ) {
+    return { ok: false, error: SELF_LOCKOUT };
+  }
+
+  /*
+   * The role and its holders' org role in one transaction: removing "Manage
+   * team" must also take away the org-plugin "admin" it implied, or those
+   * people keep inviting and removing staff by calling the plugin directly.
+   * Adding it must grant it, or the plugin refuses the invites the Team page
+   * now offers them.
+   */
   try {
-    await db
-      .update(role)
-      .set({
-        name: parsed.data.name,
-        description: parsed.data.description,
-        permissions: parsed.data.permissions,
-      })
-      .where(and(eq(role.id, input.id), eq(role.churchId, ctx.church.id)));
-  } catch {
-    return { ok: false, error: "A role with that name already exists." };
+    await db.transaction(async (tx) => {
+      await tx
+        .update(role)
+        .set({
+          name: parsed.data.name,
+          description: parsed.data.description,
+          permissions: parsed.data.permissions,
+        })
+        .where(and(eq(role.id, input.id), eq(role.churchId, ctx.church.id)));
+      await syncRoleHolders(tx, ctx.church.id, input.id, parsed.data.permissions);
+    });
+  } catch (e) {
+    // Drizzle wraps the driver error on some paths, so look one level down.
+    const code =
+      (e as { code?: string })?.code ??
+      (e as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23505")
+      return { ok: false, error: "A role with that name already exists." };
+    console.error("[roles] updateRole failed", e);
+    return { ok: false, error: "Could not save the role. Please try again." };
   }
 
   // Which permissions moved, in both directions. This is the entry that
@@ -167,8 +227,30 @@ export async function deleteRole(id: string): Promise<ActionResult> {
   if (existing.isSystem)
     return { ok: false, error: "The Owner role can't be deleted." };
 
-  // Staff keep their membership; their roleId is cleared (FK on delete).
-  await db.delete(role).where(and(eq(role.id, id), eq(role.churchId, ctx.church.id)));
+  const me = await callerSeat(ctx.church.id, ctx.user.id);
+  if (!me.isOwner && me.roleId === id) return { ok: false, error: SELF_LOCKOUT };
+
+  /*
+   * Staff keep their membership and drop to the basics — which is what the
+   * audit line below says, and now what happens.
+   *
+   * Leaving it to the FK (on delete set null) cleared role_id but kept
+   * staff.role, which is "admin" for anyone whose role had team.manage — and
+   * admin-with-no-role is the legacy full-access fallback. Deleting a
+   * "Secretary" role to take access away gave every secretary everything.
+   * Detach first, in the same transaction, while the rows can still be found —
+   * pending invitations for the role included, and with the role row locked
+   * so an assignment landing mid-delete cannot slip past (lib/role-sync.ts).
+   */
+  let deleted: boolean;
+  try {
+    deleted = await deleteChurchRole(ctx.church.id, id);
+  } catch (e) {
+    console.error("[roles] deleteRole failed", e);
+    return { ok: false, error: "Could not delete the role. Please try again." };
+  }
+  // Somebody else deleted it between the read above and the lock.
+  if (!deleted) return { ok: false, error: "Role not found." };
 
   await audit({
     churchId: ctx.church.id,
@@ -230,33 +312,46 @@ export async function assignRole(
 
   // Now that this also writes staff.role, someone could demote themselves out
   // of team management entirely — recoverable only by the owner. Refuse it.
-  if (
-    permissions !== null &&
-    member.userId === ctx.user.id &&
-    betterAuthRoleFor(permissions) !== "admin"
-  ) {
-    return {
-      ok: false,
-      error:
-        "You can't remove your own team management access — ask the church owner to change your role.",
-    };
+  // Clearing your own role does the same (it drops you to the basics), unless
+  // you never had one: then it changes nothing.
+  if (member.userId === ctx.user.id) {
+    const losesTeam =
+      permissions !== null
+        ? betterAuthRoleFor(permissions) !== "admin"
+        : member.roleId !== null;
+    if (losesTeam) return { ok: false, error: SELF_LOCKOUT };
   }
 
   // The church role is the source of truth for both systems: a role granting
   // "Manage team" must also carry the Better Auth org role, or the Team page
   // lets them in and Better Auth then rejects their invite.
   //
-  // Clearing a role deliberately leaves staff.role alone — writing "member"
-  // would silently demote a legacy admin who has no church role and depends on
-  // the full-access fallback in lib/permissions.ts.
-  await db
-    .update(staff)
-    .set(
-      permissions === null
-        ? { roleId: null }
-        : { roleId, role: betterAuthRoleFor(permissions) },
-    )
-    .where(and(eq(staff.id, staffId), eq(staff.organizationId, ctx.church.id)));
+  // Clearing a role drops a former role-holder to "member" — their "admin"
+  // came from that role, and keeping it would hand them the legacy
+  // full-access fallback. Somebody who never had a role is a genuine legacy
+  // admin and keeps what they have (orgRoleAfterClearingRole).
+  try {
+    await db
+      .update(staff)
+      .set(
+        permissions === null
+          ? {
+              roleId: null,
+              role: orgRoleAfterClearingRole(member.roleId, member.role),
+            }
+          : { roleId, role: betterAuthRoleFor(permissions) },
+      )
+      .where(and(eq(staff.id, staffId), eq(staff.organizationId, ctx.church.id)));
+  } catch (e) {
+    // The role was deleted after it was read above: deleteRole holds it locked
+    // while it detaches, so the foreign key refuses this rather than letting
+    // the assignment land on a role that is about to vanish.
+    const code =
+      (e as { code?: string })?.code ??
+      (e as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23503") return { ok: false, error: "Role not found." };
+    throw e;
+  }
 
   await audit({
     churchId: ctx.church.id,
@@ -313,10 +408,16 @@ export async function grantNewPermissions(id: string): Promise<ActionResult> {
   );
   if (missing.length === 0) return { ok: true };
 
-  await db
-    .update(role)
-    .set({ permissions: [...existing.permissions, ...missing] })
-    .where(and(eq(role.id, id), eq(role.churchId, ctx.church.id)));
+  // Widening may add "Manage team", which the holders' org role must carry
+  // too or the plugin refuses the invites the Team page now offers them.
+  const merged = [...existing.permissions, ...missing];
+  await db.transaction(async (tx) => {
+    await tx
+      .update(role)
+      .set({ permissions: merged })
+      .where(and(eq(role.id, id), eq(role.churchId, ctx.church.id)));
+    await syncRoleHolders(tx, ctx.church.id, id, merged);
+  });
 
   await audit({
     churchId: ctx.church.id,

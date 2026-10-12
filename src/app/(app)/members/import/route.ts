@@ -1,28 +1,27 @@
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { member } from "@/db/schema";
+import { firstTimerRun, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { parseCsv } from "@/lib/csv";
-import { normalizeBirthday } from "@/lib/birthday";
+import { headerToField } from "@/lib/members-data";
+import { churchDial } from "@/lib/member-signup";
+import { nationalNumber } from "@/lib/phone-intl";
 import {
-  headerToField,
-  normalizeDate,
-  normalizeGender,
-  normalizeStatus,
-  type MemberFieldKey,
-} from "@/lib/members-data";
+  addPhoneOwner,
+  guardianKey,
+  MAX_IMPORT_ERRORS,
+  personKey,
+  planMemberImport,
+  type PhoneOwners,
+} from "@/lib/member-import";
 
 const MAX_ROWS = 5000;
 const CHUNK = 500;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function clip(v: string | undefined, max: number): string | null {
-  const s = (v ?? "").trim();
-  return s ? s.slice(0, max) : null;
-}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -61,10 +60,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Map each column index to a member field via the header row.
-  const headers = rows[0];
-  const colMap: (MemberFieldKey | null)[] = headers.map(headerToField);
-  if (!colMap.includes("firstName")) {
+  if (!rows[0].map(headerToField).includes("firstName")) {
     return json(
       {
         ok: false,
@@ -75,75 +71,181 @@ export async function POST(request: Request) {
     );
   }
 
-  const dataRows = rows.slice(1);
-  const truncated = dataRows.length > MAX_ROWS;
-  const limited = truncated ? dataRows.slice(0, MAX_ROWS) : dataRows;
+  const truncated = rows.length - 1 > MAX_ROWS;
+  const dial = await churchDial(church.id);
 
-  type NewMember = typeof member.$inferInsert;
-  const inserts: NewMember[] = [];
-  const errors: string[] = [];
-  let skipped = 0;
+  /*
+   * Who is already on the register, in one read: every email, and the national
+   * part of every phone with the first names of whoever has it. A re-imported
+   * file (or a retry after a lost response) cannot double the register, and a
+   * family sharing one phone is not mistaken for one person (see
+   * planMemberImport).
+   */
+  const onFile = await db
+    .select({
+      id: member.id,
+      email: member.email,
+      phone: member.phone,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      dateOfBirth: member.dateOfBirth,
+      guardianId: member.guardianId,
+    })
+    .from(member)
+    .where(eq(member.churchId, church.id));
+  const existingEmails = new Set<string>();
+  const existingPhones: PhoneOwners = new Map();
+  // And who everybody is, for the rows that carry no contact (see personKey).
+  const nameById = new Map(
+    onFile.map((r) => [r.id, [r.firstName, r.lastName].filter(Boolean).join(" ")]),
+  );
+  const existingPeople = new Set<string>();
+  for (const r of onFile) {
+    if (r.email) existingEmails.add(r.email.trim().toLowerCase());
+    const n = r.phone ? nationalNumber(r.phone, dial) : null;
+    if (n) addPhoneOwner(existingPhones, n, r.firstName);
+    const byDob = personKey(r.firstName, r.lastName, r.dateOfBirth, null);
+    if (byDob) existingPeople.add(byDob);
+    const guardian = r.guardianId ? nameById.get(r.guardianId) : undefined;
+    const byGuardian = guardian ? personKey(r.firstName, r.lastName, null, guardian) : null;
+    if (byGuardian) existingPeople.add(byGuardian);
+  }
 
-  limited.forEach((cells, idx) => {
-    const rowNo = idx + 2; // +1 header, +1 to 1-base
-    const get = (key: MemberFieldKey): string => {
-      const col = colMap.indexOf(key);
-      return col >= 0 ? (cells[col] ?? "") : "";
-    };
-
-    const firstName = get("firstName").trim();
-    if (!firstName) {
-      skipped++;
-      if (errors.length < 25) errors.push(`Row ${rowNo}: missing first name`);
-      return;
-    }
-
-    const emailRaw = get("email").trim();
-    const email = emailRaw && EMAIL_RE.test(emailRaw) ? emailRaw : null;
-
-    inserts.push({
-      churchId: church.id,
-      createdBy: user.id,
-      firstName: firstName.slice(0, 80),
-      middleName: clip(get("middleName"), 80),
-      lastName: clip(get("lastName"), 80),
-      gender: normalizeGender(get("gender")),
-      status: normalizeStatus(get("status")),
-      phone: clip(get("phone"), 40),
-      email,
-      dateOfBirth: normalizeBirthday(get("dateOfBirth")),
-      joinedAt: normalizeDate(get("joinedAt")),
-      house: clip(get("house"), 120),
-      street: clip(get("street"), 160),
-      city: clip(get("city"), 120),
-      lga: clip(get("lga"), 120),
-      state: clip(get("state"), 120),
-      country: clip(get("country"), 120),
-      notes: clip(get("notes"), 1000),
-    });
+  const plan = planMemberImport(rows, {
+    dial,
+    existingEmails,
+    existingPhones,
+    existingPeople,
+    maxRows: MAX_ROWS,
   });
+  const errors = plan.errors;
+  const note = (msg: string) => {
+    if (errors.length < MAX_IMPORT_ERRORS) errors.push(msg);
+  };
 
   // Respect the plan member limit — import only up to the remaining headroom.
+  // Counted AFTER de-duplication, so people already on file use none of it.
+  let planned = plan.rows;
   const limit = await memberLimitStatus(church.id);
   if (limit.limit !== null) {
     const remaining = Math.max(0, limit.limit - limit.used);
-    if (inserts.length > remaining) {
+    if (planned.length > remaining) {
       errors.push(
-        `Plan limit reached — only ${remaining} of ${inserts.length} new members were added. Upgrade your plan to add more.`,
+        `Plan limit reached — only ${remaining} of ${planned.length} new members were added. Upgrade your plan to add more.`,
       );
-      inserts.length = remaining;
+      planned = planned.slice(0, remaining);
     }
   }
 
+  /*
+   * Ids are chosen here rather than read back from RETURNING, so a child row
+   * can be tied to its guardian without relying on the order Postgres hands
+   * rows back in.
+   */
+  const inserts = planned.map((p) => ({
+    id: randomUUID(),
+    churchId: church.id,
+    createdBy: user.id,
+    ...p.values,
+  }));
+  const children = planned
+    .map((p, i) => ({ p, id: inserts[i].id }))
+    .filter((x) => x.p.values.isMinor && x.p.guardianName);
+
   let imported = 0;
+  let linked = 0;
+  let visitorsHeld = 0;
   try {
-    // One transaction so an import is all-or-nothing (safe to retry).
+    // One transaction so an import is all-or-nothing.
     await db.transaction(async (tx) => {
       for (let i = 0; i < inserts.length; i += CHUNK) {
         const batch = inserts.slice(i, i + CHUNK);
         if (batch.length) {
           await tx.insert(member).values(batch);
           imported += batch.length;
+        }
+      }
+
+      /*
+       * Imported visitors are history, not this week's first-timers.
+       *
+       * The first-timer sequence picks up every visitor created in the last
+       * few weeks, and every imported row was created today — so a church
+       * moving 600 visitor cards across from another system would have sent
+       * all 600 a "thank you for visiting" text, charged to its wallet, and a
+       * "become a member" invite a fortnight later. A row on the "all" channel
+       * is how the sequence records a stage as already done (see
+       * runFirstTimers), so each imported visitor gets one per stage and is
+       * never messaged. They stay visitors, and stay in Follow-up.
+       */
+      const visitors = inserts.filter(
+        (r) => r.status === "visitor" || r.status === "new_convert",
+      );
+      for (let i = 0; i < visitors.length; i += CHUNK) {
+        const batch = visitors.slice(i, i + CHUNK);
+        await tx
+          .insert(firstTimerRun)
+          .values(
+            batch.flatMap((v) =>
+              (["welcome", "invite"] as const).map((stage) => ({
+                churchId: church.id,
+                memberId: v.id,
+                stage,
+                channel: "all",
+                // "skipped", not "sent": nothing was sent, and a count of
+                // first-timer messages must not include every imported visitor.
+                // The sweep only asks whether an "all" row exists.
+                outcome: "skipped",
+                detail: "Imported from a spreadsheet, so the automatic messages were not sent.",
+              })),
+            ),
+          )
+          .onConflictDoNothing();
+      }
+      visitorsHeld = visitors.length;
+
+      /*
+       * Guardians, by name, within this church only — the Guardian column
+       * holds a name, and the export writes "First Last". Linked only when
+       * exactly one member answers to it: a guess between two people of the
+       * same name would attach a child to a stranger.
+       */
+      if (children.length > 0) {
+        const everyone = await tx
+          .select({
+            id: member.id,
+            firstName: member.firstName,
+            lastName: member.lastName,
+          })
+          .from(member)
+          .where(eq(member.churchId, church.id));
+        const byName = new Map<string, string[]>();
+        for (const m of everyone) {
+          const k = guardianKey([m.firstName, m.lastName].filter(Boolean).join(" "));
+          byName.set(k, [...(byName.get(k) ?? []), m.id]);
+        }
+        const toLink = new Map<string, string[]>();
+        for (const c of children) {
+          const ids = (byName.get(guardianKey(c.p.guardianName!)) ?? []).filter(
+            (id) => id !== c.id,
+          );
+          if (ids.length === 1) {
+            toLink.set(ids[0], [...(toLink.get(ids[0]) ?? []), c.id]);
+          } else {
+            note(
+              `Row ${c.p.rowNo}: guardian "${c.p.guardianName}" ${
+                ids.length === 0 ? "was not found" : "matches more than one member"
+              } — ${c.p.values.firstName} was added without a guardian link`,
+            );
+          }
+        }
+        for (const [guardianId, childIds] of toLink) {
+          const done = await tx
+            .update(member)
+            .set({ guardianId })
+            .where(and(eq(member.churchId, church.id), inArray(member.id, childIds)))
+            .returning({ id: member.id });
+          linked += done.length;
         }
       }
     });
@@ -159,9 +261,21 @@ export async function POST(request: Request) {
     revalidatePath("/members");
     revalidatePath("/dashboard");
   }
+  if (visitorsHeld > 0) {
+    errors.push(
+      `${visitorsHeld} visitor${visitorsHeld === 1 ? " was" : "s were"} imported without the automatic first-timer messages. Register new first-timers on the First-timers page.`,
+    );
+  }
   if (truncated) {
     errors.push(`Only the first ${MAX_ROWS} rows were imported.`);
   }
 
-  return json({ ok: true, imported, skipped, errors });
+  return json({
+    ok: true,
+    imported,
+    skipped: plan.skipped,
+    duplicates: plan.duplicates,
+    linked,
+    errors,
+  });
 }

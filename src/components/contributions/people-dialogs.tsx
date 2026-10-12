@@ -203,6 +203,8 @@ function PersonForm({
               value={expected}
               onChange={setExpected}
               currencyPrefix={currencySymbol(currency)}
+              currency={currency}
+              allowZero
             />
           </Field>
 

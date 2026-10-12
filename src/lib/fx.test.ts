@@ -103,6 +103,34 @@ describe("internationalPrice", () => {
     expect(p.surchargeNgn).toBeLessThan(p.chargeNgn);
   });
 
+  /*
+   * The ₦6,900 nobody was told about: the charge used to be rounded to two
+   * significant figures, so ₦100,000 + ₦3,100 was charged as ₦110,000 while
+   * the page said the total "includes ₦3,100".
+   */
+  it("charges exactly the base plus the disclosed fee on an annual total", () => {
+    expect(internationalPrice(100_000, "KES", rates).chargeNgn).toBe(103_100);
+    expect(internationalPrice(250_000, "KES", rates).chargeNgn).toBe(253_100);
+    expect(internationalPrice(10_000, "MZN", rates).chargeNgn).toBe(13_100);
+  });
+
+  it("discloses the whole uplift, and the same fee on every plan", () => {
+    const fees = new Set<number>();
+    for (const base of [5000, 8_500, 10_000, 25_000, 50_000, 100_000, 250_000]) {
+      const p = internationalPrice(base, "MZN", rates);
+      expect(p.chargeNgn - base).toBe(p.surchargeNgn);
+      fees.add(p.surchargeNgn);
+    }
+    expect([...fees]).toEqual([3100]);
+  });
+
+  it("never rounds the fee below what $2 costs", () => {
+    const odd: Rates = { ...rates, perNgn: { ...rates.perNgn, USD: 1 / 1555.5 } };
+    const p = internationalPrice(10_000, "MZN", odd);
+    expect(p.surchargeNgn).toBeGreaterThanOrEqual(INTERNATIONAL_SURCHARGE_USD * 1555.5);
+    expect(p.surchargeNgn % 100).toBe(0);
+  });
+
   it("scales with the plan rather than flattening every price", () => {
     const small = internationalPrice(5000, "KES", rates);
     const large = internationalPrice(15_000, "KES", rates);

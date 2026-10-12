@@ -6,8 +6,8 @@ import {
   desc,
   eq,
   gt,
-  gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
   ne,
@@ -26,11 +26,18 @@ import {
 } from "@/db/schema";
 import {
   DEFAULT_PARTNER_RATES,
+  canonicalPhone,
+  commissionBase,
+  dropRepeatedOneOffs,
   earningNote,
   earningsForPayment,
   generatePartnerCode,
   normalisePartnerCode,
   normaliseRates,
+  PAYOUT_TRANSITIONS,
+  payoutTransitionAllowed,
+  payoutTransitionError,
+  takeForPayout,
   tierFor,
   walletTotals,
   type PartnerRates,
@@ -132,17 +139,35 @@ export async function createPartner(opts: {
     const code = generatePartnerCode();
     const taken = await partnerByCode(code);
     if (taken) continue;
-    const [row] = await db
-      .insert(partner)
-      .values({
-        userId: opts.userId,
-        code,
-        displayName: opts.displayName.trim().slice(0, 120) || "Partner",
-        phone: opts.phone?.trim() || null,
-        status: "pending",
-      })
-      .returning({ id: partner.id, code: partner.code });
-    return { ok: true, id: row.id, code: row.code };
+    try {
+      const [row] = await db
+        .insert(partner)
+        .values({
+          userId: opts.userId,
+          code,
+          displayName: opts.displayName.trim().slice(0, 120) || "Partner",
+          // The gateway's spelling, the same as savePartnerPhone stores, so
+          // the number a code is sent to and the number on file always match.
+          phone: opts.phone ? canonicalPhone(opts.phone) || null : null,
+          status: "pending",
+        })
+        .returning({ id: partner.id, code: partner.code });
+      return { ok: true, id: row.id, code: row.code };
+    } catch (e) {
+      /*
+       * Two unique constraints can refuse this, and they mean opposite things.
+       * `partner_userId_unique` is a second tap of "Join" racing the first
+       * past the check above — the person IS a Partner now, so say so. A code
+       * that somebody else took between the check and the insert is a reason
+       * to draw another.
+       */
+      const code23505 =
+        (e as { code?: string })?.code ?? (e as { cause?: { code?: string } })?.cause?.code;
+      if (code23505 !== "23505") throw e;
+      if (await partnerForUser(opts.userId)) {
+        return { ok: false, error: "This account is already a Partner." };
+      }
+    }
   }
   return { ok: false, error: "We couldn't allocate a referral code. Try again." };
 }
@@ -225,6 +250,7 @@ export async function awardPartnerCommission(
         id: payment.id,
         churchId: payment.churchId,
         amount: payment.amount,
+        surchargeAmount: payment.surchargeAmount,
         currency: payment.currency,
         status: payment.status,
         periodMonths: payment.periodMonths,
@@ -236,11 +262,15 @@ export async function awardPartnerCommission(
       .limit(1);
     if (!pay) return { awarded: false, reason: "no such payment" };
     if (pay.status !== "success") return { awarded: false, reason: "not successful" };
+    // Its church was deleted after paying: the referral went with it, so
+    // there is nobody to credit. Named, so the reconcile sweep can say why.
+    const churchId = pay.churchId;
+    if (!churchId) return { awarded: false, reason: "church deleted" };
 
     const [ref] = await db
       .select({ partnerId: partnerReferral.partnerId })
       .from(partnerReferral)
-      .where(eq(partnerReferral.churchId, pay.churchId))
+      .where(eq(partnerReferral.churchId, churchId))
       .limit(1);
     if (!ref) return { awarded: false, reason: "not a referred church" };
 
@@ -258,119 +288,251 @@ export async function awardPartnerCommission(
       return { awarded: false, reason: "partner is suspended" };
     }
 
-    /*
-     * How many months of subscription this church has already paid for, so
-     * this payment can be priced across the months it covers.
-     *
-     * Strictly EARLIER payments only, and "earlier" has to be a total order
-     * because the consequence of a tie is money. Two payments paid in the same
-     * microsecond is rare; two paid at a timestamp somebody TYPED — a manual
-     * bank transfer recorded with a date rather than a time, which this
-     * platform does constantly — is not rare at all, because every one of
-     * those lands at midday exactly.
-     *
-     * With a plain `<=` both rows count each other and both come out as the
-     * second payment, so the first commission is paid to nobody. With a plain
-     * `<` neither counts the other and both claim the first commission, and
-     * the Partner is paid it twice.
-     *
-     * So it falls through to `created_at` — the order the rows were WRITTEN,
-     * which is the order the money actually arrived in — and then to the id,
-     * which cannot tie. The id alone was not enough: it is a random uuid, so
-     * the row written second had an even chance of sorting first, and which of
-     * two same-day payments earned the first commission came down to a coin
-     * toss. `partners-annual.db-check.ts` is what caught that.
-     */
-    const months = Math.max(1, Number(pay.periodMonths) || 1);
-    const [counted] = await db
-      .select({ m: sql<number>`coalesce(sum(${payment.periodMonths}), 0)::int` })
-      .from(payment)
-      .where(
-        and(
-          eq(payment.churchId, pay.churchId),
-          eq(payment.status, "success"),
-          // Only money. A zero-naira activation is not a month the Partner
-          // earns on, and counting it would consume the first commission.
-          gt(payment.amount, 0),
-          pay.paidAt
-            ? or(
-                lt(payment.paidAt, pay.paidAt),
-                and(
-                  eq(payment.paidAt, pay.paidAt),
-                  or(
-                    lt(payment.createdAt, pay.createdAt),
-                    and(
-                      eq(payment.createdAt, pay.createdAt),
-                      lt(payment.id, pay.id),
-                    ),
-                  ),
-                ),
-              )
-            : ne(payment.id, pay.id),
-        ),
-      );
-    const firstMonth = Math.max(1, Number(counted?.m ?? 0) + 1);
-
+    // Read before the lock: neither depends on this church's ledger, and the
+    // tier query is the slowest thing here.
     const rates = await getPartnerRates();
     const tier = tierFor(rates, await livePayingChurches(p.id, rates), p.tierOverride);
-    const lines = earningsForPayment({
-      rates,
-      tier,
-      amount: Number(pay.amount),
-      firstMonth,
-      months,
-    });
-    if (lines.length === 0) {
-      return { awarded: false, reason: "nothing earned at this point" };
-    }
 
-    /*
-     * Available straight away, because the holding-back is already expressed
-     * by WHICH MONTH earns what: the second commission is not released on a
-     * timer, it is simply not earned until the church has paid for its second
-     * month — which a church paying for a year has already done, today, which
-     * is the whole point. A "pending" status is left in the schema for a
-     * future rule that needs it (a refund window, say) rather than used to
-     * fake one now.
-     */
-    const inserted = await db
-      .insert(partnerEarning)
-      .values(
-        lines.map((line) => ({
-          partnerId: p.id,
-          churchId: pay.churchId,
-          paymentId: pay.id,
-          kind: line.kind,
-          amount: line.amount,
-          currency: pay.currency,
-          rateBps: line.rateBps,
-          status: "available" as const,
-          // Why this row is the size it is, for a payment covering several
-          // months. Null for an ordinary monthly one, where there is nothing
-          // to explain.
-          note: earningNote(line, months),
-        })),
-      )
+    return await db.transaction(async (tx) => {
       /*
-       * One row per kind, which is what keeps the unique index carrying
-       * idempotence: a replayed callback inserting the same three kinds
-       * conflicts on all three and awards nothing. It is also why the months
-       * of one kind are summed into a single row upstream rather than
-       * inserted one per month.
+       * One church's payments are priced one at a time.
+       *
+       * Which month a payment pays for depends on the church's OTHER payments
+       * and on what they have already earned, so two awards for the same
+       * church running together — a callback and a webhook for one payment, or
+       * a card payment landing while a transfer is being recorded — could each
+       * read the ledger before the other wrote to it and both come out as month
+       * one. The referral row is the church's one row in this module, so
+       * locking it queues them. Awards for different churches never wait.
        */
-      .onConflictDoNothing({
-        target: [partnerEarning.paymentId, partnerEarning.kind],
-      })
-      .returning({ id: partnerEarning.id });
+      await tx
+        .select({ id: partnerReferral.id })
+        .from(partnerReferral)
+        .where(eq(partnerReferral.churchId, churchId))
+        .for("update");
 
-    return {
-      awarded: inserted.length > 0,
-      reason: inserted.length ? undefined : "already awarded",
-    };
+      /*
+       * Still a success, read again under a share lock. A void takes this row
+       * FOR UPDATE, so it either committed before this read (and there is
+       * nothing to award) or waits until these earnings are written — and the
+       * reversal that follows the void then finds them. Without it, an award
+       * that read "success" just before a void could write its earnings just
+       * after the reversal had looked, and the commission on money that never
+       * arrived would stand.
+       */
+      const [still] = await tx
+        .select({ status: payment.status })
+        .from(payment)
+        .where(eq(payment.id, pay.id))
+        .for("share");
+      if (still?.status !== "success") {
+        return { awarded: false, reason: "not successful" };
+      }
+
+      /*
+       * A payment is priced ONCE. If it has any earning at all, this is a
+       * replay, and it stops here rather than pricing the payment again.
+       *
+       * The unique (payment, kind) index alone is not enough for that: a replay
+       * that runs after a LATER payment has been awarded counts that later one
+       * too (see below), arrives at a different month, and comes out as a kind
+       * this payment does not have yet — a "second" on top of its "first". The
+       * index lets that through, because it is a different kind.
+       */
+      const [already] = await tx
+        .select({ id: partnerEarning.id })
+        .from(partnerEarning)
+        .where(eq(partnerEarning.paymentId, pay.id))
+        .limit(1);
+      if (already) return { awarded: false, reason: "already awarded" };
+
+      /*
+       * How many months of subscription this church had already paid for when
+       * this payment came in, so it can be priced across the months it covers.
+       *
+       * "Already" is judged by two orders, and needs both.
+       *
+       * The order the rows were WRITTEN (created_at, then id): what was on the
+       * ledger before this payment arrived. Without it, a bank transfer recorded
+       * in November with the date it was paid — 1 September — counted nothing
+       * before it, was priced as month one, and earned the first commission a
+       * second time on top of the October and November card payments that had
+       * already earned the first and the second.
+       *
+       * The order they were PAID (paid_at, then created_at, then id): what was
+       * settled before this one. Without it, a card checkout started on day 1
+       * and completed on day 6 would count nothing written before day 1 — and
+       * miss the transfer recorded on day 5.
+       *
+       * When the two orders AGREE, that settles it. When they disagree (a
+       * backdated row, or a slow checkout), the tie-break is the order the
+       * payments were PRICED: the other payment counts as earlier only if it
+       * has already been priced, i.e. already has earnings. Pricing for one
+       * church is serialised by the lock above, so that is a strict order too,
+       * and the rule is antisymmetric — of any two payments, exactly one counts
+       * the other. A plain "either order says earlier" was not: a card checkout
+       * written day 1 and paid day 6 and a transfer written and paid on day 5,
+       * both successful before either was awarded (two awards back to back, or
+       * a sweep retrying one that errored), each counted the other, both were
+       * priced as month two, and the first commission went to nobody.
+       * `partners-annual.db-check.ts` covers each of these.
+       *
+       * Loaded here, under the lock, as a plain list rather than a correlated
+       * subquery: the outer query has no join, so a raw `sql` reference to
+       * payment.id inside one would lose its qualifier (the AGENTS.md trap).
+       */
+      const pricedRows = await tx
+        .selectDistinct({ paymentId: partnerEarning.paymentId })
+        .from(partnerEarning)
+        .where(
+          and(
+            eq(partnerEarning.churchId, churchId),
+            isNotNull(partnerEarning.paymentId),
+            ne(partnerEarning.paymentId, pay.id),
+          ),
+        );
+      const pricedIds = pricedRows
+        .map((r) => r.paymentId)
+        .filter((id): id is string => !!id);
+
+      const writtenEarlier = or(
+        lt(payment.createdAt, pay.createdAt),
+        and(eq(payment.createdAt, pay.createdAt), lt(payment.id, pay.id)),
+      );
+      const paidEarlier = pay.paidAt
+        ? or(
+            lt(payment.paidAt, pay.paidAt),
+            and(
+              eq(payment.paidAt, pay.paidAt),
+              or(
+                lt(payment.createdAt, pay.createdAt),
+                and(eq(payment.createdAt, pay.createdAt), lt(payment.id, pay.id)),
+              ),
+            ),
+          )
+        : undefined;
+      const countsAsEarlier = paidEarlier
+        ? or(
+            // Both orders agree. A row with no paid_at has no second opinion,
+            // so its written order stands on its own, as it always did.
+            and(writtenEarlier, or(paidEarlier, isNull(payment.paidAt))),
+            // They disagree: whichever was priced first is the earlier one.
+            pricedIds.length
+              ? and(or(writtenEarlier, paidEarlier), inArray(payment.id, pricedIds))
+              : undefined,
+          )
+        : writtenEarlier;
+
+      const months = Math.max(1, Number(pay.periodMonths) || 1);
+      const [counted] = await tx
+        .select({ m: sql<number>`coalesce(sum(${payment.periodMonths}), 0)::int` })
+        .from(payment)
+        .where(
+          and(
+            eq(payment.churchId, churchId),
+            eq(payment.status, "success"),
+            // Only money. A zero-naira activation is not a month the Partner
+            // earns on, and counting it would consume the first commission.
+            gt(payment.amount, 0),
+            ne(payment.id, pay.id),
+            countsAsEarlier,
+          ),
+        );
+      const firstMonth = Math.max(1, Number(counted?.m ?? 0) + 1);
+
+      const priced = earningsForPayment({
+        rates,
+        tier,
+        // The plan's price, not the international card surcharge on top of it.
+        amount: commissionBase(Number(pay.amount), Number(pay.surchargeAmount)),
+        firstMonth,
+        months,
+      });
+
+      /*
+       * And the last word on the two big commissions: a church that has
+       * already earned its first (or second) on a payment that still stands
+       * does not earn it again, whatever the count above concluded. A voided
+       * payment no longer stands — its commission was reversed — so it does
+       * not block the payment that has really become the first.
+       */
+      const earned = await tx
+        .select({ kind: partnerEarning.kind })
+        .from(partnerEarning)
+        .innerJoin(payment, eq(payment.id, partnerEarning.paymentId))
+        .where(
+          and(
+            eq(partnerEarning.churchId, churchId),
+            ne(partnerEarning.paymentId, pay.id),
+            inArray(partnerEarning.kind, ["first", "second"]),
+            ne(partnerEarning.status, "cancelled"),
+            eq(payment.status, "success"),
+          ),
+        );
+      const { kept: lines, dropped } = dropRepeatedOneOffs(
+        priced,
+        earned.map((e) => e.kind),
+      );
+      if (dropped.length) {
+        console.warn(
+          `[partners] payment ${pay.id}: not awarding ${dropped
+            .map((d) => d.kind)
+            .join(" + ")} again — church ${churchId} already earned it ` +
+            `(priced from month ${firstMonth})`,
+        );
+      }
+      if (lines.length === 0) {
+        return { awarded: false, reason: "nothing earned at this point" };
+      }
+
+      /*
+       * Available straight away, because the holding-back is already expressed
+       * by WHICH MONTH earns what: the second commission is not released on a
+       * timer, it is simply not earned until the church has paid for its second
+       * month — which a church paying for a year has already done, today, which
+       * is the whole point. A "pending" status is left in the schema for a
+       * future rule that needs it (a refund window, say) rather than used to
+       * fake one now.
+       */
+      const inserted = await tx
+        .insert(partnerEarning)
+        .values(
+          lines.map((line) => ({
+            partnerId: p.id,
+            churchId: churchId,
+            paymentId: pay.id,
+            kind: line.kind,
+            amount: line.amount,
+            currency: pay.currency,
+            rateBps: line.rateBps,
+            status: "available" as const,
+            // Why this row is the size it is, for a payment covering several
+            // months. Null for an ordinary monthly one, where there is nothing
+            // to explain.
+            note: earningNote(line, months),
+          })),
+        )
+        /*
+         * One row per kind, which keeps the unique index as the database's
+         * own guarantee of idempotence underneath the lock and the check
+         * above. It is also why the months of one kind are summed into a
+         * single row upstream rather than inserted one per month.
+         */
+        .onConflictDoNothing({
+          target: [partnerEarning.paymentId, partnerEarning.kind],
+        })
+        .returning({ id: partnerEarning.id });
+
+      return {
+        awarded: inserted.length > 0,
+        reason: inserted.length ? undefined : "already awarded",
+      };
+    });
   } catch (e) {
     // Logged and swallowed, deliberately: the church has paid, and a
     // commission that failed to record must not turn that into a failed
-    // payment. The ledger can be reconciled; a lost payment cannot.
+    // payment. The ledger can be reconciled; a lost payment cannot. The
+    // reconcile cron retries any recent payment still without an earning.
     console.error("[partners] could not award a commission", e);
     return { awarded: false, reason: "error" };
   }
@@ -381,6 +543,18 @@ export async function awardPartnerCommission(
  *
  * The tier qualifies on this rather than on sign-ups, which is the whole
  * difference between rewarding work and paying for churn.
+ *
+ * "Paying" is paid MONEY covering any part of the window — the months a
+ * payment bought, not the day it was made:
+ *
+ *   - a church that paid for a year four months ago is paying today. Counted by
+ *     the day of the payment it dropped out after 90 days, and a Partner whose
+ *     churches all pay annually fell a tier — and was paid less on every new
+ *     commission — for being better at their job;
+ *   - a ₦0 row is not paying. An admin setting a plan by hand, or a 100%
+ *     discount, records a "successful" payment of nothing, and counting those
+ *     let a Partner climb tiers on churches that pay nothing — the same rule
+ *     the month count in awardPartnerCommission already uses.
  */
 export async function livePayingChurches(
   partnerId: string,
@@ -396,7 +570,14 @@ export async function livePayingChurches(
       and(
         eq(partnerReferral.partnerId, partnerId),
         eq(payment.status, "success"),
-        gte(payment.paidAt, since),
+        gt(payment.amount, 0),
+        isNotNull(payment.paidAt),
+        /*
+         * The period this payment bought still reaches into the window. The
+         * query is joined, so drizzle qualifies these columns; this is not
+         * the correlated-subquery trap in AGENTS.md.
+         */
+        sql`${payment.paidAt} + make_interval(months => greatest(${payment.periodMonths}, 1)) >= ${since.toISOString()}::timestamptz`,
         eq(church.status, "active"),
       ),
     );
@@ -454,7 +635,15 @@ export async function partnerChurches(partnerId: string): Promise<PartnerChurch[
         last: sql<Date | null>`max(${payment.paidAt})`,
       })
       .from(payment)
-      .where(and(inArray(payment.churchId, ids), eq(payment.status, "success")))
+      .where(
+        and(
+          inArray(payment.churchId, ids),
+          eq(payment.status, "success"),
+          // Money only, as the commission counts it. A ₦0 activation listed
+          // as a payment had a Partner asking where its commission was.
+          gt(payment.amount, 0),
+        ),
+      )
       .groupBy(payment.churchId),
     db
       .select({
@@ -466,6 +655,9 @@ export async function partnerChurches(partnerId: string): Promise<PartnerChurch[
         and(
           eq(partnerEarning.partnerId, partnerId),
           inArray(partnerEarning.churchId, ids),
+          // A cancelled earning was never theirs; a reversal (negative) is
+          // counted, so the figure is what the church has really earned them.
+          ne(partnerEarning.status, "cancelled"),
         ),
       )
       .groupBy(partnerEarning.churchId),
@@ -591,7 +783,10 @@ export async function requestPayout(opts: {
   amount: number;
   bank: { name: string | null; accountNumber: string | null; accountName: string | null };
   currency: string;
-}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+}): Promise<
+  /** `amount` is what was recorded: the whole earnings taken, debts netted in. */
+  { ok: true; id: string; amount: number } | { ok: false; error: string }
+> {
   try {
     return await db.transaction(async (tx) => {
       // Re-checked inside the transaction, not just in the action: the
@@ -631,26 +826,28 @@ export async function requestPayout(opts: {
         return { ok: false as const, error: "That is more than your available balance." };
       }
 
-      // Take whole earnings until the request is covered. Splitting a row would
-      // make the ledger stop explaining itself for the sake of a few kobo.
-      const taken: string[] = [];
-      let running = 0;
-      for (const r of rows) {
-        if (running >= opts.amount - 0.001) break;
-        taken.push(r.id);
-        running += Number(r.amount);
-      }
-      if (taken.length === 0) {
+      // Take whole earnings until the request is covered — every reversal
+      // (a negative row) included first, so a debt is always settled by the
+      // withdrawal it is owed against. Splitting a row would make the ledger
+      // stop explaining itself for the sake of a few kobo.
+      const take = takeForPayout(
+        rows.map((r) => ({ id: r.id, amount: Number(r.amount) })),
+        opts.amount,
+      );
+      if (!take) {
         return { ok: false as const, error: "There is nothing available to withdraw." };
       }
+      const taken = take.ids;
+      const running = take.total;
 
+      // What is actually being paid is the earnings taken, not the number
+      // typed — so the payout and the ledger can never disagree.
+      const recorded = Math.round(running * 100) / 100;
       const [payout] = await tx
         .insert(partnerPayout)
         .values({
           partnerId: opts.partnerId,
-          // What is actually being paid is the earnings taken, not the number
-          // typed — so the payout and the ledger can never disagree.
-          amount: Math.round(running * 100) / 100,
+          amount: recorded,
           currency: opts.currency,
           status: "requested",
           bankName: opts.bank.name,
@@ -679,7 +876,9 @@ export async function requestPayout(opts: {
         );
       }
 
-      return { ok: true as const, id: payout.id };
+      // Returned so the notice the Partner receives names the figure that
+      // will actually be transferred, not the one they typed.
+      return { ok: true as const, id: payout.id, amount: recorded };
     });
   } catch (err) {
     if (err instanceof PayoutRaced) {
@@ -719,7 +918,24 @@ function isUniqueViolation(err: unknown, constraint?: string): boolean {
   return e.cause ? isUniqueViolation(e.cause, constraint) : false;
 }
 
-/** Approve, pay or reject a request. Superadmin only; the route enforces that. */
+/**
+ * Approve, pay or reject a request. Superadmin only; the route enforces that.
+ *
+ * The decision is a state machine (PAYOUT_TRANSITIONS in partners-shared), and
+ * it is held where two people cannot both pass it:
+ *
+ * - the payout row is locked (`for update`) before its status is read, so a
+ *   second decision on the same request waits for the first and then reads
+ *   what the first wrote — not the "requested" it saw on its page;
+ * - the UPDATE repeats the allowed-from statuses and counts what came back. If
+ *   that is not exactly one row the transaction is thrown away.
+ *
+ * Before this, the only check was "not already paid", read outside the
+ * transaction. A request rejected in one tab had its earnings handed back,
+ * the Partner asked again, and a stale tab could still mark the OLD request
+ * paid — two transfers for one balance. And a reject landing just after a
+ * "paid" handed money already paid back to "available", to be withdrawn again.
+ */
 export async function decidePayout(opts: {
   payoutId: string;
   status: "approved" | "paid" | "rejected";
@@ -727,48 +943,239 @@ export async function decidePayout(opts: {
   note?: string | null;
   decidedBy: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [row] = await db
-    .select({ id: partnerPayout.id, status: partnerPayout.status })
-    .from(partnerPayout)
-    .where(eq(partnerPayout.id, opts.payoutId))
-    .limit(1);
-  if (!row) return { ok: false, error: "We couldn't find that request." };
-  if (row.status === "paid") return { ok: false, error: "That one is already paid." };
+  const from = PAYOUT_TRANSITIONS[opts.status];
+  try {
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ id: partnerPayout.id, status: partnerPayout.status })
+        .from(partnerPayout)
+        .where(eq(partnerPayout.id, opts.payoutId))
+        .for("update")
+        .limit(1);
+      if (!row) return { ok: false as const, error: "We couldn't find that request." };
+      if (!payoutTransitionAllowed(row.status, opts.status)) {
+        return { ok: false as const, error: payoutTransitionError(row.status, opts.status) };
+      }
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(partnerPayout)
-      .set({
-        status: opts.status,
-        reference: opts.reference?.trim() || null,
-        note: opts.note?.trim() || null,
-        decidedBy: opts.decidedBy,
-        decidedAt: new Date(),
-        paidAt: opts.status === "paid" ? new Date() : null,
-      })
-      .where(eq(partnerPayout.id, opts.payoutId));
+      const moved = await tx
+        .update(partnerPayout)
+        .set({
+          status: opts.status,
+          reference: opts.reference?.trim() || null,
+          note: opts.note?.trim() || null,
+          decidedBy: opts.decidedBy,
+          decidedAt: new Date(),
+          paidAt: opts.status === "paid" ? new Date() : null,
+        })
+        .where(
+          and(
+            eq(partnerPayout.id, opts.payoutId),
+            // Repeated, so the UPDATE itself refuses a request that has moved.
+            inArray(partnerPayout.status, [...from]),
+          ),
+        )
+        .returning({ id: partnerPayout.id });
+      if (moved.length !== 1) {
+        throw new PayoutRaced(
+          `decide ${opts.status} on ${opts.payoutId} moved ${moved.length} rows`,
+        );
+      }
 
-    if (opts.status === "paid") {
-      await tx
-        .update(partnerEarning)
-        .set({ status: "paid" })
-        .where(eq(partnerEarning.payoutId, opts.payoutId));
+      if (opts.status === "paid") {
+        await tx
+          .update(partnerEarning)
+          .set({ status: "paid" })
+          .where(
+            and(
+              eq(partnerEarning.payoutId, opts.payoutId),
+              eq(partnerEarning.status, "available"),
+            ),
+          );
+      }
+
+      if (opts.status === "rejected") {
+        /*
+         * Rejecting hands the money BACK, it does not destroy it. The earnings
+         * return to available and the Partner can request again — anything else
+         * would quietly take money somebody had earned. Never a paid row: the
+         * transition table already refuses rejecting a paid request, and this
+         * is the same rule said a second time, at the rows it protects.
+         */
+        await tx
+          .update(partnerEarning)
+          .set({ payoutId: null, status: "available" })
+          .where(
+            and(
+              eq(partnerEarning.payoutId, opts.payoutId),
+              ne(partnerEarning.status, "paid"),
+            ),
+          );
+      }
+
+      return { ok: true as const };
+    });
+  } catch (err) {
+    if (err instanceof PayoutRaced) {
+      console.warn(`[partners] payout decision rolled back: ${err.message}`);
+      return {
+        ok: false,
+        error: "Someone else just decided this request. Refresh the page.",
+      };
     }
+    throw err;
+  }
+}
 
-    if (opts.status === "rejected") {
-      /*
-       * Rejecting hands the money BACK, it does not destroy it. The earnings
-       * return to available and the Partner can request again — anything else
-       * would quietly take money somebody had earned.
-       */
-      await tx
-        .update(partnerEarning)
-        .set({ payoutId: null, status: "available" })
-        .where(eq(partnerEarning.payoutId, opts.payoutId));
+/* ============================================================
+ * Reversing a commission
+ * ========================================================== */
+
+export type ReverseCommissionResult =
+  | {
+      ok: true;
+      /** Earnings still in the wallet, now cancelled. */
+      cancelled: number;
+      /** Naira already withdrawn or requested, now owed back as a negative row. */
+      clawedBack: number;
+      /** True when this payment had been reversed before; nothing changed. */
+      already: boolean;
     }
-  });
+  | { ok: false; error: string };
 
-  return { ok: true };
+/**
+ * Take back the commission on a payment that has been voided.
+ *
+ * Called by superadmin after a SUCCESSFUL payment is voided (a bounced
+ * transfer, a refund, a mistyped amount). Without it a Partner kept — and
+ * could withdraw — commission on money that never arrived.
+ *
+ * Two cases, because money is a ledger and a paid row is history:
+ *
+ * - an earning still sitting in the wallet (not in any withdrawal) is
+ *   CANCELLED. It was never withdrawn, so there is nothing to recover; it
+ *   simply stops counting;
+ * - an earning already inside a withdrawal — requested, approved or paid —
+ *   is left exactly as it is, and ONE negative `reversal` row for the same
+ *   total is written against the payment. It is deducted from the Partner's
+ *   next withdrawal (takeForPayout always takes it first). If the withdrawal
+ *   is later rejected, the earning comes back to the wallet and the reversal
+ *   still nets it to zero, which is the right answer either way.
+ *
+ * Idempotent: the reversal row is unique on (payment, kind), and a payment
+ * that already has one is left alone — a second call after a rejected
+ * withdrawal must not cancel the returned earning AND keep the debt for it.
+ *
+ * Never throws into the caller. A void has already been committed by the time
+ * this runs; a reversal that failed is logged, written to the audit trail as
+ * critical with the payment id, and reported in the result.
+ */
+export async function reversePartnerCommission(
+  paymentId: string,
+): Promise<ReverseCommissionResult> {
+  try {
+    return await db.transaction(async (tx) => {
+      // Locked, so a withdrawal being requested right now either took these
+      // rows before us (and we see the payout id) or waits until we are done.
+      const rows = await tx
+        .select({
+          id: partnerEarning.id,
+          partnerId: partnerEarning.partnerId,
+          churchId: partnerEarning.churchId,
+          kind: partnerEarning.kind,
+          amount: partnerEarning.amount,
+          currency: partnerEarning.currency,
+          status: partnerEarning.status,
+          payoutId: partnerEarning.payoutId,
+        })
+        .from(partnerEarning)
+        .where(eq(partnerEarning.paymentId, paymentId))
+        .for("update");
+
+      if (rows.some((r) => r.kind === "reversal")) {
+        return { ok: true as const, cancelled: 0, clawedBack: 0, already: true };
+      }
+
+      const earnings = rows.filter((r) => Number(r.amount) > 0 && r.status !== "cancelled");
+      const inWallet = earnings.filter(
+        (r) => !r.payoutId && (r.status === "available" || r.status === "pending"),
+      );
+      const gone = earnings.filter((r) => !inWallet.includes(r));
+
+      if (inWallet.length) {
+        const cancelled = await tx
+          .update(partnerEarning)
+          .set({
+            status: "cancelled",
+            note: sql`concat_ws(' · ', ${partnerEarning.note}, 'Cancelled: the payment was voided')`,
+          })
+          .where(
+            and(
+              inArray(
+                partnerEarning.id,
+                inWallet.map((r) => r.id),
+              ),
+              // Repeated: only a row still in the wallet may be cancelled.
+              isNull(partnerEarning.payoutId),
+              inArray(partnerEarning.status, ["available", "pending"]),
+            ),
+          )
+          .returning({ id: partnerEarning.id });
+        if (cancelled.length !== inWallet.length) {
+          throw new PayoutRaced(
+            `reversal of ${paymentId} cancelled ${cancelled.length} of ${inWallet.length} earnings`,
+          );
+        }
+      }
+
+      const owed = Math.round(gone.reduce((sum, r) => sum + Number(r.amount), 0) * 100) / 100;
+      if (owed > 0) {
+        const first = gone[0];
+        await tx
+          .insert(partnerEarning)
+          .values({
+            partnerId: first.partnerId,
+            churchId: first.churchId,
+            paymentId,
+            kind: "reversal",
+            amount: -owed,
+            currency: first.currency,
+            rateBps: 0,
+            status: "available",
+            note: "A payment you earned commission on was voided. Deducted from your next withdrawal.",
+          })
+          .onConflictDoNothing({
+            target: [partnerEarning.paymentId, partnerEarning.kind],
+          });
+      }
+
+      return {
+        ok: true as const,
+        cancelled: inWallet.length,
+        clawedBack: owed,
+        already: false,
+      };
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    console.error(`[partners] could not reverse the commission on payment ${paymentId}`, e);
+    try {
+      const { auditSystem } = await import("@/lib/audit");
+      await auditSystem({
+        action: "platform.partner.commission_reverse_failed",
+        summary: `Partner commission on voided payment ${paymentId} was NOT reversed: ${error}. Reverse it by hand before the Partner's next withdrawal is paid.`,
+        targetType: "payment",
+        targetId: paymentId,
+        severity: "critical",
+        meta: { paymentId, error },
+      });
+    } catch (auditErr) {
+      console.error(
+        `[partners] and the audit entry for that failure could not be written either (payment ${paymentId})`,
+        auditErr,
+      );
+    }
+    return { ok: false, error };
+  }
 }
 
 /* ============================================================

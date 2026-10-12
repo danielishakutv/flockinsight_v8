@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { member } from "@/db/schema";
-import { formatBirthdayForCsv } from "@/lib/birthday";
+import { formatBirthdayForCsv, isStorableDate } from "@/lib/birthday";
 
 /** CSV column order for export and the template. */
 export const MEMBER_CSV_HEADERS = [
@@ -66,7 +66,14 @@ export type MemberFieldKey =
   | "lga"
   | "state"
   | "country"
-  | "notes";
+  | "notes"
+  /*
+   * The three the export has always written and the import used to ignore,
+   * so a child exported and imported back came home as an unlinked adult.
+   */
+  | "isMinor"
+  | "guardianName"
+  | "relationship";
 
 /** Normalize a header for tolerant matching ("First Name" → "firstname"). */
 export function normalizeHeader(h: string): string {
@@ -109,7 +116,20 @@ const HEADER_ALIASES: Record<string, MemberFieldKey> = {
   country: "country",
   notes: "notes",
   note: "notes",
+  child: "isMinor",
+  minor: "isMinor",
+  ischild: "isMinor",
+  guardian: "guardianName",
+  guardianname: "guardianName",
+  parent: "guardianName",
+  parentname: "guardianName",
+  relationship: "relationship",
 };
+
+/** The "Child" column: the export writes "Yes"; a spreadsheet may say anything truthy. */
+export function normalizeYes(v: string): boolean {
+  return /^(yes|y|true|1)$/i.test(v.trim());
+}
 
 export function headerToField(header: string): MemberFieldKey | null {
   return HEADER_ALIASES[normalizeHeader(header)] ?? null;
@@ -132,12 +152,21 @@ export function normalizeStatus(v: string): MemberStatus {
     : "active";
 }
 
-/** Accept YYYY-MM-DD or YYYY/MM/DD; otherwise null. */
+/**
+ * Accept YYYY-MM-DD or YYYY/MM/DD naming a day that exists; otherwise null.
+ *
+ * Shape alone used to be enough, so "2026-02-30" or "2023-09-31" went through
+ * and Postgres refused it inside the import's single transaction — the whole
+ * file failed with "no members were added" and no row number to go and fix.
+ * The member, giving and attendance imports all read dates through here.
+ */
 export function normalizeDate(v: string): string | null {
   const s = v.trim();
   if (!s) return null;
   const m = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2]}-${m[3]}`;
+  return isStorableDate(iso) ? iso : null;
 }
 
 /**

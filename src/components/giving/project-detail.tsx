@@ -49,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 
 const NONE = "__none__";
@@ -207,6 +208,7 @@ export function ProjectDetail({
         <PledgeDialog
           projectId={p.id}
           members={members}
+          currency={currency}
           onClose={() => setPledgeOpen(false)}
           onSaved={() => {
             setPledgeOpen(false);
@@ -231,6 +233,7 @@ export function ProjectDetail({
       {editProjectOpen && (
         <EditProjectDialog
           project={p}
+          currency={currency}
           onClose={() => setEditProjectOpen(false)}
           onSaved={() => {
             setEditProjectOpen(false);
@@ -406,11 +409,13 @@ function shortCadence(cadence: PledgeRow["cadence"], custom: string | null): str
 function PledgeDialog({
   projectId,
   members,
+  currency,
   onClose,
   onSaved,
 }: {
   projectId: string;
   members: Member[];
+  currency: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -488,6 +493,7 @@ function PledgeDialog({
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="50,000"
               />
+              <AmountPreview value={amount} currency={currency} />
             </div>
             <div className="space-y-2">
               <Label>{t("giving.howTheyAposLlGive")}</Label>
@@ -527,6 +533,7 @@ function PledgeDialog({
                   onChange={(e) => setInstallment(e.target.value)}
                   placeholder="5,000"
                 />
+                <AmountPreview value={installment} currency={currency} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="pl-start">{t("giving.starting")}</Label>
@@ -631,6 +638,7 @@ function PaymentDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
+              <AmountPreview value={amount} currency={currency} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="pay-date">{t("giving.date")}</Label>
@@ -682,10 +690,12 @@ function PaymentDialog({
 
 function EditProjectDialog({
   project: p,
+  currency,
   onClose,
   onSaved,
 }: {
   project: Detail;
+  currency: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -734,6 +744,7 @@ function EditProjectDialog({
               value={targetAmount}
               onChange={(e) => setTargetAmount(e.target.value)}
             />
+            <AmountPreview value={targetAmount} currency={currency} />
           </div>
           <div className="space-y-2">
             <Label>{t("giving.status")}</Label>

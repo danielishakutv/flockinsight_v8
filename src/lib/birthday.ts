@@ -22,10 +22,55 @@ const MONTHS_SHORT = [
 /** Days per month, with a leap February so 29 Feb is always selectable. */
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-/** Number of days in a birth month ("01".."12"); 31 when the month is unset. */
-export function daysInBirthMonth(month: string): number {
+export function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+/** A typed year that names a real year — four digits, not the sentinel, not 0000. */
+function realYear(year: string | null | undefined): number | null {
+  const y = (year ?? "").trim();
+  if (!/^\d{4}$/.test(y) || y === BIRTH_YEAR_UNKNOWN) return null;
+  const n = Number(y);
+  return n >= 1 ? n : null;
+}
+
+/**
+ * Number of days in a birth month ("01".."12"); 31 when the month is unset.
+ *
+ * With no year, February has 29 so a 29 Feb birthday can always be recorded
+ * (it is stored in the leap sentinel year). With a real year it has what that
+ * year actually had: "29 Feb 1990" used to be offered, built as 1990-02-29,
+ * and refused by Postgres — the member save failed with a generic error, and
+ * on the public form a child's birthday made the child silently not exist.
+ */
+export function daysInBirthMonth(month: string, year?: string): number {
   const m = Number(month);
-  return m >= 1 && m <= 12 ? DAYS_IN_MONTH[m - 1] : 31;
+  if (!(m >= 1 && m <= 12)) return 31;
+  const y = realYear(year);
+  if (m === 2 && y !== null) return isLeapYear(y) ? 29 : 28;
+  return DAYS_IN_MONTH[m - 1];
+}
+
+/**
+ * True for a "YYYY-MM-DD" that Postgres' `date` will accept: well-formed, a
+ * day that exists in that month of that year, and year 1 or later (there is
+ * no year 0).
+ *
+ * Not `calendar-date.ts`'s `isRealCalendarDate`, because that builds the date
+ * with `Date.UTC`, which maps years 0–99 onto 1900–1999 — so it calls the
+ * birthday sentinel "0004-02-29" impossible. `setUTCFullYear` does no such
+ * mapping, so this agrees with the database for every year a row can hold.
+ */
+export function isStorableDate(iso: string | null | undefined): boolean {
+  const m = (iso ?? "").match(ISO_RE);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (y < 1 || mo < 1 || mo > 12 || d < 1) return false;
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, mo - 1, d);
+  return (
+    dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d
+  );
 }
 
 /** True when a stored birthday carries no real year (the sentinel year). */
@@ -50,18 +95,20 @@ export function splitBirthday(iso: string | null | undefined): {
 
 /**
  * Build a stored birthday from parts. A month and day are required; the year is
- * optional (blank or partial → the sentinel year). Returns "" when incomplete,
- * and clamps the day to the month (e.g. 31 Feb → 29 Feb) so the result is
- * always a valid date.
+ * optional (blank, partial or 0000 → the sentinel year). Returns "" when
+ * incomplete, and clamps the day to the month IN THAT YEAR (31 Feb → 29 Feb
+ * with no year, 29 Feb 1990 → 28 Feb 1990) so the result is always a date
+ * Postgres will store.
  */
 export function buildBirthday(month: string, day: string, year: string): string {
   const mm = month.trim().padStart(2, "0");
   if (!/^(0[1-9]|1[0-2])$/.test(mm)) return "";
   let d = Number(day);
   if (!Number.isInteger(d) || d < 1) return "";
-  d = Math.min(d, daysInBirthMonth(mm));
+  const ry = realYear(year);
+  const y = ry !== null ? year.trim() : BIRTH_YEAR_UNKNOWN;
+  d = Math.min(d, daysInBirthMonth(mm, y));
   const dd = String(d).padStart(2, "0");
-  const y = /^\d{4}$/.test(year.trim()) ? year.trim() : BIRTH_YEAR_UNKNOWN;
   return `${y}-${mm}-${dd}`;
 }
 
@@ -108,14 +155,25 @@ export function formatBirthdayForCsv(iso: string | null | undefined): string | n
 /**
  * Parse a birthday from a CSV / free-text value into a stored ISO. Accepts a
  * full date ("YYYY-MM-DD" or "YYYY/MM/DD") or a year-less "MM-DD" / "MM/DD"
- * (stored with the sentinel year). Returns null when unrecognised.
+ * (stored with the sentinel year). Returns null when unrecognised — and when
+ * the day does not exist in that month.
+ *
+ * Not clamped, unlike {@link buildBirthday}. The dropdowns clamp because the
+ * person is looking at the result as they choose; text arrives from a
+ * spreadsheet nobody is watching, and quietly turning "1990-04-31" into the
+ * 30th filed a birthday on a day that is nobody's, greeted every year. Null
+ * lets the caller name the cell instead.
  */
 export function normalizeBirthday(value: string): string | null {
   const s = (value ?? "").trim();
   if (!s) return null;
+  const strict = (month: string, day: string, year: string): string | null => {
+    const iso = buildBirthday(month, day, year);
+    return iso && Number(iso.slice(8)) === Number(day) ? iso : null;
+  };
   const full = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
-  if (full) return buildBirthday(full[2], full[3], full[1]) || null;
+  if (full) return strict(full[2], full[3], full[1]);
   const md = s.match(/^(\d{1,2})[-/](\d{1,2})$/);
-  if (md) return buildBirthday(md[1], md[2], "") || null;
+  if (md) return strict(md[1], md[2], "");
   return null;
 }

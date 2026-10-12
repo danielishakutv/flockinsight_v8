@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccount,
@@ -16,11 +16,15 @@ import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
-import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
+import { parseMoneyInput } from "@/lib/money-input";
+import {
+  backfillFund,
+  fundAccountFor,
+  unlinkFundAccount,
+} from "@/lib/finance-giving-sync";
 import {
   defaultCategoriesFor,
   isIsoDate,
-  parseAmount,
   transferProblem,
   canRecordIncomeInto,
   type FinanceKind,
@@ -74,6 +78,13 @@ function refresh(): void {
 }
 
 const KIND = z.enum(["income", "expense"]);
+
+/**
+ * Said whenever somebody tries to change, by hand, a row a gift wrote. The
+ * gift is the record; the row is its reflection in the fund, and follows it.
+ */
+const MIRRORS_A_GIFT =
+  "This entry mirrors a gift — change or remove it in Giving, and the books follow.";
 const uuid = z.string().uuid();
 
 /* ============================================================
@@ -109,13 +120,15 @@ export async function saveAccount(input: AccountInput): Promise<ActionResult> {
   // An opening balance is optional, and unlike a transaction amount it may
   // legitimately be zero or negative (an overdrawn account is still a fact).
   let openingBalance = 0;
+  // Read by the same parser as every other amount, so "1500,50" from a
+  // comma-decimal keypad is 1500.50 here too, not 150050.
   if (d.openingBalance?.trim()) {
-    const cleaned = d.openingBalance.replace(/[^\d.-]/g, "");
-    const n = Number(cleaned);
-    if (!Number.isFinite(n) || Math.abs(n) >= 1e12) {
-      return { ok: false, error: "That opening balance isn't a valid amount." };
-    }
-    openingBalance = Math.round(n * 100) / 100;
+    const ob = parseMoneyInput(d.openingBalance, {
+      allowZero: true,
+      allowNegative: true,
+    });
+    if (!ob.ok) return { ok: false, error: `Opening balance: ${ob.error}` };
+    openingBalance = ob.value;
   }
 
   const values = {
@@ -525,9 +538,26 @@ export async function saveTransaction(
   }
   const d = parsed.data;
 
-  const amount = parseAmount(d.amount);
-  if (amount === null) {
-    return { ok: false, error: "Enter an amount greater than zero." };
+  const parsedAmount = parseMoneyInput(d.amount);
+  if (!parsedAmount.ok) return { ok: false, error: parsedAmount.error };
+  const amount = parsedAmount.value;
+
+  // A row a gift wrote is the gift's reflection, not a record of its own.
+  // Asked first, so the answer is this rather than a confusing complaint
+  // about the account it sits in.
+  if (d.id) {
+    const [existing] = await db
+      .select({ givingId: financeTransaction.givingId })
+      .from(financeTransaction)
+      .where(
+        and(
+          eq(financeTransaction.id, d.id),
+          eq(financeTransaction.churchId, g.churchId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return { ok: false, error: "That record no longer exists." };
+    if (existing.givingId) return { ok: false, error: MIRRORS_A_GIFT };
   }
 
   // An account or category from another church must not be attachable, so both
@@ -616,10 +646,18 @@ export async function saveTransaction(
           and(
             eq(financeTransaction.id, d.id),
             eq(financeTransaction.churchId, g.churchId),
+            // Repeated in the write, so a row a concurrent sync has just
+            // made a gift's shadow is not overwritten by hand.
+            isNull(financeTransaction.givingId),
           ),
         )
         .returning({ id: financeTransaction.id });
-      if (!row) return { ok: false, error: "That record no longer exists." };
+      if (!row) {
+        return {
+          ok: false,
+          error: before?.givingId ? MIRRORS_A_GIFT : "That record no longer exists.",
+        };
+      }
       const changed = before
         ? diffFields(
             before as unknown as Record<string, unknown>,
@@ -686,6 +724,10 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
         and(
           eq(financeTransaction.id, id),
           eq(financeTransaction.churchId, g.churchId),
+          // A gift's shadow is removed by removing the gift. Deleted here, the
+          // fund's balance fell while the gift stayed in Giving, and nothing
+          // brought it back until somebody happened to edit that gift.
+          isNull(financeTransaction.givingId),
         ),
       )
       .returning({
@@ -699,7 +741,22 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
         categoryId: financeTransaction.categoryId,
         note: financeTransaction.note,
       });
-    if (!row) return { ok: false, error: "That record no longer exists." };
+    if (!row) {
+      const [still] = await db
+        .select({ givingId: financeTransaction.givingId })
+        .from(financeTransaction)
+        .where(
+          and(
+            eq(financeTransaction.id, id),
+            eq(financeTransaction.churchId, g.churchId),
+          ),
+        )
+        .limit(1);
+      return {
+        ok: false,
+        error: still?.givingId ? MIRRORS_A_GIFT : "That record no longer exists.",
+      };
+    }
     await audit({
       churchId: g.churchId,
       action: "finance.transaction.delete",
@@ -852,26 +909,20 @@ export async function unlinkFund(accountId: string): Promise<ActionResult> {
   if (!uuid.safeParse(accountId).success)
     return { ok: false, error: "Invalid id" };
 
-  const [row] = await db
-    .update(financeAccount)
-    .set({ givingCategoryId: null })
-    .where(
-      and(
-        eq(financeAccount.id, accountId),
-        eq(financeAccount.churchId, g.churchId),
-      ),
-    )
-    .returning({ id: financeAccount.id, name: financeAccount.name });
+  // "Nothing is deleted" only holds if the rows stop being shadows of their
+  // gifts at the same moment the link goes; see unlinkFundAccount.
+  const row = await unlinkFundAccount(g.churchId, accountId);
   if (!row) return { ok: false, error: "That account no longer exists." };
 
   await audit({
     churchId: g.churchId,
     action: "finance.fund.unlink",
-    summary: `Detached "${row.name}" from its giving category — new giving stops feeding it`,
+    summary: `Detached "${row.name}" from its giving category — new giving stops feeding it, and its ${row.detached} giving entr${row.detached === 1 ? "y stays" : "ies stay"} as ordinary records`,
     targetType: "finance-account",
     targetId: row.id,
     targetLabel: row.name,
     severity: "warning",
+    meta: { detachedRows: row.detached },
   });
 
   refresh();
@@ -909,10 +960,9 @@ export async function recordTransfer(
   }
   const d = parsed.data;
 
-  const amount = parseAmount(d.amount);
-  if (amount === null) {
-    return { ok: false, error: "Enter an amount greater than zero." };
-  }
+  const parsedAmount = parseMoneyInput(d.amount);
+  if (!parsedAmount.ok) return { ok: false, error: parsedAmount.error };
+  const amount = parsedAmount.value;
 
   // Both accounts are read back from this church before the rule is applied,
   // so an id from somewhere else matches nothing.

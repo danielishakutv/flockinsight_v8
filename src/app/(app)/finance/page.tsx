@@ -10,7 +10,8 @@ import {
   getLedger,
   transferableAccounts,
 } from "@/lib/finance-data";
-import { readFinanceFilters } from "@/lib/finance-shared";
+import { EMPTY_FINANCE_FILTERS, readFinanceFilters } from "@/lib/finance-shared";
+import { churchToday } from "@/lib/church-today";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { FinanceClient } from "@/components/finance/finance-client";
 import { getT } from "@/lib/i18n/server";
@@ -36,8 +37,9 @@ export default async function FinancePage({
   const filters = readFinanceFilters(first);
   const page = Math.max(1, Number(first("page") ?? 1) || 1);
 
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  // The church's own today, not the server's: it is the default date of a new
+  // entry and the anchor of "This month" / "This year".
+  const today = churchToday(church.timezone);
 
   const [accounts, categories, ledger, summary, [anyRow]] = await Promise.all([
     // Carries the giving link, so the form knows which accounts may take
@@ -45,9 +47,14 @@ export default async function FinancePage({
     transferableAccounts(church.id),
     activeCategoryOptions(church.id),
     getLedger(church.id, filters, page),
-    // The summary follows the same range the person is looking at, so the
-    // cards and the list below can never tell two different stories.
-    getFinanceSummary(church.id, filters.from, filters.to),
+    // The cards follow the date range the person is looking at. The other
+    // filters narrow the list, and the "in / out" line beside its count comes
+    // from the ledger's own totals, so it describes the results it sits next to.
+    getFinanceSummary(church.id, {
+      ...EMPTY_FINANCE_FILTERS,
+      from: filters.from,
+      to: filters.to,
+    }),
     // "No records yet" and "nothing matches these filters" need different
     // words, so ask whether anything exists at all.
     db
@@ -75,6 +82,8 @@ export default async function FinancePage({
         summary={summary}
         filters={filters}
         resultCount={ledger.count}
+        resultIncome={ledger.income}
+        resultExpense={ledger.expense}
         page={page}
         pageSize={FINANCE_PAGE_SIZE}
         hasAnyRecords={Boolean(anyRow)}

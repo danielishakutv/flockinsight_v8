@@ -16,12 +16,12 @@ import {
   contributionPath,
   emailKey,
   nameKey,
-  parseAmount,
   phoneKey,
 } from "@/lib/contributions-shared";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { auditGuest } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
+import { zMoney } from "@/lib/money-zod";
 import { rateLimit } from "@/lib/meeting-api";
 
 /**
@@ -55,13 +55,9 @@ const schema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
     z.string().trim().email("That email address looks wrong").max(200).nullable(),
   ),
-  amount: z.preprocess(
-    (v) => parseAmount(v),
-    z
-      .number({ message: "Enter the amount you paid" })
-      .positive("The amount must be more than zero")
-      .max(1_000_000_000_000),
-  ),
+  // The platform's one money parser: "1500,50" from a comma-decimal keypad
+  // is 1500.50, never 150050.
+  amount: zMoney(),
   paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the date you paid"),
   method: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),

@@ -3,10 +3,20 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { and, eq } from "drizzle-orm";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { and, eq, isNull } from "drizzle-orm";
 import { sendEmail, emailLayout } from "./mailer";
 import { db } from "@/db";
 import { escapeHtml } from "@/lib/html-escape";
+import {
+  NEVER_PATHS,
+  churchForTeamCall,
+  guardTeamCall,
+  invitationCapForChurch,
+  orgEndpointPolicy,
+  refuseNeverPath,
+} from "@/lib/org-plugin-guard";
+import { repointSessionsLeaving } from "@/lib/session-pointer";
 import {
   user,
   session,
@@ -15,7 +25,39 @@ import {
   church,
   staff,
   invitation,
+  partner,
 } from "@/db/schema";
+
+/**
+ * What a verification email should say this account is for.
+ *
+ * Every one used to say "finish setting up your church", including to a
+ * Partner who has no church and signed up precisely so as not to make one.
+ * Read from what the account IS — a seat in a church, a Partner row — not
+ * from which page sent it. If the lookup fails the email still goes, with
+ * wording that is true of any account.
+ */
+async function verificationPurpose(userId: string): Promise<string> {
+  try {
+    const [[seat], [agent]] = await Promise.all([
+      db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(and(eq(staff.userId, userId), eq(staff.temp, false)))
+        .limit(1),
+      db
+        .select({ id: partner.id })
+        .from(partner)
+        .where(eq(partner.userId, userId))
+        .limit(1),
+    ]);
+    if (agent && !seat) return "to open your Partner dashboard";
+    if (seat) return "to finish setting up your church";
+  } catch (e) {
+    console.error("[auth] could not tell what this account is for", e);
+  }
+  return "to finish setting up your account";
+}
 
 // Trust localhost + every local LAN IPv4 of this machine (so you can log in
 // from a phone on the same Wi-Fi). Auto-adapts when you switch networks.
@@ -39,6 +81,42 @@ function devTrustedOrigins(port = 3000): string[] {
 
 export const auth = betterAuth({
   trustedOrigins: devTrustedOrigins(3000),
+
+  /*
+   * Organization-plugin endpoints nothing in the app uses, refused over HTTP.
+   * The `hooks.before` below refuses the same paths from server code too, and
+   * holds the team endpoints to the app's own permissions; the reasoning for
+   * both is in lib/org-plugin-guard.ts.
+   */
+  disabledPaths: [...NEVER_PATHS],
+
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const policy = orgEndpointPolicy(ctx.path);
+      if (!policy) return;
+      if (policy === "never") refuseNeverPath();
+
+      // No session: the endpoint itself answers 401.
+      const data = await getSessionFromCtx(ctx);
+      if (!data?.user) return;
+      const body = (ctx.body ?? undefined) as Record<string, unknown> | undefined;
+      const active = data.session.activeOrganizationId;
+      const churchId = await churchForTeamCall(
+        ctx.path,
+        body,
+        typeof active === "string" ? active : null,
+      );
+      // Nothing to judge: the plugin reports the missing church or invitation.
+      if (!churchId) return;
+      await guardTeamCall({
+        path: ctx.path,
+        userId: data.user.id,
+        churchId,
+        resend: body?.resend === true,
+        email: typeof body?.email === "string" ? body.email : null,
+      });
+    }),
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -91,12 +169,13 @@ export const auth = betterAuth({
     sendOnSignUp: false,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user: u, url }) => {
+      const purpose = await verificationPurpose(u.id);
       await sendEmail({
         to: u.email,
         subject: "Verify your FlockInsight email",
         html: emailLayout(
           "Confirm your email",
-          "<p>Welcome to FlockInsight! Please confirm your email address to finish setting up your church.</p>",
+          `<p>Welcome to FlockInsight! Please confirm your email address ${purpose}.</p>`,
           { label: "Verify email", url },
         ),
         text: `Verify your FlockInsight email: ${url}`,
@@ -248,6 +327,46 @@ export const auth = betterAuth({
               input: true,
             },
           },
+        },
+      },
+      // Church deletion is a superadmin act with a backup and an audit row,
+      // never a plugin call (see lib/org-plugin-guard.ts).
+      disableOrganizationDeletion: true,
+      // Sized from the plan rather than the plugin's flat 100, which a large
+      // bulk invite on an unlimited plan ran into ("Invitation limit reached").
+      invitationLimit: async ({ organization }) =>
+        invitationCapForChurch(organization.id),
+      organizationHooks: {
+        /*
+         * A church made through the plugin (/onboarding) used to get every
+         * table default, including trialEndsAt NULL — which the trial reads as
+         * "grandfathered", never gated. An owner whose trial had ended could
+         * open /onboarding and run a second church free for ever. Every church
+         * gets the same 7 Sundays the signup flow gives.
+         */
+        afterCreateOrganization: async ({ organization: org }) => {
+          try {
+            const { trialEndDate } = await import("./trial");
+            await db
+              .update(church)
+              .set({ trialEndsAt: trialEndDate(new Date()) })
+              .where(and(eq(church.id, org.id), isNull(church.trialEndsAt)));
+          } catch (e) {
+            console.error("[auth] afterCreateOrganization trial start failed", e);
+          }
+        },
+        /*
+         * Removed from the team means out now: their sessions stop pointing at
+         * this church, as revokeMemberAccess does for the member-linked path —
+         * and point at another church of theirs if they have one, rather than
+         * at nothing, which reads as "create your church" (session-pointer.ts).
+         */
+        afterRemoveMember: async ({ member: removed, organization: org }) => {
+          try {
+            await repointSessionsLeaving(db, removed.userId, org.id);
+          } catch (e) {
+            console.error("[auth] afterRemoveMember session clear failed", e);
+          }
         },
       },
       // Email the invitee an accept link. Failure here must NOT block the

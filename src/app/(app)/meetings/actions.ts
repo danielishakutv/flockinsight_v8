@@ -11,6 +11,7 @@ import {
   meetingParticipant,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { endOfLocalDay, parseWallClockInput } from "@/lib/wall-clock-input";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { isSfuConfigured } from "@/lib/sfu";
@@ -132,8 +133,13 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
   const v = parsed.data;
 
-  const scheduledFor = v.scheduledFor ? new Date(v.scheduledFor) : null;
-  if (scheduledFor && Number.isNaN(scheduledFor.getTime()))
+  /*
+   * Read in the CHURCH's timezone. The field posts a wall-clock time with no
+   * zone, and `new Date(...)` read it in the server's — so a Nairobi church's
+   * 18:30 was stored hours out, and every edit-and-save moved it again.
+   */
+  const scheduledFor = v.scheduledFor ? parseWallClockInput(v.scheduledFor, g.timezone) : null;
+  if (v.scheduledFor && !scheduledFor)
     return { ok: false, error: "Pick a real date and time." };
 
   /*
@@ -168,8 +174,8 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
    * the 31st means "including the 31st", and a 6pm meeting on the 31st is after
    * midnight on the 31st.
    */
-  const repeatUntil = v.repeatUntil ? new Date(`${v.repeatUntil}T23:59:59`) : null;
-  if (repeatUntil && Number.isNaN(repeatUntil.getTime()))
+  const repeatUntil = v.repeatUntil ? endOfLocalDay(v.repeatUntil, g.timezone) : null;
+  if (v.repeatUntil && !repeatUntil)
     return { ok: false, error: "Pick a real date for the last one." };
   if (repeatUntil && scheduledFor && repeatUntil.getTime() < scheduledFor.getTime())
     return { ok: false, error: "The last one cannot be before the first one." };

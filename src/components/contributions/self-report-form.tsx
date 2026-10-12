@@ -215,6 +215,7 @@ export function SelfReportForm({
               value={amount}
               onChange={setAmount}
               currencyPrefix={currencySymbol(currency)}
+              currency={currency}
               required
             />
           </Field>

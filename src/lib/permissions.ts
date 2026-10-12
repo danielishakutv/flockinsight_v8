@@ -1,15 +1,20 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { role, staff } from "@/db/schema";
+import { role } from "@/db/schema";
 import { getSession, getActAsChurchId } from "@/lib/session";
 import {
   ALL_PERMISSIONS,
   MEMBER_DEFAULT_PERMISSIONS,
   type PermissionKey,
 } from "@/lib/permissions-catalog";
+import {
+  NO_ACCESS,
+  loadStaffAccess,
+  type StaffAccess,
+} from "@/lib/staff-permissions";
 
 // Re-export the catalog so server callers can keep importing from here.
 export * from "@/lib/permissions-catalog";
@@ -18,17 +23,16 @@ export * from "@/lib/permissions-catalog";
  * Access resolution
  * ========================================================== */
 
-export type Access = {
-  isOwner: boolean;
-  perms: Set<PermissionKey>;
-  staffRole: string | null;
-};
+export type Access = StaffAccess;
 
-const EMPTY: Access = { isOwner: false, perms: new Set(), staffRole: null };
+const EMPTY: Access = NO_ACCESS;
 
 /**
  * The signed-in user's effective access within their active church.
  * Cached per-request. Owner (church creator) always has everything.
+ *
+ * The policy itself lives in lib/staff-permissions.ts, shared with the Better
+ * Auth hooks that guard the organization plugin's endpoints.
  */
 export const getAccess = cache(async (): Promise<Access> => {
   const data = await getSession();
@@ -44,58 +48,9 @@ export const getAccess = cache(async (): Promise<Access> => {
   const churchId = data.session.activeOrganizationId;
   if (!churchId) return EMPTY;
 
-  const [s] = await db
-    .select({ role: staff.role, roleId: staff.roleId })
-    .from(staff)
-    .where(and(eq(staff.organizationId, churchId), eq(staff.userId, data.user.id)))
-    .limit(1);
-  if (!s) return EMPTY;
-
-  if (s.role === "owner") {
-    return { isOwner: true, perms: new Set(ALL_PERMISSIONS), staffRole: "owner" };
-  }
-
-  if (s.roleId) {
-    const [r] = await db
-      .select({ permissions: role.permissions, isSystem: role.isSystem })
-      .from(role)
-      .where(and(eq(role.id, s.roleId), eq(role.churchId, churchId)))
-      .limit(1);
-    if (r) {
-      /*
-       * The locked system role means "everything", and it has to mean
-       * everything TODAY.
-       *
-       * A role's permissions are a text[] frozen when the role was created.
-       * That is right for a role a church wrote itself — we must never widen
-       * access behind their back. But the system role is created by us,
-       * described as "Full access to everything. Cannot be changed." and
-       * cannot be edited, so a stored list is simply a stale copy of
-       * ALL_PERMISSIONS. Churches that signed up before a module existed had
-       * people on this role who could not see it, which read as the module
-       * being missing rather than hidden.
-       */
-      if (r.isSystem) {
-        return {
-          isOwner: false,
-          perms: new Set(ALL_PERMISSIONS),
-          staffRole: s.role,
-        };
-      }
-      return { isOwner: false, perms: new Set(r.permissions), staffRole: s.role };
-    }
-  }
-
-  // No custom role assigned yet — keep legacy admins fully enabled, and give
-  // everyone else the baseline "Member" permissions.
-  if (s.role === "admin") {
-    return { isOwner: false, perms: new Set(ALL_PERMISSIONS), staffRole: "admin" };
-  }
-  return {
-    isOwner: false,
-    perms: new Set(MEMBER_DEFAULT_PERMISSIONS),
-    staffRole: s.role,
-  };
+  // temp rows are excluded there: impersonation is the act-as branch above,
+  // never a staff row that outlived it.
+  return loadStaffAccess(data.user.id, churchId);
 });
 
 /** Does the current user hold a permission? Owner always does. */

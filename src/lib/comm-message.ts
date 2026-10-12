@@ -8,6 +8,7 @@ import {
   type MessageFilters,
   type RecipientStatusFilter,
 } from "@/lib/comm-message-shared";
+import { logState } from "@/lib/comm-log-state";
 
 /* ============================================================
  * One sent message and who it actually reached.
@@ -53,12 +54,17 @@ export async function getMessage(churchId: string, id: string) {
       cost: communicationLog.cost,
       createdAt: communicationLog.createdAt,
       sentBy: user.name,
+      status: communicationLog.status,
+      updatedAt: communicationLog.updatedAt,
     })
     .from(communicationLog)
     .leftJoin(user, eq(user.id, communicationLog.createdBy))
     .where(and(eq(communicationLog.id, id), eq(communicationLog.churchId, churchId)))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  const { status, updatedAt, ...rest } = row;
+  // Still going, cut short, or finished - see comm-log-state.ts.
+  return { ...rest, state: logState(status, updatedAt) };
 }
 
 function recipientWhere(logId: string, f: MessageFilters): SQL | undefined {

@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { defaultUploadCategory } from "@/lib/media-upload-rules";
 import { useT } from "@/components/i18n-provider";
 
 type Item = {
@@ -89,12 +90,20 @@ function fmtDuration(s: number | null): string | null {
 export function MediaLibrary({
   configured,
   canManage,
+  canSermons = true,
   storage,
   heldElsewhere,
   items: initial,
 }: {
   configured: boolean;
   canManage: boolean;
+  /**
+   * Whether the plan includes the sermon library. Below it, "Sermon" is shown
+   * but cannot be picked, and the picker opens on Document — it used to open
+   * on Sermon, so the first photo a Starter church dropped in was refused with
+   * an upgrade message.
+   */
+  canSermons?: boolean;
   storage: StorageInfo;
   /**
    * Space used by files this library deliberately does not list — at present,
@@ -114,7 +123,9 @@ export function MediaLibrary({
   const [used, setUsed] = useState(storage.used);
   const [filter, setFilter] = useState<Group>("all");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>("sermon");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>(
+    defaultUploadCategory(canSermons),
+  );
   const [preview, setPreview] = useState<Item | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -234,21 +245,28 @@ export function MediaLibrary({
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">{t("media.category")}</label>
                 <div className="flex gap-1.5">
-                  {CATEGORIES.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      onClick={() => setCategory(c.value)}
-                      className={cn(
-                        "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
-                        category === c.value
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
+                  {CATEGORIES.map((c) => {
+                    const locked = c.value === "sermon" && !canSermons;
+                    return (
+                      <button
+                        key={c.value}
+                        type="button"
+                        disabled={locked}
+                        title={locked ? "The sermon library is on the Pro plan." : undefined}
+                        onClick={() => setCategory(c.value)}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                          category === c.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted",
+                          locked && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                        )}
+                      >
+                        {c.label}
+                        {locked && " · Pro"}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <Button type="button" onClick={() => inputRef.current?.click()}>

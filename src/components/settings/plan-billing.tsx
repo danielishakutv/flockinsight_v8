@@ -79,6 +79,13 @@ export function PlanBilling({
     labels: Record<string, string | null>;
     /** The same, for a year. One card surcharge rather than twelve. */
     annualLabels: Record<string, string | null>;
+    /**
+     * The undiscounted prices, converted and carrying the same fee, for the
+     * struck-through "was" figure. A naira list price struck through beside a
+     * converted price read as a 92% discount.
+     */
+    baseLabels?: Record<string, string | null>;
+    annualBaseLabels?: Record<string, string | null>;
     currency: string;
     /** What the card is actually charged, in naira, for the priciest plan
      *  shown — used only in the explanatory note. */
@@ -94,6 +101,25 @@ export function PlanBilling({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  /*
+   * Set once Paystack's URL is in hand and never cleared on the way out. The
+   * transition ends the moment the action returns, long before a slow phone
+   * has left the page — and a second tap in that gap opened a second checkout
+   * and a second pending payment nobody made.
+   */
+  const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    // Back from Paystack into a page restored from the bfcache: the buttons
+    // must work again, or the church is stuck looking at disabled ones.
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        setRedirecting(false);
+        setBusyPlan(null);
+      }
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const annual = cycle === "annual";
   const toasted = useRef(false);
@@ -103,6 +129,13 @@ export function PlanBilling({
     toasted.current = true;
     if (status === "success") toast.success(t("settings.paymentSuccessfulPlanUpdated"));
     else if (status === "failed") toast.error(t("settings.paymentFailedOrWasCancelled"));
+    // Not a failure: a transfer still in flight, or Paystack slow to answer.
+    // The webhook settles it; saying "failed" is how churches came to pay twice.
+    else if (status === "pending")
+      toast.info(
+        "Your payment is being confirmed. Your plan updates by itself as soon as Paystack confirms it — there is no need to pay again.",
+        { duration: 10_000 },
+      );
     else if (status === "error") toast.error(t("settings.somethingWentWrongWithThat"));
     router.replace("/settings/billing");
   }, [status, router, t]);
@@ -110,15 +143,31 @@ export function PlanBilling({
   const currentIndex = PLANS.findIndex((p) => p.id === currentPlan);
 
   function checkout(plan: PlanId) {
+    if (redirecting) return;
     setBusyPlan(plan);
     startTransition(async () => {
-      const res = await startCheckout(plan, cycle);
+      let res: Awaited<ReturnType<typeof startCheckout>>;
+      try {
+        res = await startCheckout(plan, cycle);
+      } catch (e) {
+        // A lost connection, or a tab older than the last deploy. Never a
+        // spinner that spins for ever: say which, and give the button back.
+        console.error("billing: could not start checkout", e);
+        toast.error(
+          typeof navigator !== "undefined" && !navigator.onLine
+            ? "You appear to be offline. Check your connection and try again. Nothing was charged."
+            : "We couldn't reach FlockInsight. Reload the page (the app may have just been updated) and try again. Nothing was charged.",
+        );
+        setBusyPlan(null);
+        return;
+      }
       if (!res.ok) {
         toast.error(res.error);
         setBusyPlan(null);
         return;
       }
       if (res.url) {
+        setRedirecting(true);
         window.location.href = res.url; // to Paystack
         return;
       }
@@ -127,6 +176,14 @@ export function PlanBilling({
       router.refresh();
     });
   }
+
+  const busy = pending || redirecting;
+  const renewsDate = renewsAt ? parseISO(renewsAt) : null;
+  // Read once per render on the client; a renewal date is days apart, so a
+  // render that straddles the instant it lapses is not worth a timer.
+  // eslint-disable-next-line react-hooks/purity
+  const lapsed = renewsDate !== null && renewsDate.getTime() <= Date.now();
+  const paidAhead = renewsDate !== null && !lapsed;
 
   return (
     <div className="space-y-5">
@@ -196,8 +253,10 @@ export function PlanBilling({
               )}
             </div>
             <p className="text-muted-foreground mt-1 text-sm">
-              {renewsAt
-                ? `Renews ${format(parseISO(renewsAt), "MMM d, yyyy")}`
+              {renewsDate
+                ? lapsed
+                  ? `Expired on ${format(renewsDate, "MMM d, yyyy")}`
+                  : `Paid through ${format(renewsDate, "MMM d, yyyy")}`
                 : "No active renewal date"}
             </p>
           </div>
@@ -265,11 +324,31 @@ export function PlanBilling({
           // two rounded numbers that will not quite reconcile.
           const perMonth = monthlyEquivalent(monthlyPrice, annualFreeMonths);
           const saving = annualSaving(monthlyPrice, annualFreeMonths);
+          const nairaWas = annual
+            ? annualTotal(basePrices[p.id], annualFreeMonths)
+            : basePrices[p.id];
+          // Abroad: the converted "was" price, or nothing — never naira
+          // beside a figure in another currency.
+          const wasLabel = international
+            ? ((annual ? international.annualBaseLabels : international.baseLabels)?.[p.id] ??
+              null)
+            : nairaWas !== null
+              ? `₦${nairaWas.toLocaleString()}`
+              : null;
+          /*
+           * The current plan can be paid for too: to renew early (the new
+           * months start where the paid ones end), to switch a monthly plan
+           * to a year, or simply to buy it during the trial. It used to be a
+           * disabled "Current plan" button, so the only way to pay for the
+           * plan a church was already on was to be locked out first.
+           */
           const action =
             p.id === "enterprise"
               ? "contact"
               : isCurrent
-                ? "current"
+                ? onTrial || !renewsDate
+                  ? `Pay for ${p.name}`
+                  : "Renew"
                 : i > currentIndex
                   ? "Upgrade"
                   : "Downgrade";
@@ -296,18 +375,15 @@ export function PlanBilling({
                 ) : (
                   <>
                     {priceLabel}
-                    {price !== null && price > 0 && discount > 0 && (
+                    {price !== null && price > 0 && discount > 0 && wasLabel && (
                       <span className="text-muted-foreground ml-1 text-xs font-normal line-through">
                         {/*
-                          The undiscounted price for the SAME period. Striking
-                          through a monthly figure beside a yearly one invited
-                          a comparison between two different things.
+                          The undiscounted price for the SAME period, in the
+                          SAME money. Striking through a monthly figure beside
+                          a yearly one, or naira beside meticais, invited a
+                          comparison between two different things.
                         */}
-                        ₦
-                        {(annual
-                          ? annualTotal(basePrices[p.id], annualFreeMonths)
-                          : basePrices[p.id]
-                        )?.toLocaleString()}
+                        {wasLabel}
                       </span>
                     )}
                   </>
@@ -315,7 +391,8 @@ export function PlanBilling({
               </p>
               {annual && price !== null && price > 0 && perMonth !== null && (
                 <p className="text-muted-foreground mt-1 text-xs">
-                  Works out at ₦{perMonth.toLocaleString()}/mo ·{" "}
+                  {international ? "In naira: works out at" : "Works out at"} ₦
+                  {perMonth.toLocaleString()}/mo ·{" "}
                   <span className="text-primary font-semibold">
                     saves ₦{saving.toLocaleString()}
                   </span>
@@ -329,11 +406,7 @@ export function PlanBilling({
                   </li>
                 ))}
               </ul>
-              {action === "current" ? (
-                <Button disabled variant="outline" className="mt-4 w-full">
-                  Current plan
-                </Button>
-              ) : action === "contact" ? (
+              {action === "contact" ? (
                 <Button asChild variant="outline" className="mt-4 w-full">
                   <a href="mailto:hello@flockinsight.com?subject=Enterprise%20plan">
                     Contact us
@@ -342,11 +415,15 @@ export function PlanBilling({
               ) : (
                 <Button
                   className="mt-4 w-full"
-                  variant={action === "Upgrade" ? "default" : "outline"}
+                  variant={
+                    action === "Upgrade" || (isCurrent && (onTrial || trialExpired || lapsed))
+                      ? "default"
+                      : "outline"
+                  }
                   onClick={() => checkout(p.id)}
-                  disabled={pending}
+                  disabled={busy}
                 >
-                  {pending && busyPlan === p.id && (
+                  {busy && busyPlan === p.id && (
                     <Loader2 className="animate-spin" />
                   )}
                   {action}
@@ -357,6 +434,20 @@ export function PlanBilling({
           );
         })}
       </div>
+
+      {/*
+        What paying does to the time already bought, in one sentence each —
+        the same rules lib/plan-period.ts applies on the server.
+      */}
+      {(paidAhead || onTrial) && (
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          {onTrial
+            ? "Paying now never shortens your free trial: the months you buy start when the trial ends."
+            : "Renewing early adds the new months after the ones you have already paid for."}{" "}
+          {paidAhead &&
+            "Switching to a different plan carries over what is left of your current one at its value — a cheaper plan runs longer, a dearer one shorter — so nothing you paid for is lost."}
+        </p>
+      )}
 
       {/*
         Said once, under the grid, rather than on four cards. A church abroad

@@ -43,6 +43,7 @@ import {
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,8 @@ export type TransactionRow = {
   method: string | null;
   note: string | null;
   recordedByName: string | null;
+  /** Set on a row a giving fund wrote: it follows its gift, not the pencil. */
+  givingId: string | null;
 };
 
 type Option = { id: string; name: string };
@@ -113,6 +116,8 @@ export function FinanceClient({
   summary,
   filters,
   resultCount,
+  resultIncome,
+  resultExpense,
   page,
   pageSize,
   hasAnyRecords,
@@ -133,6 +138,9 @@ export function FinanceClient({
   };
   filters: FinanceFilterState;
   resultCount: number;
+  /** Income and expense across every filtered match, not just this page. */
+  resultIncome: number;
+  resultExpense: number;
   page: number;
   pageSize: number;
   hasAnyRecords: boolean;
@@ -385,7 +393,7 @@ export function FinanceClient({
         categories={categories}
         today={today}
         resultCount={resultCount}
-        resultSummary={`${formatMoney(summary.income, currency)} in · ${formatMoney(summary.expense, currency)} out`}
+        resultSummary={`${formatMoney(resultIncome, currency)} in · ${formatMoney(resultExpense, currency)} out`}
       />
 
       {/* Ledger */}
@@ -464,7 +472,23 @@ export function FinanceClient({
                       {r.kind === "income" ? "+" : "−"}
                       {formatMoney(r.amount, currency)}
                     </td>
-                    {canManage && (
+                    {canManage && r.givingId && (
+                      <td className="px-4 py-3">
+                        {/* A gift's reflection in its fund: editing or
+                            deleting it here would move the fund away from
+                            what was actually given, so it is changed through
+                            the gift and the books follow. */}
+                        <div className="flex justify-end">
+                          <Link
+                            href="/giving"
+                            title="This entry mirrors a gift. Change or remove it in Giving."
+                          >
+                            <Badge variant="secondary">From Giving</Badge>
+                          </Link>
+                        </div>
+                      </td>
+                    )}
+                    {canManage && !r.givingId && (
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
                           <Button
@@ -575,6 +599,7 @@ export function FinanceClient({
                   placeholder="0.00"
                   autoFocus
                 />
+                <AmountPreview value={form.amount} currency={currency} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="date">{t("finance.date")}</Label>

@@ -3,11 +3,9 @@ import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
-import { applyDiscount, getAnnualFreeMonths, getPlanPrices } from "@/lib/pricing";
-import { annualTotal } from "@/lib/billing-cycle";
-import { PLANS, type PlanId } from "@/lib/plans";
 import { computeStanding } from "@/lib/trial";
-import { pricesForCountry, planPriceLabelFor } from "@/lib/plan-price";
+import { offerLabel, priceBook } from "@/lib/plan-offers";
+import type { PlanPrice } from "@/lib/plan-price";
 import { PlanBilling } from "@/components/settings/plan-billing";
 
 export const metadata = { title: "Billing · Settings" };
@@ -50,59 +48,42 @@ export default async function BillingPage({
       .limit(20),
   ]);
 
-  const [basePrices, freeMonths] = await Promise.all([
-    getPlanPrices(),
-    getAnnualFreeMonths(),
-  ]);
-  const prices = Object.fromEntries(
-    PLANS.map((p) => [p.id, applyDiscount(basePrices[p.id], row.discount)]),
-  ) as Record<PlanId, number | null>;
-
   /*
-   * The yearly total for each plan, computed here rather than in the browser.
-   *
-   * The toggle on the billing screen chooses between two numbers the server
-   * worked out; it never multiplies a price itself. A total computed in a
-   * client component is a total a browser can edit, and this one is handed
-   * straight to a payment.
+   * Every figure on this screen comes from priceBook — the same book the trial
+   * gate prints from and the same steps startCheckout bills with (lib/
+   * plan-offers.ts). The yearly totals are worked out there, on the server:
+   * the toggle on the billing screen chooses between two numbers, it never
+   * multiplies a price itself, because a total computed in a client component
+   * is a total a browser can edit.
    */
-  const annualPrices = Object.fromEntries(
-    PLANS.map((p) => [p.id, annualTotal(prices[p.id], freeMonths)]),
-  ) as Record<PlanId, number | null>;
+  const book = await priceBook({ country: c.country, planDiscountPct: row.discount });
+  const { basePrices, prices, annualPrices, freeMonths } = book;
 
   const standing = computeStanding(c);
 
   /*
    * A church outside Nigeria is quoted in its own currency and charged a
-   * surcharge covering the international card fee. Computed here, on the
-   * server, from the SAME helper the checkout action uses — if the card and
-   * the charge ever disagreed, the church would find out on its statement.
+   * surcharge covering the international card fee. If the card and the
+   * charge ever disagreed, the church would find out on its statement.
    */
-  const [localised, localisedAnnual] = await Promise.all([
-    pricesForCountry(prices, c.country),
-    pricesForCountry(annualPrices, c.country),
-  ]);
-  const first = Object.values(localised).find((p) => p?.international);
+  const labels = (set: Record<string, PlanPrice | null>, per: "/mo" | "/yr") =>
+    Object.fromEntries(
+      Object.entries(set).map(([id, p]) => [id, p && p.baseNgn > 0 ? offerLabel(p, per) : null]),
+    );
+  const first = book.international;
   const international = first
     ? {
-        labels: Object.fromEntries(
-          Object.entries(localised).map(([id, p]) => [
-            id,
-            p && p.baseNgn > 0 ? planPriceLabelFor(p) : null,
-          ]),
-        ),
+        labels: labels(book.local.monthly, "/mo"),
         /*
          * The yearly figures carry ONE surcharge, not twelve — it is a flat
          * amount per card transaction and a year is one transaction. So these
          * are a separate conversion rather than the monthly label times ten,
          * and paying annually saves a church abroad more than the two months.
          */
-        annualLabels: Object.fromEntries(
-          Object.entries(localisedAnnual).map(([id, p]) => [
-            id,
-            p && p.baseNgn > 0 ? planPriceLabelFor(p, { perMonth: "/yr" }) : null,
-          ]),
-        ),
+        annualLabels: labels(book.local.annual, "/yr"),
+        // The struck-through "was" prices, in the same money as the price.
+        baseLabels: labels(book.local.baseMonthly, "/mo"),
+        annualBaseLabels: labels(book.local.baseAnnual, "/yr"),
         currency: first.displayCurrency,
         surchargeNgn: first.surchargeNgn,
         live: first.live,

@@ -6,24 +6,27 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { debitWallet } from "@/lib/wallet";
+import { creditWallet, debitWallet } from "@/lib/wallet";
 import { getStorageBundles } from "@/lib/pricing";
-import { GB } from "@/lib/storage-bytes";
+import { formatBytes, GB } from "@/lib/storage-bytes";
+import { getStorageInfo } from "@/lib/storage";
+import { storageSwitchQuote, type SwitchQuote } from "@/lib/storage-switch";
 import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-/** Add one month and return the new date. */
-function addMonth(from: Date): Date {
-  const d = new Date(from);
-  d.setMonth(d.getMonth() + 1);
-  return d;
-}
-
 /**
- * Subscribe to (or switch to) a storage bundle. Charges the first month from
- * the wallet immediately and activates the extra storage. Switching bundles
- * charges a fresh month and resets the renewal date.
+ * Subscribe to, or switch to, a storage bundle.
+ *
+ * With no add-on running, the first month is charged in full from the wallet.
+ * A switch inside a paid month is settled on the difference for the days left
+ * — charged on the way up, credited back on the way down — and the renewal
+ * date stays put (lib/storage-switch.ts has the rule and why). It used to
+ * charge a whole fresh month on every switch, keep nothing of the old one,
+ * and happily shrink a church's storage below the files it already had.
+ *
+ * The church row is locked for the whole decision, so a double tap or two
+ * tabs cannot both charge: the second one finds the bundle already switched.
  */
 export async function subscribeStorage(gb: number): Promise<ActionResult> {
   const { church: c, user } = await requireChurch();
@@ -35,35 +38,113 @@ export async function subscribeStorage(gb: number): Promise<ActionResult> {
   const bundle = bundles.find((b) => b.gb === gb);
   if (!bundle) return { ok: false, error: "That storage plan isn't available." };
 
-  const charge = await debitWallet({
-    churchId: c.id,
-    amount: bundle.price,
-    category: "storage",
-    reason: `Storage add-on: +${bundle.gb}GB (1 month)`,
-    createdBy: user.id,
-  });
-  if (!charge.ok)
+  /*
+   * Never below what is already stored: shrinking the quota under the files
+   * a church holds blocks every upload until it deletes some, which is not a
+   * cheaper plan so much as a broken one.
+   */
+  const info = await getStorageInfo(c.id, 0);
+  const newLimit = info.limit + bundle.gb * GB;
+  if (info.used > newLimit)
     return {
       ok: false,
-      error: `Not enough wallet balance. This costs ₦${bundle.price.toLocaleString()} — top up your wallet first.`,
+      error: `You are using ${formatBytes(info.used)}, and +${bundle.gb}GB would hold ${formatBytes(newLimit)}. Free up space in Media first, or choose a bigger plan.`,
     };
 
-  await db
-    .update(church)
-    .set({
-      storageExtraBytes: bundle.gb * GB,
-      storageMonthlyCost: bundle.price,
-      storageRenewsAt: addMonth(new Date()),
-    })
-    .where(eq(church.id, c.id));
+  type Done = { quote: Exclude<SwitchQuote, { kind: "same" }>; fromGb: number };
+  const result: { ok: true; done: Done } | { ok: false; error: string } = await db.transaction(
+    async (tx) => {
+      const [row] = await tx
+        .select({
+          extraBytes: church.storageExtraBytes,
+          monthlyCost: church.storageMonthlyCost,
+          renewsAt: church.storageRenewsAt,
+        })
+        .from(church)
+        .where(eq(church.id, c.id))
+        .for("update")
+        .limit(1);
+      if (!row) return { ok: false, error: "Church not found." };
+
+      const fromGb = Math.round(Number(row.extraBytes) / GB);
+      const quote = storageSwitchQuote(
+        {
+          currentGb: fromGb,
+          currentMonthlyCost: Number(row.monthlyCost),
+          renewsAt: row.renewsAt,
+        },
+        bundle,
+      );
+      // A stale tab, or the second of two taps: never charge for what is running.
+      if (quote.kind === "same") return { ok: false, error: "You are already on this plan." };
+
+      if (quote.kind === "downgrade") {
+        if (quote.refund > 0)
+          await creditWallet(
+            {
+              churchId: c.id,
+              amount: quote.refund,
+              category: "refund",
+              reason: `Storage: +${fromGb}GB → +${bundle.gb}GB, unused part of this month returned`,
+              createdBy: user.id,
+            },
+            tx,
+          );
+      } else if (quote.charge > 0) {
+        const charged = await debitWallet(
+          {
+            churchId: c.id,
+            amount: quote.charge,
+            category: "storage",
+            reason:
+              quote.kind === "new"
+                ? `Storage add-on: +${bundle.gb}GB (1 month)`
+                : `Storage: +${fromGb}GB → +${bundle.gb}GB, difference for the rest of this month`,
+            createdBy: user.id,
+          },
+          tx,
+        );
+        if (!charged.ok)
+          return {
+            ok: false,
+            error: `Not enough wallet balance. This costs ₦${quote.charge.toLocaleString()} now — top up your wallet first.`,
+          };
+      }
+
+      await tx
+        .update(church)
+        .set({
+          storageExtraBytes: bundle.gb * GB,
+          storageMonthlyCost: bundle.price,
+          storageRenewsAt: quote.renewsAt,
+        })
+        .where(eq(church.id, c.id));
+      return { ok: true, done: { quote, fromGb } };
+    },
+  );
+  if (!result.ok) return result;
+  const { quote, fromGb } = result.done;
 
   await audit({
     churchId: c.id,
     action: "billing.storage.create",
-    summary: `Subscribed to +${bundle.gb}GB of storage at ₦${bundle.price.toLocaleString()}/month`,
+    summary:
+      quote.kind === "new"
+        ? `Subscribed to +${bundle.gb}GB of storage at ₦${bundle.price.toLocaleString()}/month`
+        : quote.kind === "upgrade"
+          ? `Switched storage +${fromGb}GB → +${bundle.gb}GB, ₦${quote.charge.toLocaleString()} for the rest of this month, then ₦${bundle.price.toLocaleString()}/month`
+          : `Switched storage +${fromGb}GB → +${bundle.gb}GB, ₦${quote.refund.toLocaleString()} returned to the wallet, then ₦${bundle.price.toLocaleString()}/month`,
     targetType: "church",
     targetId: c.id,
-    meta: { gb: bundle.gb, price: bundle.price },
+    meta: {
+      gb: bundle.gb,
+      fromGb,
+      price: bundle.price,
+      kind: quote.kind,
+      charge: quote.kind === "downgrade" ? 0 : quote.charge,
+      refund: quote.kind === "downgrade" ? quote.refund : 0,
+      renewsAt: quote.renewsAt.toISOString(),
+    },
     severity: "notice",
   });
 

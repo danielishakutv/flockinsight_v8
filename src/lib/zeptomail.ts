@@ -1,4 +1,9 @@
 import "server-only";
+import {
+  isRetryableNetworkError,
+  isRetryableStatus,
+  parseRetryAfter,
+} from "@/lib/email-pacing";
 
 /**
  * ZeptoMail (Zoho) transactional email, over its REST API.
@@ -33,9 +38,26 @@ export type ZeptoMessage = {
   cc?: string[];
   replyTo?: string;
   attachments?: { filename: string; content: Buffer; contentType?: string }[];
+  /** Extra MIME headers, e.g. List-Unsubscribe. */
+  headers?: Record<string, string>;
 };
 
-export type ZeptoResult = { ok: boolean; id: string | null; error?: string };
+/**
+ * `status` and `retryable` are here so the mailer can tell a rate limit (try
+ * again shortly) from a refused address (never going to work) — before they
+ * existed, both were the same `ok: false` and neither was retried.
+ */
+export type ZeptoResult = {
+  ok: boolean;
+  id: string | null;
+  error?: string;
+  /** The HTTP status, or null when no response came back at all. */
+  status?: number | null;
+  /** Worth sending again: 429, 5xx, or a connection that never opened. */
+  retryable?: boolean;
+  /** The provider's Retry-After, in ms, when it sent one. */
+  retryAfterMs?: number | null;
+};
 
 const recipient = (email: string) => ({ email_address: { address: email } });
 
@@ -57,6 +79,7 @@ export async function sendViaZepto(msg: ZeptoMessage): Promise<ZeptoResult> {
   if (msg.text) body.textbody = msg.text;
   if (msg.cc?.length) body.cc = msg.cc.map(recipient);
   if (msg.replyTo) body.reply_to = [{ address: msg.replyTo }];
+  if (msg.headers && Object.keys(msg.headers).length) body.mime_headers = msg.headers;
   if (msg.attachments?.length) {
     body.attachments = msg.attachments.map((a) => ({
       name: a.filename,
@@ -91,12 +114,28 @@ export async function sendViaZepto(msg: ZeptoMessage): Promise<ZeptoResult> {
     }
 
     if (!res.ok) {
-      return { ok: false, id: null, error: zeptoError(parsed) ?? `HTTP ${res.status}` };
+      return {
+        ok: false,
+        id: null,
+        error: zeptoError(parsed) ?? `HTTP ${res.status}`,
+        status: res.status,
+        retryable: isRetryableStatus(res.status),
+        retryAfterMs: parseRetryAfter(res.headers.get("retry-after")),
+      };
     }
-    return { ok: true, id: requestId(parsed) };
+    return { ok: true, id: requestId(parsed), status: res.status };
   } catch (e) {
     const msg2 = e instanceof Error ? e.message : String(e);
-    return { ok: false, id: null, error: msg2 };
+    return {
+      ok: false,
+      id: null,
+      error: msg2,
+      status: null,
+      // Only a connection that never opened. Our own 20s timeout is not
+      // retried: ZeptoMail may have accepted the message we stopped waiting
+      // for, and a retry would deliver it twice.
+      retryable: isRetryableNetworkError(e),
+    };
   }
 }
 

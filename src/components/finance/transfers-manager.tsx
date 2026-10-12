@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 
 export type TransferAccount = {
@@ -302,6 +303,7 @@ export function TransfersManager({
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                 />
+                <AmountPreview value={amount} currency={currency} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="t-date">{t("finance.date")}</Label>

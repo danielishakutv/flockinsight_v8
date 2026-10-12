@@ -85,6 +85,11 @@ export async function listBookings(
     facilityId?: string;
     statuses?: string[];
     limit?: number;
+    /**
+     * Which end the limit cuts from. "desc" keeps the latest and drops the
+     * oldest — for a list whose point is what is coming up.
+     */
+    order?: "asc" | "desc";
   } = {},
 ) {
   const who = alias(member, "booking_member");
@@ -143,7 +148,7 @@ export async function listBookings(
     )
     .leftJoin(approver, eq(approver.id, facilityBooking.approvedBy))
     .where(and(...where))
-    .orderBy(asc(facilityBooking.startsAt))
+    .orderBy(opts.order === "desc" ? desc(facilityBooking.startsAt) : asc(facilityBooking.startsAt))
     .limit(opts.limit ?? 500);
 }
 
@@ -204,56 +209,62 @@ export async function pendingCount(churchId: string): Promise<number> {
  * slot; that is the whole point of it being a request, and two people may ask
  * for the same Saturday.
  */
-export async function clashesFor(args: {
-  churchId: string;
-  facilityId: string;
-  startsAt: Date;
-  endsAt: Date;
-  ignoreBookingId?: string;
-  bufferMinutes: number;
-}) {
+export async function clashesFor(
+  args: {
+    churchId: string;
+    facilityId: string;
+    startsAt: Date;
+    endsAt: Date;
+    ignoreBookingId?: string;
+    bufferMinutes: number;
+  },
+  /** The transaction holding `lockFacilityForBooking`, when there is one. */
+  executor: Executor = db,
+) {
   const pad = 86_400_000 + Math.max(0, args.bufferMinutes) * 60_000;
   const from = new Date(args.startsAt.getTime() - pad);
   const to = new Date(args.endsAt.getTime() + pad);
 
-  const [bookings, closures] = await Promise.all([
-    db
-      .select({
-        id: facilityBooking.id,
-        title: facilityBooking.title,
-        startsAt: facilityBooking.startsAt,
-        endsAt: facilityBooking.endsAt,
-      })
-      .from(facilityBooking)
-      .where(
-        and(
-          eq(facilityBooking.churchId, args.churchId),
-          eq(facilityBooking.facilityId, args.facilityId),
-          eq(facilityBooking.status, "approved"),
-          lt(facilityBooking.startsAt, to),
-          gte(facilityBooking.endsAt, from),
-          args.ignoreBookingId
-            ? ne(facilityBooking.id, args.ignoreBookingId)
-            : undefined,
-        ),
+  /*
+   * One after the other rather than in parallel: inside a transaction both
+   * reads share one connection, and node-postgres would queue them anyway.
+   */
+  const bookings = await executor
+    .select({
+      id: facilityBooking.id,
+      title: facilityBooking.title,
+      startsAt: facilityBooking.startsAt,
+      endsAt: facilityBooking.endsAt,
+    })
+    .from(facilityBooking)
+    .where(
+      and(
+        eq(facilityBooking.churchId, args.churchId),
+        eq(facilityBooking.facilityId, args.facilityId),
+        eq(facilityBooking.status, "approved"),
+        lt(facilityBooking.startsAt, to),
+        gte(facilityBooking.endsAt, from),
+        args.ignoreBookingId
+          ? ne(facilityBooking.id, args.ignoreBookingId)
+          : undefined,
       ),
-    db
-      .select({
-        id: facilityClosure.id,
-        reason: facilityClosure.reason,
-        startsAt: facilityClosure.startsAt,
-        endsAt: facilityClosure.endsAt,
-      })
-      .from(facilityClosure)
-      .where(
-        and(
-          eq(facilityClosure.churchId, args.churchId),
-          eq(facilityClosure.facilityId, args.facilityId),
-          lt(facilityClosure.startsAt, to),
-          gte(facilityClosure.endsAt, from),
-        ),
+    );
+  const closures = await executor
+    .select({
+      id: facilityClosure.id,
+      reason: facilityClosure.reason,
+      startsAt: facilityClosure.startsAt,
+      endsAt: facilityClosure.endsAt,
+    })
+    .from(facilityClosure)
+    .where(
+      and(
+        eq(facilityClosure.churchId, args.churchId),
+        eq(facilityClosure.facilityId, args.facilityId),
+        lt(facilityClosure.startsAt, to),
+        gte(facilityClosure.endsAt, from),
       ),
-  ]);
+    );
 
   const candidates: ClashCandidate[] = [
     ...bookings.map((b) => ({
@@ -277,6 +288,44 @@ export async function clashesFor(args: {
     candidates,
     { bufferMinutes: args.bufferMinutes, ignoreId: args.ignoreBookingId },
   );
+}
+
+/** `db`, or the transaction a caller is already inside. */
+type Executor = Pick<typeof db, "select">;
+
+/**
+ * Hold a facility for the length of a transaction, so "is it free?" and "take
+ * it" happen as one step.
+ *
+ * READ COMMITTED does not make check-then-write safe on its own (see
+ * AGENTS.md): two managers approving overlapping requests at the same moment
+ * each ran the clash check, each saw no approved overlap, and both committed —
+ * a double-booked hall and no error. Every write that makes a booking HOLD a
+ * slot (a direct booking, an approval, an edit of an approved booking) takes
+ * this lock first, so the second waits for the first and then sees it.
+ *
+ * Returns false when the facility is not this church's.
+ */
+export async function lockFacilityForBooking(
+  tx: Pick<typeof db, "select">,
+  churchId: string,
+  facilityId: string,
+): Promise<boolean> {
+  const rows = await tx
+    .select({ id: facility.id })
+    .from(facility)
+    .where(and(eq(facility.id, facilityId), eq(facility.churchId, churchId)))
+    .for("update");
+  return rows.length > 0;
+}
+
+/**
+ * Postgres's answer when the database-level rule (an exclusion constraint on
+ * approved bookings) refuses an overlap the application check missed.
+ */
+export function isBookingOverlapViolation(e: unknown): boolean {
+  const err = e as { code?: string; cause?: { code?: string } } | null;
+  return err?.code === "23P01" || err?.cause?.code === "23P01";
 }
 
 /** Re-export so a caller does not have to know where the rule lives. */

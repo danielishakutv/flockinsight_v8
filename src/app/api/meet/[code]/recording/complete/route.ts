@@ -1,5 +1,6 @@
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { media } from "@/db/schema";
+import { church, media } from "@/db/schema";
 import {
   authenticatePeer,
   completeRecording,
@@ -7,7 +8,11 @@ import {
   postSignals,
 } from "@/lib/meetings";
 import { isHostRole } from "@/lib/meetings-shared";
-import { fetchCloudinaryAsset } from "@/lib/cloudinary";
+import { destroyFromCloudinary, fetchCloudinaryAsset } from "@/lib/cloudinary";
+import { rememberOrphan } from "@/lib/media";
+import { lockChurchMediaQuota } from "@/lib/media-upload-tickets";
+import { getStorageInfo } from "@/lib/storage";
+import { formatBytes } from "@/lib/storage-bytes";
 import { fail, json } from "@/lib/meeting-api";
 import { audit } from "@/lib/audit";
 
@@ -74,27 +79,65 @@ export async function POST(
     asset.durationSec ?? Math.max(0, Math.round(Number(body.durationSec ?? 0)) || 0);
   const recordingId = body.recordingId ? String(body.recordingId) : "";
 
-  const [row] = await db
-    .insert(media)
-    .values({
-      churchId: m.churchId,
-      kind: "sermon",
-      mime: mode === "audio" ? "audio/webm" : "video/webm",
-      size: asset.bytes,
-      bytes: asset.bytes,
-      provider: "cloudinary",
-      publicId: asset.publicId,
-      resourceType: asset.resourceType,
-      url: asset.url,
-      format: asset.format,
-      width: asset.width,
-      height: asset.height,
-      durationSec,
-      title: `${m.title} — recording`,
-      originalName: `${m.code}-recording.${asset.format ?? "webm"}`,
-      uploadedBy: peer.userId ?? undefined,
-    })
-    .returning();
+  /*
+   * One row per asset, and only if it fits. The size /sign was told is the
+   * browser's word; this is what Cloudinary stored. Serialised on the CHURCH
+   * (the lock /media/sign and /media/complete take), so a repeated complete
+   * returns the row it already made instead of counting the file twice, and
+   * two different files cannot both fit into the same last megabyte.
+   */
+  const outcome = await db.transaction(async (tx) => {
+    await lockChurchMediaQuota(tx, m.churchId);
+    const [existing] = await tx
+      .select()
+      .from(media)
+      .where(and(eq(media.churchId, m.churchId), eq(media.publicId, asset.publicId)))
+      .limit(1);
+    if (existing) return { row: existing, full: null as number | null, fresh: false };
+
+    const [c] = await tx
+      .select({ storageExtraBytes: church.storageExtraBytes })
+      .from(church)
+      .where(eq(church.id, m.churchId))
+      .limit(1);
+    const info = await getStorageInfo(m.churchId, c?.storageExtraBytes ?? 0);
+    if (info.used + asset.bytes > info.limit) return { row: null, full: info.free, fresh: false };
+
+    const [inserted] = await tx
+      .insert(media)
+      .values({
+        churchId: m.churchId,
+        kind: "sermon",
+        mime: mode === "audio" ? "audio/webm" : "video/webm",
+        size: asset.bytes,
+        bytes: asset.bytes,
+        provider: "cloudinary",
+        publicId: asset.publicId,
+        resourceType: asset.resourceType,
+        url: asset.url,
+        format: asset.format,
+        width: asset.width,
+        height: asset.height,
+        durationSec,
+        title: `${m.title} — recording`,
+        originalName: `${m.code}-recording.${asset.format ?? "webm"}`,
+        uploadedBy: peer.userId ?? undefined,
+      })
+      .returning();
+    return { row: inserted, full: null, fresh: true };
+  });
+
+  if (!outcome.row) {
+    const gone = await destroyFromCloudinary(asset.publicId, asset.resourceType);
+    if (!gone)
+      await rememberOrphan(m.churchId, asset.publicId, asset.resourceType, "over quota at recording/complete");
+    return fail(
+      `Not enough storage — this recording is ${formatBytes(asset.bytes)} and you have ${formatBytes(outcome.full ?? 0)} free. It stays on your device until you make room.`,
+      413,
+      { keepLocal: true },
+    );
+  }
+  const row = outcome.row;
 
   if (recordingId)
     await completeRecording({

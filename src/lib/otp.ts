@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { otpCode } from "@/db/schema";
 
@@ -14,7 +14,9 @@ import { otpCode } from "@/db/schema";
  */
 
 const CODE_TTL_MIN = 10; // codes are valid for 10 minutes
-const MAX_ATTEMPTS = 5; // wrong guesses before a code is dead
+// Comparisons before a code is dead. Every comparison counts, the right one
+// included, so a code can be tested at most this many times in total.
+export const MAX_ATTEMPTS = 5;
 const MAX_ACTIVE_PER_DEST = 3; // throttle: live codes per destination+purpose
 
 function salt(): string {
@@ -102,29 +104,70 @@ export type VerifyOtpResult =
 /**
  * Check a code against a stored OTP (by id). On success the code is marked
  * consumed (single-use) and its payload/memberId are returned so the caller
- * can apply the pending action. Wrong guesses increment attempts.
+ * can apply the pending action.
+ *
+ * Every comparison claims an attempt FIRST, atomically, and only then
+ * compares. This used to read `attempts`, compare, and write back
+ * `row.attempts + 1` from the value it had read — so a burst of parallel
+ * guesses all read 0, all compared, and left the counter at 1. A script
+ * keeping fifty requests in flight could test thousands of codes against one
+ * id inside its ten minutes instead of five. Now the UPDATE is the gate:
+ *
+ *   update otp_code set attempts = attempts + 1
+ *   where id = $1 and attempts < 5 and consumed_at is null and expires_at > now()
+ *   returning attempts
+ *
+ * Postgres serialises concurrent UPDATEs of one row and re-checks the WHERE
+ * against the committed value, so exactly five claims can ever succeed.
+ * Consuming is the same shape (`where consumed_at is null returning`), so two
+ * simultaneous correct submissions cannot both apply the payload.
+ *
+ * `expectedPurpose`, when given, refuses a code issued for something else
+ * before any attempt is spent.
  */
-export async function verifyOtp(id: string, code: string): Promise<VerifyOtpResult> {
+export async function verifyOtp(
+  id: string,
+  code: string,
+  opts?: { expectedPurpose?: string },
+): Promise<VerifyOtpResult> {
   const clean = (code || "").replace(/\D/g, "");
   if (clean.length !== 6) return { ok: false, error: "Enter the 6-digit code." };
 
   const [row] = await db.select().from(otpCode).where(eq(otpCode.id, id)).limit(1);
   if (!row) return { ok: false, error: "This code is no longer valid. Please start again." };
+  if (opts?.expectedPurpose && row.purpose !== opts.expectedPurpose)
+    return { ok: false, error: "This code is no longer valid. Please start again." };
   if (row.consumedAt) return { ok: false, error: "This code has already been used." };
   if (row.expiresAt.getTime() < Date.now())
     return { ok: false, error: "This code has expired. Please request a new one." };
-  if (row.attempts >= MAX_ATTEMPTS)
+
+  const [claimed] = await db
+    .update(otpCode)
+    .set({ attempts: sql`${otpCode.attempts} + 1` })
+    .where(
+      and(
+        eq(otpCode.id, id),
+        lt(otpCode.attempts, MAX_ATTEMPTS),
+        isNull(otpCode.consumedAt),
+        gt(otpCode.expiresAt, new Date()),
+      ),
+    )
+    .returning({ attempts: otpCode.attempts });
+  if (!claimed) {
     return { ok: false, error: "Too many wrong attempts. Please request a new code." };
+  }
 
   if (!safeEqualHex(row.codeHash, hashCode(clean))) {
-    await db
-      .update(otpCode)
-      .set({ attempts: row.attempts + 1 })
-      .where(eq(otpCode.id, id));
     return { ok: false, error: "That code is incorrect. Please try again." };
   }
 
-  await db.update(otpCode).set({ consumedAt: new Date() }).where(eq(otpCode.id, id));
+  const [used] = await db
+    .update(otpCode)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(otpCode.id, id), isNull(otpCode.consumedAt)))
+    .returning({ id: otpCode.id });
+  if (!used) return { ok: false, error: "This code has already been used." };
+
   return {
     ok: true,
     memberId: row.memberId,

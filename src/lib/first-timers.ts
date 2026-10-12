@@ -152,6 +152,7 @@ export async function runFirstTimers(
         phone: member.phone,
         email: member.email,
         createdAt: member.createdAt,
+        firstVisitDate: member.firstVisitDate,
       })
       .from(member)
       .where(
@@ -198,9 +199,17 @@ export async function runFirstTimers(
     const stagesClaimed = new Set<string>();
 
     for (const m of members) {
-      const ageDays = Math.floor(
-        (now.getTime() - new Date(m.createdAt).getTime()) / DAY_MS,
-      );
+      /*
+       * Timed from when they actually visited, when that is known and earlier
+       * than the row. A first-timer typed in from Sunday's cards on Wednesday
+       * is three days into their week, not starting it; and somebody entered
+       * today with a first visit months ago is history, not this week's
+       * visitor — the same "never blast the visitor history" rule as the
+       * cutoff above, which `createdAt` alone cannot apply to a back-dated row.
+       */
+      const anchor = visitAnchor(m.createdAt, m.firstVisitDate);
+      if (anchor < cutoff.getTime()) continue;
+      const ageDays = Math.floor((now.getTime() - anchor) / DAY_MS);
       const vars = { name: m.firstName, church: c.name, link };
 
       const stages: {
@@ -410,6 +419,20 @@ export async function runFirstTimers(
   }
 
   return summary;
+}
+
+/**
+ * The moment a first-timer's sequence is timed from: their first visit when
+ * it is recorded and earlier than the row, otherwise when the row was made.
+ */
+export function visitAnchor(
+  createdAt: Date | string,
+  firstVisitDate: string | null,
+): number {
+  const created = new Date(createdAt).getTime();
+  if (!firstVisitDate) return created;
+  const visited = new Date(`${firstVisitDate}T00:00:00Z`).getTime();
+  return Number.isFinite(visited) && visited < created ? visited : created;
 }
 
 /**

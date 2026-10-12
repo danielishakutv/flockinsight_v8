@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { hqReportSetting } from "@/db/schema";
+import { church, hqReportSetting } from "@/db/schema";
+import { automationPaused, standingColumns } from "@/lib/church-standing";
 import {
   REPORT_RANGE,
   branchStats,
@@ -37,8 +38,28 @@ export async function GET(request: Request) {
     const due = await dueReportSettings();
     let sent = 0;
     let skipped = 0;
+    let pausedLapsed = 0;
+
+    /*
+     * A headquarters whose plan or trial has lapsed gets no report until it is
+     * back in good standing (see lib/church-standing.ts). Its `lastSentAt` is
+     * left alone, so the report goes out on the first run after it pays rather
+     * than a week later.
+     */
+    const standing = due.length
+      ? await db
+          .select({ id: church.id, ...standingColumns })
+          .from(church)
+          .where(inArray(church.id, due.map((d) => d.churchId)))
+      : [];
+    const now = new Date();
+    const paused = new Set(standing.filter((c) => automationPaused(c, now)).map((c) => c.id));
 
     for (const setting of due) {
+      if (paused.has(setting.churchId)) {
+        pausedLapsed++;
+        continue;
+      }
       const range = REPORT_RANGE[setting.frequency];
       const { rows } = await branchStats(setting.churchId, {
         range,
@@ -99,6 +120,6 @@ export async function GET(request: Request) {
         .where(eq(hqReportSetting.churchId, setting.churchId));
     }
 
-    return Response.json({ ok: true, due: due.length, sent, skipped });
+    return Response.json({ ok: true, due: due.length, sent, skipped, pausedLapsed });
   });
 }

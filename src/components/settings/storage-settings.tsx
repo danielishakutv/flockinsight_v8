@@ -11,6 +11,7 @@ import {
   cancelStorage,
 } from "@/app/(app)/settings/storage/actions";
 import { formatMoney } from "@/lib/money";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { formatBytes, GB, type StorageBundle } from "@/lib/storage-bytes";
 import type { StorageInfo } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
@@ -21,16 +22,21 @@ import { useT } from "@/components/i18n-provider";
 export function StorageSettings({
   storage,
   bundles,
+  quotes,
   balance,
-  currency,
   monthlyCost,
   extraBytes,
   renewsAt,
 }: {
   storage: StorageInfo;
   bundles: StorageBundle[];
+  /**
+   * Per bundle (by GB), what choosing it does to the wallet NOW — worked out
+   * on the server by the same rule the action charges with. Null for the
+   * bundle already running.
+   */
+  quotes: Record<number, { charge: number; refund: number } | null>;
   balance: number;
-  currency: string;
   monthlyCost: number;
   extraBytes: number;
   renewsAt: string | null;
@@ -40,25 +46,51 @@ export function StorageSettings({
   const [pending, start] = useTransition();
   const [acting, setActing] = useState<number | "cancel" | null>(null);
 
+  // Storage add-ons are paid from the wallet, and the wallet is naira — for
+  // every church, wherever it is. Never the church's own currency symbol.
+  const money = (n: number) => formatMoney(n, WALLET_CURRENCY);
   const activeGb = Math.round(extraBytes / GB);
   const pct = storage.pct;
   const nearFull = pct >= 90;
+  // The plan's own allowance, without the add-on: what a bundle is added to.
+  const baseLimit = storage.limit - extraBytes;
 
   function subscribe(b: StorageBundle) {
-    if (balance < b.price) {
+    const q = quotes[b.gb];
+    if (!q) return;
+    if (balance < q.charge) {
       toast.error(t("settings.notEnoughWalletBalanceTop"));
       return;
     }
+    /*
+     * Named, and asked. This takes money from the wallet in one tap, and on a
+     * phone the tap is not always the one meant.
+     */
+    const what =
+      activeGb > 0
+        ? q.refund > 0
+          ? `Switch from +${activeGb}GB to +${b.gb}GB now? ${money(q.refund)} for the unused part of this month goes back to your wallet, and +${b.gb}GB renews at ${money(b.price)}/month.`
+          : `Switch from +${activeGb}GB to +${b.gb}GB now? ${money(q.charge)} is taken from your wallet for the rest of this month, then +${b.gb}GB renews at ${money(b.price)}/month.`
+        : `Add +${b.gb}GB of storage? ${money(q.charge)} is taken from your wallet now, and it renews monthly.`;
+    if (!confirm(what)) return;
     setActing(b.gb);
     start(async () => {
-      const res = await subscribeStorage(b.gb);
-      if (res.ok) {
-        toast.success(`Storage upgraded to +${b.gb}GB.`);
-        router.refresh();
-      } else {
-        toast.error(res.error);
+      try {
+        const res = await subscribeStorage(b.gb);
+        if (res.ok) {
+          toast.success(`Storage is now +${b.gb}GB.`);
+          router.refresh();
+        } else {
+          toast.error(res.error);
+        }
+      } catch (e) {
+        console.error("storage: could not change the add-on", e);
+        toast.error(
+          "We couldn't reach FlockInsight. Reload the page and check your storage before trying again.",
+        );
+      } finally {
+        setActing(null);
       }
-      setActing(null);
     });
   }
 
@@ -128,7 +160,7 @@ export function StorageSettings({
             <div>
               <p className="font-semibold">
                 Active add-on: +{activeGb}GB ·{" "}
-                {formatMoney(monthlyCost, currency)}/mo
+                {money(monthlyCost)}/mo
               </p>
               {renewsAt && (
                 <p className="text-muted-foreground text-sm">
@@ -156,7 +188,7 @@ export function StorageSettings({
       {/* Wallet hint */}
       <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
         <Wallet className="size-4" />
-        Wallet balance: {formatMoney(balance, currency)}.
+        Wallet balance: {money(balance)}.
         <Link href="/settings/wallet" className="text-primary font-medium">
           Top up
         </Link>
@@ -172,6 +204,9 @@ export function StorageSettings({
           {bundles.map((b) => {
             const active = activeGb === b.gb;
             const isActing = acting === b.gb && pending;
+            const q = quotes[b.gb];
+            // Would leave the church with less room than its files take up.
+            const tooSmall = !active && storage.used > baseLimit + b.gb * GB;
             return (
               <Card
                 key={b.gb}
@@ -184,7 +219,7 @@ export function StorageSettings({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-lg font-bold">
-                    {formatMoney(b.price, currency)}
+                    {money(b.price)}
                     <span className="text-muted-foreground text-sm font-normal">
                       {" "}
                       /month
@@ -193,7 +228,7 @@ export function StorageSettings({
                   <Button
                     className="w-full"
                     variant={active ? "outline" : "default"}
-                    disabled={pending || active}
+                    disabled={pending || active || tooSmall || !q}
                     onClick={() => subscribe(b)}
                   >
                     {isActing ? (
@@ -202,12 +237,22 @@ export function StorageSettings({
                       <>
                         <Check className="size-4" /> Current
                       </>
-                    ) : activeGb > 0 ? (
-                      "Switch"
+                    ) : activeGb > 0 && q ? (
+                      q.refund > 0 ? (
+                        `Switch · ${money(q.refund)} back`
+                      ) : (
+                        `Switch · ${money(q.charge)} now`
+                      )
                     ) : (
                       "Subscribe"
                     )}
                   </Button>
+                  {tooSmall && (
+                    <p className="text-muted-foreground text-xs">
+                      You are using {formatBytes(storage.used)}, more than this
+                      plan holds.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             );

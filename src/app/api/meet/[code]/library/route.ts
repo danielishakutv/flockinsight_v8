@@ -1,9 +1,10 @@
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, like, or } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
 import { authenticatePeer, getMeetingByCode } from "@/lib/meetings";
 import { isHostRole } from "@/lib/meetings-shared";
 import { fail, json } from "@/lib/meeting-api";
+import { SLIDE_KINDS, escapeLike } from "@/lib/media-slide-kinds";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,7 +36,7 @@ export async function GET(
   if (!peer) return fail("You've been signed out of this meeting.", 401);
   if (!isHostRole(peer.role)) return fail("Only the host can pick slides.", 403);
 
-  const q = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
+  const q = escapeLike((url.searchParams.get("q") ?? "").trim().slice(0, 80));
 
   const rows = await db
     .select({
@@ -51,9 +52,16 @@ export async function GET(
     .where(
       and(
         eq(media.churchId, m.churchId),
+        /*
+         * Only kinds that belong on a slide. Anyone holding the host link can
+         * open this picker, and the church's newest images included members'
+         * contribution receipts — bank tellers and transfer screenshots — and
+         * members' own photos. See SLIDE_KINDS.
+         */
+        inArray(media.kind, [...SLIDE_KINDS]),
         like(media.mime, "image/%"),
         q
-          ? or(like(media.title, `%${q}%`), like(media.originalName, `%${q}%`))
+          ? or(ilike(media.title, `%${q}%`), ilike(media.originalName, `%${q}%`))
           : undefined,
       ),
     )

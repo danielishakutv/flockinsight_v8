@@ -9,11 +9,35 @@ import {
   canPlatform,
   platformAccess,
   requirePlatform,
+  revokePlatformResidue,
 } from "@/lib/platform-access";
 import { recordAudit } from "@/lib/audit";
 import { ALL_PLATFORM_PERMISSIONS } from "@/lib/platform-permissions";
+import {
+  grantRefusal,
+  saveRoleRefusal,
+  targetRefusal,
+} from "@/lib/platform-grant-policy";
 
 export type RoleResult = { ok: true } | { ok: false; error: string };
+
+/** Acting as a church — what an impersonation's leftovers depend on. */
+const ACT_AS = "platform.churches.manage";
+
+/**
+ * End the act-as residue (temp owner seat, session pointer) for an admin who
+ * no longer holds the permission that created it. exitImpersonation demands
+ * that permission, so they could never clear it themselves, and the plugin's
+ * unguarded reads (full organization, list members) still treat a temp owner
+ * row as membership.
+ */
+async function clearResidueIfActAsLost(
+  userIds: string[],
+  permissions: readonly string[] | null,
+): Promise<void> {
+  if (permissions === null || permissions.includes(ACT_AS)) return;
+  for (const id of userIds) await revokePlatformResidue(id);
+}
 
 const schema = z.object({
   id: z.string().uuid().optional(),
@@ -40,6 +64,21 @@ export async function saveRole(
 
   const known = new Set(ALL_PLATFORM_PERMISSIONS);
   const permissions = [...new Set(d.permissions.filter((p) => known.has(p)))];
+
+  let existing: string[] | undefined;
+  if (d.id) {
+    const [row] = await db
+      .select({ permissions: platformRole.permissions })
+      .from(platformRole)
+      .where(eq(platformRole.id, d.id))
+      .limit(1);
+    if (!row) return { ok: false, error: "That role no longer exists." };
+    existing = row.permissions ?? [];
+  }
+  // A scoped admin may not widen a role past their own reach, edit the role
+  // they are on, or narrow one that reaches further than they do.
+  const refused = saveRoleRefusal(admin, { id: d.id, permissions, existing });
+  if (refused) return { ok: false, error: refused };
 
   try {
     if (d.id) {
@@ -76,6 +115,18 @@ export async function saveRole(
     targetType: "platform_role",
     targetId: d.id ?? null,
   });
+
+  // Taking "act as church" off a role ends it for everyone on the role now.
+  if (d.id && existing?.includes(ACT_AS)) {
+    const holders = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.platformRoleId, d.id));
+    await clearResidueIfActAsLost(
+      holders.map((h) => h.id),
+      permissions,
+    );
+  }
 
   revalidatePath("/superadmin/roles");
   return { ok: true };
@@ -156,8 +207,14 @@ export async function assignRole(input: {
   }
 
   const [target] = await db
-    .select({ name: user.name, isSuperAdmin: user.isSuperAdmin })
+    .select({
+      name: user.name,
+      isSuperAdmin: user.isSuperAdmin,
+      roleId: user.platformRoleId,
+      permissions: platformRole.permissions,
+    })
     .from(user)
+    .leftJoin(platformRole, eq(platformRole.id, user.platformRoleId))
     .where(eq(user.id, input.userId))
     .limit(1);
   if (!target) return { ok: false, error: "That account no longer exists." };
@@ -168,20 +225,35 @@ export async function assignRole(input: {
     };
 
   let roleName = "Full access";
+  let grant: string[] | null = null;
   if (input.roleId) {
     const [r] = await db
-      .select({ name: platformRole.name })
+      .select({ name: platformRole.name, permissions: platformRole.permissions })
       .from(platformRole)
       .where(eq(platformRole.id, input.roleId))
       .limit(1);
     if (!r) return { ok: false, error: "That role no longer exists." };
     roleName = r.name;
+    grant = r.permissions ?? [];
   }
+
+  // Nobody hands out more than they hold, or moves an admin who can do more
+  // than they can — the same rule addAdmin and removeAdmin keep.
+  const refused =
+    targetRefusal(admin, {
+      id: input.userId,
+      isSuperAdmin: true,
+      permissions: target.roleId === null ? null : (target.permissions ?? []),
+    }) ?? grantRefusal(admin, grant);
+  if (refused) return { ok: false, error: refused };
 
   await db
     .update(user)
     .set({ platformRoleId: input.roleId })
     .where(eq(user.id, input.userId));
+
+  // Moved to a role that cannot act as a church: end any impersonation now.
+  await clearResidueIfActAsLost([input.userId], grant);
 
   await recordAudit({
     actorUserId: admin.id,
@@ -262,6 +334,11 @@ export async function addAdmin(input: {
     return { ok: false, error: "Invalid id" };
   if (input.roleId !== null && !z.string().uuid().safeParse(input.roleId).success)
     return { ok: false, error: "Invalid role" };
+  // No role means unrestricted. Nobody hands out more than they hold.
+  if (input.roleId === null) {
+    const refused = grantRefusal(admin, null);
+    if (refused) return { ok: false, error: refused };
+  }
 
   const [target] = await db
     .select({ name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin })
@@ -275,11 +352,13 @@ export async function addAdmin(input: {
   let roleName = "Full access";
   if (input.roleId) {
     const [r] = await db
-      .select({ name: platformRole.name })
+      .select({ name: platformRole.name, permissions: platformRole.permissions })
       .from(platformRole)
       .where(eq(platformRole.id, input.roleId))
       .limit(1);
     if (!r) return { ok: false, error: "That role no longer exists." };
+    const refused = grantRefusal(admin, r.permissions ?? []);
+    if (refused) return { ok: false, error: refused };
     roleName = r.name;
   }
 
@@ -324,18 +403,35 @@ export async function removeAdmin(userId: string): Promise<RoleResult> {
     return { ok: false, error: "You can't remove your own admin access." };
 
   const [target] = await db
-    .select({ name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin })
+    .select({
+      name: user.name,
+      email: user.email,
+      isSuperAdmin: user.isSuperAdmin,
+      roleId: user.platformRoleId,
+      permissions: platformRole.permissions,
+    })
     .from(user)
+    .leftJoin(platformRole, eq(platformRole.id, user.platformRoleId))
     .where(eq(user.id, userId))
     .limit(1);
   if (!target) return { ok: false, error: "That account no longer exists." };
   if (!target.isSuperAdmin)
     return { ok: false, error: "They do not have admin access." };
+  const refused = targetRefusal(admin, {
+    id: userId,
+    isSuperAdmin: true,
+    permissions: target.roleId === null ? null : (target.permissions ?? []),
+  });
+  if (refused) return { ok: false, error: refused };
 
   await db
     .update(user)
     .set({ isSuperAdmin: false, platformRoleId: null, updatedAt: new Date() })
     .where(eq(user.id, userId));
+
+  // Revoking access must also end what the access left behind: an "act as"
+  // owner seat and session pointer would otherwise outlive it indefinitely.
+  await revokePlatformResidue(userId);
 
   await recordAudit({
     actorUserId: admin.id,

@@ -434,13 +434,25 @@ export function PartnerDashboard({
                 disabled={!partner.phone}
               />
               <div className="flex gap-2">
+                {/* Number pad, and the input's own 44px height: h-9 shrank it
+                    to a 36px target to line up with a small button. The
+                    button grows to meet it instead. */}
                 <Input
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="08012345678"
-                  className="h-9"
                 />
-                <Button size="sm" variant="outline" onClick={savePhone} disabled={pending}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-11"
+                  onClick={savePhone}
+                  disabled={pending}
+                >
                   Save
                 </Button>
               </div>

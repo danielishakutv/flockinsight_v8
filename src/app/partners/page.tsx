@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,7 +18,12 @@ import {
 import { getLocale } from "@/lib/i18n/server";
 import { landingContent } from "@/lib/landing-content";
 import { getPartnerRates } from "@/lib/partners";
-import { earningsForPayment, nextTier, tierFor } from "@/lib/partners-shared";
+import {
+  earningsForPayment,
+  nextTier,
+  partnerProgramDescription,
+  tierFor,
+} from "@/lib/partners-shared";
 import { getAnnualFreeMonths, getPlanPrices } from "@/lib/pricing";
 import { annualTotal } from "@/lib/billing-cycle";
 import { PARTNER_TTL_SECONDS } from "@/lib/partner-link";
@@ -56,19 +62,26 @@ import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 const TITLE = "FlockInsight Partner Program";
-const DESCRIPTION =
-  "Bring churches onto FlockInsight and earn a share of what they pay — on every payment, for as long as they stay. Commission rates, tiers, payouts and terms.";
 
-export const metadata = {
-  title: TITLE,
-  description: DESCRIPTION,
-  alternates: { canonical: "/partners" },
-  openGraph: {
+/*
+ * Built from the live rates, like every other number on this page. It used to
+ * be a constant promising a share "on every payment, for as long as they
+ * stay" — while the trail stops after `trailMonths` — and it is the sentence
+ * Google and every WhatsApp preview show first.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const description = partnerProgramDescription(await getPartnerRates());
+  return {
     title: TITLE,
-    description: DESCRIPTION,
-    url: "/partners",
-  },
-};
+    description,
+    alternates: { canonical: "/partners" },
+    openGraph: {
+      title: TITLE,
+      description,
+      url: "/partners",
+    },
+  };
+}
 
 /** The questions a person actually asks before applying. */
 const FAQ = (
@@ -156,7 +169,13 @@ export default async function PartnerProgramPage() {
 
   const faq = FAQ(rates, attributionDays);
   const jsonLd = [
-    pageSchema({ path: "/partners", name: TITLE, description: DESCRIPTION }),
+    // The same sentence as the metadata, so the structured data cannot
+    // promise what the description does not.
+    pageSchema({
+      path: "/partners",
+      name: TITLE,
+      description: partnerProgramDescription(rates),
+    }),
     faqSchema(faq, "/partners"),
   ];
 
@@ -254,7 +273,7 @@ export default async function PartnerProgramPage() {
                 body={
                   rates.trailBps > 0
                     ? "The reason this is worth staying in: it turns a one-off introduction into an income, and it means you want your churches to thrive rather than merely to sign."
-                    : "Your earnings come from the first two payments."
+                    : "Your earnings come from the first two months paid for."
                 }
               />
             </div>

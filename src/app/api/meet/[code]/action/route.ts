@@ -1,14 +1,16 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/db";
-import { media, meeting } from "@/db/schema";
+import { church, media, meeting } from "@/db/schema";
 import {
   addMessage,
   admitParticipant,
+  sendChatHistoryTo,
   endMeeting,
   getMeetingByCode,
   getStage,
   heartbeat,
   lowerAllHands,
+  markRecordingStopped,
   participantByPeerId,
   postSignals,
   removeParticipant,
@@ -19,6 +21,7 @@ import {
   startRecordingRow,
 } from "@/lib/meetings";
 import { isHostRole, type Stage } from "@/lib/meetings-shared";
+import { SLIDE_KINDS } from "@/lib/media-slide-kinds";
 import { lookupVerse } from "@/lib/scripture";
 import { DEFAULT_TRANSLATION } from "@/lib/scripture-shared";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
@@ -35,6 +38,18 @@ type Body = {
   action?: unknown;
   [k: string]: unknown;
 };
+
+/** "12 Oct 2026, 10:00" in the church's own zone; the server's if it has none. */
+function recordingStamp(at: Date, timeZone: string | null | undefined): string {
+  const opts: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
+  try {
+    return at.toLocaleString("en-GB", timeZone ? { ...opts, timeZone } : opts);
+  } catch (e) {
+    // An unknown zone name in the church row must not stop a recording.
+    console.error("[meet/action] bad church timezone for a recording title", timeZone, e);
+    return at.toLocaleString("en-GB", opts);
+  }
+}
 
 const str = (v: unknown, max = 2000) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -236,11 +251,20 @@ export async function POST(
       if (ids.length === 0) return fail("Pick at least one slide.");
 
       // Resolve to URLs here, scoped to this church — a media id posted from
-      // the client is never trusted to belong to it.
+      // the client is never trusted to belong to it — and to the kinds the
+      // picker offers, so a crafted id cannot put a contribution receipt or a
+      // member's photo on the shared screen (see SLIDE_KINDS).
       const rows = await db
         .select({ id: media.id, url: media.url })
         .from(media)
-        .where(and(eq(media.churchId, m.churchId), inArray(media.id, ids)));
+        .where(
+          and(
+            eq(media.churchId, m.churchId),
+            inArray(media.id, ids),
+            inArray(media.kind, [...SLIDE_KINDS]),
+            like(media.mime, "image/%"),
+          ),
+        );
       const urlById = new Map(rows.map((r) => [r.id, r.url]));
       const ordered = ids
         .map((id) => ({ id, url: urlById.get(id) }))
@@ -300,6 +324,20 @@ export async function POST(
       if (action === "admit") {
         const row = await admitParticipant(m.id, id);
         if (!row) return fail("They're no longer waiting.", 404);
+        /*
+         * The chat from before they knocked, addressed to them alone, before
+         * the news that they are in — so it is waiting on their first poll
+         * inside. /join withheld it while they were in the lobby.
+         */
+        if (m.allowChat) {
+          try {
+            await sendChatHistoryTo(m.id, peer.peerId, row.peerId, row.joinedAt);
+          } catch (e) {
+            // They are still let in; an empty chat is the lesser failure, and
+            // it is logged rather than swallowed.
+            console.error(`[meet/action] could not send chat history to ${row.peerId} in ${m.id}`, e);
+          }
+        }
         await broadcast("control", { action: "admitted", peerId: row.peerId, name: row.name });
         await log({
           action: "meetings.participant.admit",
@@ -410,10 +448,20 @@ export async function POST(
         return fail(upgradeMessage("meetings.record"), 403, { code: "upgrade" });
       }
       const mode = str(body?.mode, 10) === "audio" ? "audio" : "video";
+      /*
+       * The time in the title is the CHURCH's time. Formatted on the server,
+       * whose clock may be in any zone, it named a Lagos service "09:00" when
+       * the congregation sat down at ten.
+       */
+      const [owner] = await db
+        .select({ timezone: church.timezone })
+        .from(church)
+        .where(eq(church.id, m.churchId))
+        .limit(1);
       const id = await startRecordingRow({
         meetingId: m.id,
         churchId: m.churchId,
-        title: `${m.title} — ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`,
+        title: `${m.title} — ${recordingStamp(new Date(), owner?.timezone)}`,
         mode,
         createdBy: peer.userId,
       });
@@ -437,6 +485,17 @@ export async function POST(
 
     case "recording.stop": {
       if (!host) return deny();
+      /*
+       * Written down, so the stalled-recording sweep can tell a recording still
+       * being captured from one that was stopped and is waiting to upload. The
+       * client may name the recording; an older one does not, and then every
+       * unstopped row of this meeting is the one — there is one recorder.
+       */
+      await markRecordingStopped({
+        meetingId: m.id,
+        churchId: m.churchId,
+        recordingId: str(body?.recordingId, 64) || null,
+      });
       await broadcast("recording", { state: "stopped", by: peer.displayName });
       await addMessage({
         meetingId: m.id,

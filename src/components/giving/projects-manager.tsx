@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 
 const STATUS: Record<
@@ -182,6 +183,7 @@ export function ProjectsManager({
                 onChange={(e) => set({ targetAmount: e.target.value })}
                 placeholder={t("giving.eG50000000")}
               />
+              <AmountPreview value={form.targetAmount} currency={currency} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

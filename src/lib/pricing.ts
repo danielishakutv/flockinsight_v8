@@ -24,16 +24,35 @@ export const PRICED_PLANS: PlanId[] = ["starter", "growth", "pro"];
 
 export const planPriceKey = (id: PlanId) => `plan_price_${id}`;
 
-function clean(raw: string, fallback: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+/**
+ * A stored price, made safe. The second line of defence behind the admin
+ * form's validation: a blank (`Number("")` is 0) or a zero on a PAID tier is
+ * a misconfiguration, not a free plan — read literally, it let any church
+ * activate Growth or Pro, a year at a time, for nothing. Fall back to the
+ * built-in price and say so loudly. A free Starter stays possible.
+ */
+function clean(id: PlanId, raw: string, fallback: number): number {
+  const trimmed = raw.trim();
+  const n = Number(trimmed);
+  if (trimmed === "" || !Number.isFinite(n) || n < 0) return fallback;
+  if (n === 0 && id !== "starter" && fallback > 0) {
+    console.error(
+      `[pricing] ${planPriceKey(id)} is stored as 0 — a paid tier cannot be free; using ₦${fallback}`,
+    );
+    return fallback;
+  }
+  return Math.round(n);
 }
 
 /** Resolved monthly price for one plan (null = custom). */
 export async function getPlanPrice(id: string): Promise<number | null> {
   const p = PLAN_BY_ID[id as PlanId];
   if (!p || p.priceMonthly === null) return null;
-  return clean(await getSetting(planPriceKey(id as PlanId), String(p.priceMonthly)), p.priceMonthly);
+  return clean(
+    id as PlanId,
+    await getSetting(planPriceKey(id as PlanId), String(p.priceMonthly)),
+    p.priceMonthly,
+  );
 }
 
 /** Resolved monthly prices for every plan. */
@@ -44,7 +63,7 @@ export async function getPlanPrices(): Promise<Record<PlanId, number | null>> {
       out[p.id] =
         p.priceMonthly === null
           ? null
-          : clean(await getSetting(planPriceKey(p.id), String(p.priceMonthly)), p.priceMonthly);
+          : clean(p.id, await getSetting(planPriceKey(p.id), String(p.priceMonthly)), p.priceMonthly);
     }),
   );
   return out;

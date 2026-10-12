@@ -349,6 +349,8 @@ export function PotFormDialog({
                     value={v.perPersonAmount}
                     onChange={(next) => set("perPersonAmount", next)}
                     currencyPrefix={symbol}
+                    currency={currency}
+                    allowZero
                   />
                 </Field>
                 <Field
@@ -361,6 +363,8 @@ export function PotFormDialog({
                     value={v.targetAmount}
                     onChange={(next) => set("targetAmount", next)}
                     currencyPrefix={symbol}
+                    currency={currency}
+                    allowZero
                   />
                 </Field>
               </>
@@ -372,6 +376,8 @@ export function PotFormDialog({
                     value={v.targetAmount}
                     onChange={(next) => set("targetAmount", next)}
                     currencyPrefix={symbol}
+                    currency={currency}
+                    allowZero
                   />
                 </Field>
                 <Field
@@ -384,6 +390,8 @@ export function PotFormDialog({
                     value={v.perPersonAmount}
                     onChange={(next) => set("perPersonAmount", next)}
                     currencyPrefix={symbol}
+                    currency={currency}
+                    allowZero
                   />
                 </Field>
               </>

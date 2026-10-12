@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccount,
@@ -125,9 +125,14 @@ function giverLabel(row: {
  * Bring one gift's shadow row in line with the gift.
  *
  * Creates it, updates it, or removes it when the gift no longer belongs to a
- * category with a fund — someone moved it to another category, or the fund was
- * unlinked. Removing a shadow is not losing a record: the gift itself is
- * untouched, and the row only ever existed as its reflection.
+ * category with a fund — someone moved it to a category without one. Removing
+ * a shadow is not losing a record: the gift itself is untouched, and the row
+ * only ever existed as its reflection.
+ *
+ * NOT "or the fund was unlinked". Unlinking a fund detaches its rows from
+ * their gifts (unlinkFund clears giving_id), because it promises that nothing
+ * in the account is deleted; a shadow that survived the unlink would be
+ * silently removed the next time somebody corrected a typo in an old gift.
  *
  * Best-effort by design. The gift is already saved by the time this runs, and
  * a failure to mirror it must never undo that.
@@ -142,15 +147,45 @@ export async function syncGivingToFinance(
       ? await fundAccountFor(churchId, gift.categoryId)
       : null;
 
-    if (!gift || !fund) {
-      await db
-        .delete(financeTransaction)
-        .where(
-          and(
-            eq(financeTransaction.givingId, givingId),
-            eq(financeTransaction.churchId, churchId),
+    const own = and(
+      eq(financeTransaction.givingId, givingId),
+      eq(financeTransaction.churchId, churchId),
+    );
+
+    /*
+     * Only a shadow that still sits in a LINKED fund is the gift's to move or
+     * take back. One sitting in an account that is no longer anybody's fund —
+     * its giving category was deleted, which sets the link null, or the
+     * account itself was removed — belongs to that account's history now. It
+     * is detached and kept, never deleted or carried off because somebody
+     * later corrected the note on an old gift.
+     */
+    const linkedFunds = db
+      .select({ id: financeAccount.id })
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.churchId, churchId),
+          isNotNull(financeAccount.givingCategoryId),
+        ),
+      );
+    await db
+      .update(financeTransaction)
+      .set({ givingId: null })
+      .where(
+        and(
+          own,
+          or(
+            isNull(financeTransaction.accountId),
+            notInArray(financeTransaction.accountId, linkedFunds),
           ),
-        );
+        ),
+      );
+
+    if (!gift || !fund) {
+      // The gift left every fund (moved to a category without one): its
+      // shadow in the fund it left goes, which is the rule a fund promises.
+      await db.delete(financeTransaction).where(own);
       return;
     }
 
@@ -170,31 +205,66 @@ export async function syncGivingToFinance(
       recordedBy: gift.recordedBy,
     };
 
-    const [existing] = await db
-      .select({ id: financeTransaction.id })
-      .from(financeTransaction)
-      .where(
-        and(
-          eq(financeTransaction.givingId, givingId),
-          eq(financeTransaction.churchId, churchId),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(financeTransaction)
-        .set(values)
-        .where(eq(financeTransaction.id, existing.id));
-      return;
-    }
-
+    // One statement, against the unique index on giving_id: a select-then-
+    // insert let a gift saved while its fund was being backfilled be mirrored
+    // twice. The partial index needs its predicate named here, or Postgres
+    // finds no matching constraint — and the catch below would swallow that
+    // and silently stop every shadow write.
     await db
       .insert(financeTransaction)
-      .values({ churchId, givingId, ...values });
+      .values({ churchId, givingId, ...values })
+      .onConflictDoUpdate({
+        target: financeTransaction.givingId,
+        targetWhere: sql`${financeTransaction.givingId} is not null`,
+        set: values,
+      });
   } catch (e) {
     console.error("syncGivingToFinance failed", { givingId }, e);
   }
+}
+
+/**
+ * Stop an account being a category's fund, keeping every row in it.
+ *
+ * The link and the rows' tie to their gifts go together, in one transaction.
+ * Left tied, each row was deleted by the sync the next time anybody edited
+ * its gift (the gift no longer had a fund to live in), and the FK cascade
+ * took it whenever a gift was removed — the old fund's balance eroding one
+ * correction at a time, against a promise that nothing would be deleted.
+ * Detached, they are ordinary records of money that came in, and linking the
+ * category again backfills a complete new fund instead of one with gaps.
+ *
+ * Returns null when the account is not this church's.
+ */
+export async function unlinkFundAccount(
+  churchId: string,
+  accountId: string,
+): Promise<{ id: string; name: string; detached: number } | null> {
+  return db.transaction(async (tx) => {
+    const [acct] = await tx
+      .update(financeAccount)
+      .set({ givingCategoryId: null })
+      .where(
+        and(
+          eq(financeAccount.id, accountId),
+          eq(financeAccount.churchId, churchId),
+        ),
+      )
+      .returning({ id: financeAccount.id, name: financeAccount.name });
+    if (!acct) return null;
+    const detached = await tx
+      .update(financeTransaction)
+      .set({ givingId: null })
+      .where(
+        and(
+          eq(financeTransaction.churchId, churchId),
+          eq(financeTransaction.accountId, accountId),
+          isNotNull(financeTransaction.givingId),
+        ),
+      )
+      .returning({ id: financeTransaction.id });
+    return { ...acct, detached: detached.length };
+  });
 }
 
 /** What linking a category to a new fund would pull in, for the confirmation. */
@@ -266,6 +336,10 @@ export async function backfillFund(
     where g.church_id = ${churchId}
       and g.category_id = ${categoryId}::uuid
       and ft.id is null
+    -- The anti-join cannot see a shadow a concurrent sync commits after this
+    -- statement's snapshot; the unique index can. rowCount still counts only
+    -- the rows actually created.
+    on conflict (giving_id) where giving_id is not null do nothing
   `);
 
   return Number(result.rowCount ?? 0);

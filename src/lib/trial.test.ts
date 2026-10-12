@@ -97,6 +97,52 @@ describe("computeStanding", () => {
     expect(s.state).toBe("none");
     expect(s.gated).toBe(false);
   });
+
+  /*
+   * A church onboarded with no trial and a plan set by hand used to keep full
+   * use for ever once that plan ran out: no trial date meant "none", and
+   * "none" is never gated.
+   */
+  it("gates a church whose paid plan ran out and which has no trial date", () => {
+    const s = computeStanding(
+      { planRenewsAt: new Date(NOW.getTime() - 86_400_000), trialEndsAt: null },
+      NOW,
+    );
+    expect(s.state).toBe("expired");
+    expect(s.gated).toBe(true);
+  });
+
+  it("does not gate a hand-invoiced Enterprise church whose date has passed", () => {
+    // The gate only sells self-serve tiers; an Enterprise contract that ran
+    // out is a conversation, not "your plan has expired, buy Growth".
+    const s = computeStanding(
+      { plan: "enterprise", planRenewsAt: new Date(NOW.getTime() - 86_400_000), trialEndsAt: null },
+      NOW,
+    );
+    expect(s.gated).toBe(false);
+  });
+
+  it("still honours a running trial when an earlier paid period has lapsed", () => {
+    const s = computeStanding(
+      {
+        planRenewsAt: new Date(NOW.getTime() - 86_400_000),
+        trialEndsAt: new Date(NOW.getTime() + 7 * 86_400_000),
+      },
+      NOW,
+    );
+    expect(s.state).toBe("trialing");
+    expect(s.gated).toBe(false);
+  });
+
+  /*
+   * "End trial now" in the superadmin writes a trial end a second in the past
+   * (it used to write null, which is "grandfathered" and never gated).
+   */
+  it("gates a church whose trial was ended a moment ago", () => {
+    const s = computeStanding({ trialEndsAt: new Date(NOW.getTime() - 1000) }, NOW);
+    expect(s.state).toBe("expired");
+    expect(s.gated).toBe(true);
+  });
 });
 
 describe("waiverEndDate", () => {

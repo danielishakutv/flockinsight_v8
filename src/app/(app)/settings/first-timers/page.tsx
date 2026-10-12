@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { firstTimerSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { can } from "@/lib/permissions";
 import { FirstTimersForm } from "@/components/settings/first-timers-form";
 
@@ -56,6 +57,7 @@ export default async function FirstTimersSettingsPage() {
       }}
       timezone={church.timezone}
       smsApproved={church.smsSenderStatus === "approved"}
+      smsAvailable={smsAvailableForCountry(church.country)}
     />
   );
 }

@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { church, smsSenderSubmission, walletTxn } from "@/db/schema";
+import { church, smsSenderSubmission } from "@/db/schema";
+import { creditWallet, debitWallet } from "@/lib/wallet";
 
 import { setSetting, SMS_PRICE_KEY } from "@/lib/platform-settings";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
@@ -599,39 +600,49 @@ export async function adjustWallet(
     return { ok: false, error: "Enter a positive amount." };
 
   const [c] = await db
-    .select({ balance: church.walletBalance, currency: church.currency })
+    .select({ currency: church.currency })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
   if (!c) return { ok: false, error: "Church not found." };
 
-  if (kind === "debit" && amount > c.balance)
-    return {
-      ok: false,
-      error: `Can't deduct more than the current balance (${c.balance.toFixed(2)}).`,
-    };
-
-  const newBalance = +(
-    kind === "credit" ? c.balance + amount : c.balance - amount
-  ).toFixed(2);
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(church)
-      .set({ walletBalance: newBalance })
-      .where(eq(church.id, churchId));
-    await tx.insert(walletTxn).values({
+  /*
+   * Through the wallet library, never a balance worked out here.
+   *
+   * This used to read the balance, add or subtract in JavaScript, and write
+   * the absolute figure back. A Paystack top-up or an SMS charge that landed
+   * between the read and the write was erased - the ledger kept its row, the
+   * balance lost the money, and nothing said so. creditWallet/debitWallet do
+   * the arithmetic in one UPDATE, and the debit's "enough money?" check is in
+   * its WHERE, so it is judged against the row as it is when the lock is held.
+   */
+  const reason = (
+    note || (kind === "credit" ? "Admin top-up" : "Admin deduction")
+  ).slice(0, 200);
+  let newBalance: number;
+  if (kind === "credit") {
+    newBalance = await creditWallet({
       churchId,
-      kind,
-      category: "adjustment",
       amount,
-      balanceAfter: newBalance,
-      reason: (
-        note || (kind === "credit" ? "Admin top-up" : "Admin deduction")
-      ).slice(0, 200),
+      category: "adjustment",
+      reason,
       createdBy: admin.id,
     });
-  });
+  } else {
+    const res = await debitWallet({
+      churchId,
+      amount,
+      category: "adjustment",
+      reason,
+      createdBy: admin.id,
+    });
+    if (!res.ok)
+      return {
+        ok: false,
+        error: `Can't deduct more than the current balance (${res.balance.toFixed(2)}).`,
+      };
+    newBalance = res.balance;
+  }
   await notifyChurchOfAdminAction({
     churchId,
     title: kind === "credit" ? "Your wallet was credited" : "Your wallet was adjusted",

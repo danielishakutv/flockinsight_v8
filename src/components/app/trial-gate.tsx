@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Check, Loader2, LogOut, Sparkles, X } from "lucide-react";
@@ -23,6 +23,8 @@ type PlanOpt = {
   priceLabel: string;
   /** The yearly total, worked out on the server. Null for a custom plan. */
   annualPriceLabel: string | null;
+  /** Nothing to pay (a 100% discount): the button activates rather than charges. */
+  free?: boolean;
 };
 
 /** Full-page block shown when a church's free trial has ended and it hasn't paid. */
@@ -31,12 +33,21 @@ export function TrialGate({
   canManageBilling,
   plans,
   annualFreeMonths,
+  currencyNote = null,
+  lapsed = false,
 }: {
   churchName: string;
   canManageBilling: boolean;
   plans: PlanOpt[];
   /** Months free for paying a year. 0 hides the choice entirely. */
   annualFreeMonths: number;
+  /**
+   * For a church abroad: the money it is quoted in, the money its card is
+   * charged in, and the exact card fee. Null at home.
+   */
+  currencyNote?: string | null;
+  /** A paid plan ran out, as opposed to the free trial. */
+  lapsed?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -46,16 +57,47 @@ export function TrialGate({
   const [requesting, startRequest] = useTransition();
   const [requested, setRequested] = useState(false);
 
+  // Back from Paystack into a page restored from the bfcache: give the
+  // buttons back, or the only screen this church can use is a dead one.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPaying(null);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   async function pay(plan: PlanId) {
+    if (paying) return;
     setPaying(plan);
-    const res = await startCheckout(plan, cycle);
+    let res: Awaited<ReturnType<typeof startCheckout>>;
+    try {
+      res = await startCheckout(plan, cycle);
+    } catch (e) {
+      // A lost signal, or a tab older than the last deploy. This page is the
+      // whole app for a church behind the paywall, so a spinner that never
+      // stops is a church that cannot pay.
+      console.error("trial gate: could not start checkout", e);
+      toast.error(
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "You appear to be offline. Check your connection and try again. Nothing was charged."
+          : "We couldn't reach FlockInsight. Reload the page (the app may have just been updated) and try again. Nothing was charged.",
+      );
+      setPaying(null);
+      return;
+    }
     if (!res.ok) {
       toast.error(res.error);
       setPaying(null);
       return;
     }
+    // Leaving for Paystack: `paying` stays set so a second tap cannot open a
+    // second checkout while the page is still on its way out.
     if (res.url) window.location.assign(res.url);
-    else router.refresh();
+    else {
+      setPaying(null);
+      router.refresh();
+    }
   }
 
   function requestExtension() {
@@ -89,12 +131,12 @@ export function TrialGate({
             <CalendarClock className="size-6" />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight">
-            Your free trial has ended
+            {lapsed ? "Your plan has expired" : "Your free trial has ended"}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {churchName} enjoyed its first 7 Sundays on FlockInsight 🎉. To keep
-            using attendance, members, giving and everything else, choose a plan
-            below.
+            {lapsed
+              ? `${churchName}'s FlockInsight plan has run out. To keep using attendance, members, giving and everything else, renew below.`
+              : `${churchName} enjoyed its first 7 Sundays on FlockInsight 🎉. To keep using attendance, members, giving and everything else, choose a plan below.`}
           </p>
 
           {canManageBilling ? (
@@ -153,12 +195,18 @@ export function TrialGate({
                           yearly figure leaves a church to guess whether the
                           next screen is asking for one month or twelve.
                         */}
-                        {annual ? "Pay for a year" : "Pay"}
+                        {p.free ? "Activate" : annual ? "Pay for a year" : "Pay"}
                       </Button>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {currencyNote && (
+                <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                  {currencyNote}
+                </p>
+              )}
 
               <div className="mt-6 border-t pt-5">
                 {requested ? (

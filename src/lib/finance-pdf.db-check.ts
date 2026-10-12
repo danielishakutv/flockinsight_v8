@@ -94,6 +94,7 @@ function rows(n: number): FinanceTransactionRow[] {
     method: "transfer" as const,
     note: null,
     recordedByName: "Pastor Ada",
+    givingId: null,
   }));
 }
 

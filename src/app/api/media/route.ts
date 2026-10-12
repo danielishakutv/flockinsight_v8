@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { media } from "@/db/schema";
-import { requireChurch } from "@/lib/session";
+import { churchForApi, refusalResponse } from "@/lib/api-church";
 import { can } from "@/lib/permissions";
 
 export const runtime = "nodejs";
@@ -19,7 +19,10 @@ function json(data: unknown, status = 200) {
 
 // POST /api/media  (multipart: file, kind)  ->  { ok, url }
 export async function POST(request: Request) {
-  const { church } = await requireChurch();
+  // JSON, never a redirect to the sign-in page that fetch would follow.
+  const who = await churchForApi();
+  if (!who.ok) return refusalResponse(who);
+  const { church } = who;
   if (!(await can("settings.manage")))
     return json({ ok: false, error: "You can't upload media." }, 403);
 

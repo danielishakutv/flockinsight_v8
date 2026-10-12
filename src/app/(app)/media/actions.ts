@@ -30,6 +30,20 @@ export async function deleteMediaAction(id: string): Promise<ActionResult> {
     .from(media)
     .where(and(eq(media.id, id), eq(media.churchId, church.id)))
     .limit(1);
+  if (!file) return { ok: false, error: "File not found." };
+  /*
+   * Not from here. The library hides receipts, but this action used to take
+   * any id — so anyone with media rights could post a receipt's id and erase
+   * the proof of a payment that may be in dispute, which the contribution then
+   * reads as "no receipt was ever attached". Releasing one belongs to the
+   * contribution it proves, where the release is recorded.
+   */
+  if (file.kind === "receipt")
+    return {
+      ok: false,
+      error:
+        "Receipts are managed from the contribution they prove. Release it there so the release is recorded.",
+    };
 
   const ok = await deleteMedia(id, church.id);
   if (!ok) return { ok: false, error: "File not found." };

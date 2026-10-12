@@ -1,4 +1,5 @@
 import "server-only";
+import { classifyReply, classifySendThrow } from "@/lib/sms-gateway-outcome";
 
 /**
  * SMS via Termii (https://developers.termii.com/messaging).
@@ -24,7 +25,12 @@ export function termiiBase(): string {
  */
 export type SmsResult =
   | { ok: true; ids: string[] }
-  | { ok: false; error: string };
+  /**
+   * `uncertain`: the gateway may have taken it - a timeout, a connection
+   * reset, a 2xx we could not read. Not to be refunded and not to be sent
+   * again; see sms-gateway-outcome.ts. Absent or false is a definite failure.
+   */
+  | { ok: false; error: string; uncertain?: boolean };
 
 export function isSmsConfigured(): boolean {
   return !!(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID);
@@ -58,6 +64,8 @@ type TermiiSendResponse = {
 
 // Page maths lives in a client-safe module so composers can use it too.
 export { smsPages } from "@/lib/sms-pages";
+
+const SEND_TIMEOUT_MS = 30_000;
 
 /** Send an SMS to one or more recipients. `senderId` overrides the env one. */
 export async function sendSms(opts: {
@@ -94,39 +102,56 @@ export async function sendSms(opts: {
     api_key: apiKey,
   };
 
+  let res: Response;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
+      /*
+       * A ceiling on one call. There was none, so one hung connection to the
+       * gateway held a whole batch - and the composer request waiting on it -
+       * open indefinitely. Long enough for a bulk call to a few thousand
+       * numbers; short enough that a stuck one is reported rather than waited on.
+       */
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
-    const data = (await res.json().catch(() => null)) as TermiiSendResponse | null;
-
-    const success =
-      !!data &&
-      (!!data.message_id ||
-        (Array.isArray(data.message_id_list) && data.message_id_list.length > 0) ||
-        data.code === "ok" ||
-        /success/i.test(String(data.message ?? "")));
-    if (res.ok && success) {
-      // Bulk returns a list, single returns one id. Termii does not document
-      // whether the list's order matches the `to` array, so this is an
-      // assumption — the delivery webhook falls back to matching on the
-      // recipient's phone number when an id doesn't line up.
-      const ids = Array.isArray(data?.message_id_list)
-        ? data.message_id_list.filter((v): v is string => typeof v === "string")
-        : data?.message_id
-          ? [data.message_id]
-          : [];
-      return { ok: true, ids };
-    }
-
-    return {
-      ok: false,
-      error: `SMS not sent: ${data?.message || `gateway error ${res.status}`}`,
-    };
   } catch (e) {
     console.error("[sms] Termii send failed:", e);
-    return { ok: false, error: "Could not reach the SMS gateway." };
+    // Refused or unreachable is a failure; a timeout or a reset may have
+    // been delivered. See sms-gateway-outcome.ts.
+    return { ok: false, ...classifySendThrow(e, SEND_TIMEOUT_MS / 1000) };
   }
+
+  // Read apart from the call: the timeout can fire while the body is still
+  // arriving, and by then the gateway has already answered.
+  let data: TermiiSendResponse | null = null;
+  try {
+    data = (await res.json()) as TermiiSendResponse | null;
+  } catch (e) {
+    console.error(`[sms] Termii answered ${res.status} but the body could not be read:`, e);
+  }
+
+  const success =
+    !!data &&
+    (!!data.message_id ||
+      (Array.isArray(data.message_id_list) && data.message_id_list.length > 0) ||
+      data.code === "ok" ||
+      /success/i.test(String(data.message ?? "")));
+  if (res.ok && success) {
+    // Bulk returns a list, single returns one id. Termii does not document
+    // whether the list's order matches the `to` array, so this is an
+    // assumption — the delivery webhook falls back to matching on the
+    // recipient's phone number when an id doesn't line up.
+    const ids = Array.isArray(data?.message_id_list)
+      ? data.message_id_list.filter((v): v is string => typeof v === "string")
+      : data?.message_id
+        ? [data.message_id]
+        : [];
+    return { ok: true, ids };
+  }
+
+  const failure = classifyReply(res.status, data);
+  if (failure.uncertain) console.error(`[sms] ${failure.error}`);
+  return { ok: false, ...failure };
 }

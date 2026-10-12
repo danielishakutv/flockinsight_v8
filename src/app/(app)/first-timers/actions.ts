@@ -45,6 +45,9 @@ export async function addFirstTimer(
     churchId: church.id,
     intake,
     createdBy: user.id,
+    // The same ceiling Members → Add and the import hold to. A match is never
+    // refused — see `enforceMemberLimit`.
+    enforceMemberLimit: true,
   });
   if (!res.ok) return { ok: false, error: res.error };
 

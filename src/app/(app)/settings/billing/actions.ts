@@ -5,16 +5,11 @@ import { db } from "@/db";
 import { payment, supportTicket, supportMessage } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { effectivePrice, activatePlan } from "@/lib/billing";
-import {
-  asCycle,
-  cycleMonths,
-  cycleTotal,
-  type BillingCycle,
-} from "@/lib/billing-cycle";
-import { getAnnualFreeMonths } from "@/lib/pricing";
+import { activatePlan } from "@/lib/billing";
+import { asCycle, type BillingCycle } from "@/lib/billing-cycle";
+import { chargeFor } from "@/lib/plan-offers";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
-import { priceForCountry, planAmountLabel } from "@/lib/plan-price";
+import { planAmountLabel } from "@/lib/plan-price";
 import { notifySupport } from "@/lib/support";
 import { audit } from "@/lib/audit";
 import type { PlanId } from "@/lib/plans";
@@ -51,36 +46,70 @@ export async function startCheckout(
     return { ok: false, error: "You don't have permission to manage billing." };
 
   const cycle = asCycle(cycleInput);
-  const monthly = await effectivePrice(plan, c.planDiscountPct);
-  if (monthly === null)
-    return { ok: false, error: "That plan is custom — please contact us." };
-
-  const freeMonths = await getAnnualFreeMonths();
-  const months = cycleMonths(cycle);
   /*
    * The whole charge, not the monthly one. A year is ten months of money for
    * twelve months of service, and the multiplication happens HERE rather than
    * on the page: a total computed in a client component is a total a browser
-   * can edit.
+   * can edit. `chargeFor` is the same book the billing page and the trial
+   * gate print from, so the figure a church was shown is the one billed.
    */
-  const price = cycleTotal(monthly, cycle, freeMonths) ?? 0;
+  const charge = await chargeFor(plan, cycle, c);
+  if (!charge)
+    return { ok: false, error: "That plan is custom — please contact us." };
+  const { monthly, months, freeMonths, priced } = charge;
+  const price = charge.total;
+
+  /*
+   * A ₦0 charge for a paid tier, without a 100% discount, is a misconfigured
+   * price (a superadmin cleared the field and it saved as 0), not a free plan.
+   * Activating on it would hand out Growth or Pro — and a year of it — for
+   * nothing. Refuse, loudly, rather than give the product away.
+   */
+  if (price === 0 && plan !== "starter" && c.planDiscountPct < 100) {
+    console.error(
+      `[billing] ${plan} resolves to ₦0 without a 100% discount — refusing to activate it free`,
+    );
+    return {
+      ok: false,
+      error: "This plan's price is being updated — please try again shortly or contact us.",
+    };
+  }
 
   // Free plan or 100% discount → activate immediately, no payment.
   if (price === 0) {
-    await activatePlan(c.id, plan, months);
-    await db.insert(payment).values({
-      churchId: c.id,
-      plan,
-      amount: 0,
-      currency: c.currency,
-      gateway: "manual",
-      reference: `FREE-${c.id.slice(0, 8)}-${Date.now()}`,
-      status: "success",
-      periodMonths: months,
-      note: c.planDiscountPct >= 100 ? "100% discount" : "Free plan",
-      createdBy: user.id,
-      paidAt: new Date(),
-    });
+    /*
+     * The activation and its ₦0 row in one transaction: a row without the
+     * plan, or the plan without its row, is a ledger that cannot explain
+     * itself. Remaining paid time on another tier is revalued (it is free
+     * time now, so moving it onto a paid tier is worth nothing; see
+     * lib/plan-period.ts) and an unexpired trial is kept.
+     */
+    try {
+      await db.transaction(async (tx) => {
+        await activatePlan(c.id, plan, months, { tx, convertRemaining: true });
+        await tx.insert(payment).values({
+          churchId: c.id,
+          plan,
+          amount: 0,
+          // Every payment row is in naira, whatever the church's own money.
+          currency: "NGN",
+          gateway: "manual",
+          reference: `FREE-${c.id.slice(0, 8)}-${Date.now()}`,
+          status: "success",
+          periodMonths: months,
+          note: c.planDiscountPct >= 100 ? "100% discount" : "Free plan",
+          createdBy: user.id,
+          paidAt: new Date(),
+        });
+      });
+    } catch (e) {
+      // A result, not a rejection: the button on the page re-enables and says so.
+      console.error(`[billing] could not activate ${plan} at no charge for ${c.id}`, e);
+      return {
+        ok: false,
+        error: "We couldn't activate that plan. Nothing changed — please try again.",
+      };
+    }
     await audit({
       churchId: c.id,
       action: "billing.plan.update",
@@ -115,9 +144,8 @@ export async function startCheckout(
    * Priced ONCE, on the whole charge. Which is also why paying annually is
    * cheaper again for a church abroad: the international card surcharge is a
    * flat amount per transaction, and a year is one transaction rather than
-   * twelve.
+   * twelve. (`priced`, from chargeFor above.)
    */
-  const priced = await priceForCountry(price, c.country);
 
   const annualNote =
     cycle === "annual"
@@ -125,30 +153,50 @@ export async function startCheckout(
       : null;
 
   const reference = `FI-${c.id.slice(0, 8)}-${plan}-${Date.now()}`;
-  await db.insert(payment).values({
-    churchId: c.id,
-    plan,
-    amount: priced.chargeNgn,
-    currency: "NGN",
-    gateway: "paystack",
-    reference,
-    status: "pending",
-    // What the Partner ledger prices its commission across, and what
-    // `activatePlan` extends the renewal by once this clears.
-    periodMonths: months,
-    createdBy: user.id,
-    // Recorded on the row so a refund or a query months later can see why the
-    // amount is not the list price, without re-running today's exchange rate.
-    note:
-      [
-        annualNote,
-        priced.international
-          ? `International card fee included (₦${priced.surchargeNgn.toLocaleString()}) — shown to the church as ${planAmountLabel(priced.displayAmount, priced.displayCurrency)}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" · ") || null,
-  });
+  /*
+   * If this write fails, do not open a checkout: the callback, the webhook and
+   * the reconcile cron all find the payment by this reference, so a checkout
+   * with no row would take the money and honour nothing.
+   */
+  try {
+    await db.insert(payment).values({
+      churchId: c.id,
+      plan,
+      amount: priced.chargeNgn,
+      currency: "NGN",
+      gateway: "paystack",
+      reference,
+      status: "pending",
+      // What the Partner ledger prices its commission across, and what
+      // `activatePlan` extends the renewal by once this clears.
+      periodMonths: months,
+      /*
+       * The part of the charge that is not the plan: the international card
+       * surcharge and the rounding to a whole ₦100 (both are `chargeNgn -
+       * baseNgn`). It passes through to the card network, so it is not
+       * revenue a Partner earns commission on.
+       */
+      surchargeAmount: Math.max(0, priced.chargeNgn - priced.baseNgn),
+      createdBy: user.id,
+      // Recorded on the row so a refund or a query months later can see why the
+      // amount is not the list price, without re-running today's exchange rate.
+      note:
+        [
+          annualNote,
+          priced.international
+            ? `International card fee included (₦${priced.surchargeNgn.toLocaleString()}) — shown to the church as ${planAmountLabel(priced.displayAmount, priced.displayCurrency)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || null,
+    });
+  } catch (e) {
+    console.error(`[billing] could not record checkout ${reference}`, e);
+    return {
+      ok: false,
+      error: "We couldn't start that payment. Nothing was charged — please try again.",
+    };
+  }
 
   const init = await paystackInit({
     email: user.email,

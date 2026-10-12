@@ -57,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AmountPreview } from "@/components/finance/amount-preview";
 import { useT } from "@/components/i18n-provider";
 import { useOpenOnShortcut } from "@/lib/use-opened-from-shortcut";
 
@@ -529,6 +530,7 @@ export function GivingClient({
                     placeholder="0.00"
                     autoFocus
                   />
+                  <AmountPreview value={form.amount} currency={currency} />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("giving.category")}</Label>

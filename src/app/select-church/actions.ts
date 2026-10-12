@@ -81,9 +81,8 @@ export async function landingPath(): Promise<string> {
   const data = await getSession();
   if (!data?.user) return "/login";
 
-  const { getIsSuperAdmin, getMustChangePassword, getMyChurches } = await import(
-    "@/lib/session"
-  );
+  const { getIsPartner, getIsSuperAdmin, getMustChangePassword, getMyChurches } =
+    await import("@/lib/session");
 
   // A forced password change comes before everything else; the app shell sends
   // them here anyway, and bouncing twice looks like a bug.
@@ -94,5 +93,9 @@ export async function landingPath(): Promise<string> {
   // oldest membership and hoping it was the one they meant.
   if (mine.length > 1) return "/select-church";
   if (mine.length === 1) return "/dashboard";
-  return (await getIsSuperAdmin()) ? "/superadmin" : "/onboarding";
+  if (await getIsSuperAdmin()) return "/superadmin";
+  // A Partner with no church is not somebody who abandoned a church sign-up.
+  // Somebody who is BOTH lands in their church; the account menu has the way
+  // across to the Partner dashboard.
+  return (await getIsPartner()) ? "/partner" : "/onboarding";
 }

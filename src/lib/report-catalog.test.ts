@@ -140,6 +140,15 @@ describe("every catalogued dataset can actually be built", () => {
     const catalogued = DATASETS.map((d) => d.id).sort();
     expect([...BUILDABLE_IDS].sort()).toEqual(catalogued);
   });
+
+  // The third list. A dataset with a builder but no count is downloadable yet
+  // shown as "0 rows" on the page and "nothing recorded" in the summary PDF —
+  // which is what happened to the finance books, contributions and meetings.
+  it("has a row count for every dataset, and no count without one", async () => {
+    const { COUNTED_DATASET_IDS } = await import("@/lib/report-data");
+    const catalogued = DATASETS.map((d) => d.id).sort();
+    expect([...COUNTED_DATASET_IDS].sort()).toEqual(catalogued);
+  });
 });
 
 describe("permission gating", () => {

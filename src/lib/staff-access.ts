@@ -18,3 +18,22 @@ export const TEAM_MANAGE_PERMISSION = "team.manage";
 export function betterAuthRoleFor(permissions: string[]): "admin" | "member" {
   return permissions.includes(TEAM_MANAGE_PERMISSION) ? "admin" : "member";
 }
+
+/**
+ * What `staff.role` becomes when somebody's church role is cleared.
+ *
+ * - Someone who HAD a church role drops to "member": their "admin" (if any)
+ *   came from that role, and keeping it would hand them the legacy
+ *   full-access fallback — clearing a role must never widen access.
+ * - Someone who never had one keeps what they have: that is a genuine legacy
+ *   admin (invited before church roles existed), and demoting them on a no-op
+ *   would be a silent loss of access.
+ * - The owner is never changed here.
+ */
+export function orgRoleAfterClearingRole(
+  previousRoleId: string | null,
+  currentOrgRole: string,
+): string {
+  if (currentOrgRole === "owner") return "owner";
+  return previousRoleId ? "member" : currentOrgRole;
+}

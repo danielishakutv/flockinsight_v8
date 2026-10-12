@@ -16,6 +16,7 @@ import { fundAccountFor } from "@/lib/finance-giving-sync";
 import { createFundForCategory } from "@/app/(app)/finance/actions";
 import { can, canAny } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
+import { isValidTimeZone } from "@/lib/country-profile";
 
 export type ActionResult =
   | { ok: true }
@@ -37,7 +38,18 @@ const emptyToNullStr = (v: unknown) =>
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
-  timezone: z.string().trim().min(1).max(64),
+  /*
+   * A zone Intl knows, not just a short string. Anything else saved here used
+   * to throw inside the hourly celebrations and reminder runs, which loop over
+   * every church — so one church's "GMT+2" stopped the greetings for all the
+   * churches after it.
+   */
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(isValidTimeZone, "Choose a timezone from the list."),
   currency: z.string().trim().min(1).max(8),
   country: z.string().trim().min(1).max(80),
   state: z.preprocess(emptyToNullStr, z.string().trim().max(80).nullable()),

@@ -39,12 +39,13 @@ export default async function DemoPage() {
     <>
       <div className="min-h-dvh">
         <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 lg:px-8">
-          <Link href="/">
-            <Wordmark />
+          <Link href="/" className="min-w-0">
+            {/* Same rule as the public header: the name gives way first. */}
+            <Wordmark textClassName="max-[400px]:hidden" />
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <PublicLanguageMenu />
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm" className="max-[359px]:hidden">
               <Link href="/pricing">{t("common.pricing")}</Link>
             </Button>
             <Button asChild size="sm">

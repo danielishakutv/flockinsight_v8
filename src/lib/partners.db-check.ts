@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { partner, partnerEarning, partnerPayout, user } from "@/db/schema";
-import { partnerWallet, requestPayout } from "@/lib/partners";
+import { decidePayout, partnerWallet, requestPayout } from "@/lib/partners";
 
 /** Unique per run, so a crashed run cannot collide with the next one. */
 const STAMP = Date.now().toString(36);
@@ -87,8 +87,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // The user cascades to partner, which cascades to its earnings and payouts.
-  if (partnerId) await db.delete(user).where(eq(user.id, USER_ID));
+  // Earnings and payouts are RESTRICT now — money records outlive a login (see
+  // money-history-survives-delete.db-check.ts) — so a fixture's ledger is
+  // removed explicitly, earnings first because they point at their payout.
+  if (!partnerId) return;
+  await db.delete(partnerEarning).where(eq(partnerEarning.partnerId, partnerId));
+  await db.delete(partnerPayout).where(eq(partnerPayout.partnerId, partnerId));
+  await db.delete(user).where(eq(user.id, USER_ID));
 });
 
 describe("requestPayout under concurrency", () => {
@@ -377,5 +382,214 @@ describe("requestPayout on its own", () => {
       currency: "NGN",
     });
     expect(res.ok).toBe(false);
+  });
+});
+
+/* ============================================================
+ * Deciding a withdrawal
+ *
+ * `decidePayout` used to check "not already paid" outside its transaction and
+ * then update unconditionally. Two decisions on one request — or one from a
+ * stale tab — could both pass. These cases are the state machine under a lock.
+ * ========================================================== */
+
+async function payoutStatus(id: string) {
+  const [row] = await db
+    .select({ status: partnerPayout.status })
+    .from(partnerPayout)
+    .where(eq(partnerPayout.id, id));
+  return row?.status;
+}
+
+async function earningsOf(payoutId: string | null) {
+  return db
+    .select({ status: partnerEarning.status, payoutId: partnerEarning.payoutId })
+    .from(partnerEarning)
+    .where(
+      and(
+        eq(partnerEarning.partnerId, partnerId),
+        payoutId ? eq(partnerEarning.payoutId, payoutId) : isNull(partnerEarning.payoutId),
+      ),
+    );
+}
+
+/** A fresh ledger and one approved request for 10,000 against it. */
+async function approvedRequest(): Promise<string> {
+  await refillLedger();
+  const res = await requestPayout({ partnerId, amount: 10000, bank: BANK, currency: "NGN" });
+  if (!res.ok) throw new Error(`fixture: ${res.error}`);
+  const ok = await decidePayout({ payoutId: res.id, status: "approved", decidedBy: null });
+  expect(ok.ok).toBe(true);
+  return res.id;
+}
+
+describe("decidePayout", () => {
+  it("records a transfer made against a request that was never approved", async () => {
+    /*
+     * "Paid" is written after the money has gone. Refusing it here once left
+     * the ledger saying "requested" about a transfer already made — and a
+     * later reject would have handed those earnings back to be withdrawn again.
+     */
+    await refillLedger();
+    const res = await requestPayout({ partnerId, amount: 10000, bank: BANK, currency: "NGN" });
+    if (!res.ok) throw new Error(res.error);
+    const paid = await decidePayout({
+      payoutId: res.id,
+      status: "paid",
+      reference: "zzcheck",
+      decidedBy: null,
+    });
+    expect(paid.ok).toBe(true);
+    expect(await payoutStatus(res.id)).toBe("paid");
+    const rows = await earningsOf(res.id);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((e) => e.status === "paid")).toBe(true);
+  });
+
+  it("will not mark a rejected request paid from a stale page", async () => {
+    /*
+     * The double payment, step by step: P1 is rejected (its earnings go back),
+     * the Partner asks again (P2 takes the same earnings), and somebody on a
+     * page loaded before the rejection marks P1 paid. That used to succeed —
+     * and then P2 was paid as well.
+     */
+    const p1 = await approvedRequest();
+    expect((await decidePayout({ payoutId: p1, status: "rejected", decidedBy: null })).ok).toBe(true);
+
+    const again = await requestPayout({ partnerId, amount: 10000, bank: BANK, currency: "NGN" });
+    if (!again.ok) throw new Error(again.error);
+    const p2 = again.id;
+
+    const stale = await decidePayout({
+      payoutId: p1,
+      status: "paid",
+      reference: "zzcheck-stale",
+      decidedBy: null,
+    });
+    expect(stale.ok).toBe(false);
+    expect(await payoutStatus(p1)).toBe("rejected");
+    // P2 still holds its earnings, and none of them is marked paid.
+    const held = await earningsOf(p2);
+    expect(held).toHaveLength(2);
+    expect(held.every((e) => e.status === "available")).toBe(true);
+  });
+
+  it("lets exactly one of 'paid' and 'rejected' win on one request, and the ledger agrees", async () => {
+    const id = await approvedRequest();
+
+    /*
+     * Interleaved on purpose, over the ONE contested row. A third transaction
+     * takes the payout's lock first and holds it while both decisions are
+     * fired, so both are provably waiting on the same row at the same moment
+     * — rather than hoping two promises overlap. When it lets go, they run
+     * one after the other, and the second must see what the first wrote.
+     */
+    const release = defer();
+    const holding = defer();
+    const holder = db.transaction(async (tx) => {
+      await tx
+        .select({ id: partnerPayout.id })
+        .from(partnerPayout)
+        .where(eq(partnerPayout.id, id))
+        .for("update");
+      holding.resolve();
+      await release.promise;
+    });
+    await holding.promise;
+
+    const paid = decidePayout({ payoutId: id, status: "paid", reference: "zzcheck-race", decidedBy: null });
+    const rejected = decidePayout({ payoutId: id, status: "rejected", decidedBy: null });
+    // Long enough for both to reach the lock; neither can pass it yet.
+    await new Promise((r) => setTimeout(r, 300));
+    release.resolve();
+    await holder;
+
+    const results = await Promise.all([paid, rejected]);
+    expect(results.filter((r) => r.ok), JSON.stringify(results)).toHaveLength(1);
+
+    const final = await payoutStatus(id);
+    if (final === "paid") {
+      // Paid won: the earnings are paid and still on this request.
+      const rows = await earningsOf(id);
+      expect(rows).toHaveLength(2);
+      expect(rows.every((e) => e.status === "paid")).toBe(true);
+    } else {
+      // Rejected won: the money is back in the wallet, and none of it is paid.
+      expect(final).toBe("rejected");
+      expect(await earningsOf(id)).toHaveLength(0);
+      const all = await db
+        .select({ status: partnerEarning.status })
+        .from(partnerEarning)
+        .where(eq(partnerEarning.partnerId, partnerId));
+      expect(all.some((e) => e.status === "paid")).toBe(false);
+    }
+  });
+
+  it("never hands paid money back by rejecting after payment", async () => {
+    const id = await approvedRequest();
+    expect(
+      (await decidePayout({ payoutId: id, status: "paid", reference: "zzcheck", decidedBy: null })).ok,
+    ).toBe(true);
+    const late = await decidePayout({ payoutId: id, status: "rejected", decidedBy: null });
+    expect(late.ok).toBe(false);
+    const rows = await earningsOf(id);
+    expect(rows.every((e) => e.status === "paid")).toBe(true);
+    const wallet = await partnerWallet(partnerId);
+    expect(wallet.paid).toBe(10000);
+    expect(wallet.available).toBe(10000);
+  });
+});
+
+describe("requestPayout with a reversal in the ledger", () => {
+  it("settles the debt inside the withdrawal instead of paying past it", async () => {
+    // 4 × 5,000 earned, then a reversal of 5,000: 15,000 available.
+    await refillLedger();
+    await db.insert(partnerEarning).values({
+      partnerId,
+      kind: "reversal",
+      amount: -EARNING,
+      currency: "NGN",
+      rateBps: 0,
+      status: "available",
+      note: "zzcheck reversal",
+    });
+
+    expect((await partnerWallet(partnerId)).available).toBe(15000);
+
+    const res = await requestPayout({ partnerId, amount: 15000, bank: BANK, currency: "NGN" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const [payout] = await db
+      .select({ amount: partnerPayout.amount })
+      .from(partnerPayout)
+      .where(eq(partnerPayout.id, res.id));
+    // Never 20,000: the debt went with it.
+    expect(Number(payout.amount)).toBe(15000);
+    const debt = await db
+      .select({ payoutId: partnerEarning.payoutId })
+      .from(partnerEarning)
+      .where(and(eq(partnerEarning.partnerId, partnerId), eq(partnerEarning.kind, "reversal")));
+    expect(debt[0].payoutId).toBe(res.id);
+  });
+});
+
+describe("the database's own rule on a decided withdrawal", () => {
+  it("refuses to move a paid request anywhere, whoever asks", async () => {
+    /*
+     * decidePayout holds the state machine under a lock; this is the same
+     * rule held by Postgres (trigger partner_payout_final), so a script or a
+     * future code path that updates the row directly cannot reopen a payout
+     * whose money has already gone.
+     */
+    const id = await approvedRequest();
+    expect(
+      (await decidePayout({ payoutId: id, status: "paid", reference: "zzcheck", decidedBy: null })).ok,
+    ).toBe(true);
+    await expect(
+      db.update(partnerPayout).set({ status: "rejected" }).where(eq(partnerPayout.id, id)),
+      "the partner_payout_final trigger is missing: has the G2 migration been applied?",
+    ).rejects.toThrow();
+    expect(await payoutStatus(id)).toBe("paid");
   });
 });

@@ -15,6 +15,7 @@ import {
   type UploadProgress,
 } from "@/lib/direct-upload";
 import { formatBytes } from "@/lib/storage-bytes";
+import { isLocalMediaMime, unsupportedMediaMessage } from "@/lib/media-local-types";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 
@@ -181,7 +182,16 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       const size = chunkSize || 8 * 1024 * 1024;
 
       try {
-        for (let offset = 0; offset < file.size; offset += size) {
+        /*
+         * Driven by what the SERVER holds, not by a loop counter. Each chunk is
+         * sent with its offset and written there, so a retry of a chunk whose
+         * answer was lost lands on top of itself; and when the server says it
+         * holds a different amount (409), the next chunk starts from its
+         * number. Appending blindly is what turned one lost response into a
+         * video that broke halfway through and still said "ready".
+         */
+        let offset = 0;
+        while (offset < file.size) {
           const slice = file.slice(offset, Math.min(offset + size, file.size));
 
           /*
@@ -194,16 +204,21 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
            * it is tried again.
            */
           let lastError: string | null = null;
-          let sent = false;
-          for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
+          let next: number | null = null;
+          for (let attempt = 1; attempt <= 3 && next === null; attempt++) {
             try {
               const res = await fetch(
-                `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}`,
+                `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}&offset=${offset}`,
                 { method: "POST", body: slice },
               );
               const data = await res.json().catch(() => null);
               if (res.ok && data?.ok) {
-                sent = true;
+                next = Math.max(offset + slice.size, Number(data.received) || 0);
+                break;
+              }
+              if (res.status === 409 && data?.conflict) {
+                // The server is the authority on how far this got.
+                next = Math.min(Number(data.received) || 0, file.size);
                 break;
               }
               /*
@@ -221,12 +236,13 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
             }
             if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 1500));
           }
-          if (!sent) throw new Error(lastError ?? "A piece of the upload was refused.");
+          if (next === null) throw new Error(lastError ?? "A piece of the upload was refused.");
+          offset = next;
 
           // 95% at most until the server confirms the row: the last 5% is the
           // difference between "sent" and "saved", and they are not the same.
           patch(entryId, {
-            progress: Math.min(95, Math.round(((offset + slice.size) / file.size) * 95)),
+            progress: Math.min(95, Math.round((offset / file.size) * 95)),
           });
         }
       } catch (e) {
@@ -234,7 +250,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         await fetch(
           `/api/media/chunk?action=abandon&uploadId=${encodeURIComponent(uploadId)}`,
           { method: "POST" },
-        ).catch(() => {});
+        ).catch((abandonErr) => {
+          // The sweep clears it in a fortnight; worth a line, not a failure.
+          console.error("[media] could not abandon a partial upload", abandonErr);
+        });
         throw e;
       }
 
@@ -277,8 +296,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
        * that. Chunking keeps every individual request far below Cloudflare's
        * 100 MB body limit, so a 266 MB recording arrives as thirty-odd ordinary
        * requests instead of one that is refused at the edge.
+       *
+       * Routed by the SAME list the server accepts (lib/media-local-types), so
+       * the two cannot disagree: a type the server would refuse is named here,
+       * before a single byte is sent, instead of after ten minutes of upload.
        */
-      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+      if (isLocalMediaMime(file.type)) {
         try {
           await uploadToServerInChunks(entryId, file, kind);
         } catch (e) {
@@ -287,6 +310,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           console.error("[media] chunked upload failed", e);
           patch(entryId, { status: "error", error: message });
         }
+        return;
+      }
+      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+        patch(entryId, { status: "error", error: unsupportedMediaMessage(file.type) });
         return;
       }
 

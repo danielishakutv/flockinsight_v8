@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { celebrationSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { can } from "@/lib/permissions";
 import { getCelebrationQueue } from "@/lib/celebrations";
 import { CELEBRATION_DEFAULTS } from "@/lib/celebration-defaults";
@@ -22,7 +23,7 @@ export default async function CelebrationsSettingsPage() {
       .from(celebrationSetting)
       .where(eq(celebrationSetting.churchId, church.id))
       .limit(1),
-    getCelebrationQueue(church.id, 14),
+    getCelebrationQueue(church.id, 14, church.timezone),
   ]);
 
   const s = setting ?? CELEBRATION_DEFAULTS;
@@ -43,6 +44,7 @@ export default async function CelebrationsSettingsPage() {
       }}
       timezone={church.timezone}
       smsApproved={church.smsSenderStatus === "approved"}
+      smsAvailable={smsAvailableForCountry(church.country)}
       queue={queue}
     />
   );

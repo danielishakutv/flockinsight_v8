@@ -30,16 +30,20 @@ export type PartnerTier = {
   name: string;
   /** Churches live and paying, in the rolling window, to reach it. */
   minChurches: number;
-  /** Commission on a referred church's first payment, in basis points. */
+  /**
+   * Commission on a referred church's first MONTH paid for, in basis points.
+   * A month, not a payment: a year paid at once earns the first, the second
+   * and the trail in one go.
+   */
   firstBps: number;
-  /** Commission on its second payment. */
+  /** Commission on its second month paid for. */
   secondBps: number;
 };
 
 export type PartnerRates = {
   tiers: PartnerTier[];
   /**
-   * The recurring slice, paid for `trailMonths` after the first two payments.
+   * The recurring slice, paid for `trailMonths` after the first two months.
    *
    * The single biggest reason a Partner stays: it turns a one-off hunt into an
    * income that grows, and it quietly makes them want their churches to
@@ -155,7 +159,13 @@ export function applyRate(amount: number, bps: number): number {
   return Math.round(amount * bps) / 10_000;
 }
 
-export type EarningKind = "first" | "second" | "trail" | "bonus";
+/**
+ * `reversal` is the one kind that is never computed from a month: it is the
+ * negative row written when a payment is voided after its commission had
+ * already left the wallet (see `reversePartnerCommission`). It is a ledger
+ * entry rather than an edit, so the earning it offsets still says what was paid.
+ */
+export type EarningKind = "first" | "second" | "trail" | "bonus" | "reversal";
 
 /**
  * Which commission one MONTH of a subscription earns, and at what rate.
@@ -279,7 +289,7 @@ export function earningsForPayment(opts: {
     }
   }
 
-  const order: EarningKind[] = ["first", "second", "trail", "bonus"];
+  const order: EarningKind[] = ["first", "second", "trail", "bonus", "reversal"];
   return [...groups.values()]
     .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
     .map((g) => ({
@@ -316,6 +326,53 @@ export function earningFor(opts: {
   });
   if (!line) return null;
   return { kind: line.kind, amount: line.amount, rateBps: line.rateBps };
+}
+
+/**
+ * What a Partner's commission is a share of: the plan's price, not the money
+ * that passed through to a card network.
+ *
+ * An international church pays the plan price plus a surcharge that exists to
+ * cover Paystack's international card fee (and whatever rounding to a whole
+ * ₦100 added). That part is stored on the payment as `surchargeAmount`. Paying
+ * 40% of it to a Partner gave them more for a Kenyan church than for the same
+ * plan sold in Lagos, out of the very money that pays the fee — so the base is
+ * `amount - surchargeAmount`, never below zero, and never more than was paid.
+ */
+export function commissionBase(amount: number, surchargeAmount?: number | null): number {
+  const paid = Number(amount);
+  if (!Number.isFinite(paid) || paid <= 0) return 0;
+  const surcharge = Number(surchargeAmount ?? 0);
+  const off = Number.isFinite(surcharge) && surcharge > 0 ? surcharge : 0;
+  return Math.max(0, Math.round((paid - off) * 100) / 100);
+}
+
+/**
+ * Drop a first or second commission the church has already earned elsewhere.
+ *
+ * A church has exactly one first month and one second month. The month count
+ * in `awardPartnerCommission` is built so a payment cannot be priced as month
+ * one twice, but it is a count over rows people date by hand, and the cost of
+ * being wrong is paying the 40% twice. So the lines are checked against the
+ * kinds the church's still-standing payments already carry, and a repeat is
+ * removed rather than inserted. The trail legitimately appears on many
+ * payments and is never touched; nor is anything else.
+ */
+export function dropRepeatedOneOffs(
+  lines: EarningLine[],
+  alreadyEarned: Iterable<EarningKind>,
+): { kept: EarningLine[]; dropped: EarningLine[] } {
+  const seen = new Set(alreadyEarned);
+  const kept: EarningLine[] = [];
+  const dropped: EarningLine[] = [];
+  for (const line of lines) {
+    if ((line.kind === "first" || line.kind === "second") && seen.has(line.kind)) {
+      dropped.push(line);
+    } else {
+      kept.push(line);
+    }
+  }
+  return { kept, dropped };
 }
 
 /**
@@ -390,6 +447,153 @@ function round2(n: number): number {
 }
 
 /**
+ * Which unclaimed earnings a withdrawal of `amount` takes.
+ *
+ * Whole rows, oldest first — and every NEGATIVE row before any of them. A
+ * negative row is a reversal: commission on a payment that was voided after
+ * the money had already left. It is a debt against the next withdrawal and it
+ * must be IN that withdrawal. Taking rows oldest-first alone stops as soon as
+ * the request is covered, so a debt sitting behind a large earning would never
+ * be reached and the payout would come out larger than the balance it was
+ * drawn from.
+ *
+ * Null when what is there cannot cover the request, or nets to nothing. The
+ * total is what the ledger gives up, which is what is paid.
+ */
+export function takeForPayout(
+  rows: { id: string; amount: number }[],
+  amount: number,
+): { ids: string[]; total: number } | null {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const debts = rows.filter((r) => r.amount < 0);
+  const credits = rows.filter((r) => r.amount > 0);
+  const ids = debts.map((r) => r.id);
+  let running = debts.reduce((sum, r) => sum + r.amount, 0);
+  for (const r of credits) {
+    if (running >= amount - 0.001) break;
+    ids.push(r.id);
+    running += r.amount;
+  }
+  if (running < amount - 0.001 || running <= 0) return null;
+  return { ids, total: round2(running) };
+}
+
+export type PayoutStatus = "requested" | "approved" | "paid" | "rejected";
+export type PayoutDecision = "approved" | "paid" | "rejected";
+
+/**
+ * Where a withdrawal may go from where it is. Anything not listed is refused.
+ *
+ * Paid and rejected are FINAL. Before this table the only check was "not
+ * already paid", read before the transaction: a request rejected in one tab —
+ * its earnings handed back, and then claimed by a new request — could still be
+ * marked paid from a stale tab, and the same money went out twice.
+ *
+ * A request may be marked paid straight from "requested". Approving first is
+ * the usual path, but "paid" is recorded AFTER a human has already made the
+ * transfer — refusing it then does not stop the money, it only leaves the
+ * ledger saying "requested" about money that has gone, where a later reject
+ * would hand those earnings back to be withdrawn a second time. (A version of
+ * this table required approval first; the queue offers "Mark paid" on every
+ * open row, so every admin following the page was refused after paying.)
+ *
+ * `decidePayout` repeats this table in its UPDATE's WHERE, so it holds against
+ * two decisions racing as well as against a stale page.
+ */
+export const PAYOUT_TRANSITIONS: Record<PayoutDecision, readonly PayoutStatus[]> = {
+  approved: ["requested"],
+  paid: ["requested", "approved"],
+  rejected: ["requested", "approved"],
+};
+
+export function payoutTransitionAllowed(from: string, to: PayoutDecision): boolean {
+  return (PAYOUT_TRANSITIONS[to] as readonly string[]).includes(from);
+}
+
+/** Why a decision was refused, in words the person at the queue can act on. */
+export function payoutTransitionError(from: string, to: PayoutDecision): string {
+  if (from === "paid") return "That one is already paid.";
+  if (from === "rejected") return "That request was already rejected. Refresh the page.";
+  // Only "approved" again is left: approving is the one step that needs a
+  // fresh request.
+  return `That request is already ${from}, so it cannot be ${to} now. Refresh the page.`;
+}
+
+export type BankDetails = {
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+};
+
+/** Is this a different account, or the same one saved again? */
+export function bankDetailsChanged(before: BankDetails, after: BankDetails): boolean {
+  const norm = (v: string | null | undefined) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return (
+    norm(before.bankName) !== norm(after.bankName) ||
+    norm(before.bankAccountNumber) !== norm(after.bankAccountNumber) ||
+    norm(before.bankAccountName) !== norm(after.bankAccountName)
+  );
+}
+
+/**
+ * How recent an email code must be to authorise changing where money goes.
+ *
+ * Long enough to verify and then fill in a bank form; short enough that a
+ * verification from last month says nothing about who is holding the session
+ * now.
+ */
+export const BANK_CHANGE_FRESH_MS = 15 * 60_000;
+
+/**
+ * Does a change of bank account keep the Partner's email verification?
+ *
+ * Only when that verification is FRESH — a code confirmed in the last few
+ * minutes, which proves whoever is changing the account can read the inbox on
+ * file. Otherwise the change clears it and nothing can be withdrawn until a
+ * new code is confirmed. A stolen session (a shared phone left signed in) can
+ * change an account number; it cannot read the email, and the email is the
+ * one address on a Partner that a session cannot change. The phone is no help
+ * here: a session holder can put in their own number and verify it.
+ */
+export function bankChangeKeepsVerification(
+  emailVerifiedAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!emailVerifiedAt) return false;
+  const at = new Date(emailVerifiedAt).getTime();
+  if (!Number.isFinite(at)) return false;
+  const age = now.getTime() - at;
+  return age >= 0 && age <= BANK_CHANGE_FRESH_MS;
+}
+
+/**
+ * The ceilings on verification codes a Partner can make us send.
+ *
+ * Every SMS here is paid from the platform's own Termii balance, not a
+ * church's wallet, and a pending Partner account is one form away for any
+ * signed-in user. Without a ceiling, "save a number, send a code" in a loop
+ * spent our float on strangers and put the sender ID at risk of being flagged.
+ * Per Partner, per destination and per address, in memory for the burst; per
+ * Partner and per destination over a day, in the database, because the
+ * in-memory count is per worker and forgets on every deploy.
+ */
+export const PARTNER_OTP_LIMITS = {
+  perPartnerHour: 5,
+  perDestinationHour: 3,
+  perIpHour: 10,
+  perPartnerDay: 8,
+  perDestinationDay: 5,
+  phoneChangesPerDay: 3,
+  bankChangesPerDay: 5,
+} as const;
+
+/** An account number as it may appear in a message: the last four digits. */
+export function maskAccount(accountNumber: string | null | undefined): string {
+  const digits = (accountNumber ?? "").replace(/\D/g, "");
+  return digits ? `****${digits.slice(-4)}` : "****";
+}
+
+/**
  * May this Partner withdraw this much?
  *
  * Says no with the reason, because every one of these is something the person
@@ -459,7 +663,29 @@ export function canWithdraw(opts: {
  * or a number written with spaces, would fail a check that should pass.
  */
 export function otpDestination(which: "email" | "phone", raw: string): string {
-  return which === "email" ? raw.trim().toLowerCase() : raw.replace(/[^0-9+]/g, "");
+  return which === "email" ? raw.trim().toLowerCase() : canonicalPhone(raw);
+}
+
+/**
+ * A phone number in the ONE spelling the SMS gateway uses: digits only, with
+ * the Nigerian 0 or bare ten digits turned into 234… — the same rule as
+ * `normalizePhone` in lib/sms (which is server-only, so it is restated here
+ * and the test pins the cases). Empty when it cannot be a number.
+ *
+ * One spelling is what makes a per-number limit mean what it says. "0801…",
+ * "+234 801…" and "234801…" are the same phone, and while they were three
+ * destinations the throttle on codes per destination was three throttles.
+ */
+export function canonicalPhone(raw: string): string {
+  const digits = (raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("234")) return digits.length === 13 ? digits : "";
+  if (digits.startsWith("0")) {
+    const rest = digits.slice(1);
+    return rest.length === 10 ? `234${rest}` : "";
+  }
+  if (digits.length === 10) return `234${digits}`;
+  return digits.length >= 10 ? digits : "";
 }
 
 /**
@@ -525,6 +751,24 @@ export function generatePartnerCode(random: () => number = Math.random): string 
 /** What a person typed, turned into what we store. */
 export function normalisePartnerCode(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
+}
+
+/**
+ * The one-line description of the programme, for search results and link
+ * previews — built from the live rates, like every other number on the page.
+ *
+ * It used to promise a share "on every payment, for as long as they stay",
+ * while the trail stops after `trailMonths`. A preview is the first thing a
+ * prospective Partner reads, and it was the one sentence on the page that was
+ * not true.
+ */
+export function partnerProgramDescription(rates: PartnerRates): string {
+  const pct = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
+  const trail =
+    rates.trailBps > 0 && rates.trailMonths > 0
+      ? `, then ${pct(rates.trailBps)} of every payment for the next ${rates.trailMonths} months`
+      : "";
+  return `Bring churches onto FlockInsight and earn a commission on their first two months${trail}. Commission rates, tiers, payouts and terms.`;
 }
 
 export function partnerLink(origin: string, code: string): string {

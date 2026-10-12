@@ -294,3 +294,28 @@ export function durationLabel(period: Interval): string {
   const r = Number.isInteger(d) ? String(d) : d.toFixed(1);
   return `${r} day${d === 1 ? "" : "s"}`;
 }
+
+/**
+ * What an EDIT does to a booking's hold on its slot.
+ *
+ *   - "hold": it is approved and stays approved, so the new times must pass
+ *     the clash check — under the facility lock, like any other claim.
+ *   - "rerequest": it was approved on a facility that needs approval, and the
+ *     slot itself moved (another facility, other times). The old approval was
+ *     for the old slot; it goes back to "requested" for somebody to decide.
+ *   - "unchanged": it never held a slot (requested, declined, cancelled), so
+ *     there is nothing to check and its status stays as it is.
+ *
+ * Before this, an edit on an approval-required facility skipped the clash
+ * check entirely and kept "approved" — a hall moved onto a wedding's Saturday
+ * double-booked it without a word.
+ */
+export function editHold(args: {
+  status: BookingStatus;
+  requiresApproval: boolean;
+  slotChanged: boolean;
+}): "hold" | "rerequest" | "unchanged" {
+  if (args.status !== "approved") return "unchanged";
+  if (args.requiresApproval && args.slotChanged) return "rerequest";
+  return "hold";
+}

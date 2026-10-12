@@ -276,7 +276,11 @@ describe("ledger", () => {
 
 describe("summary", () => {
   it("adds up the range and breaks it down by category", async () => {
-    const s = await getFinanceSummary(churchId, "2026-03-01", "2026-04-30");
+    const s = await getFinanceSummary(churchId, {
+      ...EMPTY_FINANCE_FILTERS,
+      from: "2026-03-01",
+      to: "2026-04-30",
+    });
     expect(s.income).toBe(75000.5);
     expect(s.expense).toBe(20000.25);
     expect(s.net).toBe(55000.25);
@@ -286,9 +290,31 @@ describe("summary", () => {
   });
 
   it("sorts the breakdown biggest first", async () => {
-    const s = await getFinanceSummary(churchId, "2026-03-01", "2026-04-30");
+    const s = await getFinanceSummary(churchId, {
+      ...EMPTY_FINANCE_FILTERS,
+      from: "2026-03-01",
+      to: "2026-04-30",
+    });
     const totals = s.byCategory.map((c) => c.total);
     expect([...totals].sort((a, b) => b - a)).toEqual(totals);
+  });
+
+  // The statement PDF prints these cards above the filtered list, so with a
+  // filter they must describe that list and nothing else.
+  it("follows every filter, and agrees with the ledger's own totals", async () => {
+    const f = {
+      ...EMPTY_FINANCE_FILTERS,
+      from: "2026-03-01",
+      to: "2026-04-30",
+      kind: "expense",
+    };
+    const [s, page] = await Promise.all([
+      getFinanceSummary(churchId, f),
+      getLedger(churchId, f, 1, 10),
+    ]);
+    expect(s.income).toBe(0);
+    expect(s.expense).toBe(page.expense);
+    expect(s.byCategory.every((c) => c.kind === "expense")).toBe(true);
   });
 });
 

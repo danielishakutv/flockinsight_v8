@@ -3,7 +3,11 @@ import { db } from "@/db";
 import { giving, givingCategory, member, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { parseGivingFilters } from "@/lib/giving-data";
+import {
+  GIVING_FILTER_NONE,
+  givingWhereFor,
+  parseGivingFilters,
+} from "@/lib/giving-data";
 import { getChurchBrand } from "@/lib/pdf-brand";
 import { renderGivingPdf, type GivingPdfRow } from "@/lib/giving-pdf";
 
@@ -29,16 +33,33 @@ export async function GET(request: Request) {
   });
   const f = parseGivingFilters(params);
 
-  // The date range is the part of the filter a statement is really about, so
-  // it is applied here directly rather than paging through getGivingList.
-  const where = and(
-    eq(giving.churchId, church.id),
-    ...(f.from ? [sql`${giving.date} >= ${f.from}`] : []),
-    ...(f.to ? [sql`${giving.date} <= ${f.to}`] : []),
-    ...(f.categoryId && f.categoryId !== "none"
-      ? [eq(giving.categoryId, f.categoryId)]
-      : []),
-  );
+  // The list's own WHERE clause — every filter, not just the dates. This
+  // used to apply only from/to/category, and the menu link carried no query
+  // string at all, so a "Building project, January" statement printed the
+  // church's all-time giving. givingWhereFor reads member, category and
+  // project names, so every query below joins all three; each join is
+  // many-to-one, so counts and sums are unchanged by them.
+  const where = givingWhereFor(church.id, f);
+
+  // Name the narrowing filters on the statement, beside the dates.
+  const [catRow, projRow] = await Promise.all([
+    f.categoryId && f.categoryId !== GIVING_FILTER_NONE
+      ? db
+          .select({ name: givingCategory.name })
+          .from(givingCategory)
+          .where(and(eq(givingCategory.id, f.categoryId), eq(givingCategory.churchId, church.id)))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : null,
+    f.projectId && f.projectId !== GIVING_FILTER_NONE
+      ? db
+          .select({ name: project.name })
+          .from(project)
+          .where(and(eq(project.id, f.projectId), eq(project.churchId, church.id)))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : null,
+  ]);
 
   const [brand, rows, byCategory, [agg]] = await Promise.all([
     getChurchBrand(church),
@@ -69,6 +90,8 @@ export async function GET(request: Request) {
       })
       .from(giving)
       .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
+      .leftJoin(member, eq(member.id, giving.memberId))
+      .leftJoin(project, eq(project.id, giving.projectId))
       .where(where)
       .groupBy(givingCategory.name),
     db
@@ -77,6 +100,9 @@ export async function GET(request: Request) {
         total: sql<number>`coalesce(sum(${giving.amount}), 0)`,
       })
       .from(giving)
+      .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
+      .leftJoin(member, eq(member.id, giving.memberId))
+      .leftJoin(project, eq(project.id, giving.projectId))
       .where(where),
   ]);
 
@@ -93,7 +119,7 @@ export async function GET(request: Request) {
     note: r.note,
   }));
 
-  const rangeLabel =
+  const dates =
     f.from && f.to
       ? `${f.from} to ${f.to}`
       : f.from
@@ -101,6 +127,14 @@ export async function GET(request: Request) {
         : f.to
           ? `Until ${f.to}`
           : "All time";
+  const narrowing: string[] = [];
+  if (f.categoryId === GIVING_FILTER_NONE) narrowing.push("No category");
+  else if (f.categoryId) narrowing.push(catRow?.name ?? "A removed category");
+  if (f.projectId === GIVING_FILTER_NONE) narrowing.push("No project");
+  else if (f.projectId) narrowing.push(projRow?.name ?? "A removed project");
+  if (f.method) narrowing.push(f.method);
+  if (f.q) narrowing.push(`"${f.q.slice(0, 40)}"`);
+  const rangeLabel = [dates, ...narrowing].join(" · ");
 
   const pdf = await renderGivingPdf({
     brand,

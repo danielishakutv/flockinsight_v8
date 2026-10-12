@@ -68,6 +68,22 @@ function open(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * One IndexedDB request, settled when its TRANSACTION settles.
+ *
+ * Not when the request succeeds. Those are different moments, and the gap
+ * between them is where recordings were lost: a large Blob write succeeds as a
+ * request and is then refused at commit — QuotaExceededError on a nearly full
+ * phone, Safari's per-origin limit, a private window — which shows up only as
+ * the transaction aborting. Resolving on `req.onsuccess` told the meeting room
+ * an hour of video was safe on the device when nothing had been written, and it
+ * then let go of the only copy in memory.
+ *
+ * So: resolve on `complete`, reject on `abort` (with the transaction's own
+ * error, which is where the quota failure is reported), and treat anything
+ * thrown while setting up the transaction — DataCloneError, InvalidStateError —
+ * as the same refusal rather than an exception that escapes the promise.
+ */
 function run<T>(
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest<T>,
@@ -75,13 +91,53 @@ function run<T>(
   return open().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(STORE, mode);
-        const req = fn(tx.objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error ?? new Error("IndexedDB write failed."));
-        tx.oncomplete = () => db.close();
+        let result: T | undefined;
+        let requestError: DOMException | null = null;
+        let tx: IDBTransaction;
+        try {
+          tx = db.transaction(STORE, mode);
+          const req = fn(tx.objectStore(STORE));
+          req.onsuccess = () => {
+            result = req.result;
+          };
+          /*
+           * Remember why, and nothing else. Do NOT call preventDefault here (or
+           * on the transaction's error event): in IndexedDB, cancelling a
+           * request's error event is precisely what stops the transaction from
+           * aborting. The transaction then commits without the write, `oncomplete`
+           * fires, and the caller is told a failed write succeeded. Left alone,
+           * the error aborts the transaction and `onabort` below rejects.
+           */
+          req.onerror = () => {
+            requestError = req.error;
+          };
+        } catch (e) {
+          db.close();
+          reject(e instanceof Error ? e : new Error(String(e)));
+          return;
+        }
+        tx.oncomplete = () => {
+          db.close();
+          resolve(result as T);
+        };
+        tx.onabort = () => {
+          db.close();
+          reject(
+            tx.error ??
+              requestError ??
+              new Error("IndexedDB did not keep the change (the transaction was aborted)."),
+          );
+        };
       }),
   );
+}
+
+/** Why the device could not keep a recording, in words for the person. */
+export class VaultUnavailable extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "VaultUnavailable";
+  }
 }
 
 /**
@@ -92,8 +148,38 @@ function run<T>(
  * recording and immediately closes the laptop.
  */
 export async function keepRecording(entry: Omit<VaultEntry, "attempts" | "lastError">): Promise<void> {
-  if (!vaultSupported()) return;
-  await run("readwrite", (s) => s.put({ ...entry, attempts: 0, lastError: null }));
+  /*
+   * Throws rather than returning quietly. A caller that is told nothing assumes
+   * the recording is safe and lets the in-memory Blob go; a webview with no
+   * IndexedDB used to get exactly that, and a "recording queued" toast for a
+   * file that existed nowhere. The caller must keep the Blob and offer a
+   * download instead — see `VaultUnavailable`.
+   */
+  if (!vaultSupported())
+    throw new VaultUnavailable("This browser cannot keep recordings on the device.");
+  try {
+    await run("readwrite", (s) => s.put({ ...entry, attempts: 0, lastError: null }));
+  } catch (e) {
+    const name = (e as { name?: string } | null)?.name;
+    throw new VaultUnavailable(
+      name === "QuotaExceededError"
+        ? "This device is out of space for the recording."
+        : "This browser would not store the recording on the device.",
+      { cause: e },
+    );
+  }
+  /*
+   * Read back before claiming success. A committed transaction is the browser's
+   * word; finding the entry is ours, and it costs one small read against an
+   * hour of somebody's service.
+   */
+  const kept = await getPending(entry.id);
+  if (!kept) throw new VaultUnavailable("The recording could not be found on the device after saving it.");
+}
+
+/** Whether a recording is really on this device right now. */
+export async function isKept(id: string): Promise<boolean> {
+  return (await getPending(id)) !== null;
 }
 
 export async function listPending(): Promise<VaultEntry[]> {
@@ -101,10 +187,10 @@ export async function listPending(): Promise<VaultEntry[]> {
   try {
     const all = await run<VaultEntry[]>("readonly", (s) => s.getAll() as IDBRequest<VaultEntry[]>);
     return all.sort((a, b) => b.createdAt - a.createdAt);
-  } catch {
+  } catch (e) {
     // A private window, or storage the browser has decided to refuse. The
-    // recording still exists in memory for this session; say nothing here and
-    // let the caller's own error path speak.
+    // caller's own error path speaks to the person; this leaves a trace.
+    console.error("[recording-vault] could not list recordings on this device", e);
     return [];
   }
 }
@@ -113,7 +199,8 @@ export async function getPending(id: string): Promise<VaultEntry | null> {
   if (!vaultSupported()) return null;
   try {
     return (await run<VaultEntry | undefined>("readonly", (s) => s.get(id))) ?? null;
-  } catch {
+  } catch (e) {
+    console.error("[recording-vault] could not read a recording on this device", e);
     return null;
   }
 }
@@ -123,8 +210,9 @@ export async function releaseRecording(id: string): Promise<void> {
   if (!vaultSupported()) return;
   try {
     await run("readwrite", (s) => s.delete(id));
-  } catch {
-    /* Leaving a saved copy behind is harmless; losing an unsaved one is not. */
+  } catch (e) {
+    // Leaving a saved copy behind is harmless; losing an unsaved one is not.
+    console.error("[recording-vault] could not release a saved recording", e);
   }
 }
 
@@ -151,7 +239,13 @@ export async function noteFailure(id: string, error: string): Promise<void> {
   const entry = await getPending(id);
   if (!entry) return;
   await run("readwrite", (s) =>
-    s.put({ ...entry, lastError: error, attempts: entry.attempts + 1 }),
+    /*
+     * `lastAttemptAt` too, or the backoff never applies: it is the clock the
+     * uploader measures from, and a refusal at START (before any progress was
+     * noted) used to leave it unset — so a recording the server would never
+     * accept was retried every twenty seconds for ever.
+     */
+    s.put({ ...entry, lastError: error, attempts: entry.attempts + 1, lastAttemptAt: Date.now() }),
   );
 }
 

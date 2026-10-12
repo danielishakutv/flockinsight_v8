@@ -1,6 +1,7 @@
 import { Church } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireChurch } from "@/lib/session";
+import { requireCan } from "@/lib/permissions";
 import {
   getAttendanceRows,
   summarizeAttendance,
@@ -51,6 +52,9 @@ function StatTile({
 export default async function AttendanceReportPage() {
   const t = await getT();
   const { church } = await requireChurch();
+  // /reports sits outside the (app) group, so no layout guards it: the same
+  // permission the /attendance page asks for, checked here.
+  await requireCan("attendance.view");
   const rows = await getAttendanceRows(church.id);
   const s = summarizeAttendance(rows);
 

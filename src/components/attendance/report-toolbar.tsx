@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
  */
 export function ReportToolbar() {
   return (
-    <div className="no-print sticky top-0 z-10 mb-6 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur print:hidden">
+    <div className="no-print sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur print:hidden">
       <Button asChild variant="ghost" size="sm">
         <Link href="/attendance">
           <ArrowLeft className="size-4" />

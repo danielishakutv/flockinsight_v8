@@ -3,9 +3,16 @@
 import { z } from "zod";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { invitation, member, role, staff, staffInvite, user } from "@/db/schema";
+import {
+  invitation,
+  member,
+  role,
+  staff,
+  staffInvite,
+  user,
+} from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireChurch } from "@/lib/session";
 import { teamLimitStatus } from "@/lib/entitlements-server";
@@ -13,6 +20,12 @@ import { planName } from "@/lib/plans";
 import { can } from "@/lib/permissions";
 import { betterAuthRoleFor } from "@/lib/staff-access";
 import { refuseIfDemo } from "@/lib/demo";
+import {
+  invitationErrorMessage,
+  isBatchStoppingInvitationError,
+} from "@/lib/invitation-errors";
+import { invitationCapForChurch } from "@/lib/org-plugin-guard";
+import { repointSessionsLeaving } from "@/lib/session-pointer";
 
 /**
  * Giving an existing congregation member a login and a church role.
@@ -25,7 +38,12 @@ import { refuseIfDemo } from "@/lib/demo";
 
 export type AccessResult =
   | { ok: true; invitationId: string }
-  | { ok: false; error: string };
+  /**
+   * `stopBatch`: a refusal no later invitation in the same batch can get past
+   * (the church's invitation cap, its team size, the demo church). The bulk
+   * invite stops there instead of making N more doomed calls.
+   */
+  | { ok: false; error: string; stopBatch?: boolean };
 
 export type BulkAccessResult =
   | {
@@ -165,45 +183,74 @@ export async function inviteMemberAsStaff(input: {
   }
   const orgRole = betterAuthRoleFor(permissions);
 
-  // Reuse a pending invitation for this email rather than stacking duplicates.
-  const [pending] = await db
+  /*
+   * One live invitation per person, and every invite actually sends an email.
+   *
+   * This used to reuse ANY pending row for the email — including one that had
+   * expired days ago — and send nothing. Re-inviting somebody whose link had
+   * run out therefore changed a role column on a dead invitation and told the
+   * admin "Invitation sent". Now:
+   *
+   * - an expired pending row is retired (status "canceled", the same word the
+   *   org plugin writes) so it neither lingers as "pending" nor is reused;
+   * - a live one is re-sent through the plugin (`resend: true`), which extends
+   *   its expiry and emails the same link again;
+   * - otherwise a fresh invitation is created, which emails it.
+   */
+  const now = new Date();
+  await db
+    .update(invitation)
+    .set({ status: "canceled" })
+    .where(
+      and(
+        eq(invitation.organizationId, ctx.church.id),
+        eq(invitation.status, "pending"),
+        lte(invitation.expiresAt, now),
+        sql`lower(${invitation.email}) = ${email.toLowerCase()}`,
+      ),
+    );
+
+  const [live] = await db
     .select({ id: invitation.id })
     .from(invitation)
     .where(
       and(
         eq(invitation.organizationId, ctx.church.id),
         eq(invitation.status, "pending"),
+        gt(invitation.expiresAt, now),
         sql`lower(${invitation.email}) = ${email.toLowerCase()}`,
       ),
     )
     .limit(1);
 
-  let invitationId: string;
-  if (pending) {
-    invitationId = pending.id;
-    // Keep the org role in step with the role we're about to attach.
+  // Keep the org role in step with the role we're about to attach, BEFORE the
+  // email goes out, so the re-sent invitation carries it.
+  if (live) {
     await db
       .update(invitation)
       .set({ role: orgRole })
-      .where(eq(invitation.id, invitationId));
-  } else {
-    try {
-      const created = await auth.api.createInvitation({
-        body: {
-          email,
-          role: orgRole,
-          organizationId: ctx.church.id,
-        },
-        headers: await headers(),
-      });
-      invitationId = created.id;
-    } catch (e) {
-      console.error("[access] createInvitation failed", e);
-      return {
-        ok: false,
-        error: "Could not create the invitation. Please try again.",
-      };
-    }
+      .where(eq(invitation.id, live.id));
+  }
+
+  let invitationId: string;
+  try {
+    const created = await auth.api.createInvitation({
+      body: {
+        email,
+        role: orgRole,
+        organizationId: ctx.church.id,
+        resend: live ? true : undefined,
+      },
+      headers: await headers(),
+    });
+    invitationId = created.id;
+  } catch (e) {
+    console.error("[access] createInvitation failed", e);
+    return {
+      ok: false,
+      error: invitationErrorMessage(e),
+      stopBatch: isBatchStoppingInvitationError(e),
+    };
   }
 
   // invitation_id is unique, so re-inviting the same person with a different
@@ -255,6 +302,35 @@ export async function inviteMembersAsStaff(input: {
     if ("error" in r) return { ok: false, error: r.error };
   }
 
+  /*
+   * Room for this many more invitations waiting to be accepted. The org plugin
+   * refuses every invite past its cap ("Invitation limit reached"), and used to
+   * do so one member at a time, each reported as "please try again" — which
+   * retrying could never fix. Count the live ones first and say so up front.
+   */
+  const [{ pending }] = await db
+    .select({ pending: count() })
+    .from(invitation)
+    .where(
+      and(
+        eq(invitation.organizationId, ctx.church.id),
+        eq(invitation.status, "pending"),
+        gt(invitation.expiresAt, new Date()),
+      ),
+    );
+  const cap = await invitationCapForChurch(ctx.church.id);
+  const pendingN = Number(pending);
+  if (pendingN + input.memberIds.length > cap) {
+    const room = Math.max(0, cap - pendingN);
+    return {
+      ok: false,
+      error:
+        room === 0
+          ? `Your church already has ${pendingN} invitations waiting to be accepted. Cancel some in Settings → Team (or wait for them to expire), then try again.`
+          : `Your church has ${pendingN} invitations waiting to be accepted, so there is room for ${room} more. Select ${room} or fewer, or cancel some in Settings → Team.`,
+    };
+  }
+
   const names = await db
     .select({
       id: member.id,
@@ -270,16 +346,30 @@ export async function inviteMembersAsStaff(input: {
   let invited = 0;
   const skipped: { memberId: string; name: string; reason: string }[] = [];
 
-  // One member's problem must not abort the rest of the batch.
-  for (const memberId of input.memberIds) {
+  // One member's problem must not abort the rest of the batch — unless it is
+  // a problem every later member would hit too; then say it once for each and
+  // stop calling.
+  for (let i = 0; i < input.memberIds.length; i++) {
+    const memberId = input.memberIds[i];
     const res = await inviteMemberAsStaff({ memberId, roleId: input.roleId });
-    if (res.ok) invited++;
-    else {
-      skipped.push({
-        memberId,
-        name: nameById.get(memberId) ?? "This member",
-        reason: res.error,
-      });
+    if (res.ok) {
+      invited++;
+      continue;
+    }
+    skipped.push({
+      memberId,
+      name: nameById.get(memberId) ?? "This member",
+      reason: res.error,
+    });
+    if (res.stopBatch) {
+      for (const rest of input.memberIds.slice(i + 1)) {
+        skipped.push({
+          memberId: rest,
+          name: nameById.get(rest) ?? "This member",
+          reason: res.error,
+        });
+      }
+      break;
     }
   }
 
@@ -314,8 +404,22 @@ export async function revokeMemberAccess(
     return { ok: false, error: "The church owner's access can't be removed." };
   }
 
+  const removedUserId = m.userId;
   await db.transaction(async (tx) => {
     if (s) await tx.delete(staff).where(eq(staff.id, s.id));
+
+    /*
+     * Removed means removed now, not when their session next expires.
+     *
+     * Their sessions still point at this church. requireChurch() refuses a
+     * church without a genuine seat, but clearing the pointer as well means
+     * nothing that reads activeOrganizationId straight off the session (the
+     * notification routes, the org plugin) keeps answering them either. Only
+     * sessions aimed at THIS church, and they move to another church the
+     * person still belongs to rather than to nothing — a null pointer reads
+     * as "create your church" (lib/session-pointer.ts).
+     */
+    await repointSessionsLeaving(tx, removedUserId, ctx.church.id);
 
     // Keep the person and every record they touched — this removes a login,
     // not a member.

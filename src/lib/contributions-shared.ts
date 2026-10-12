@@ -11,6 +11,7 @@
  * test, which is the point — one implementation of each rule.
  */
 import { formatMoneyPlain } from "@/lib/money";
+import { parseMoney } from "@/lib/money-input";
 
 export type ContributionKind = "equal" | "open" | "gift";
 export type ContributionStatus = "draft" | "open" | "closed" | "settled";
@@ -980,14 +981,17 @@ export function isShareableUrl(url: string): boolean {
  * Validation shared by the admin form and the public form
  * ========================================================== */
 
-/** Parse a typed amount: "5,000" and " 5000 " both mean 5000. */
+/**
+ * Parse a typed amount: "5,000" and " 5000 " both mean 5000, and "1500,50"
+ * from a comma-decimal keypad means 1500.50 — it used to have its comma
+ * stripped and be saved as 150050.
+ *
+ * Delegates to the platform's one money parser (lib/money-input). Zero and a
+ * minus sign are let through so that amountRejection, not this, says what is
+ * wrong with them; a figure that cannot be read one way only is null.
+ */
 export function parseAmount(input: unknown): number | null {
-  if (typeof input === "number") return Number.isFinite(input) ? input : null;
-  if (typeof input !== "string") return null;
-  const cleaned = input.replace(/[\s,]/g, "");
-  if (cleaned === "") return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
+  return parseMoney(input, { allowZero: true, allowNegative: true });
 }
 
 export const MAX_AMOUNT = 1_000_000_000_000;

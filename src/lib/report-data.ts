@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lte, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
@@ -768,6 +768,12 @@ const BUILDERS: Record<string, Builder> = {
         "opening_balance",
         "total_in",
         "total_out",
+        // Transfers as their own columns, so every row reconciles —
+        // opening + total_in + transferred_in - total_out - transferred_out
+        // = balance — without folding internal moves into income, where
+        // summing total_in across accounts would count them twice.
+        "transferred_in",
+        "transferred_out",
         "balance",
         "record_count",
         "is_open",
@@ -781,6 +787,8 @@ const BUILDERS: Record<string, Builder> = {
         a.openingBalance,
         a.income,
         a.expense,
+        a.transferredIn,
+        a.transferredOut,
         a.balance,
         a.transactionCount,
         a.isActive ? "yes" : "no",
@@ -889,7 +897,9 @@ const BUILDERS: Record<string, Builder> = {
           total: sql<number>`coalesce(sum(${pledge.amount}), 0)`,
         })
         .from(pledge)
-        .where(eq(pledge.churchId, churchId))
+        // A cancelled pledge is not money anybody is expecting; the Projects
+        // page (listProjects) leaves it out, and the export now agrees.
+        .where(and(eq(pledge.churchId, churchId), ne(pledge.status, "cancelled")))
         .groupBy(pledge.projectId),
     ]);
     const raisedOf = new Map(raisedRows.map((r) => [r.projectId, Number(r.total)]));
@@ -2647,9 +2657,68 @@ export async function getChurchTotals(
 }
 
 /**
+ * One scalar subquery per dataset, keyed by the dataset's own id.
+ *
+ * Keyed by id rather than by a camelCase alias mapped back by hand, because
+ * the hand mapping is how eight datasets — the finance books, contributions
+ * and meetings — came to have no count at all: the page greyed them out as
+ * "0 rows" and the board-facing summary PDF printed "nothing recorded" under
+ * Finance for a church with hundreds of entries. COUNTED_DATASET_IDS is held
+ * to the catalogue by a test, so a new dataset without a count fails the build.
+ *
+ * Not correlated, unlike the aggregates above: each subquery filters its own
+ * single table on a bound parameter, so there is no outer column to shadow.
+ */
+function countSubqueries(churchId: string): Record<string, SQL<number>> {
+  return {
+    members: sql<number>`(select count(*)::int from ${member} where church_id = ${churchId})`,
+    households: sql<number>`(select count(*)::int from ${household} where church_id = ${churchId})`,
+    "member-growth": sql<number>`(select count(distinct to_char(coalesce(joined_at, created_at::date), 'YYYY-MM'))::int from ${member} where church_id = ${churchId})`,
+    services: sql<number>`(select count(*)::int from ${service} where church_id = ${churchId})`,
+    "attendance-sessions": sql<number>`(select count(*)::int from ${attendanceSession} where church_id = ${churchId})`,
+    "attendance-records": sql<number>`(select count(*)::int from ${attendanceRecord} r join ${attendanceSession} s on s.id = r.session_id where s.church_id = ${churchId})`,
+    giving: sql<number>`(select count(*)::int from ${giving} where church_id = ${churchId})`,
+    "giving-categories": sql<number>`(select count(*)::int from ${givingCategory} where church_id = ${churchId})`,
+    projects: sql<number>`(select count(*)::int from ${project} where church_id = ${churchId})`,
+    pledges: sql<number>`(select count(*)::int from ${pledge} where church_id = ${churchId})`,
+    groups: sql<number>`(select count(*)::int from ${group} where church_id = ${churchId})`,
+    "group-memberships": sql<number>`(select count(*)::int from ${groupMembership} gm join ${group} g on g.id = gm.group_id where g.church_id = ${churchId})`,
+    "follow-ups": sql<number>`(select count(*)::int from ${followUpInteraction} where church_id = ${churchId})`,
+    events: sql<number>`(select count(*)::int from ${event} where church_id = ${churchId})`,
+    "event-guests": sql<number>`(select count(*)::int from ${eventGuest} where church_id = ${churchId})`,
+    forms: sql<number>`(select count(*)::int from ${form} where church_id = ${churchId})`,
+    "form-responses": sql<number>`(select count(*)::int from ${formResponse} where church_id = ${churchId})`,
+    devotionals: sql<number>`(select count(*)::int from ${devotional} where church_id = ${churchId})`,
+    subscribers: sql<number>`(select count(*)::int from ${subscriber} where church_id = ${churchId})`,
+    messages: sql<number>`(select count(*)::int from ${communicationLog} where church_id = ${churchId})`,
+    "message-recipients": sql<number>`(select count(*)::int from ${communicationRecipient} where church_id = ${churchId})`,
+    team: sql<number>`(select count(*)::int from ${staff} where organization_id = ${churchId} and temp = false)`,
+    roles: sql<number>`(select count(*)::int from ${role} where church_id = ${churchId})`,
+    wallet: sql<number>`(select count(*)::int from ${walletTxn} where church_id = ${churchId})`,
+    payments: sql<number>`(select count(*)::int from ${payment} where church_id = ${churchId})`,
+    media: sql<number>`(select count(*)::int from ${media} where church_id = ${churchId})`,
+    "support-tickets": sql<number>`(select count(*)::int from ${supportTicket} where church_id = ${churchId})`,
+    usage: sql<number>`(select count(*)::int from ${usageStat} where church_id = ${churchId})`,
+    "finance-transactions": sql<number>`(select count(*)::int from ${financeTransaction} where church_id = ${churchId})`,
+    "finance-accounts": sql<number>`(select count(*)::int from ${financeAccount} where church_id = ${churchId})`,
+    "finance-categories": sql<number>`(select count(*)::int from ${financeCategory} where church_id = ${churchId})`,
+    contributions: sql<number>`(select count(*)::int from ${contribution} where church_id = ${churchId})`,
+    "contribution-payments": sql<number>`(select count(*)::int from ${contributionEntry} where church_id = ${churchId})`,
+    "contribution-payouts": sql<number>`(select count(*)::int from ${contributionPayout} where church_id = ${churchId})`,
+    meetings: sql<number>`(select count(*)::int from ${meeting} where church_id = ${churchId})`,
+    "meeting-attendance": sql<number>`(select count(*)::int from ${meetingParticipant} where church_id = ${churchId})`,
+  };
+}
+
+/** Every dataset id getDatasetCounts answers for. */
+export const COUNTED_DATASET_IDS: readonly string[] = Object.keys(
+  countSubqueries("00000000-0000-0000-0000-000000000000"),
+);
+
+/**
  * How many rows each dataset holds, for the page and the summary PDF.
  *
- * One round trip of scalar subqueries rather than actually building all 27
+ * One round trip of scalar subqueries rather than actually building every
  * datasets: the page only needs the sizes, and materialising every row to
  * count them would make opening the page as expensive as downloading
  * everything on it.
@@ -2660,71 +2729,20 @@ export async function getChurchTotals(
 export async function getDatasetCounts(
   churchId: string,
 ): Promise<Record<string, number>> {
-  // Not correlated, unlike the aggregates above: each subquery filters its own
-  // single table on a bound parameter, so there is no outer column to shadow.
-  const [row] = await db
-    .select({
-      members: sql<number>`(select count(*)::int from ${member} where church_id = ${churchId})`,
-      households: sql<number>`(select count(*)::int from ${household} where church_id = ${churchId})`,
-      memberGrowth: sql<number>`(select count(distinct to_char(coalesce(joined_at, created_at::date), 'YYYY-MM'))::int from ${member} where church_id = ${churchId})`,
-      services: sql<number>`(select count(*)::int from ${service} where church_id = ${churchId})`,
-      sessions: sql<number>`(select count(*)::int from ${attendanceSession} where church_id = ${churchId})`,
-      records: sql<number>`(select count(*)::int from ${attendanceRecord} r join ${attendanceSession} s on s.id = r.session_id where s.church_id = ${churchId})`,
-      giving: sql<number>`(select count(*)::int from ${giving} where church_id = ${churchId})`,
-      givingCategories: sql<number>`(select count(*)::int from ${givingCategory} where church_id = ${churchId})`,
-      projects: sql<number>`(select count(*)::int from ${project} where church_id = ${churchId})`,
-      pledges: sql<number>`(select count(*)::int from ${pledge} where church_id = ${churchId})`,
-      groups: sql<number>`(select count(*)::int from ${group} where church_id = ${churchId})`,
-      groupMemberships: sql<number>`(select count(*)::int from ${groupMembership} gm join ${group} g on g.id = gm.group_id where g.church_id = ${churchId})`,
-      followUps: sql<number>`(select count(*)::int from ${followUpInteraction} where church_id = ${churchId})`,
-      events: sql<number>`(select count(*)::int from ${event} where church_id = ${churchId})`,
-      eventGuests: sql<number>`(select count(*)::int from ${eventGuest} where church_id = ${churchId})`,
-      forms: sql<number>`(select count(*)::int from ${form} where church_id = ${churchId})`,
-      formResponses: sql<number>`(select count(*)::int from ${formResponse} where church_id = ${churchId})`,
-      devotionals: sql<number>`(select count(*)::int from ${devotional} where church_id = ${churchId})`,
-      subscribers: sql<number>`(select count(*)::int from ${subscriber} where church_id = ${churchId})`,
-      messages: sql<number>`(select count(*)::int from ${communicationLog} where church_id = ${churchId})`,
-      messageRecipients: sql<number>`(select count(*)::int from ${communicationRecipient} where church_id = ${churchId})`,
-      team: sql<number>`(select count(*)::int from ${staff} where organization_id = ${churchId} and temp = false)`,
-      roles: sql<number>`(select count(*)::int from ${role} where church_id = ${churchId})`,
-      wallet: sql<number>`(select count(*)::int from ${walletTxn} where church_id = ${churchId})`,
-      payments: sql<number>`(select count(*)::int from ${payment} where church_id = ${churchId})`,
-      media: sql<number>`(select count(*)::int from ${media} where church_id = ${churchId})`,
-      supportTickets: sql<number>`(select count(*)::int from ${supportTicket} where church_id = ${churchId})`,
-      usage: sql<number>`(select count(*)::int from ${usageStat} where church_id = ${churchId})`,
-    })
-    .from(sql`(select 1) as _`);
-
-  return {
-    members: Number(row.members),
-    households: Number(row.households),
-    "member-growth": Number(row.memberGrowth),
-    services: Number(row.services),
-    "attendance-sessions": Number(row.sessions),
-    "attendance-records": Number(row.records),
-    giving: Number(row.giving),
-    "giving-categories": Number(row.givingCategories),
-    projects: Number(row.projects),
-    pledges: Number(row.pledges),
-    groups: Number(row.groups),
-    "group-memberships": Number(row.groupMemberships),
-    "follow-ups": Number(row.followUps),
-    events: Number(row.events),
-    "event-guests": Number(row.eventGuests),
-    forms: Number(row.forms),
-    "form-responses": Number(row.formResponses),
-    devotionals: Number(row.devotionals),
-    subscribers: Number(row.subscribers),
-    messages: Number(row.messages),
-    "message-recipients": Number(row.messageRecipients),
-    team: Number(row.team),
-    roles: Number(row.roles),
-    wallet: Number(row.wallet),
-    payments: Number(row.payments),
-    media: Number(row.media),
-    "support-tickets": Number(row.supportTickets),
-    usage: Number(row.usage),
-  };
+  const queries = countSubqueries(churchId);
+  const ids = Object.keys(queries);
+  // Positional aliases: a dataset id has hyphens, which are not worth
+  // trusting to every layer between here and the driver.
+  const fields: Record<string, SQL<number>> = {};
+  ids.forEach((id, i) => {
+    fields[`c${i}`] = queries[id];
+  });
+  const [row] = await db.select(fields).from(sql`(select 1) as _`);
+  const counts: Record<string, number> = {};
+  ids.forEach((id, i) => {
+    counts[id] = Number(row?.[`c${i}`] ?? 0);
+  });
+  return counts;
 }
 
 /** Every dataset id that has a builder — guards the catalogue against drift. */

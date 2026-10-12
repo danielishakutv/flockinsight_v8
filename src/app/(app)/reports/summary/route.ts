@@ -2,6 +2,7 @@ import { requireChurch } from "@/lib/session";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { getChurchBrand } from "@/lib/pdf-brand";
 import { getAccess } from "@/lib/permissions";
+import { summaryRefusal } from "@/lib/report-summary-access";
 import { allowedDatasets } from "@/lib/report-catalog";
 import { getChurchTotals, getDatasetCounts } from "@/lib/report-data";
 import { getSummaryInsights } from "@/lib/report-summary";
@@ -35,6 +36,22 @@ export async function GET(request: Request) {
     return new Response("You don't have permission to download any reports.", {
       status: 403,
     });
+
+  /*
+   * This report prints every module's figures, not just the datasets above:
+   * total giving, giving by category and month, what the messages cost, the
+   * roll and the groups. `datasets` only ever filtered the closing list, so a
+   * volunteer with members.view alone (the default Member role) downloaded the
+   * church's giving — the thing a church writes a narrow role to withhold.
+   *
+   * Until the PDF can leave out the sections a person may not see (and say
+   * that it did, so an omitted section never reads as "nothing recorded"), it
+   * is all or nothing: the view permission for every module it prints.
+   * The rule lives in lib/report-summary-access.ts so the Reports page can
+   * disable its button with the same sentence.
+   */
+  const refused = summaryRefusal(access.isOwner, access.perms);
+  if (refused) return new Response(refused, { status: 403 });
 
   const range = parseRange(new URL(request.url).searchParams);
 

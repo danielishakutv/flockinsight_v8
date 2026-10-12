@@ -21,11 +21,30 @@ import { setReferralRewards } from "@/lib/referrals";
 import { requirePlatform } from "@/lib/platform-access";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-const schema = z.object({
-  starter: z.number().min(0).max(10_000_000),
-  growth: z.number().min(0).max(10_000_000),
-  pro: z.number().min(0).max(10_000_000),
-});
+/*
+ * Clearing a price field to retype it used to save ₦0 — `Number("")` is 0,
+ * and 0 passed `min(0)`. Every church could then activate Pro, a year of it,
+ * for nothing, through the free-plan path. So a paid tier has a floor, a
+ * blank or non-number is refused rather than read as zero, and the tiers must
+ * stay in order. Starter may still be 0: a free entry tier is a real option.
+ */
+const price = (floor: number, name: string) =>
+  z
+    .number({ error: `Enter a price for ${name}.` })
+    .int(`${name}'s price must be a whole number of naira.`)
+    .min(floor, floor > 0 ? `${name} must cost at least ₦${floor}.` : `${name} cannot be negative.`)
+    .max(10_000_000);
+
+const schema = z
+  .object({
+    starter: price(0, "Starter"),
+    growth: price(100, "Growth"),
+    pro: price(100, "Pro"),
+  })
+  .refine((d) => d.growth >= d.starter, {
+    message: "Growth cannot cost less than Starter.",
+  })
+  .refine((d) => d.pro >= d.growth, { message: "Pro cannot cost less than Growth." });
 
 export type PlanPriceInput = z.infer<typeof schema>;
 

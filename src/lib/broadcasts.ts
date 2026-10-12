@@ -127,6 +127,16 @@ export async function deliverBroadcast(
         ? d.linkUrl
         : `${BASE_URL}${d.linkUrl}`
       : `${BASE_URL}/notifications`;
+    /*
+     * Handed to the mailer all at once, but not SENT all at once: the mailer
+     * paces every send (a few in flight, a few per second, retrying a rate
+     * limit or a 5xx with backoff - lib/email-pacing.ts). This used to open
+     * one request per recipient at the same instant, and Resend refused most
+     * of a 400-person broadcast with "10 requests per second". `bulk` puts it
+     * in the slow lane, so a password reset sent meanwhile is not stuck behind
+     * it. An address the mailer cannot use is refused there, with the reason,
+     * before it costs a provider request.
+     */
     const results = await Promise.allSettled(
       recipients.map(async (r) => {
         // Personalise per recipient: {name} → their first name.
@@ -160,15 +170,24 @@ export async function deliverBroadcast(
          * an address is not unique enough once somebody changes theirs, and a
          * bounce report may arrive days later.
          */
-        const sent = await sendEmailWithId({ to: r.email, subject, html, text });
-        return { r, sent };
+        return sendEmailWithId({ to: r.email, subject, html, text, bulk: true });
       }),
     );
 
     const receipts: (typeof notificationReceipt.$inferInsert)[] = [];
-    for (const out of results) {
-      if (out.status !== "fulfilled") continue;
-      const { r, sent } = out.value;
+    results.forEach((out, i) => {
+      // results[i] belongs to recipients[i]. A send that threw (rendering, or
+      // SMTP) still gets a receipt, with the reason - it used to be skipped,
+      // so that person was simply missing from the record.
+      const r = recipients[i];
+      const sent =
+        out.status === "fulfilled"
+          ? out.value
+          : {
+              ok: false,
+              id: null,
+              error: String((out.reason as Error)?.message ?? out.reason),
+            };
       if (sent.ok) emailSent++;
       receipts.push({
         notificationId: row.id,
@@ -180,9 +199,9 @@ export async function deliverBroadcast(
         // upgrade that to delivered, or tell us it bounced.
         status: sent.ok ? "sent" : "failed",
         providerMessageId: sent.id,
-        error: sent.ok ? null : "The provider rejected it",
+        error: sent.ok ? null : (sent.error || "The provider rejected it").slice(0, 300),
       });
-    }
+    });
     if (receipts.length > 0) {
       // Best-effort: a send that happened must not be reported as failed
       // because we could not write down who it went to.

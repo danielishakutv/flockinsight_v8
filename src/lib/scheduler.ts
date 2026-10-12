@@ -1,8 +1,8 @@
 import "server-only";
-import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { CronJob } from "@/lib/cron-schedule";
-import { getCronLiveness } from "@/lib/cron-run";
+import { getCronLiveness, isJobStillDue } from "@/lib/cron-run";
+import { withJobLock, type LockPool } from "@/lib/scheduler-lock";
 
 /**
  * Run the scheduled jobs from inside the app, so there is no crontab to lose.
@@ -20,10 +20,12 @@ import { getCronLiveness } from "@/lib/cron-run";
  *
  * TWO WORKERS, ONE RUN. PM2 runs this in cluster mode, so every tick happens
  * twice. A Postgres advisory lock settles it: whichever worker takes the lock
- * runs the job and the other moves on. The lock is session-scoped and released
- * in a `finally`, and even if a worker dies holding one, the connection closing
- * drops it. Double-sending a broadcast to a congregation is not an acceptable
- * failure, so this is belt and braces rather than a nicety.
+ * runs the job and the other moves on. The lock is session-scoped, so it is
+ * taken, held and released on ONE checked-out connection (see
+ * scheduler-lock.ts for what happened when it was not); even if a worker dies
+ * holding one, the connection closing drops it. Double-sending a broadcast to a
+ * congregation is not an acceptable failure, so this is belt and braces rather
+ * than a nicety.
  *
  * WHAT DECIDES A JOB IS DUE is `cron_run` — the same table the health page
  * reads — not a timer in memory. A worker that restarts does not re-run
@@ -36,48 +38,16 @@ import { getCronLiveness } from "@/lib/cron-run";
 /** How often to look for work. Jobs are due on their own intervals. */
 const TICK_MS = 60_000;
 
-/**
- * A stable lock id per job.
+/*
+ * The lock itself — one pooled connection held for the whole job, and a fresh
+ * "is it still due?" once the lock is taken — lives in scheduler-lock.ts, where
+ * it is tested against a fake pool that behaves like Postgres session locks.
  *
- * Postgres advisory locks are keyed by number, so the job name is hashed. FNV-1a
- * for stability across processes and releases — `String.hashCode` does not
- * exist in JS and anything involving `Math.random` or object identity would
- * give the two workers different numbers, which defeats the entire purpose.
+ * `db.$client` is the node-postgres Pool drizzle was built on: the same pool,
+ * so the scheduler holds one of its ten connections while a job runs and never
+ * more than one per job.
  */
-function lockIdFor(job: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < job.length; i++) {
-    hash ^= job.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  // Positive and well inside int4, which is what the one-argument form takes.
-  return Math.abs(hash | 0);
-}
-
-/**
- * Run `body` if this worker can take the job's lock, otherwise do nothing.
- *
- * Returns whether it ran, which is only used for logging — a skipped run is
- * the normal case on one of the two workers and is not worth a line.
- */
-async function withJobLock(job: string, body: () => Promise<void>): Promise<boolean> {
-  const id = lockIdFor(job);
-
-  // node-postgres returns a QueryResult, not an array of rows.
-  const result = await db.execute<{ locked: boolean }>(
-    sql`select pg_try_advisory_lock(${id}) as locked`,
-  );
-  if (!result.rows[0]?.locked) return false;
-
-  try {
-    await body();
-    return true;
-  } finally {
-    // Always, including when the job threw. A held lock would stop this job
-    // for ever on every worker, which is worse than the failure that caused it.
-    await db.execute(sql`select pg_advisory_unlock(${id})`);
-  }
-}
+const pool: LockPool = db.$client as unknown as LockPool;
 
 /**
  * Ask the job's own route to run, over loopback.
@@ -125,7 +95,7 @@ export function startScheduler(): void {
 
   console.log("[scheduler] in-app cron is on; the crontab entries can be removed");
 
-  const tick = async () => {
+  const runDueJobs = async () => {
     let status;
     try {
       status = await getCronLiveness();
@@ -148,11 +118,40 @@ export function startScheduler(): void {
        */
       if (!row.due) continue;
 
+      /*
+       * `row.due` is only a reason to TRY: it was read at the start of the tick.
+       * Inside the lock the job is asked again, fresh, because the other worker
+       * may have run it while this one was busy with an earlier job.
+       */
       try {
-        await withJobLock(row.job, () => runJob(row.job));
+        await withJobLock(
+          pool,
+          row.job,
+          () => isJobStillDue(row.job),
+          () => runJob(row.job),
+        );
       } catch (e) {
         console.error(`[scheduler] ${row.job} failed`, e);
       }
+    }
+  };
+
+  /*
+   * One tick at a time per worker.
+   *
+   * `setInterval` does not wait for the last tick, and a tick can run for many
+   * minutes. Without this a second tick on the SAME worker would start while
+   * the first was still inside a job, and walk the list beside it.
+   */
+  let ticking = false;
+
+  const tick = async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      await runDueJobs();
+    } finally {
+      ticking = false;
     }
   };
 

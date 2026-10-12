@@ -1,11 +1,12 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getPlanPrices } from "@/lib/pricing";
 import { getTermiiUnitCost, getSmsPrice } from "@/lib/platform-settings";
 import { getChurchHealth, type ChurchHealthRow } from "@/lib/platform-health";
-import { platformMrrSnapshot } from "@/db/schema";
+import { church, payment, platformMrrSnapshot } from "@/db/schema";
+import { churchMrr, type MrrPayment } from "@/lib/mrr";
 
 /**
  * Platform metrics for the command centre.
@@ -52,6 +53,8 @@ async function loadOverviewStats(): Promise<OverviewStats> {
     unitCost,
     smsPrice,
     healthRows,
+    billingRows,
+    latestPayments,
     revenueMonth,
     revenuePrevMonth,
     signupsMonth,
@@ -62,11 +65,59 @@ async function loadOverviewStats(): Promise<OverviewStats> {
     getTermiiUnitCost(),
     getSmsPrice(),
     getChurchHealth(),
+    // What decides whether a church is paying at all: computeStanding's inputs.
+    db
+      .select({
+        id: church.id,
+        plan: church.plan,
+        status: church.status,
+        discountPct: church.planDiscountPct,
+        paymentWaived: church.paymentWaived,
+        paymentWaivedUntil: church.paymentWaivedUntil,
+        trialEndsAt: church.trialEndsAt,
+        planRenewsAt: church.planRenewsAt,
+      })
+      .from(church),
+    /*
+     * Each church's latest successful payment OF REAL MONEY — what it
+     * actually pays. One table, no join, joined to the churches in JS (a
+     * correlated raw-SQL subquery here is exactly the AGENTS.md qualifier
+     * trap).
+     *
+     * Real money only: a ₦0 row (a FREE- activation, an operator's "set the
+     * plan") paid nothing, and as the latest row it used to hide the transfer
+     * before it, so the church fell back to list price. A church whose plan
+     * no real payment explains still falls back to its discounted list price
+     * (lib/mrr.ts) — deliberately, because most ₦0 operator rows are churches
+     * paying by transfer from before Record payment existed, and counting
+     * them as nothing would understate revenue far more than the rare comp
+     * whose discount was later lowered overstates it.
+     */
+    db
+      .selectDistinctOn([payment.churchId], {
+        churchId: payment.churchId,
+        plan: payment.plan,
+        amount: payment.amount,
+        surchargeAmount: payment.surchargeAmount,
+        periodMonths: payment.periodMonths,
+      })
+      .from(payment)
+      // A deleted church's payments are history, not recurring revenue.
+      .where(
+        and(
+          eq(payment.status, "success"),
+          gt(payment.amount, 0),
+          isNotNull(payment.churchId),
+        ),
+      )
+      .orderBy(payment.churchId, desc(sql`coalesce(${payment.paidAt}, ${payment.createdAt})`)),
+    // Bucketed by when the money LANDED, as the finance page does: a
+    // backdated transfer belongs to the month it was paid in.
     scalar(sql`select coalesce(sum(amount), 0) as n from payment
-               where status = 'success' and created_at >= ${monthStart}`),
+               where status = 'success' and coalesce(paid_at, created_at) >= ${monthStart}`),
     scalar(sql`select coalesce(sum(amount), 0) as n from payment
-               where status = 'success' and created_at >= ${lastMonthStart}
-                 and created_at < ${monthStart}`),
+               where status = 'success' and coalesce(paid_at, created_at) >= ${lastMonthStart}
+                 and coalesce(paid_at, created_at) < ${monthStart}`),
     scalar(sql`select count(*) as n from church where created_at >= ${monthStart}`),
     scalar(sql`select count(*) as n from church
                where created_at >= ${lastMonthStart} and created_at < ${monthStart}`),
@@ -75,21 +126,46 @@ async function loadOverviewStats(): Promise<OverviewStats> {
                  and day >= ${monthStart.toISOString().slice(0, 10)}`),
   ]);
 
-  // getPlanPrices returns `number | null` — an unpriced plan contributes 0,
-  // not NaN.
-  const priceFor = (plan: string): number => {
-    const p = (prices as Partial<Record<string, number | null>>)[plan];
-    return typeof p === "number" ? p : 0;
-  };
+  /*
+   * MRR: what each church that is actually paid up actually pays, a month
+   * at a time (lib/mrr.ts). Not the list price of every church's plan, which
+   * counted every free trial as a paying Starter.
+   */
+  const latestByChurch = new Map<string, MrrPayment>(
+    latestPayments.flatMap((p) =>
+      p.churchId
+        ? [
+            [
+              p.churchId,
+              {
+                plan: p.plan,
+                amount: Number(p.amount),
+                surchargeAmount: Number(p.surchargeAmount ?? 0),
+                periodMonths: p.periodMonths,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const listPrices = prices as Record<string, number | null>;
+  const valueOf = new Map<string, number>(
+    billingRows.map((c) => [
+      c.id,
+      churchMrr(c, latestByChurch.get(c.id) ?? null, listPrices, now),
+    ]),
+  );
+  const mrrNow = [...valueOf.values()].reduce((sum, v) => sum + v, 0);
 
-  const activeRows = healthRows.filter((r) => r.status !== "suspended");
-  const mrrNow = activeRows.reduce((sum, r) => sum + priceFor(r.plan), 0);
-
-  // Churches whose recurring revenue is in danger: gone quiet, or never started.
+  // Paying churches whose revenue is in danger: gone quiet, or never started.
+  // A trial church at risk is a lost lead, not lost revenue.
   const atRiskRows = healthRows.filter(
     (r) => r.health === "at_risk" || r.health === "never_activated",
   );
-  const revenueAtRisk = atRiskRows.reduce((sum, r) => sum + priceFor(r.plan), 0);
+  const revenueAtRisk = atRiskRows.reduce(
+    (sum, r) => sum + (valueOf.get(r.churchId) ?? 0),
+    0,
+  );
 
   const cutoff = Date.now() - 7 * 86_400_000;
 
@@ -205,10 +281,10 @@ async function loadGrowthSeries(days = 90): Promise<GrowthPoint[]> {
       group by 1
     ),
     rev as (
-      select created_at::date as day, coalesce(sum(amount), 0) as n
+      select coalesce(paid_at, created_at)::date as day, coalesce(sum(amount), 0) as n
       from payment
       where status = 'success'
-        and created_at >= now() - make_interval(days => ${days})
+        and coalesce(paid_at, created_at) >= now() - make_interval(days => ${days})
       group by 1
     )
     select

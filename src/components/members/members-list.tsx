@@ -40,6 +40,8 @@ import { TrainingBadges } from "@/components/training/training-badge";
 import type { EarnedBadge } from "@/lib/training-shared";
 import { MemberSignupLink } from "@/components/members/member-signup-link";
 import { cn } from "@/lib/utils";
+import { countryProfile } from "@/lib/country-profile";
+import { phoneMatchesQuery } from "@/lib/phone-intl";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,12 +193,16 @@ export function MembersList({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return members;
-    return members.filter((m) =>
-      [fullName(m), m.phone, m.email, m.guardianName]
-        .filter(Boolean)
-        .some((v) => v!.toLowerCase().includes(q)),
+    // Phones are stored both as typed ("0803…") and E.164 ("+234803…"), so a
+    // phone-like query is matched on its digits, not as text.
+    const dial = countryProfile(churchCountry).dial;
+    return members.filter(
+      (m) =>
+        [fullName(m), m.phone, m.email, m.guardianName]
+          .filter(Boolean)
+          .some((v) => v!.toLowerCase().includes(q)) || phoneMatchesQuery(m.phone, q, dial),
     );
-  }, [members, query]);
+  }, [members, query, churchCountry]);
 
   // Only adults can be a guardian.
   const guardians = useMemo(

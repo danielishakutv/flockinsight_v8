@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { cronRun } from "@/db/schema";
 
@@ -131,4 +131,23 @@ export async function getCronLiveness(): Promise<CronLiveness[]> {
       overdue,
     };
   });
+}
+
+/**
+ * Is this one job due right now, read fresh from `cron_run`?
+ *
+ * The scheduler asks this AFTER taking a job's lock. `getCronLiveness` is read
+ * once at the start of a tick, and a tick can spend minutes on earlier jobs; by
+ * the time it reaches a later one, the other worker may have run it and
+ * finished. With the lock held nobody else can be starting it, so this answer
+ * is the one that counts — the snapshot only decides whether to try.
+ */
+export async function isJobStillDue(job: CronJob, now: Date = new Date()): Promise<boolean> {
+  const [last] = await db
+    .select({ startedAt: cronRun.startedAt })
+    .from(cronRun)
+    .where(eq(cronRun.job, job))
+    .orderBy(desc(cronRun.startedAt))
+    .limit(1);
+  return isCronDue(last?.startedAt ?? null, CRON_JOBS[job].intervalMinutes, now);
 }

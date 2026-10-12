@@ -15,6 +15,7 @@ import {
   type CommMember,
 } from "@/components/communication/communication-client";
 import { getT } from "@/lib/i18n/server";
+import { logState } from "@/lib/comm-log-state";
 
 export const metadata = { title: "Communication" };
 
@@ -68,6 +69,8 @@ export default async function CommunicationPage() {
           units: communicationLog.units,
           cost: communicationLog.cost,
           createdAt: communicationLog.createdAt,
+          status: communicationLog.status,
+          updatedAt: communicationLog.updatedAt,
         })
         .from(communicationLog)
         .where(eq(communicationLog.churchId, c.id))
@@ -132,6 +135,7 @@ export default async function CommunicationPage() {
           units: r.units,
           cost: Number(r.cost),
           createdAt: r.createdAt.toISOString(),
+          state: logState(r.status, r.updatedAt),
         }))}
       />
     </PageContainer>

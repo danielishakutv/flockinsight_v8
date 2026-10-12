@@ -1,12 +1,14 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { giving, givingCategory } from "@/db/schema";
+import { giving, givingCategory, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { parseCsv } from "@/lib/csv";
 import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
 import { normalizeDate } from "@/lib/members-data";
+import { decimalSeparatorFor } from "@/lib/money-input";
+import { localeForCountry } from "@/lib/country-profile";
 import {
   getGivingCategories,
   headerToGivingField,
@@ -75,6 +77,24 @@ export async function POST(request: Request) {
   );
   let catCount = existingCats.length;
 
+  // This church's projects, by lowercased name, so the Project column the
+  // export writes comes back in. Only this church's own, so an id from
+  // anywhere else can never be attached.
+  const projects = await db
+    .select({ id: project.id, name: project.name })
+    .from(project)
+    .where(eq(project.churchId, church.id));
+  const projByName = new Map(
+    projects.map((p) => [p.name.trim().toLowerCase(), p.id]),
+  );
+
+  // How this church writes a decimal, to settle "5.000" (five thousand in
+  // Maputo, five in Lagos) where there is nobody to ask.
+  const decimal = decimalSeparatorFor(
+    localeForCountry(church.country),
+    church.country,
+  );
+
   const errors: string[] = [];
   let skipped = 0;
   let createdCategories = 0;
@@ -87,21 +107,33 @@ export async function POST(request: Request) {
     giver: string | null;
     method: ReturnType<typeof normalizeMethod>;
     note: string | null;
+    projectId: string | null;
   };
   const parsed: Parsed[] = [];
   const newCatNames: string[] = [];
 
   limited.forEach((cells, idx) => {
     const rowNo = idx + 2;
+    // normalizeDate refuses a day that does not exist (2026-02-30), so one
+    // bad row is reported by number instead of failing the whole file.
     const date = normalizeDate(get(cells, "date"));
-    const amount = normalizeAmount(get(cells, "amount"));
+    const amount = normalizeAmount(get(cells, "amount"), decimal);
     if (!date || amount === null) {
       skipped++;
       if (errors.length < 25)
         errors.push(
-          `Row ${rowNo}: ${!date ? "invalid date" : "invalid amount"}`,
+          `Row ${rowNo}: ${!date ? "invalid date" : "invalid or ambiguous amount"}`,
         );
       return;
+    }
+    const projectName = get(cells, "project").trim();
+    const projectId = projectName
+      ? (projByName.get(projectName.toLowerCase()) ?? null)
+      : null;
+    if (projectName && !projectId && errors.length < 25) {
+      errors.push(
+        `Row ${rowNo}: project "${projectName.slice(0, 80)}" not found — imported without a project`,
+      );
     }
     const categoryName = get(cells, "category").trim();
     const key = categoryName.toLowerCase();
@@ -120,6 +152,7 @@ export async function POST(request: Request) {
       giver: get(cells, "giver").trim().slice(0, 160) || null,
       method: normalizeMethod(get(cells, "method")),
       note: get(cells, "note").trim().slice(0, 500) || null,
+      projectId,
     });
   });
 
@@ -148,6 +181,7 @@ export async function POST(request: Request) {
         giverName: p.giver,
         method: p.method,
         note: p.note,
+        projectId: p.projectId,
         recordedBy: user.id,
       }));
 
@@ -213,6 +247,7 @@ export async function POST(request: Request) {
     revalidatePath("/settings/giving");
     revalidatePath("/dashboard");
     revalidatePath("/finance");
+    if (parsed.some((p) => p.projectId)) revalidatePath("/giving/projects");
   }
   if (createdCategories > 0) {
     errors.push(

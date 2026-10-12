@@ -16,6 +16,14 @@ import {
 } from "@/lib/temp-password";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
+import {
+  countryProfile,
+  currencyForCountry,
+  localeForCountry,
+  timezoneForCountry,
+} from "@/lib/country-profile";
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/geo";
+import { internationalPhone } from "@/lib/phone-intl";
 
 import { requirePlatform } from "@/lib/platform-access";
 /**
@@ -48,6 +56,15 @@ const schema = z.object({
     )
     .default(null),
   plan: z.enum(["starter", "growth", "pro", "enterprise"]).default("starter"),
+  /**
+   * Where the church is. Decides its currency, clock, starting language, how
+   * its phone number is read and whether SMS is offered — the same answers
+   * public signup takes from it. Without this every church onboarded by the
+   * team was created Nigerian: naira, Lagos time, English, an SMS button that
+   * could never reach a +258 number, and naira list prices with no FX
+   * conversion or international surcharge.
+   */
+  country: z.string().trim().max(80).default(DEFAULT_COUNTRY),
   /** Skip both the person's email verification and the church's. */
   markVerified: z.boolean().default(true),
   /** Blank = generate one. Either way they are asked to change it. */
@@ -88,6 +105,22 @@ export async function adminOnboardChurch(
   const d = parsed.data;
   const email = d.ownerEmail.toLowerCase();
 
+  // A country the dropdown offers, or a refusal — never a silent Nigeria.
+  const country = d.country || DEFAULT_COUNTRY;
+  if (!COUNTRIES.includes(country))
+    return { ok: false, error: `"${country}" isn't a country we know. Choose one from the list.` };
+
+  // Read with the church's own dial code, settled before anything is created.
+  const contactPhone = d.contactPhone
+    ? internationalPhone(d.contactPhone, countryProfile(country).dial)
+    : null;
+  if (d.contactPhone && !contactPhone)
+    return {
+      ok: false,
+      error: `That phone number doesn't look complete for ${country}. Check it, or leave it blank.`,
+    };
+  const locale = localeForCountry(country);
+
   // Refuse rather than quietly attach a church to somebody's existing login:
   // adding a second church to an account changes what that person sees when
   // they log in, and that should be a deliberate act, not a side effect.
@@ -120,6 +153,8 @@ export async function adminOnboardChurch(
         email,
         emailVerified: d.markVerified,
         mustChangePassword: true,
+        // Their own language from the first screen, as public signup does.
+        ...(locale !== "en" ? { locale } : {}),
       });
       /*
        * The credential row has to be created, not updated.
@@ -161,13 +196,16 @@ export async function adminOnboardChurch(
           handle: slug,
           plan: d.plan,
           contactEmail: email,
-          contactPhone: d.contactPhone,
+          contactPhone,
+          country,
+          currency: currencyForCountry(country),
+          timezone: timezoneForCountry(country),
           trialEndsAt:
             d.trialSundays > 0 ? trialEndDate(now, d.trialSundays) : null,
           // The superadmin is vouching for these, having checked them
           // out-of-band. Recorded below so the claim has a name against it.
           emailVerifiedAt: d.markVerified ? now : null,
-          phoneVerifiedAt: d.markVerified && d.contactPhone ? now : null,
+          phoneVerifiedAt: d.markVerified && contactPhone ? now : null,
         });
         await tx.insert(staff).values({
           id: crypto.randomUUID(),
@@ -198,7 +236,7 @@ export async function adminOnboardChurch(
     actorName: admin.name,
     action: "church.onboard",
     summary:
-      `Created ${d.churchName} with owner ${email} on the ${d.plan} plan` +
+      `Created ${d.churchName} (${country}) with owner ${email} on the ${d.plan} plan` +
       (d.markVerified ? ", marked verified without the usual checks" : ""),
     targetType: "church",
     targetId: churchId,

@@ -4,7 +4,10 @@ import { db } from "@/db";
 import { church } from "@/db/schema";
 import { issueOtp, peekOtp, verifyOtp } from "@/lib/otp";
 import { emailLayout, isEmailConfigured, sendEmail } from "@/lib/mailer";
-import { isSmsConfigured, normalizePhone, sendSms } from "@/lib/sms";
+import { isSmsConfigured, sendSms } from "@/lib/sms";
+import { internationalPhone } from "@/lib/phone-intl";
+import { countryProfile } from "@/lib/country-profile";
+import { SMS_COUNTRIES, smsAvailableForCountry } from "@/lib/sms-availability";
 import { maskEmail, maskPhone } from "@/lib/verification-shared";
 import { escapeHtml } from "@/lib/html-escape";
 
@@ -106,13 +109,47 @@ export async function startPhoneVerification(opts: {
   churchId: string;
   churchName: string;
   phone: string;
+  /** The church's country; read from the church when not given. */
+  country?: string | null;
 }): Promise<StartResult> {
-  const phone = normalizePhone(opts.phone || "");
-  if (!phone)
+  /*
+   * Only where a code can actually arrive.
+   *
+   * The code goes out through the platform's Termii sender, which delivers to
+   * Nigerian networks and nowhere else: a message to a Kenyan or Mozambican
+   * number is accepted, paid for by the platform, and never arrives. A church
+   * abroad was asked for a code that could not come, and so could never be
+   * verified. It is told so instead, and pointed at the people who can verify
+   * it by hand (Superadmin → church → Mark verified).
+   */
+  const country =
+    opts.country !== undefined ? opts.country : await churchCountry(opts.churchId);
+  if (!smsAvailableForCountry(country))
     return {
       ok: false,
-      error: "Enter a valid phone number, e.g. 08012345678.",
+      error: `We can't send verification codes by SMS to numbers in ${country || "your country"} yet. Contact support and we'll verify your number by hand.`,
     };
+
+  /*
+   * Read with the church's own dial code, not Nigeria's: `normalizePhone`
+   * turned a UK "07911 123456" into a Nigerian number, and refused a local
+   * number from anywhere else with a Nigerian example.
+   */
+  const dial = countryProfile(country).dial;
+  const intl = internationalPhone(opts.phone, dial);
+  if (!intl)
+    return {
+      ok: false,
+      error: `Enter the number the way you would dial it in ${country}, or with its country code (+${dial}).`,
+    };
+  // A foreign number in a Nigerian church is just as undeliverable.
+  if (!SMS_COUNTRIES.some((c) => intl.startsWith(countryProfile(c).dial)))
+    return {
+      ok: false,
+      error:
+        "We can only send verification codes to Nigerian numbers for now. Use a Nigerian number, or contact support and we'll verify it by hand.",
+    };
+  const phone = intl;
 
   if (!isSmsConfigured())
     return {
@@ -141,6 +178,15 @@ export async function startPhoneVerification(opts: {
     };
 
   return { ok: true, otpId: issued.id, channel: "sms", masked: maskPhone(phone) };
+}
+
+async function churchCountry(churchId: string): Promise<string | null> {
+  const [c] = await db
+    .select({ country: church.country })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  return c?.country ?? null;
 }
 
 /**

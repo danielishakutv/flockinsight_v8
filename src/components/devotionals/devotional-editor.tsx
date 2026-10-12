@@ -102,7 +102,7 @@ export function DevotionalEditor({ initial }: { initial: State }) {
   }
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-40 lg:pb-24">
       <BackBar />
 
       <Card>
@@ -186,8 +186,11 @@ export function DevotionalEditor({ initial }: { initial: State }) {
         </CardContent>
       </Card>
 
-      {/* Sticky action bar */}
-      <div className="bg-background/80 fixed inset-x-0 bottom-0 z-10 border-t p-3 backdrop-blur lg:left-64">
+      {/* Sticky action bar. Below lg it stands above the phone's bottom nav
+        (--mobile-nav-clearance, globals.css): at bottom-0 it sat underneath
+        it, and a tap on the button landed on the nav, so nothing here could be
+        saved from a phone. */}
+      <div className="bg-background/80 fixed inset-x-0 bottom-[calc(var(--mobile-nav-clearance)+env(safe-area-inset-bottom))] z-20 border-t p-3 backdrop-blur lg:bottom-0 lg:left-64">
         <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-end gap-2 px-1">
           <Button variant="ghost" disabled={busy} onClick={() => run("draft")}>
             <Save className="size-4" /> Save draft

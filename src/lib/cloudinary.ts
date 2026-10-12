@@ -253,8 +253,21 @@ export async function destroyFromCloudinary(
     );
     const json = (await res.json().catch(() => null)) as {
       result?: string;
+      error?: { message?: string };
     } | null;
-    return json?.result === "ok" || json?.result === "not found";
+    const gone = json?.result === "ok" || json?.result === "not found";
+    if (!gone) {
+      // A 5xx, a rate limit, a revoked key: the asset is still there and still
+      // billing. Said out loud, because a false here used to be silent.
+      console.error("[cloudinary] destroy refused", {
+        publicId,
+        resourceType,
+        status: res.status,
+        result: json?.result ?? null,
+        error: json?.error?.message ?? null,
+      });
+    }
+    return gone;
   } catch (e) {
     console.error("[cloudinary] destroy failed", e);
     return false;
@@ -298,6 +311,16 @@ export type DirectUploadTicket = {
   resourceType: ResourceType;
   /** Correlates the chunks of one file. Cloudinary requires it byte-for-byte. */
   uniqueUploadId: string;
+  /**
+   * The one asset this ticket may write, inside `folder`. Signed, so the
+   * browser cannot choose another — see `signDirectUpload`.
+   */
+  publicId?: string;
+  /**
+   * Always "false" alongside a public id, and signed: the browser must send it
+   * with every chunk or Cloudinary refuses the signature.
+   */
+  overwrite?: "false";
 };
 
 /**
@@ -322,13 +345,39 @@ export function signDirectUpload(opts: {
   audio?: boolean;
   purpose?: "receipt";
   uniqueUploadId: string;
+  /**
+   * Bind the ticket to ONE asset. Without it a signature covers only the
+   * folder, and stays valid for an hour: one ticket, asked for with a declared
+   * size of zero, could put any number of 100 MB files into a church's folder,
+   * none of them counted against its storage. With the public id signed, every
+   * use of the ticket writes the same asset, so it can only ever be one file.
+   * A bare name (no slashes); Cloudinary files it under `folder`.
+   */
+  publicId?: string;
 }): DirectUploadTicket | null {
   if (!isCloudinaryConfigured()) return null;
 
   const timestamp = Math.floor(Date.now() / 1000);
   const transformation = transformationFor(opts);
 
-  const signature = sign({ timestamp, folder: opts.folder, transformation });
+  /*
+   * A ticket bound to a public id must not be able to REPLACE that asset.
+   * Cloudinary's default for a signed public id is overwrite=true, so without
+   * this one ticket could upload a tiny file, have /complete file its tiny
+   * size, and then — still within the signature's hour — upload 100 MB over
+   * the same public id. The asset would be replaced and the row would go on
+   * saying "tiny". With overwrite=false, a second upload to the same id gets
+   * the existing asset back and changes nothing.
+   */
+  const overwrite = opts.publicId ? ("false" as const) : undefined;
+
+  const signature = sign({
+    timestamp,
+    folder: opts.folder,
+    transformation,
+    public_id: opts.publicId,
+    overwrite,
+  });
 
   return {
     endpoint: `https://api.cloudinary.com/v1_1/${CLOUD}/${opts.resourceType}/upload`,
@@ -340,6 +389,8 @@ export function signDirectUpload(opts: {
     transformation,
     resourceType: opts.resourceType,
     uniqueUploadId: opts.uniqueUploadId,
+    ...(opts.publicId ? { publicId: opts.publicId } : {}),
+    ...(overwrite ? { overwrite } : {}),
   };
 }
 

@@ -274,15 +274,24 @@ export function HouseholdDetail({
 
       {/* Add members dialog */}
       <Dialog open={addOpen} onOpenChange={(o) => !pending && setAddOpen(o)}>
+        {/*
+          The panel is clipped and the LIST is what gives way, so the Add
+          button is always on screen. With overflow-hidden on a panel whose
+          content did not shrink, a short phone (or one with the keyboard up
+          after tapping Search) cut the footer off with nothing to scroll —
+          the members were picked and could not be added. min-h-0 lets the
+          wrapper and the list shrink below their content (flex items will not
+          by default); flex-basis stays auto, so on a tall screen nothing moves.
+        */}
         <DialogContent
-          className="max-h-[85dvh] overflow-hidden sm:max-w-md"
+          className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-md"
           aria-describedby={undefined}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("members.addMembers")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <div className="relative">
+          <div className="flex min-h-0 flex-col gap-2">
+            <div className="relative shrink-0">
               <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <Input
                 value={query}
@@ -291,7 +300,7 @@ export function HouseholdDetail({
                 className="pl-9"
               />
             </div>
-            <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border p-1">
+            <div className="max-h-72 min-h-0 space-y-1 overflow-y-auto overscroll-contain rounded-lg border p-1">
               {filtered.length === 0 ? (
                 <p className="text-muted-foreground p-3 text-sm">
                   No members to add.
@@ -336,7 +345,7 @@ export function HouseholdDetail({
               )}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={pending}>
               Cancel
             </Button>

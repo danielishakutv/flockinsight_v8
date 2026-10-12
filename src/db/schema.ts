@@ -518,6 +518,20 @@ export const media = pgTable(
      */
     transcodeStatus: text(),
     transcodeError: text(),
+    /**
+     * The transcode's lease: until when a "running" row belongs to the worker
+     * that claimed it. A deploy kills ffmpeg along with its worker and leaves
+     * the row "running" for ever; once this has passed, the queue may claim it
+     * again. Null on a row nobody has claimed.
+     */
+    transcodeLeaseUntil: timestamp({ withTimezone: true }),
+    /** When the current (or last) conversion was claimed. */
+    transcodeStartedAt: timestamp({ withTimezone: true }),
+    /**
+     * How many times a conversion has been claimed. A file that kills its
+     * worker every time must not be retried for ever; the queue gives up at 3.
+     */
+    transcodeAttempts: integer().notNull().default(0),
     /** What it weighed before transcoding, so the saving can be shown honestly. */
     originalBytes: bigint({ mode: "number" }),
     publicId: text(), // Cloudinary public_id (for delete/transform)
@@ -548,6 +562,69 @@ export const media = pgTable(
   (t) => [
     index("media_church_idx").on(t.churchId),
     index("media_church_kind_idx").on(t.churchId, t.kind),
+  ],
+);
+
+/**
+ * A Cloudinary asset whose media row is gone but which Cloudinary would not
+ * delete at the time — a timeout, a 5xx, a rate limit.
+ *
+ * The row is still removed (a church must be able to free its quota while
+ * Cloudinary is having a bad hour), but the asset goes on costing the platform
+ * money, and once the row is gone nothing else remembers its public id. This is
+ * the memory: the storage cron retries each one and removes the entry when
+ * Cloudinary confirms. No foreign key to church, on purpose — the asset still
+ * exists, and still bills, if the church is later deleted.
+ */
+export const mediaOrphan = pgTable(
+  "media_orphan",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text(),
+    publicId: text().notNull(),
+    resourceType: text().notNull().default("image"),
+    attempts: integer().notNull().default(0),
+    lastError: text(),
+    lastTriedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("media_orphan_public_id_idx").on(t.publicId)],
+);
+
+/**
+ * Every direct-to-Cloudinary upload ticket /api/media/sign has handed out.
+ *
+ * A ticket is a signature the browser takes to Cloudinary, so the bytes never
+ * pass through us — which also means nothing was counted until the browser
+ * chose to call /complete. One that never did could put 100 MB per ticket into
+ * a church's folder, uncounted, and ask for as many tickets as it liked. So a
+ * ticket is now a row: its declared size is reserved against the quota while
+ * it is open, a church may hold only a few open at once, /complete closes it,
+ * and the storage cron destroys the asset of any ticket that was never
+ * completed. No foreign key to church, for the same reason as media_orphan:
+ * the asset bills whether or not the church still exists.
+ */
+export const mediaUploadTicket = pgTable(
+  "media_upload_ticket",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text().notNull(),
+    /** The full Cloudinary public id, folder included — what /complete names. */
+    publicId: text().notNull(),
+    resourceType: text().notNull(),
+    /** The browser's word for the size, reserved against the quota while open. */
+    declaredBytes: bigint({ mode: "number" }).notNull(),
+    /** "open" | "completed" | "reaped" */
+    status: text().notNull().default("open"),
+    /** When Cloudinary stops accepting the signature (about an hour). */
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    closedAt: timestamp({ withTimezone: true }),
+    createdBy: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("media_upload_ticket_public_id_idx").on(t.publicId),
+    index("media_upload_ticket_open_idx").on(t.churchId, t.status, t.expiresAt),
   ],
 );
 
@@ -1294,9 +1371,11 @@ export const givingLink = pgTable(
  * would mean a payment that completes while the giver's phone dies is a
  * payment nobody can account for.
  *
- * `givingId` is what makes settling idempotent: a webhook and a browser
- * redirect routinely arrive for the same payment, and whichever gets there
- * first writes the giving row. The other sees it is set and stops.
+ * `status` is what makes settling idempotent: a webhook and a browser
+ * redirect routinely arrive for the same payment, and whichever claims it
+ * (status not yet 'success') writes the giving row in the same transaction.
+ * The other sees 'success' and stops. Not `givingId`, which is set null when
+ * its gift is deleted and used to let a deleted gift record itself again.
  */
 export const onlinePayment = pgTable(
   "online_payment",
@@ -1322,7 +1401,7 @@ export const onlinePayment = pgTable(
     /** Matched to a member when the email or phone is recognised. */
     memberId: uuid().references(() => member.id, { onDelete: "set null" }),
     note: text(),
-    /** The giving row written on success - and the idempotency latch. */
+    /** The giving row written on success. Null again if that gift is deleted. */
     givingId: uuid().references((): AnyPgColumn => giving.id, {
       onDelete: "set null",
     }),
@@ -1891,8 +1970,21 @@ export const walletTxn = pgTable(
     reason: text(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /*
+     * The external payment this movement settles — a Paystack top-up
+     * reference. Unique where present, so one payment can be credited once and
+     * only once: the callback, the webhook and the reconcile cron all race to
+     * credit the same top-up, and if the claim in front of them ever regresses
+     * the second credit fails here instead of landing in somebody's wallet.
+     */
+    reference: text(),
   },
-  (t) => [index("wallet_txn_church_idx").on(t.churchId)],
+  (t) => [
+    index("wallet_txn_church_idx").on(t.churchId),
+    uniqueIndex("wallet_txn_reference_idx")
+      .on(t.reference)
+      .where(sql`${t.reference} is not null`),
+  ],
 );
 
 // Church-initiated wallet top-ups (paid via Paystack).
@@ -1967,9 +2059,22 @@ export const payment = pgTable(
   "payment",
   {
     id: uuid().primaryKey().defaultRandom(),
-    churchId: text()
-      .notNull()
-      .references(() => church.id, { onDelete: "cascade" }),
+    /*
+     * Nullable, and SET NULL — not cascade. A payment is money the platform
+     * received, with the Paystack reference a dispute or a chargeback is
+     * settled against; deleting the church that paid it does not un-receive
+     * it. With cascade, every delete quietly rewrote collected-this-year and
+     * revenue-by-month backwards, and the finance page's "Deleted church"
+     * label could never appear because there was never a row to put it on.
+     * `churchName` keeps who paid once the church row is gone.
+     */
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    /*
+     * The church's name, stamped when the church is deleted (and backfilled
+     * for every payment when this column arrived), so a payment whose church
+     * is gone still says whose it was. Live rows read `church.name`.
+     */
+    churchName: text(),
     plan: planEnum().notNull(),
     amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
     currency: text().notNull().default("NGN"),
@@ -1977,6 +2082,22 @@ export const payment = pgTable(
     reference: text().notNull().unique(),
     status: paymentStatusEnum().notNull().default("pending"),
     periodMonths: integer().notNull().default(1),
+    /*
+     * The part of `amount` that is not the plan's price, in naira: the
+     * international card surcharge plus whatever the rounding to a whole ₦100
+     * added. Money we pass to a card network is not revenue a Partner earns a
+     * share of, so commission is computed on `amount - surchargeAmount`.
+     */
+    surchargeAmount: numeric({ precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    /*
+     * Whether settling this payment moved the church's renewal date. False for
+     * money a superadmin logged against a plan they had already set by hand —
+     * which is what lets a void undo exactly what the payment did, and nothing
+     * it did not.
+     */
+    extendsPlan: boolean().notNull().default(true),
     note: text(), // e.g. "Admin onboarding" / discount applied
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -2036,7 +2157,13 @@ export const scheduledSms = pgTable(
     reason: text(),
     /** The earliest it may go. Set from nextSmsWindowStart() at queue time. */
     sendAfter: timestamp({ withTimezone: true }).notNull(),
-    /** queued | sent | failed | cancelled */
+    /**
+     * queued | sending | sent | failed | cancelled
+     *
+     * "sending" is held only while the worker has the row. A row left in it
+     * by a restart is recovered to "failed" by flushSmsQueue, with a reason
+     * that says some of it may already have gone.
+     */
     status: text().notNull().default("queued"),
     attempts: integer().notNull().default(0),
     /** Why the last attempt failed, in words a church admin can act on. */
@@ -2044,6 +2171,12 @@ export const scheduledSms = pgTable(
     sentAt: timestamp({ withTimezone: true }),
     /** The communication_log row written when it went out, when there is one. */
     logId: uuid(),
+    /**
+     * The composer's id for one press of Send. Unique, so the same message
+     * submitted twice (a retry after a gateway timeout, a double tap) is
+     * refused instead of texting the whole congregation twice.
+     */
+    requestId: text().unique(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -2077,6 +2210,27 @@ export const communicationLog = pgTable(
     // separate from `failed` so `recipients` always reconciles as
     // sent + failed + skipped.
     skipped: integer().notNull().default(0),
+    /**
+     * sending | done | interrupted
+     *
+     * A composer email is logged BEFORE its first message goes, as "sending",
+     * and its counts and recipient rows grow as the results come back. A send
+     * a restart killed half-way then still has a row in History saying how far
+     * it got, instead of no trace at all and a church sending it again to
+     * everybody. Every other writer inserts a finished row, hence the default.
+     */
+    status: text().notNull().default("done"),
+    /**
+     * The composer's id for one press of Send. Unique, so a retry after a lost
+     * response, or a second tap, is refused by the database on whichever
+     * worker it lands, instead of emailing everybody twice.
+     */
+    requestId: text().unique(),
+    /** Last progress on a "sending" row: how a stalled one is recognised. */
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -2317,9 +2471,41 @@ export const celebrationRun = pgTable(
     memberId: uuid().references(() => member.id, { onDelete: "cascade" }),
     kind: text().notNull(), // 'birthday' | 'wedding' | 'baptism' | custom label
     onDate: date().notNull(),
+    /*
+     * One row per channel, written BEFORE the send as "pending" and settled
+     * with what actually happened — the same shape as first_timer_run.
+     *
+     * The row used to be the whole record and was inserted before anything
+     * was sent, so a greeting whose email hit a Resend 429 or whose SMS met an
+     * empty wallet was marked done for the day and never tried again. Rows
+     * from before these columns are channel "all" / outcome "sent": both
+     * channels, finished.
+     */
+    /** "sms" | "email", or "all" on a row from before this column existed. */
+    channel: text().notNull().default("all"),
+    /** "pending" | "sent" | "queued" | "failed" */
+    outcome: text().notNull().default("sent"),
+    /** Why it failed, in the words the church is shown. */
+    detail: text(),
+    attempts: integer().notNull().default(1),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  (t) => [uniqueIndex("celebration_run_unique").on(t.memberId, t.kind, t.onDate)],
+  (t) => [
+    /* One row per member per occasion per day per channel: a re-run is a no-op
+     * for what was sent, and a failed channel can be retried without sending
+     * the other one twice. */
+    uniqueIndex("celebration_run_channel_unique").on(
+      t.memberId,
+      t.kind,
+      t.onDate,
+      t.channel,
+    ),
+    index("celebration_run_church_date_idx").on(t.churchId, t.onDate),
+  ],
 );
 
 /* ============================================================
@@ -2759,7 +2945,14 @@ export const firstTimerRun = pgTable(
     stage: text().notNull(), // "welcome" | "invite"
     /** "sms" | "email", or "all" on a row from before this column existed. */
     channel: text().notNull().default("all"),
-    /** "pending" | "sent" | "queued" | "failed" */
+    /**
+     * "pending" | "sent" | "queued" | "failed" | "skipped"
+     *
+     * "skipped" is a stage deliberately never sent — a visitor brought in by a
+     * spreadsheet import is history, not this week's first-timer. Written on
+     * the "all" channel, which the sweep reads as "this stage is done", and
+     * kept distinct from "sent" so no count of messages includes them.
+     */
     outcome: text().notNull().default("sent"),
     /** Why it failed, in the words the church is shown. */
     detail: text(),
@@ -3375,6 +3568,13 @@ export const partnerEarningKindEnum = pgEnum("partner_earning_kind", [
   "second", // commission on the second
   "trail", // the recurring slice, for a while after
   "bonus", // a volume bonus, or anything granted by hand
+  /*
+   * A NEGATIVE row: the commission on a payment that was voided after the
+   * money had already gone into a withdrawal. Deducted from the next one. An
+   * earning still in the wallet is cancelled instead; see
+   * reversePartnerCommission in lib/partners.ts.
+   */
+  "reversal",
 ]);
 
 export const partnerEarningStatusEnum = pgEnum("partner_earning_status", [
@@ -3388,9 +3588,16 @@ export const partnerEarning = pgTable(
   "partner_earning",
   {
     id: uuid().primaryKey().defaultRandom(),
+    /*
+     * RESTRICT, not cascade. user -> partner cascades, so deleting a Partner's
+     * login used to take every commission the platform still owed them with
+     * it. An earning is money owed; it outlives an account. A Partner with
+     * history is suspended, not deleted, and this refuses the delete if any
+     * path forgets to check.
+     */
     partnerId: uuid()
       .notNull()
-      .references(() => partner.id, { onDelete: "cascade" }),
+      .references(() => partner.id, { onDelete: "restrict" }),
     churchId: text().references(() => church.id, { onDelete: "set null" }),
     /**
      * The payment this came out of.
@@ -3415,6 +3622,16 @@ export const partnerEarning = pgTable(
   (t) => [
     index("partner_earning_partner_idx").on(t.partnerId, t.status),
     uniqueIndex("partner_earning_once_idx").on(t.paymentId, t.kind),
+    /*
+     * Only a reversal is negative, and a reversal is only ever negative. A
+     * withdrawal takes negative rows as debts (takeForPayout), so a negative
+     * "first" written by hand would silently shrink somebody's payout. Compared
+     * as text so the migration that adds the enum value can add this too.
+     */
+    check(
+      "partner_earning_sign_chk",
+      sql`(${t.kind}::text = 'reversal') = (${t.amount} < 0)`,
+    ),
   ],
 );
 
@@ -3441,9 +3658,14 @@ export const partnerPayout = pgTable(
   "partner_payout",
   {
     id: uuid().primaryKey().defaultRandom(),
+    /*
+     * RESTRICT, for the same reason as partner_earning: a payout is the record
+     * of money that left the platform and where it went. It must outlive the
+     * Partner's login.
+     */
     partnerId: uuid()
       .notNull()
-      .references(() => partner.id, { onDelete: "cascade" }),
+      .references(() => partner.id, { onDelete: "restrict" }),
     amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
     currency: text().notNull().default("NGN"),
     status: partnerPayoutStatusEnum().notNull().default("requested"),
@@ -3705,6 +3927,16 @@ export const financeTransaction = pgTable(
     // splits by kind over a date range.
     index("finance_txn_church_date_idx").on(t.churchId, t.date),
     index("finance_txn_church_kind_idx").on(t.churchId, t.kind),
+    /*
+     * One shadow per gift. The sync's "is there a row yet?" and the fund
+     * backfill's anti-join both read before they write, so under READ
+     * COMMITTED a gift saved while its fund was being linked could be
+     * mirrored twice and counted twice in the fund. The sync upserts on this
+     * and the backfill does nothing on conflict with it.
+     */
+    uniqueIndex("finance_txn_giving_uidx")
+      .on(t.givingId)
+      .where(sql`${t.givingId} is not null`),
   ],
 );
 
@@ -4618,6 +4850,18 @@ export const meetingRecording = pgTable(
     url: text(),
     error: text(),
     startedAt: timestamp({ withTimezone: true }),
+    /**
+     * When the host pressed Stop. Null while it is still being recorded — and
+     * a recording that is still being recorded is not a stalled upload, however
+     * long the service runs.
+     */
+    stoppedAt: timestamp({ withTimezone: true }),
+    /**
+     * The last sign of life: Record, Stop, or a chunk of it reaching the server.
+     * The stalled-recording sweep judges on THIS, not on when Record was
+     * pressed, so a long service or a slow upload is never called lost.
+     */
+    lastActivityAt: timestamp({ withTimezone: true }),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -5731,6 +5975,14 @@ export const facility = pgTable(
   ],
 );
 
+/*
+ * Also carries `facility_booking_no_overlap`, an EXCLUDE USING gist constraint
+ * (btree_gist) refusing two APPROVED bookings whose [starts_at, ends_at)
+ * intervals overlap on one facility. Drizzle cannot declare an exclusion
+ * constraint, so it lives only in its hand-written migration — it is the
+ * database half of the approval claim (lockFacilityForBooking is the other),
+ * and `isBookingOverlapViolation` reads its 23P01. Do not drop it.
+ */
 export const facilityBooking = pgTable(
   "facility_booking",
   {

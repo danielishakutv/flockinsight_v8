@@ -2,15 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { facility, facilityBooking, facilityClosure, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { recordAudit } from "@/lib/audit";
-import { clashesFor, getFacility } from "@/lib/facilities";
-import { feeFor, validateBooking } from "@/lib/facility-shared";
+import {
+  clashesFor,
+  getFacility,
+  isBookingOverlapViolation,
+  lockFacilityForBooking,
+} from "@/lib/facilities";
+import { editHold, feeFor, validateBooking, type BookingStatus } from "@/lib/facility-shared";
 
 export type Result<T = unknown> =
   | ({ ok: true } & T)
@@ -244,27 +249,18 @@ export async function saveBooking(
    * already holds it. A mere request is not — two people may ask for the same
    * Saturday, and whoever approves one decides between them. The check runs
    * again at approval, which is the moment it actually matters.
+   *
+   * The check and the write happen inside one transaction holding the
+   * facility's row lock (see `lockFacilityForBooking`); checked outside it, two
+   * bookings for one slot could each find it free and both be written.
    */
   const willHold = canManage && !f.requiresApproval;
-  if (willHold) {
-    const clashes = await clashesFor({
-      churchId: g.church.id,
-      facilityId: d.facilityId,
-      startsAt: v.startsAt,
-      endsAt: v.endsAt,
-      ignoreBookingId: id,
-      bufferMinutes: f.bufferMinutes,
-    });
-    if (clashes.length > 0) {
-      return {
-        ok: false,
-        error: `${f.name} is not free then.`,
-        clashes: clashes.map((c) => ({ label: c.with.label, reason: c.reason })),
-      };
-    }
-  }
-
   const status = willHold ? "approved" : "requested";
+  const notFree = (clashes: Awaited<ReturnType<typeof clashesFor>>) => ({
+    ok: false as const,
+    error: `${f.name} is not free then.`,
+    clashes: clashes.map((c) => ({ label: c.with.label, reason: c.reason })),
+  });
 
   /*
    * The fee is worked out on the SERVER from the facility's own rate, and a
@@ -304,37 +300,150 @@ export async function saveBooking(
 
   if (id) {
     const [existing] = await db
-      .select({ id: facilityBooking.id, title: facilityBooking.title })
+      .select({
+        id: facilityBooking.id,
+        title: facilityBooking.title,
+        status: facilityBooking.status,
+        facilityId: facilityBooking.facilityId,
+        startsAt: facilityBooking.startsAt,
+        endsAt: facilityBooking.endsAt,
+      })
       .from(facilityBooking)
       .where(and(eq(facilityBooking.id, id), eq(facilityBooking.churchId, g.church.id)))
       .limit(1);
     if (!existing) return { ok: false, error: "That booking no longer exists." };
     if (!canManage) return { ok: false, error: "Only someone who manages facilities can change a booking." };
 
-    await db.update(facilityBooking).set(values).where(eq(facilityBooking.id, id));
+    const slotChanged =
+      existing.facilityId !== d.facilityId ||
+      existing.startsAt.getTime() !== v.startsAt.getTime() ||
+      existing.endsAt.getTime() !== v.endsAt.getTime();
+    const hold = editHold({
+      status: existing.status as BookingStatus,
+      requiresApproval: f.requiresApproval,
+      slotChanged,
+    });
+
+    type EditOutcome =
+      | { ok: true }
+      | { ok: false; clashes: Awaited<ReturnType<typeof clashesFor>> }
+      | { ok: false; gone: true };
+    let edited: EditOutcome;
+    try {
+      edited = await db.transaction(async (tx): Promise<EditOutcome> => {
+        if (hold === "hold") {
+          if (!(await lockFacilityForBooking(tx, g.church.id, d.facilityId)))
+            return { ok: false, gone: true };
+          const clashes = await clashesFor(
+            {
+              churchId: g.church.id,
+              facilityId: d.facilityId,
+              startsAt: v.startsAt,
+              endsAt: v.endsAt,
+              ignoreBookingId: id,
+              bufferMinutes: f.bufferMinutes,
+            },
+            tx,
+          );
+          if (clashes.length > 0) return { ok: false, clashes };
+        }
+        const rows = await tx
+          .update(facilityBooking)
+          .set({
+            ...values,
+            // A moved approval on a facility that needs one is asked again.
+            ...(hold === "rerequest"
+              ? { status: "requested" as const, approvedBy: null, approvedAt: null }
+              : {}),
+          })
+          .where(
+            and(
+              eq(facilityBooking.id, id),
+              eq(facilityBooking.churchId, g.church.id),
+              // The status this decision was made on, repeated: a booking
+              // approved or cancelled meanwhile is not silently rewritten.
+              eq(facilityBooking.status, existing.status),
+            ),
+          )
+          .returning({ id: facilityBooking.id });
+        return rows.length > 0 ? { ok: true } : { ok: false, gone: true };
+      });
+    } catch (e) {
+      if (isBookingOverlapViolation(e)) return { ok: false, error: `${f.name} is not free then.` };
+      throw e;
+    }
+    if (!edited.ok) {
+      if ("clashes" in edited) return notFree(edited.clashes);
+      return { ok: false, error: "That booking changed while you were editing it. Open it again." };
+    }
+
     await recordAudit({
       actorUserId: g.user.id,
       actorName: g.user.name,
       churchId: g.church.id,
       action: "facility_booking_update",
-      summary: `Changed the booking "${v.title}" for ${f.name}`,
+      summary:
+        hold === "rerequest"
+          ? `Moved the booking "${v.title}" for ${f.name}; it needs approving again`
+          : `Changed the booking "${v.title}" for ${f.name}`,
       targetType: "facility_booking",
       targetId: id,
     });
     refresh();
-    return { ok: true, id, status: "updated", message: "Booking updated." };
+    return {
+      ok: true,
+      id,
+      status: hold === "rerequest" ? "requested" : "updated",
+      message:
+        hold === "rerequest"
+          ? `Booking updated. ${f.name} needs approval, so the new time is a request until somebody approves it.`
+          : "Booking updated.",
+    };
   }
 
-  const [row] = await db
-    .insert(facilityBooking)
-    .values({
-      ...values,
-      status,
-      approvedBy: status === "approved" ? g.user.id : null,
-      approvedAt: status === "approved" ? new Date() : null,
-      createdBy: g.user.id,
-    })
-    .returning({ id: facilityBooking.id });
+  type CreateOutcome =
+    | { ok: true; id: string }
+    | { ok: false; clashes: Awaited<ReturnType<typeof clashesFor>> }
+    | { ok: false; gone: true };
+  let created: CreateOutcome;
+  try {
+    created = await db.transaction(async (tx): Promise<CreateOutcome> => {
+      if (willHold) {
+        if (!(await lockFacilityForBooking(tx, g.church.id, d.facilityId)))
+          return { ok: false, gone: true };
+        const clashes = await clashesFor(
+          {
+            churchId: g.church.id,
+            facilityId: d.facilityId,
+            startsAt: v.startsAt,
+            endsAt: v.endsAt,
+            bufferMinutes: f.bufferMinutes,
+          },
+          tx,
+        );
+        if (clashes.length > 0) return { ok: false, clashes };
+      }
+      const [inserted] = await tx
+        .insert(facilityBooking)
+        .values({
+          ...values,
+          status,
+          approvedBy: status === "approved" ? g.user.id : null,
+          approvedAt: status === "approved" ? new Date() : null,
+          createdBy: g.user.id,
+        })
+        .returning({ id: facilityBooking.id });
+      return { ok: true, id: inserted.id };
+    });
+  } catch (e) {
+    if (isBookingOverlapViolation(e)) return { ok: false, error: `${f.name} is not free then.` };
+    throw e;
+  }
+  if (!created.ok) {
+    if ("clashes" in created) return notFree(created.clashes);
+    return { ok: false, error: "That is not on your register." };
+  }
+  const row = { id: created.id };
 
   await recordAudit({
     actorUserId: g.user.id,
@@ -394,33 +503,82 @@ export async function decideBooking(
   const f = await getFacility(g.church.id, b.facilityId);
   if (!f) return { ok: false, error: "That facility is no longer on your register." };
 
-  if (decision === "approved") {
-    const clashes = await clashesFor({
-      churchId: g.church.id,
-      facilityId: b.facilityId,
-      startsAt: b.startsAt,
-      endsAt: b.endsAt,
-      ignoreBookingId: id,
-      bufferMinutes: f.bufferMinutes,
+  /*
+   * Which states each decision may be made from. Repeated in the UPDATE, with
+   * the row count checked, so two managers deciding the same booking at once
+   * cannot both "win" — and an approval cannot land on a booking somebody has
+   * just cancelled.
+   */
+  const FROM: Record<typeof decision, BookingStatus[]> = {
+    approved: ["requested"],
+    declined: ["requested"],
+    cancelled: ["requested", "approved"],
+  };
+  if (!FROM[decision].includes(b.status as BookingStatus))
+    return { ok: false, error: `That booking is already ${b.status}.` };
+
+  type Decided =
+    | { ok: true }
+    | { ok: false; clashes: Awaited<ReturnType<typeof clashesFor>> }
+    | { ok: false; changed: true };
+  let decided: Decided;
+  try {
+    decided = await db.transaction(async (tx): Promise<Decided> => {
+      if (decision === "approved") {
+        /*
+         * Under the facility's lock: a second manager approving an overlapping
+         * request at the same moment waits here, and then sees this approval.
+         */
+        if (!(await lockFacilityForBooking(tx, g.church.id, b.facilityId)))
+          return { ok: false, changed: true };
+        const clashes = await clashesFor(
+          {
+            churchId: g.church.id,
+            facilityId: b.facilityId,
+            startsAt: b.startsAt,
+            endsAt: b.endsAt,
+            ignoreBookingId: id,
+            bufferMinutes: f.bufferMinutes,
+          },
+          tx,
+        );
+        if (clashes.length > 0) return { ok: false, clashes };
+      }
+      const rows = await tx
+        .update(facilityBooking)
+        .set({
+          status: decision,
+          decisionNote: clean(note),
+          approvedBy: decision === "approved" ? g.user.id : null,
+          approvedAt: decision === "approved" ? new Date() : null,
+        })
+        .where(
+          and(
+            eq(facilityBooking.id, id),
+            eq(facilityBooking.churchId, g.church.id),
+            inArray(facilityBooking.status, FROM[decision]),
+          ),
+        )
+        .returning({ id: facilityBooking.id });
+      return rows.length > 0 ? { ok: true } : { ok: false, changed: true };
     });
-    if (clashes.length > 0) {
+  } catch (e) {
+    if (isBookingOverlapViolation(e))
       return {
         ok: false,
         error: `${f.name} is no longer free then — something else was approved first.`,
-        clashes: clashes.map((c) => ({ label: c.with.label, reason: c.reason })),
       };
-    }
+    throw e;
   }
-
-  await db
-    .update(facilityBooking)
-    .set({
-      status: decision,
-      decisionNote: clean(note),
-      approvedBy: decision === "approved" ? g.user.id : null,
-      approvedAt: decision === "approved" ? new Date() : null,
-    })
-    .where(eq(facilityBooking.id, id));
+  if (!decided.ok) {
+    if ("clashes" in decided)
+      return {
+        ok: false,
+        error: `${f.name} is no longer free then — something else was approved first.`,
+        clashes: decided.clashes.map((c) => ({ label: c.with.label, reason: c.reason })),
+      };
+    return { ok: false, error: "Somebody else decided this booking a moment ago. Refresh to see it." };
+  }
 
   await recordAudit({
     actorUserId: g.user.id,

@@ -292,6 +292,7 @@ function EntryForm({
                 value={amount}
                 onChange={setAmount}
                 currencyPrefix={symbol}
+                currency={currency}
                 required
               />
             </Field>

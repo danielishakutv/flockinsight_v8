@@ -25,6 +25,10 @@ export type UploadTicket = {
   folder: string;
   transformation?: string;
   uniqueUploadId: string;
+  /** The one asset this ticket may write; signed, and sent with every chunk. */
+  publicId?: string;
+  /** "false" on every ticket bound to a public id; signed, so it must be sent. */
+  overwrite?: "false";
 };
 
 export type UploadProgress = {
@@ -92,6 +96,9 @@ function postChunk(
     form.append("timestamp", String(ticket.timestamp));
     form.append("folder", ticket.folder);
     if (ticket.transformation) form.append("transformation", ticket.transformation);
+    // Part of the signature when present; a chunk without it would be refused.
+    if (ticket.publicId) form.append("public_id", ticket.publicId);
+    if (ticket.overwrite) form.append("overwrite", ticket.overwrite);
     form.append("signature", ticket.signature);
 
     const xhr = new XMLHttpRequest();

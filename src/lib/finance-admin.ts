@@ -45,7 +45,8 @@ export type FinanceChurchRow = {
 
 export type PaymentRow = {
   id: string;
-  churchId: string;
+  /** Null once the church that paid has been deleted; the payment stays. */
+  churchId: string | null;
   churchName: string | null;
   plan: PlanId | null;
   amount: number;
@@ -102,7 +103,9 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
       .select({
         id: payment.id,
         churchId: payment.churchId,
-        churchName: church.name,
+        // The live name, or the one stamped on the payment when its church
+        // was deleted — so a deleted church's money still says whose it was.
+        churchName: sql<string | null>`coalesce(${church.name}, ${payment.churchName})`,
         plan: payment.plan,
         amount: payment.amount,
         currency: payment.currency,

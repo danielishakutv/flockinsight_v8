@@ -6,6 +6,8 @@
  * the summary cards and the CSV can never disagree about what a balance is.
  */
 
+import { parseMoney } from "@/lib/money-input";
+
 export type FinanceKind = "income" | "expense";
 export type FinanceAccountType = "bank" | "cash" | "mobile_money" | "other";
 export type FinanceMethod =
@@ -253,18 +255,17 @@ export function isIsoDate(value: string): boolean {
 }
 
 /**
- * Parse an amount the way a person types one: "1,500", "2,000.50", " 300 ".
- * Returns null when it is not a usable positive amount, so the caller can say
- * so rather than saving a zero or a NaN.
+ * Parse an amount the way a person types one: "1,500", "2,000.50", " 300 ",
+ * and "1500,50" from a keypad whose decimal key is a comma. Returns null when
+ * it is not a usable positive amount, so the caller can say so rather than
+ * saving a zero or a NaN.
+ *
+ * A thin wrapper over the platform's one money parser (lib/money-input). This
+ * used to strip every comma, so "1500,50" was saved as 150050. Callers that
+ * want to tell the person WHY a figure was refused use parseMoneyInput.
  */
 export function parseAmount(input: string): number | null {
-  const cleaned = input.replace(/[^\d.-]/g, "");
-  if (!cleaned || cleaned === "-" || cleaned === ".") return null;
-  const n = Number(cleaned);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  // Guard the column: numeric(14,2) holds twelve digits before the point.
-  if (n >= 1e12) return null;
-  return roundMoney(n);
+  return parseMoney(input);
 }
 
 /* ============================================================

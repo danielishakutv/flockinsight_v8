@@ -1,8 +1,16 @@
 import Link from "next/link";
-import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { Heart } from "lucide-react";
 import { db } from "@/db";
 import { member } from "@/db/schema";
+import {
+  celebrationWindow,
+  displayZone,
+  windowLookup,
+  yearsTo,
+} from "@/lib/celebration-window";
+import { churchDisplayZone } from "@/lib/celebrations";
+import { customAnniversaryOn } from "@/lib/celebration-sql";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Card,
@@ -31,33 +39,28 @@ type Event = {
   years: number | null;
 };
 
-/** Whole years between an ISO date and the given upcoming year, or null. */
-function yearsTo(iso: string, eventYear: number): number | null {
-  const y = Number(iso.slice(0, 4));
-  if (!y) return null;
-  const n = eventYear - y;
-  return n > 0 ? n : null;
-}
+/**
+ * The next fortnight's wedding, baptism and custom anniversaries, in the
+ * church's own calendar (see UpcomingBirthdays).
+ */
+export async function UpcomingAnniversaries({
+  churchId,
+  timezone,
+}: {
+  churchId: string;
+  timezone?: string;
+}) {
+  const tz = timezone !== undefined ? displayZone(timezone) : await churchDisplayZone(churchId);
+  const meta = windowLookup(celebrationWindow(tz, 14));
+  const keys = [...meta.keys()];
 
-export async function UpcomingAnniversaries({ churchId }: { churchId: string }) {
-  const today = new Date();
-  // Next 14 days, keyed by MM-DD (handles month/year rollover).
-  const window: { key: string; offset: number; label: string; year: number }[] =
-    [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    window.push({
-      key: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-      offset: i,
-      label:
-        i === 0 ? "Today" : i === 1 ? "Tomorrow" : `${MONTHS[d.getMonth()]} ${d.getDate()}`,
-      year: d.getFullYear(),
-    });
-  }
-  const meta = new Map(window.map((w) => [w.key, w]));
-
-  // Candidates: anyone with a wedding/baptism date, or custom anniversaries.
+  /*
+   * Candidates are filtered by the window IN SQL. This used to load any 500
+   * members with a wedding or baptism date, in no order, and filter in JS
+   * afterwards — so a church with 1,500 married or baptised members missed
+   * about two thirds of its anniversaries. Custom anniversaries are matched on
+   * the window in SQL too, so none of them can crowd the others out of the cap.
+   */
   const rows = await db
     .select({
       id: member.id,
@@ -72,13 +75,13 @@ export async function UpcomingAnniversaries({ churchId }: { churchId: string }) 
       and(
         eq(member.churchId, churchId),
         or(
-          isNotNull(member.weddingDate),
-          isNotNull(member.baptismDate),
-          ne(sql`jsonb_array_length(${member.anniversaries})`, 0),
+          inArray(sql`to_char(${member.weddingDate}, 'MM-DD')`, keys),
+          inArray(sql`to_char(${member.baptismDate}, 'MM-DD')`, keys),
+          customAnniversaryOn(keys),
         ),
       ),
     )
-    .limit(500);
+    .limit(2000);
 
   const events: Event[] = [];
   const add = (
@@ -96,7 +99,12 @@ export async function UpcomingAnniversaries({ churchId }: { churchId: string }) 
       last: r.lastName,
       kind,
       offset: m.offset,
-      label: m.label,
+      label:
+        m.offset === 0
+          ? "Today"
+          : m.offset === 1
+            ? "Tomorrow"
+            : `${MONTHS[m.month]} ${m.day}`,
       years: yearsTo(iso, m.year),
     });
   };

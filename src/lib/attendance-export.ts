@@ -11,6 +11,17 @@ export type AttendanceExportRow = {
   female: number; // adults
   teenMale: number;
   teenFemale: number;
+  /*
+   * Youths and seniors. A church that turned these bands on had them counted
+   * in `total` and nowhere else in the export, so the row showed Total 140
+   * beside splits adding to 100 — and re-importing the file recomputed the
+   * total from the visible splits and quietly overwrote 140 with 100. Zero
+   * for a church that does not use them.
+   */
+  youthMale: number;
+  youthFemale: number;
+  seniorMale: number;
+  seniorFemale: number;
   childMale: number;
   childFemale: number;
   children: number; // stored total (legacy rows have only this)
@@ -29,6 +40,8 @@ export type AttendanceSummary = {
   male: number; // adults
   female: number; // adults
   teens: number;
+  youths: number;
+  seniors: number;
   children: number;
   firstTimers: number;
   newConverts: number;
@@ -52,6 +65,10 @@ export async function getAttendanceRows(
       female: attendanceSession.femaleCount,
       teenMale: attendanceSession.teenMaleCount,
       teenFemale: attendanceSession.teenFemaleCount,
+      youthMale: attendanceSession.youthMaleCount,
+      youthFemale: attendanceSession.youthFemaleCount,
+      seniorMale: attendanceSession.seniorMaleCount,
+      seniorFemale: attendanceSession.seniorFemaleCount,
       childMale: attendanceSession.childMaleCount,
       childFemale: attendanceSession.childFemaleCount,
       children: attendanceSession.childrenCount,
@@ -76,6 +93,10 @@ export async function getAttendanceRows(
     female: r.female,
     teenMale: r.teenMale,
     teenFemale: r.teenFemale,
+    youthMale: r.youthMale,
+    youthFemale: r.youthFemale,
+    seniorMale: r.seniorMale,
+    seniorFemale: r.seniorFemale,
     childMale: r.childMale,
     childFemale: r.childFemale,
     children: r.children,
@@ -99,6 +120,8 @@ export function summarizeAttendance(
     male: 0,
     female: 0,
     teens: 0,
+    youths: 0,
+    seniors: 0,
     children: 0,
     firstTimers: 0,
     newConverts: 0,
@@ -113,6 +136,8 @@ export function summarizeAttendance(
     s.male += r.male;
     s.female += r.female;
     s.teens += r.teenMale + r.teenFemale;
+    s.youths += r.youthMale + r.youthFemale;
+    s.seniors += r.seniorMale + r.seniorFemale;
     s.children += r.children;
     s.firstTimers += r.firstTimers;
     s.newConverts += r.newConverts;

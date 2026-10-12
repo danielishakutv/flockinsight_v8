@@ -45,7 +45,8 @@ type ChurchRow = {
 
 type PaymentRow = {
   id: string;
-  churchId: string;
+  /** Null once the church that paid has been deleted. */
+  churchId: string | null;
   churchName: string | null;
   plan: string | null;
   amount: number;
@@ -283,7 +284,13 @@ export function FinanceTabs({
           <Table
             head={["Church", "Amount", "How", "Status", "Paid", ""]}
             rows={payments.map((p) => [
-              p.churchName ?? <span key="d" className="text-muted-foreground">Deleted church</span>,
+              p.churchId ? (
+                p.churchName
+              ) : (
+                <span key="d" className="text-muted-foreground">
+                  {p.churchName ? `${p.churchName} (deleted)` : "Deleted church"}
+                </span>
+              ),
               <span key="a" className="font-semibold">{formatMoney(p.amount)}</span>,
               <span key="g" className="capitalize">
                 {p.gateway}

@@ -1,6 +1,6 @@
 import "server-only";
-import { createReadStream } from "node:fs";
-import { mkdir, rename, rm, stat, unlink } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { mkdir, open, rename, rm, stat, unlink, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -30,9 +30,82 @@ export const MEDIA_ROOT =
 /** Partially-uploaded files, assembled here and moved only when complete. */
 export const MEDIA_TMP = path.join(MEDIA_ROOT, ".tmp");
 
+/*
+ * The allow-list itself lives in a client-safe module, because the uploader in
+ * the browser routes by the same rule. Re-exported so server code keeps one
+ * import.
+ */
+import { localMimeEssence } from "@/lib/media-local-types";
+export { localMimeEssence, extForMime } from "@/lib/media-local-types";
+
+/**
+ * Do these first bytes look like an audio or video container at all?
+ *
+ * The allow-list (`localMimeEssence`) decides what TYPE a file is served as; this decides
+ * whether the bytes are plausibly that kind of thing. Both are needed: the type
+ * comes from the browser that uploaded it, and a church that labelled an HTML
+ * page "video/mp4" would otherwise still have it stored, kept for ever and
+ * served — as video, harmlessly, but as a file nobody can play and an
+ * invitation to try the next trick. Checked on the assembled file at `finish`,
+ * before anything becomes a media row.
+ *
+ * Deliberately generous within audio/video: every container a phone, a camera,
+ * a recorder or an old desktop tool is likely to produce. What it refuses is
+ * text, markup and anything else that is not media.
+ */
+export function looksLikeAudioOrVideo(head: Uint8Array): boolean {
+  if (head.length < 4) return false;
+  const at = (i: number) => head[i] ?? -1;
+  const ascii = (from: number, text: string) =>
+    [...text].every((c, i) => at(from + i) === c.charCodeAt(0));
+
+  // Matroska / WebM — what MediaRecorder writes in Chrome, Edge and Firefox.
+  if (at(0) === 0x1a && at(1) === 0x45 && at(2) === 0xdf && at(3) === 0xa3) return true;
+  // ISO base media (mp4, m4a, mov, 3gp): a box size, then the box type. Safari's
+  // recorder and every phone camera. Old QuickTime files may open on another box.
+  if (["ftyp", "moov", "mdat", "free", "skip", "wide", "pnot"].some((b) => ascii(4, b)))
+    return true;
+  if (ascii(0, "OggS")) return true; // Ogg (Vorbis, Opus, Theora)
+  if (ascii(0, "fLaC")) return true; // FLAC
+  if (ascii(0, "RIFF") && (ascii(8, "WAVE") || ascii(8, "AVI "))) return true;
+  if (ascii(0, "ID3")) return true; // MP3 with a tag
+  if (ascii(0, "FLV")) return true;
+  if (ascii(0, "#!AMR")) return true;
+  // AIFF / AIFC (Logic, GarageBand, older Macs) and Apple's Core Audio Format.
+  if (ascii(0, "FORM") && (ascii(8, "AIFF") || ascii(8, "AIFC"))) return true;
+  if (ascii(0, "caff")) return true;
+  // ASF (wmv / wma): a fixed header GUID.
+  if (at(0) === 0x30 && at(1) === 0x26 && at(2) === 0xb2 && at(3) === 0x75) return true;
+  // MPEG program stream, and a transport stream's sync byte repeated a packet on.
+  if (at(0) === 0x00 && at(1) === 0x00 && at(2) === 0x01 && (at(3) === 0xba || at(3) === 0xb3))
+    return true;
+  if (head.length >= 189 && at(0) === 0x47 && at(188) === 0x47) return true;
+  // Blu-ray / AVCHD camera transport stream (.m2ts): 192-byte packets, each
+  // with a 4-byte timestamp in front of the sync byte.
+  if (head.length >= 197 && at(4) === 0x47 && at(196) === 0x47) return true;
+  // A bare MPEG audio frame (mp3) or ADTS (aac): eleven sync bits. FF FE is
+  // excluded by name because it is also the UTF-16 byte-order mark — the one
+  // way a text file can begin with these bits.
+  if (at(0) === 0xff && (at(1) & 0xe0) === 0xe0 && at(1) !== 0xfe && at(1) !== 0xff)
+    return true;
+  return false;
+}
+
+/** The first bytes of a file on disk, for `looksLikeAudioOrVideo`. */
+export async function readHead(file: string, length = 512): Promise<Uint8Array> {
+  const fh = await open(file, "r");
+  try {
+    const buf = new Uint8Array(length);
+    const { bytesRead } = await fh.read(buf, 0, length, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
+
 /** Only these ever go to local disk; everything else stays on Cloudinary. */
 export function isLocallyStored(mime: string): boolean {
-  return mime.startsWith("video/") || mime.startsWith("audio/");
+  return localMimeEssence(mime) !== null;
 }
 
 /**
@@ -150,6 +223,72 @@ export async function removeFile(key: string | null | undefined): Promise<void> 
   }
 }
 
+/**
+ * Where a chunk may land, given what the server already holds.
+ *
+ * A chunk is placed at the offset the CLIENT says it starts at, never simply
+ * appended. Appending is what corrupted files: a chunk whose response was lost
+ * on a weak connection was sent again and written twice, and every byte after
+ * it sat 8 MB late — a video that broke halfway through and still reported
+ * "ready". Two open tabs uploading the same recording did the same thing.
+ *
+ * Written at its own offset, a repeat lands on top of itself. The only offset
+ * refused is one PAST the end, because that would leave a hole of zeroes in
+ * the middle of somebody's service.
+ */
+export function chunkPlacement(
+  heldBytes: number,
+  offset: number,
+  length: number,
+): { ok: true; endsAt: number } | { ok: false; received: number } {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > heldBytes) {
+    return { ok: false, received: heldBytes };
+  }
+  return { ok: true, endsAt: Math.max(heldBytes, offset + length) };
+}
+
+/** How many bytes a partial upload holds, 0 if it does not exist yet. */
+export async function heldBytes(file: string): Promise<number> {
+  try {
+    return (await stat(file)).size;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return 0;
+    throw e;
+  }
+}
+
+/**
+ * Write one chunk at its offset — a positional write, never an append.
+ *
+ * Opened without O_APPEND and without O_TRUNC: on Linux, O_APPEND ignores the
+ * position entirely (so `appendFile` and the "a" flag cannot do this), and
+ * O_TRUNC would empty the file on every chunk. Because the same bytes at the
+ * same offset produce the same file, this needs no lock across the two PM2
+ * workers — a duplicate request is harmless whichever worker serves it.
+ */
+export async function writeChunkAt(
+  file: string,
+  offset: number,
+  buf: Uint8Array,
+): Promise<void> {
+  const fh = await open(file, fsConstants.O_WRONLY | fsConstants.O_CREAT, 0o640);
+  try {
+    let written = 0;
+    while (written < buf.length) {
+      const { bytesWritten } = await fh.write(
+        buf,
+        written,
+        buf.length - written,
+        offset + written,
+      );
+      if (bytesWritten <= 0) throw new Error("The disk accepted no bytes.");
+      written += bytesWritten;
+    }
+  } finally {
+    await fh.close();
+  }
+}
+
 /** Abandon a partial upload. Scoped to the church that owns it. */
 export async function discardUpload(
   churchId: string,
@@ -201,28 +340,82 @@ export function parseRange(header: string | null, size: number): RangeSpec | nul
   return { start, end, size };
 }
 
-/** A web ReadableStream over part of a file, for a Response body. */
+/** How much one pull reads from disk. */
+const STREAM_CHUNK = 64 * 1024;
+
+/**
+ * A web ReadableStream over part of a file, for a Response body.
+ *
+ * PULL-based, and that is the whole point. The previous version attached a
+ * "data" listener to a flowing fs stream and enqueued every chunk the moment
+ * the disk produced it, so one phone opening a 1.5 GB service recording on a
+ * slow connection made Node read the entire file into memory and hold it there
+ * while the phone downloaded at 1-2 Mbps. A handful of viewers was enough to
+ * push a worker past PM2's memory limit and restart it — cutting off every
+ * church served by that worker, not just the one watching the video.
+ *
+ * Here nothing is read until the consumer asks for more, so what is held per
+ * viewer is a few chunks whatever the size of the file.
+ */
 export function streamFile(
   key: string,
   range?: { start: number; end: number },
 ): ReadableStream<Uint8Array> {
-  const nodeStream = createReadStream(resolveKey(key), range);
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      nodeStream.on("data", (c) =>
-        controller.enqueue(
-          typeof c === "string" ? new TextEncoder().encode(c) : new Uint8Array(c),
-        ),
-      );
-      nodeStream.on("end", () => controller.close());
-      nodeStream.on("error", (err) => controller.error(err));
+  const file = resolveKey(key);
+  let fh: FileHandle | null = null;
+  let pos = range?.start ?? 0;
+  /** Inclusive; undefined reads to the end of the file. */
+  const end = range?.end;
+
+  const close = async (why: string) => {
+    const h = fh;
+    fh = null;
+    if (!h) return;
+    try {
+      await h.close();
+    } catch (e) {
+      // A handle that will not close is a leak somebody needs to hear about.
+      console.error(`[media-store] could not close ${key} (${why}):`, e);
+    }
+  };
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async start() {
+        fh = await open(file, "r");
+      },
+      async pull(controller) {
+        try {
+          const want =
+            end === undefined ? STREAM_CHUNK : Math.min(STREAM_CHUNK, end - pos + 1);
+          if (want <= 0 || !fh) {
+            await close("done");
+            controller.close();
+            return;
+          }
+          const buf = new Uint8Array(want);
+          const { bytesRead } = await fh.read(buf, 0, want, pos);
+          if (bytesRead === 0) {
+            await close("eof");
+            controller.close();
+            return;
+          }
+          pos += bytesRead;
+          controller.enqueue(bytesRead === want ? buf : buf.subarray(0, bytesRead));
+        } catch (err) {
+          await close("error");
+          controller.error(err);
+        }
+      },
+      async cancel() {
+        // The reader went away — a person scrubbing a video or closing the tab.
+        // Without this the file handle stays open for every abandoned request.
+        await close("cancel");
+      },
     },
-    cancel() {
-      // The reader went away — a person scrubbing a video or closing the tab.
-      // Without this the file handle stays open for every abandoned request.
-      nodeStream.destroy();
-    },
-  });
+    // A few chunks of read-ahead keeps playback smooth without buffering the file.
+    { highWaterMark: 4 },
+  );
 }
 
 /**
@@ -249,11 +442,22 @@ export async function sweepStaleUploads(
     const { readdir } = await import("node:fs/promises");
     const names = await readdir(MEDIA_TMP);
     for (const name of names) {
-      if (!name.endsWith(".part")) continue;
+      /*
+       * Two kinds of leftover live here. Partial uploads (".part") get the long
+       * window above. A transcode's output ("<id>-<run>-transcode.mp4") is only
+       * ever written by a running ffmpeg, whose longest allowed run is four
+       * hours — so one untouched for a day belongs to a worker that was killed
+       * mid-job (a deploy, a restart), and nothing will ever come back for it.
+       * Left alone they pile up, each the size of a service.
+       */
+      const isPart = name.endsWith(".part");
+      const isTranscode = /-transcode\.(mp4|m4a)$/.test(name);
+      if (!isPart && !isTranscode) continue;
+      const fileCutoff = isPart ? cutoff : now.getTime() - 86_400_000;
       const full = path.join(MEDIA_TMP, name);
       try {
         const st = await stat(full);
-        if (st.mtimeMs >= cutoff) continue;
+        if (st.mtimeMs >= fileCutoff) continue;
         bytes += st.size;
         await unlink(full);
         removed++;

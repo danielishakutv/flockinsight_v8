@@ -24,6 +24,7 @@ import {
   parseMessageFilters,
 } from "@/lib/comm-message-shared";
 import { formatMoney } from "@/lib/money";
+import { logStateNotice } from "@/lib/comm-log-state";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { RecipientFilters } from "@/components/communication/recipient-filters";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +92,13 @@ export default async function MessageDetailPage({
   const pages = Math.max(1, Math.ceil(count / RECIPIENT_PAGE_SIZE));
 
   // Sends made before per-recipient tracking existed have totals but no rows.
-  const noDetail = totals.all === 0 && message.recipients > 0;
+  // A send still going has no rows yet either, and is not one of those.
+  const noDetail = totals.all === 0 && message.recipients > 0 && message.state === "done";
+  const stateNotice = logStateNotice(message.state, {
+    sent: message.sent,
+    failed: message.failed,
+    recipients: message.recipients - message.skipped,
+  });
 
   return (
     <PageContainer>
@@ -146,6 +153,27 @@ export default async function MessageDetailPage({
           </p>
         </CardContent>
       </Card>
+
+      {stateNotice && (
+        <Card
+          className={
+            message.state === "interrupted"
+              ? "border-destructive/40 bg-destructive/5 mt-4"
+              : "mt-4 border-dashed"
+          }
+        >
+          <CardContent className="flex items-start gap-3 py-4 text-sm">
+            <TriangleAlert
+              className={
+                message.state === "interrupted"
+                  ? "text-destructive mt-0.5 size-4 shrink-0"
+                  : "text-muted-foreground mt-0.5 size-4 shrink-0"
+              }
+            />
+            <p>{stateNotice}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Outcome summary */}
       <div className={noDetail ? "mt-4 grid grid-cols-3 gap-3" : "mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"}>

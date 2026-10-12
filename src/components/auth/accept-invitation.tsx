@@ -206,7 +206,9 @@ export function AcceptInvitation({
       <Shell>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{t("auth.wrongAccount")}</CardTitle>
-          <CardDescription>
+          {/* wrap-anywhere: an address is one unbreakable word, and at 320px
+              a long one ran out of the card and scrolled the page sideways. */}
+          <CardDescription className="wrap-anywhere">
             This invitation is for{" "}
             <span className="text-foreground font-semibold">{email}</span>, but
             you&apos;re signed in as{" "}
@@ -235,7 +237,7 @@ export function AcceptInvitation({
     <Shell>
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Join {church}</CardTitle>
-        <CardDescription>
+        <CardDescription className="wrap-anywhere">
           {mode === "accept"
             ? `You're signed in as ${sessionEmail}. Accept to join the team.`
             : mode === "login"

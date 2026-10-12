@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -24,7 +24,17 @@ import {
   celebrationSetting,
   subscriber as subscriberTable,
 } from "@/db/schema";
+import type { PgTable } from "drizzle-orm/pg-core";
 import { slugify, randomSuffix } from "@/lib/slug";
+import { trialEndDate } from "@/lib/trial";
+import {
+  chunkForInsert,
+  planChurchRestore,
+  restoreFailureCause,
+  reviveDates,
+  splitMemberLinks,
+  type RestoreSource,
+} from "@/lib/church-restore";
 
 export const BACKUP_VERSION = 1;
 
@@ -160,7 +170,9 @@ export async function resetChurch(churchId: string): Promise<void> {
 /* ============================================================
  * RESTORE — creates a BRAND-NEW church from a backup (never overwrites an
  * existing one, so it can't cause data loss). UUID primary keys are remapped
- * consistently; user references are cleared (the team isn't restored).
+ * consistently; user references are cleared (the team isn't restored). The
+ * row-shaping lives in church-restore.ts, where it is tested through a real
+ * JSON round trip — the step that broke every restore until it was.
  * ========================================================== */
 
 type AnyRow = Record<string, unknown>;
@@ -190,105 +202,22 @@ export async function restoreChurchAsNew(
   const baseName = String(src.name ?? "Restored church");
   const slug = await uniqueChurchSlug(String(src.slug ?? baseName));
 
-  // Remap tables of UUID-keyed rows: return new rows + old→new id map.
-  const map = <T extends AnyRow>(rows: T[] | undefined): { rows: T[]; ids: Map<string, string> } => {
-    const ids = new Map<string, string>();
-    const out = (rows ?? []).map((r) => {
-      const nid = randomUUID();
-      ids.set(String(r.id), nid);
-      return { ...r, id: nid, churchId: newChurchId } as T;
-    });
-    return { rows: out, ids };
-  };
-
-  const members = map(backup.members as AnyRow[]);
-  const services = map(backup.services as AnyRow[]);
-  const categories = map(backup.categories as AnyRow[]);
-  const groups = map(backup.groups as AnyRow[]);
-  const sessions = map(backup.sessions as AnyRow[]);
-  const roles = map(backup.roles as AnyRow[]);
-  const forms = map(backup.forms as AnyRow[]);
-  const devotionals = map(backup.devotionals as AnyRow[]);
-  const events = map(backup.events as AnyRow[]);
-  const mediaRows = map(backup.media as AnyRow[]);
-
-  // Clean user references (the team isn't restored) + remap FKs.
-  members.rows.forEach((r) => {
-    r.userId = null;
-    r.assignedToId = null;
-    r.createdBy = null;
-  });
-  sessions.rows.forEach((r) => {
-    r.recordedBy = null;
-    r.serviceId = r.serviceId ? services.ids.get(String(r.serviceId)) ?? null : null;
-  });
-  categories.rows.forEach(() => {});
-  const givingRows = (backup.giving as AnyRow[] ?? []).map((r) => ({
-    ...r,
-    id: randomUUID(),
-    churchId: newChurchId,
-    categoryId: r.categoryId ? categories.ids.get(String(r.categoryId)) ?? null : null,
-    memberId: r.memberId ? members.ids.get(String(r.memberId)) ?? null : null,
-    recordedBy: null,
-  }));
-  const records = (backup.records as AnyRow[] ?? [])
-    .map((r) => ({
-      ...r,
-      id: randomUUID(),
-      sessionId: sessions.ids.get(String(r.sessionId)),
-      memberId: members.ids.get(String(r.memberId)),
-    }))
-    .filter((r) => r.sessionId && r.memberId);
-  const memberships = (backup.memberships as AnyRow[] ?? [])
-    .map((r) => ({
-      ...r,
-      id: randomUUID(),
-      groupId: groups.ids.get(String(r.groupId)),
-      memberId: members.ids.get(String(r.memberId)),
-    }))
-    .filter((r) => r.groupId && r.memberId);
-  const followUps = (backup.followUps as AnyRow[] ?? [])
-    .map((r) => ({
-      ...r,
-      id: randomUUID(),
-      churchId: newChurchId,
-      memberId: members.ids.get(String(r.memberId)),
-      createdBy: null,
-    }))
-    .filter((r) => r.memberId);
-  groups.rows.forEach((r) => (r.createdBy = null));
-  roles.rows.forEach(() => {});
-  events.rows.forEach((r) => (r.createdBy = null));
-  devotionals.rows.forEach((r) => {
-    r.createdBy = null;
-  });
-  mediaRows.rows.forEach((r) => {
-    r.uploadedBy = null;
-    r.data = null;
-  });
-  // Forms need globally-unique slugs.
-  for (const f of forms.rows) {
-    f.slug = (slugify(String(f.title ?? "form")) || "form") + "-" + randomSuffix(6);
-    f.createdBy = null;
-  }
-  const responses = (backup.responses as AnyRow[] ?? [])
-    .map((r) => ({
-      ...r,
-      id: randomUUID(),
-      churchId: newChurchId,
-      formId: forms.ids.get(String(r.formId)),
-      memberId: r.memberId ? members.ids.get(String(r.memberId)) ?? null : null,
-    }))
-    .filter((r) => r.formId);
-  const subscribers = (backup.subscribers as AnyRow[] ?? []).map((r) => ({
-    ...r,
-    id: randomUUID(),
-    churchId: newChurchId,
-  }));
+  // Re-keyed rows for the new church: ids remapped, foreign references either
+  // remapped or cleared. Pure, and tested in church-restore.test.ts.
+  const plan = planChurchRestore(backup as unknown as RestoreSource, newChurchId);
 
   try {
     await db.transaction(async (tx) => {
-      // The new church shell — fresh identity, no paid balances/plan time.
+      /*
+       * The new church shell — fresh identity, no paid balances, no plan time.
+       *
+       * Starter on an ordinary trial, NOT the source's plan. A copy of a Pro
+       * church with no trial date and no renewal date reads to
+       * computeStanding as grandfathered — never gated — so the copy used to
+       * hold Pro's modules for ever while this comment promised it held
+       * nothing. A superadmin who restores to replace a paying church sets its
+       * plan or waiver from the church page, the same as for any other.
+       */
       await tx.insert(church).values({
         id: newChurchId,
         name: `${baseName} (restored)`,
@@ -299,7 +228,8 @@ export async function restoreChurchAsNew(
         currency: (src.currency as string) ?? "NGN",
         country: (src.country as string) ?? "Nigeria",
         state: (src.state as string) ?? null,
-        plan: (src.plan as "starter") ?? "starter",
+        plan: "starter",
+        trialEndsAt: trialEndDate(new Date()),
         status: "active",
         theme: (src.theme as string) ?? "indigo",
         denomination: (src.denomination as string) ?? null,
@@ -311,41 +241,52 @@ export async function restoreChurchAsNew(
         city: (src.city as string) ?? null,
       });
 
-      const insert = async (table: typeof member, rows: AnyRow[]) => {
-        if (rows.length) await tx.insert(table).values(rows as never);
+      // Every insert goes through reviveDates: the backup has been through
+      // JSON, so its timestamps are strings and drizzle needs Dates. And in
+      // chunks, because one statement takes at most 65,535 parameters and a
+      // real church's attendance history is far more than that.
+      const insert = async (table: PgTable, rows: AnyRow[]) => {
+        for (const chunk of chunkForInsert(reviveDates(table, rows))) {
+          await tx.insert(table).values(chunk as never);
+        }
       };
 
-      await insert(member as never, members.rows);
-      await insert(service as never, services.rows);
-      await insert(givingCategory as never, categories.rows);
-      await insert(group as never, groups.rows);
-      await insert(role as never, roles.rows);
-      await insert(attendanceSession as never, sessions.rows);
-      await insert(attendanceRecord as never, records as AnyRow[]);
-      await insert(giving as never, givingRows);
-      await insert(groupMembership as never, memberships as AnyRow[]);
-      await insert(followUpInteraction as never, followUps as AnyRow[]);
-      await insert(form as never, forms.rows);
-      await insert(formResponse as never, responses as AnyRow[]);
-      await insert(devotional as never, devotionals.rows);
-      await insert(subscriberTable as never, subscribers);
-      await insert(event as never, events.rows);
-      await insert(media as never, mediaRows.rows);
+      // Members go in unlinked, then the guardian and inviter links are set
+      // once every member they can point at exists.
+      const { rows: memberRows, links } = splitMemberLinks(plan.members);
+      await insert(member, memberRows);
+      for (const l of links) {
+        await tx
+          .update(member)
+          .set({ guardianId: l.guardianId, invitedById: l.invitedById })
+          .where(and(eq(member.id, l.id), eq(member.churchId, newChurchId)));
+      }
 
-      if (backup.reminderSetting)
-        await tx
-          .insert(reminderSetting)
-          .values({ ...(backup.reminderSetting as AnyRow), churchId: newChurchId } as never);
-      if (backup.celebrationSetting)
-        await tx
-          .insert(celebrationSetting)
-          .values({ ...(backup.celebrationSetting as AnyRow), churchId: newChurchId } as never);
+      // Parents before children: a form points at its event, a record at its
+      // session and member, a membership at its group.
+      await insert(service, plan.services);
+      await insert(givingCategory, plan.categories);
+      await insert(group, plan.groups);
+      await insert(role, plan.roles);
+      await insert(attendanceSession, plan.sessions);
+      await insert(attendanceRecord, plan.records);
+      await insert(giving, plan.giving);
+      await insert(groupMembership, plan.memberships);
+      await insert(followUpInteraction, plan.followUps);
+      await insert(event, plan.events);
+      await insert(form, plan.forms);
+      await insert(formResponse, plan.responses);
+      await insert(devotional, plan.devotionals);
+      await insert(subscriberTable, plan.subscribers);
+      await insert(media, plan.media);
+      if (plan.reminderSetting) await insert(reminderSetting, [plan.reminderSetting]);
+      if (plan.celebrationSetting) await insert(celebrationSetting, [plan.celebrationSetting]);
     });
   } catch (e) {
     console.error("[restore] failed", e);
     return {
       ok: false,
-      error: "Restore failed — the backup may be incompatible. No church was created.",
+      error: `Restore failed — no church was created. Cause: ${restoreFailureCause(e)}`,
     };
   }
 

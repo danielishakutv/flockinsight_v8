@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, asc, count, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -15,7 +15,9 @@ import { adapterFor } from "@/lib/gateways";
 import { PROVIDER_SPECS, supportsCurrency } from "@/lib/gateways/specs";
 import type { GatewayCredentials, ProviderId } from "@/lib/gateways/types";
 import { openJson, openSecret, sealJson, sealSecret, secretHint } from "@/lib/secret-box";
-import { normalizePhone } from "@/lib/sms";
+import { internationalPhone, nationalNumber } from "@/lib/phone-intl";
+import { countryProfile } from "@/lib/country-profile";
+import { churchToday } from "@/lib/church-today";
 import { siteUrl } from "@/lib/site";
 import { slugify, randomSuffix } from "@/lib/slug";
 
@@ -29,7 +31,7 @@ import { slugify, randomSuffix } from "@/lib/slug";
  * and send them to the gateway. When the payment completes we hear about it
  * twice — once from a webhook, once from the giver's own redirect — and
  * whichever arrives first verifies it with the gateway and writes the `giving`
- * row. The second one sees `givingId` is set and stops.
+ * row. The second one sees the payment is already 'success' and stops.
  *
  * WHY THE REFERENCE IS OURS. It is the only thread tying a gateway
  * transaction back to a church, a link and a person. If it were the gateway's,
@@ -133,8 +135,39 @@ export async function getActiveGateway(
     .from(churchGateway)
     .where(and(eq(churchGateway.churchId, churchId), eq(churchGateway.isActive, true)))
     .limit(1);
-  if (!row) return null;
+  return row ? usableGateway(row) : null;
+}
 
+/**
+ * The gateway a payment was MADE with, whether or not it is the active one.
+ *
+ * Settling used to ask getActiveGateway, so a church that stopped online
+ * giving — or switched from Paystack to Flutterwave — while a transfer was
+ * still clearing never recorded that gift: the webhook was answered 200 with
+ * "setup no longer available" (so it was never retried), or the reference was
+ * looked up at the wrong provider and not found. The money was in the
+ * church's account and nothing here knew. Whether a gateway is active decides
+ * where NEW gifts go; it must never decide whether a gift already paid is
+ * recorded. The keys are kept when a gateway is deactivated, for this.
+ */
+export async function gatewayForPayment(
+  churchId: string,
+  provider: string,
+): Promise<ActiveGateway | null> {
+  const [row] = await db
+    .select()
+    .from(churchGateway)
+    .where(
+      and(
+        eq(churchGateway.churchId, churchId),
+        eq(churchGateway.provider, provider as ProviderId),
+      ),
+    )
+    .limit(1);
+  return row ? usableGateway(row) : null;
+}
+
+function usableGateway(row: typeof churchGateway.$inferSelect): ActiveGateway | null {
   const provider = row.provider as ProviderId;
   const creds = credsFrom(row);
   const spec = PROVIDER_SPECS[provider];
@@ -709,6 +742,60 @@ function newReference(): string {
   return `FI-${Date.now().toString(36).toUpperCase()}-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+/**
+ * The member an online giver is, if we can tell — or null, which is fine: the
+ * gift is then recorded under the name they typed, like a cash gift from a
+ * visitor.
+ *
+ * Email OR phone, never "phone, else email". It used to compare member.phone
+ * for exact equality with a Nigeria-normalised number ("2348031234567"),
+ * while Members → Add stores what was typed ("0803 123 4567"), so a phone
+ * almost never matched — and because a phone was given, the email that would
+ * have matched was never tried. A member's online gifts then went down as an
+ * anonymous visitor's and were missing from their statement.
+ *
+ * Email is compared case-insensitively. A phone is compared on its national
+ * number — the church's own country's length, not Nigeria's ten — against the
+ * trailing digits of whatever shape is stored. Two people matching (one by
+ * email, one by phone) is settled in favour of the email, which the giver
+ * typed for this payment and which the gateway's receipt goes to.
+ *
+ * No join here, so the raw-SQL column references below cannot be bound to
+ * the wrong table (the drizzle qualifier trap in AGENTS.md).
+ */
+async function matchGiverToMember(
+  churchId: string,
+  email: string,
+  rawPhone: string | null,
+  dial: string,
+): Promise<string | null> {
+  const national = rawPhone ? nationalNumber(rawPhone, dial) : null;
+  if (!email && !national) return null;
+  const rows = await db
+    .select({ id: member.id, email: member.email })
+    .from(member)
+    .where(
+      and(
+        eq(member.churchId, churchId),
+        or(
+          email ? sql`lower(${member.email}) = ${email}` : sql`false`,
+          national
+            ? and(
+                isNotNull(member.phone),
+                // The length is computed here from the numbering plan, never
+                // input, so it is inlined rather than bound.
+                sql`right(regexp_replace(${member.phone}, '\\D', '', 'g'), ${sql.raw(String(national.length))}) = ${national}`,
+              )
+            : sql`false`,
+        ),
+      ),
+    )
+    .limit(2);
+  if (rows.length === 0) return null;
+  const byEmail = rows.find((r) => (r.email ?? "").toLowerCase() === email);
+  return (byEmail ?? rows[0]).id;
+}
+
 export type StartGiftResult =
   | { ok: true; checkoutUrl: string; reference: string }
   | { ok: false; error: string };
@@ -756,31 +843,18 @@ export async function startOnlineGift(opts: {
       error: "Enter an email address — the gateway needs one to send a receipt.",
     };
 
-  const phone = opts.phone ? normalizePhone(opts.phone) : null;
+  // The church's own dial code, not Nigeria's: normalizePhone read a Kenyan
+  // "0712345678" as +234 712 345 678 and refused a Mozambican number outright.
+  const [where] = await db
+    .select({ country: church.country })
+    .from(church)
+    .where(eq(church.id, link.churchId))
+    .limit(1);
+  const dial = countryProfile(where?.country).dial;
+  const phone = opts.phone ? internationalPhone(opts.phone, dial) : null;
   const reference = newReference();
 
-  /*
-   * Matched to a member where we can, by phone first and then email.
-   *
-   * Phone first because it is the identifier a Nigerian congregation actually
-   * has on file; email is often shared or absent. A miss is fine — the gift is
-   * recorded under the name they typed, exactly like a cash gift from a
-   * visitor.
-   */
-  let memberId: string | null = null;
-  if (phone || email) {
-    const [match] = await db
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.churchId, link.churchId),
-          phone ? eq(member.phone, phone) : eq(member.email, email),
-        ),
-      )
-      .limit(1);
-    memberId = match?.id ?? null;
-  }
+  const memberId = await matchGiverToMember(link.churchId, email, opts.phone, dial);
 
   await db.insert(onlinePayment).values({
     churchId: link.churchId,
@@ -858,9 +932,10 @@ export type SettleResult =
  * on the way back from a bank app — and between them a completed payment is
  * almost always settled within seconds.
  *
- * SAFE TO CALL ANY NUMBER OF TIMES. The gateway is asked each time; the giving
- * row is written only if `givingId` is still null, under a conditional update
- * that only one caller can win.
+ * SAFE TO CALL ANY NUMBER OF TIMES. Once a payment has succeeded it is never
+ * asked about again; until then the gateway is asked each time, and the giving
+ * row is written only by the caller whose conditional update claims the
+ * payment (status not yet 'success'), in the same transaction as the claim.
  */
 export async function settleOnlinePayment(reference: string): Promise<SettleResult> {
   const [row] = await db
@@ -868,6 +943,7 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
       payment: onlinePayment,
       churchName: church.name,
       currency: church.currency,
+      timezone: church.timezone,
       linkSlug: givingLink.slug,
       linkTitle: givingLink.title,
       categoryId: givingLink.categoryId,
@@ -882,9 +958,21 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
 
   const p = row.payment;
 
-  // Already settled. Answered from our own record without troubling the
-  // gateway — this is the common case when a webhook and a redirect race.
-  if (p.givingId) {
+  /*
+   * Already settled. Answered from our own record without troubling the
+   * gateway — this is the common case when a webhook and a redirect race.
+   *
+   * Decided by the PAYMENT's own state, not only by givingId. That column is
+   * set null when its gift is deleted (a treasurer removing a duplicate of a
+   * gift also typed in by hand), and when it was the only latch, the next
+   * reload of the giver's thanks page — a phone restoring its tabs, a link
+   * shared on WhatsApp — or a webhook retry found it null, asked the gateway
+   * (which says "success" for ever), and recorded the gift again, posted it to
+   * Finance again and sent and charged for another receipt. A deletion that
+   * undoes itself. A payment that succeeded stays settled; its gift stays
+   * deleted if somebody deleted it.
+   */
+  if (p.givingId || p.status === "success" || p.paidAt) {
     return {
       ok: true,
       status: "success",
@@ -898,10 +986,18 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
     };
   }
 
-  const gateway = await getActiveGateway(p.churchId);
+  // The provider that took THIS payment, active or not. See gatewayForPayment.
+  const gateway = await gatewayForPayment(p.churchId, p.provider);
   const adapter = gateway ? adapterFor(gateway.provider) : null;
-  if (!gateway || !adapter)
+  if (!gateway || !adapter) {
+    // Loud: the money may be in the church's account with nothing here
+    // recording it, and a webhook answered 200 is never sent again.
+    console.error("[online-giving] cannot settle: no usable keys for its provider", {
+      reference,
+      provider: p.provider,
+    });
     return { ok: false, error: "This church's payment setup is no longer available." };
+  }
 
   const verified = await adapter.verify(gateway.creds, reference);
   if (!verified.ok) return { ok: false, error: verified.error };
@@ -939,45 +1035,63 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
    */
   const paidAmount = verified.amount > 0 ? verified.amount : p.amount;
   const paidCurrency = verified.currency || p.currency;
-  const today = new Date().toISOString().slice(0, 10);
-
-  const [gift] = await db
-    .insert(giving)
-    .values({
-      churchId: p.churchId,
-      categoryId: row.categoryId ?? null,
-      memberId: p.memberId,
-      giverName: p.giverName || "Online giver",
-      amount: paidAmount,
-      method: "online",
-      date: today,
-      note: [row.linkTitle, p.note].filter(Boolean).join(" — ").slice(0, 500) || null,
-    })
-    .returning({ id: giving.id });
+  // The church's day, not the server's UTC one: a gift at 00:30 on 1 January
+  // in Lagos belongs to the new year's statement, not the old one's.
+  const today = churchToday(row.timezone);
 
   /*
-   * The latch. `givingId is null` in the WHERE is what makes a double settle
-   * impossible: the loser of the race updates no rows, sees it, and removes
-   * the duplicate gift it just wrote.
+   * Claim, then write, in one transaction — the payment row is the latch.
+   *
+   * The conditional UPDATE takes the row's lock. A second caller racing this
+   * one (webhook and redirect together) waits on it, re-reads the row once
+   * this commits, finds status 'success', updates nothing, and stops. It no
+   * longer writes a gift first and deletes it after losing, and a gift that
+   * was later deleted can never be claimed again: `status <> 'success'` is
+   * false for ever once this commits.
    */
-  const claimed = await db
-    .update(onlinePayment)
-    .set({
-      status: "success",
-      givingId: gift.id,
-      gatewayRef: verified.gatewayRef ?? p.gatewayRef,
-      amount: paidAmount,
-      currency: paidCurrency,
-      paidAt: new Date(),
-      failReason: null,
-    })
-    .where(and(eq(onlinePayment.id, p.id), sql`${onlinePayment.givingId} is null`))
-    .returning({ id: onlinePayment.id });
+  const gift = await db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(onlinePayment)
+      .set({
+        status: "success",
+        gatewayRef: verified.gatewayRef ?? p.gatewayRef,
+        amount: paidAmount,
+        currency: paidCurrency,
+        paidAt: new Date(),
+        failReason: null,
+      })
+      .where(
+        and(
+          eq(onlinePayment.id, p.id),
+          sql`${onlinePayment.status} <> 'success'`,
+          isNull(onlinePayment.givingId),
+        ),
+      )
+      .returning({ id: onlinePayment.id });
+    if (claimed.length === 0) return null;
 
-  if (claimed.length === 0) {
-    // Somebody else got there first. Undo our gift so the church does not see
-    // the same offering twice.
-    await db.delete(giving).where(eq(giving.id, gift.id));
+    const [written] = await tx
+      .insert(giving)
+      .values({
+        churchId: p.churchId,
+        categoryId: row.categoryId ?? null,
+        memberId: p.memberId,
+        giverName: p.giverName || "Online giver",
+        amount: paidAmount,
+        method: "online",
+        date: today,
+        note: [row.linkTitle, p.note].filter(Boolean).join(" — ").slice(0, 500) || null,
+      })
+      .returning({ id: giving.id });
+    await tx
+      .update(onlinePayment)
+      .set({ givingId: written.id })
+      .where(eq(onlinePayment.id, p.id));
+    return written;
+  });
+
+  if (!gift) {
+    // Somebody else settled it first; nothing was written here.
     return {
       ok: true,
       status: "success",

@@ -12,6 +12,23 @@
 :root {
   --radius: 0.85rem;
 
+  /*
+   * How far a phone's fixed bottom nav (components/app/mobile-nav.tsx) reaches
+   * up the screen, NOT counting the safe-area inset. The tallest thing in it
+   * is the round Record button: a size-16 (4rem) circle whose -mt-6 is taken
+   * out of its own bottom-aligned (items-end) wrapper, so its top stands
+   * exactly 4rem above the bar's bottom edge. The tabs beside it are ~61px
+   * (py-2 + a 24px icon + gap + an 11px label), so the circle decides. Plus
+   * 0.25rem so the bar's border does not sit on the circle's rim: 4.25rem.
+   * It was 5.5rem, on the belief the button stood 24px proud of a 60px bar;
+   * that left a 24px strip between nav and bar for the page to scroll through.
+   * An editor's sticky Save/Send bar sits this far up below lg, or the nav
+   * covers it and every tap on "Save" lands on the nav instead. Add
+   * env(safe-area-inset-bottom) where it is used, and if the nav changes
+   * height, change this with it.
+   */
+  --mobile-nav-clearance: 4.25rem;
+
   --background: oklch(0.99 0.002 264);
   --foreground: oklch(0.18 0.01 264);
 
@@ -174,10 +191,45 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+    /*
+     * A long email address or URL is one unbreakable "word": at 320px
+     * "pastor.emmanuel.okonkwo@stpaulscathedral.org" is wider than a card, and
+     * the whole page scrolled sideways. break-word only breaks a word that
+     * would otherwise overflow, and leaves min-content sizing alone, so no
+     * table column or flex row lays out differently. Where a flex item still
+     * holds an address, `wrap-anywhere` on that element finishes the job.
+     */
+    overflow-wrap: break-word;
   }
   /* Tabular figures for big numbers in stat cards */
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * No form control under 16px on a phone.
+ *
+ * iOS Safari zooms the page into any field whose text is smaller than 16px
+ * when it is focused (the viewport allows zoom, deliberately), and the person
+ * then has to pinch back out. ui/input and ui/textarea avoid it with
+ * `text-base md:text-sm`; hand-rolled native controls kept writing a bare
+ * `text-sm` — the Country select every new church taps on /signup, the More
+ * sheet's search, the follow-up log date, the QR and link selects, the
+ * public directory filters — and every new one would too.
+ *
+ * Unlayered on purpose: Tailwind's utilities live in a cascade layer, and an
+ * unlayered rule beats any layered one, so this wins over `text-sm`/`text-xs`
+ * below md without touching a single call site. It only matches the bare
+ * classes, so `md:text-sm` (already 16px below md) and deliberately large
+ * text such as the giving page's amount box are left alone.
+ */
+@media (width < 48rem) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea):is(
+      .text-sm,
+      .text-xs
+    ) {
+    font-size: 1rem;
   }
 }
 

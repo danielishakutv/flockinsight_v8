@@ -35,12 +35,18 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
         active ? "text-primary" : "text-muted-foreground",
       )}
     >
-      <item.icon className={cn("size-6", active && "fill-primary/10")} />
-      {t(item.labelKey)}
+      <item.icon className={cn("size-6 shrink-0", active && "fill-primary/10")} />
+      {/*
+        min-w-0 + truncate: a flex item will not shrink below its text, so on a
+        320px phone "Members" and "More" pushed the bar 42px past the screen
+        and every page scrolled sideways. A long translated label now clips
+        with an ellipsis instead.
+      */}
+      <span className="max-w-full truncate px-0.5">{t(item.labelKey)}</span>
     </Link>
   );
 }
@@ -264,7 +270,7 @@ export function MobileNav({
         className="bg-background/90 fixed inset-x-0 bottom-0 z-30 flex items-end border-t backdrop-blur lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="flex flex-1 items-stretch">
+        <div className="flex min-w-0 flex-1 items-stretch">
           {leftItems.map((item) => (
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
@@ -284,7 +290,7 @@ export function MobileNav({
           </div>
         )}
 
-        <div className="flex flex-1 items-stretch">
+        <div className="flex min-w-0 flex-1 items-stretch">
           {rightItems.map((item) => (
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
@@ -294,12 +300,12 @@ export function MobileNav({
             aria-label={t("nav.more")}
             aria-expanded={moreOpen}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
               moreActive ? "text-primary" : "text-muted-foreground",
             )}
           >
             <MoreGlyph active={moreActive} />
-            {t("nav.more")}
+            <span className="max-w-full truncate px-0.5">{t("nav.more")}</span>
           </button>
         </div>
       </nav>

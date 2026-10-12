@@ -33,9 +33,15 @@ type ImportResult = { imported: number; skipped: number; errors: string[] };
 export function GivingDataMenu({
   hasData = true,
   canManage = true,
+  exportQuery = "",
 }: {
   hasData?: boolean;
   canManage?: boolean;
+  /**
+   * The list's filters as a query string, so the statement and the CSV hold
+   * what is on screen. Without it both links printed all-time giving.
+   */
+  exportQuery?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -95,13 +101,13 @@ export function GivingDataMenu({
             <>
               <DropdownMenuItem asChild>
                 {/* The statement you print and hand over. */}
-                <a href="/giving/export/pdf" download>
+                <a href={`/giving/export/pdf${exportQuery ? `?${exportQuery}` : ""}`} download>
                   <FileText className="size-4" />
                   Giving statement (PDF)
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <a href="/giving/export" download>
+                <a href={`/giving/export${exportQuery ? `?${exportQuery}` : ""}`} download>
                   <FileSpreadsheet className="size-4" />
                   Export CSV
                 </a>

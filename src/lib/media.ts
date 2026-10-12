@@ -1,13 +1,19 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, lt, or, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { media, type Media } from "@/db/schema";
+import { media, mediaOrphan, type Media } from "@/db/schema";
 import {
   uploadToCloudinary,
   destroyFromCloudinary,
   isCloudinaryConfigured,
   type ResourceType,
 } from "@/lib/cloudinary";
+import { can } from "@/lib/permissions";
+import {
+  refuseWithoutFeature,
+  type FeatureRefusal,
+} from "@/lib/entitlements-server";
+import { sermonNeedsLibraryPlan } from "@/lib/media-upload-rules";
 
 export type MediaKind =
   | "logo"
@@ -91,6 +97,36 @@ export function permForKind(kind: MediaKind): string {
     default:
       return "media.manage"; // sermon, file
   }
+}
+
+/**
+ * May the signed-in person upload this kind of file?
+ *
+ * A photo is the one kind two different teams legitimately add: the media team
+ * adds it to the library, and whoever looks after the church's public page adds
+ * it to the gallery there. `permForKind` answers with ONE permission, which for
+ * photo was settings.manage — so a media-team role with "Media: Upload &
+ * delete" picked Photo in the library and was told "You can't upload this."
+ * Either permission is enough. Logos, covers and event images stay with
+ * settings.manage alone, because they change how the public page looks.
+ */
+export async function canUploadKind(kind: MediaKind): Promise<boolean> {
+  if (kind === "photo")
+    return (await can("media.manage")) || (await can("settings.manage"));
+  return can(permForKind(kind));
+}
+
+/**
+ * The plan's answer for this upload, in one place for every route that can
+ * create a file. See `sermonNeedsLibraryPlan` for why it is shared, and why a
+ * meeting recording is never refused here.
+ */
+export async function refuseUploadKind(
+  kind: MediaKind,
+  opts: { recordingId?: string | null } = {},
+): Promise<FeatureRefusal | null> {
+  if (!sermonNeedsLibraryPlan(kind, opts)) return null;
+  return refuseWithoutFeature("mediaLibrary");
 }
 
 /** Map a mime type to a Cloudinary resource type (audio rides on "video"). */
@@ -178,10 +214,18 @@ export async function storeMedia(opts: {
 /**
  * Delete a media row (and its Cloudinary asset, if any). Scoped to a church so
  * one tenant can't delete another's files. Returns false if not found.
+ *
+ * A contribution receipt is refused unless the caller says otherwise. The
+ * library hides receipts on purpose — a deleted proof leaves a disputed payment
+ * reading as though no receipt was ever attached, and nothing records that one
+ * existed — but the delete itself used to take any id, so anyone with media
+ * rights could post a receipt's id and erase it. Releasing a receipt belongs to
+ * the contribution it proves, where the release is recorded.
  */
 export async function deleteMedia(
   id: string,
   churchId: string,
+  opts: { allowReceipt?: boolean } = {},
 ): Promise<boolean> {
   const [row] = await db
     .select()
@@ -189,12 +233,21 @@ export async function deleteMedia(
     .where(eq(media.id, id))
     .limit(1);
   if (!row || row.churchId !== churchId) return false;
+  if (row.kind === "receipt" && !opts.allowReceipt) return false;
 
   if (row.provider === "cloudinary" && row.publicId) {
-    await destroyFromCloudinary(
-      row.publicId,
-      (row.resourceType as ResourceType) || "image",
-    );
+    const resourceType = (row.resourceType as ResourceType) || "image";
+    const gone = await destroyFromCloudinary(row.publicId, resourceType);
+    /*
+     * The row still goes. A church must be able to free its quota while
+     * Cloudinary is having a bad hour, and refusing the delete would leave it
+     * stuck behind a full-storage wall it cannot clear.
+     *
+     * But the asset is still there, billing the platform, and once the row is
+     * gone nothing else knows its public id. So it is written down where the
+     * storage cron will try again — never just dropped.
+     */
+    if (!gone) await rememberOrphan(churchId, row.publicId, resourceType, "destroy refused");
   }
 
   /*
@@ -210,4 +263,64 @@ export async function deleteMedia(
 
   await db.delete(media).where(eq(media.id, id));
   return true;
+}
+
+/** Note a Cloudinary asset that outlived its row, for the storage cron. */
+export async function rememberOrphan(
+  churchId: string | null,
+  publicId: string,
+  resourceType: ResourceType,
+  reason: string,
+): Promise<void> {
+  console.error("[media] Cloudinary would not delete an asset; orphan recorded", {
+    churchId,
+    publicId,
+    resourceType,
+    reason,
+  });
+  await db
+    .insert(mediaOrphan)
+    .values({ churchId, publicId, resourceType, lastError: reason.slice(0, 300) })
+    .onConflictDoNothing({ target: mediaOrphan.publicId });
+}
+
+/**
+ * Try again to delete assets Cloudinary refused earlier.
+ *
+ * For the storage cron. Each entry is removed only when Cloudinary confirms
+ * the asset is gone ("ok" or "not found"); a failure is counted and retried no
+ * more than hourly, so one stubborn asset cannot use up every run.
+ */
+export async function retryMediaOrphans(
+  limit = 50,
+  now: Date = new Date(),
+): Promise<{ tried: number; cleared: number }> {
+  const hourAgo = new Date(now.getTime() - 60 * 60_000);
+  const rows = await db
+    .select()
+    .from(mediaOrphan)
+    .where(or(isNull(mediaOrphan.lastTriedAt), lt(mediaOrphan.lastTriedAt, hourAgo)))
+    .orderBy(asc(mediaOrphan.createdAt))
+    .limit(limit);
+
+  let cleared = 0;
+  for (const r of rows) {
+    const gone = await destroyFromCloudinary(r.publicId, r.resourceType as ResourceType);
+    if (gone) {
+      await db.delete(mediaOrphan).where(eq(mediaOrphan.id, r.id));
+      cleared++;
+    } else {
+      await db
+        .update(mediaOrphan)
+        .set({
+          attempts: sql`${mediaOrphan.attempts} + 1`,
+          lastTriedAt: now,
+          lastError: "destroy refused on retry",
+        })
+        .where(and(eq(mediaOrphan.id, r.id)));
+    }
+  }
+  if (rows.length > 0)
+    console.log(`[media] orphan retry: ${cleared} of ${rows.length} Cloudinary asset(s) cleared`);
+  return { tried: rows.length, cleared };
 }

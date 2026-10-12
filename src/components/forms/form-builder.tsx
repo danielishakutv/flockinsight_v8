@@ -137,7 +137,7 @@ export function FormBuilder({
   }
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-40 lg:pb-24">
       <div className="flex items-center justify-between">
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link href="/forms">
@@ -323,8 +323,11 @@ export function FormBuilder({
         </CardContent>
       </Card>
 
-      {/* Sticky save bar */}
-      <div className="bg-background/80 fixed inset-x-0 bottom-0 z-10 border-t p-3 backdrop-blur lg:left-64">
+      {/* Sticky save bar. Below lg it stands above the phone's bottom nav
+        (--mobile-nav-clearance, globals.css): at bottom-0 it sat underneath
+        it, and a tap on the button landed on the nav, so nothing here could be
+        saved from a phone. */}
+      <div className="bg-background/80 fixed inset-x-0 bottom-[calc(var(--mobile-nav-clearance)+env(safe-area-inset-bottom))] z-20 border-t p-3 backdrop-blur lg:bottom-0 lg:left-64">
         <div className="mx-auto flex max-w-3xl items-center justify-end gap-3 px-1">
           <Button onClick={save} disabled={saving} size="lg">
             {saving && <Loader2 className="size-4 animate-spin" />}

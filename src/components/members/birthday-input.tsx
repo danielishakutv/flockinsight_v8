@@ -59,14 +59,16 @@ export function BirthdayInput({
 
   function update(next: Partial<typeof parts>) {
     const merged = { ...parts, ...next };
-    // Clamp the day if the new month is shorter (e.g. 31 → 30 Sep, 31 → 29 Feb).
-    const maxDay = daysInBirthMonth(merged.month);
+    // Clamp the day if the new month is shorter (e.g. 31 → 30 Sep, 31 → 29 Feb),
+    // and to what February had in the year typed (29 → 28 in 1990), so the
+    // picker never shows a day the stored date does not have.
+    const maxDay = daysInBirthMonth(merged.month, merged.year);
     if (Number(merged.day) > maxDay) merged.day = String(maxDay).padStart(2, "0");
     setParts(merged);
     onChange(buildBirthday(merged.month, merged.day, merged.year));
   }
 
-  const maxDay = daysInBirthMonth(parts.month);
+  const maxDay = daysInBirthMonth(parts.month, parts.year);
   const days = Array.from({ length: maxDay }, (_, i) =>
     String(i + 1).padStart(2, "0"),
   );

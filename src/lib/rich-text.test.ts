@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   richTextToEmailHtml,
   richTextToPlain,
@@ -302,5 +302,20 @@ describe("richTextToEmailHtml", () => {
   it("sanitises on the way out too, for rows written before the editor", () => {
     const out = richTextToEmailHtml('<p onclick="x()">Hi</p>');
     expect(out).not.toContain("onclick");
+  });
+});
+
+describe("the sanitiser stays quiet", () => {
+  it("does not print the per-call sanitize-html warning about <style>", () => {
+    // It printed a multi-line block on every call - two per recipient of a
+    // broadcast - which buried real errors in the production log.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      sanitizeRichText("<style>p{color:red}</style><p>x</p>");
+      richTextToPlain("<style>p{color:red}</style><p>x</p>");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

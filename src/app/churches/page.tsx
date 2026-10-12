@@ -145,7 +145,7 @@ export default async function ChurchDirectoryPage({
           {near ? " · nearest first" : ""}
         </p>
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {rows.map((c) => {
             const dist =
               near && c.lat != null && c.lng != null
@@ -156,7 +156,10 @@ export default async function ChurchDirectoryPage({
               <Link
                 key={c.handle}
                 href={`/c/${c.handle}`}
-                className="group flex gap-3 rounded-2xl border bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-slate-900"
+                // min-w-0: a grid item is as wide as its longest unbroken
+                // line by default, so one long church name made every card
+                // 400px and the directory scrolled sideways on a phone.
+                className="group flex min-w-0 gap-3 rounded-2xl border bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-slate-900"
               >
                 <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-violet-100 dark:bg-violet-500/15">
                   {c.logo ? (
@@ -169,8 +172,8 @@ export default async function ChurchDirectoryPage({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 truncate font-bold group-hover:text-violet-600">
-                    {c.name}
+                  <p className="flex min-w-0 items-center gap-1.5 font-bold group-hover:text-violet-600">
+                    <span className="truncate">{c.name}</span>
                     {isChurchVerified(c) && <VerifiedTick className="size-3.5" />}
                     {c.featured && (
                       <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />
@@ -187,9 +190,9 @@ export default async function ChurchDirectoryPage({
                     </p>
                   )}
                   {(place || dist != null) && (
-                    <p className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-                      <MapPin className="size-3" />
-                      {place || "—"}
+                    <p className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1 text-xs">
+                      <MapPin className="size-3 shrink-0" />
+                      <span className="truncate">{place || "—"}</span>
                       {dist != null && (
                         <span className="text-violet-600">
                           · {dist < 1 ? "<1" : Math.round(dist)} km

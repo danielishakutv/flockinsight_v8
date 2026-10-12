@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -8,17 +8,18 @@ import {
   user,
 } from "@/db/schema";
 import { recordRecipients, type RecipientOutcome } from "@/lib/comm-recipients";
-import { smsPages } from "@/lib/sms";
 import {
   SMS_WINDOW_LABEL,
   nextSmsWindowStart,
   smsWindowNotice,
   withinSmsWindow,
 } from "@/lib/sms-window";
+import { MAX_SMS_ATTEMPTS, RETRY_AFTER_MS, queueVerdict } from "@/lib/sms-queue-rules";
 
 /**
  * SMS that arrived outside the 8am–8pm delivery window, and the worker that
- * sends it when the window opens.
+ * sends it when the window opens. Also the way a composer send too big for one
+ * web request goes out: queued due now, and sent after the response.
  *
  * Two rules shape this file.
  *
@@ -34,12 +35,22 @@ import {
 
 export type QueuedResult = {
   ok: "queued";
+  /** The queue row, so a caller sending it now can hand it to the worker. */
+  id: string;
   sendAfter: Date;
   count: number;
   notice: string;
+  /** True when it is going out now in the background, not waiting for 8am. */
+  sendingNow: boolean;
 };
 
-/** Park a send until the window opens. Returns what the caller tells the user. */
+/**
+ * Park a send - until the window opens, or (`sendNow`) due immediately for a
+ * worker to pick up after the response. Returns what the caller tells the user.
+ *
+ * `requestId` is one press of Send. The column is unique, so a second row for
+ * the same press is refused here and the congregation is not texted twice.
+ */
 export async function queueChurchSms(opts: {
   churchId: string;
   timezone: string;
@@ -54,8 +65,11 @@ export async function queueChurchSms(opts: {
   origin?: string;
   reason?: string | null;
   userId?: string | null;
-}): Promise<QueuedResult> {
-  const sendAfter = nextSmsWindowStart(new Date(), opts.timezone);
+  requestId?: string | null;
+  sendNow?: boolean;
+}): Promise<QueuedResult | { ok: false; error: string; duplicate?: boolean }> {
+  const now = new Date();
+  const sendAfter = opts.sendNow ? now : nextSmsWindowStart(now, opts.timezone);
 
   const [row] = await db
     .insert(scheduledSms)
@@ -72,19 +86,37 @@ export async function queueChurchSms(opts: {
       origin: opts.origin ?? "communication",
       reason: opts.reason ?? null,
       sendAfter,
+      requestId: opts.requestId ?? null,
       createdBy: opts.userId ?? null,
     })
+    .onConflictDoNothing({ target: scheduledSms.requestId })
     .returning({ id: scheduledSms.id });
 
+  if (!row) {
+    return {
+      ok: false,
+      // Marked, so the composer keeps the same request id for the next press
+      // and that one is refused too, rather than going out as a fresh copy.
+      duplicate: true,
+      error:
+        "This message is already being sent. Check the queue and History before sending it again.",
+    };
+  }
+
   console.log(
-    `[sms-queue] held ${opts.recipients.length} message(s) for church ${opts.churchId} until ${sendAfter.toISOString()} (${row?.id})`,
+    `[sms-queue] ${opts.sendNow ? "sending" : "held"} ${opts.recipients.length} message(s) for church ${opts.churchId}${opts.sendNow ? " now" : ` until ${sendAfter.toISOString()}`} (${row.id})`,
   );
 
+  const n = opts.recipients.length;
   return {
     ok: "queued",
+    id: row.id,
     sendAfter,
-    count: opts.recipients.length,
-    notice: smsWindowNotice(sendAfter, opts.timezone),
+    count: n,
+    sendingNow: !!opts.sendNow,
+    notice: opts.sendNow
+      ? `Sending to ${n} ${n === 1 ? "person" : "people"} now. A large send takes a few minutes; it appears in History when it is done, and your wallet is charged only for the messages that go.`
+      : smsWindowNotice(sendAfter, opts.timezone),
   };
 }
 
@@ -110,7 +142,15 @@ export type QueuedSms = {
   createdAt: string;
 };
 
-/** What this church has waiting (and what recently failed), newest first. */
+/**
+ * What this church has waiting, what is going out right now, and what went
+ * wrong.
+ *
+ * What can still be acted on comes first - going out now, then waiting, the
+ * soonest first - and only then the fortnight of problems, newest first. In
+ * plain time order a church with twenty old failures could not see, or
+ * cancel, the message actually waiting for 8am: the limit cut it off.
+ */
 export async function listQueuedSms(
   churchId: string,
   limit = 20,
@@ -133,12 +173,35 @@ export async function listQueuedSms(
     .where(
       and(
         eq(scheduledSms.churchId, churchId),
-        // Sent ones are in the communication history, where they belong. This
-        // list is only what has not happened yet, plus what went wrong.
-        inArray(scheduledSms.status, ["queued", "failed"]),
+        /*
+         * Clean sends are in the communication history, where they belong.
+         * This list is what has not happened yet, what is happening now
+         * ("sending" - including one a restart interrupted, which the worker
+         * turns into a failure with a reason), and what went wrong: a failure,
+         * or a send that went to only some of its list. An automatic send
+         * writes no history row, so for those this is the only place a
+         * shortfall can be seen at all.
+         */
+        or(
+          inArray(scheduledSms.status, ["queued", "sending"]),
+          // What went wrong stays for a fortnight - long enough to be seen and
+          // acted on, not so long that old news crowds out what is waiting.
+          and(
+            gte(scheduledSms.createdAt, new Date(Date.now() - 14 * 86_400_000)),
+            or(
+              eq(scheduledSms.status, "failed"),
+              and(eq(scheduledSms.status, "sent"), isNotNull(scheduledSms.error)),
+            ),
+          ),
+        ),
       ),
     )
-    .orderBy(asc(scheduledSms.sendAfter), desc(scheduledSms.createdAt))
+    .orderBy(
+      sql`case ${scheduledSms.status} when 'sending' then 0 when 'queued' then 1 else 2 end`,
+      // Waiting rows soonest first; the rest are ordered by createdAt below.
+      sql`case when ${scheduledSms.status} in ('sending', 'queued') then ${scheduledSms.sendAfter} end asc`,
+      desc(scheduledSms.createdAt),
+    )
     .limit(limit);
 
   return rows.map((r) => ({
@@ -182,9 +245,6 @@ export async function cancelQueuedSms(
   return done.length > 0;
 }
 
-/** How many attempts a row gets before it stops being retried. */
-const MAX_ATTEMPTS = 3;
-
 /**
  * How long past its moment a queued message may still be sent.
  *
@@ -206,6 +266,16 @@ const MAX_ATTEMPTS = 3;
  */
 const STALE_AFTER_HOURS = 24;
 
+/**
+ * How long a row may sit in "sending" before it is presumed abandoned.
+ *
+ * The claim sets `sendAfter` to the moment it was claimed, so this measures
+ * from then. A batch with its gateway calls running five at a time finishes in
+ * minutes even for a large congregation; an hour is far past any real send
+ * and still the same morning for the church.
+ */
+const STUCK_AFTER_MINUTES = 60;
+
 export type FlushReport = {
   considered: number;
   sent: number;
@@ -213,6 +283,34 @@ export type FlushReport = {
   failed: number;
   /** Too old to be worth delivering. See STALE_AFTER_HOURS. */
   expired: number;
+  /** Left in "sending" by a restart or a crash. See STUCK_AFTER_MINUTES. */
+  stuck: number;
+};
+
+type DueRow = {
+  id: string;
+  churchId: string;
+  audience: string;
+  body: string;
+  recipients: { phone: string; message: string; memberId?: string | null; name?: string | null }[];
+  origin: string;
+  reason: string | null;
+  createdBy: string | null;
+  attempts: number;
+  timezone: string;
+};
+
+const dueColumns = {
+  id: scheduledSms.id,
+  churchId: scheduledSms.churchId,
+  audience: scheduledSms.audience,
+  body: scheduledSms.body,
+  recipients: scheduledSms.recipients,
+  origin: scheduledSms.origin,
+  reason: scheduledSms.reason,
+  createdBy: scheduledSms.createdBy,
+  attempts: scheduledSms.attempts,
+  timezone: church.timezone,
 };
 
 /**
@@ -243,19 +341,31 @@ export async function flushSmsQueue(now: Date = new Date()): Promise<FlushReport
     )
     .returning({ id: scheduledSms.id });
 
-  const due = await db
-    .select({
-      id: scheduledSms.id,
-      churchId: scheduledSms.churchId,
-      audience: scheduledSms.audience,
-      body: scheduledSms.body,
-      recipients: scheduledSms.recipients,
-      origin: scheduledSms.origin,
-      reason: scheduledSms.reason,
-      createdBy: scheduledSms.createdBy,
-      attempts: scheduledSms.attempts,
-      timezone: church.timezone,
+  /*
+   * Recover rows a restart left behind.
+   *
+   * A deploy, a memory restart or a crash between the claim and the last
+   * update left a row in "sending" for ever: nothing read that status, so the
+   * message was neither sent nor reported, and the church could neither see
+   * nor cancel it. It is marked failed - NOT requeued, because the gateway may
+   * already have delivered some of it, and sending it again would text those
+   * people twice.
+   */
+  const stuckBefore = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
+  const stuck = await db
+    .update(scheduledSms)
+    .set({
+      status: "failed",
+      error:
+        "Interrupted while sending: some or all of these may have gone out. Check the SMS history and the wallet before sending it again.",
     })
+    .where(
+      and(eq(scheduledSms.status, "sending"), lte(scheduledSms.sendAfter, stuckBefore)),
+    )
+    .returning({ id: scheduledSms.id });
+
+  const due: DueRow[] = await db
+    .select(dueColumns)
     .from(scheduledSms)
     .innerJoin(church, eq(church.id, scheduledSms.churchId))
     .where(and(eq(scheduledSms.status, "queued"), lte(scheduledSms.sendAfter, now)))
@@ -268,129 +378,222 @@ export async function flushSmsQueue(now: Date = new Date()): Promise<FlushReport
     held: 0,
     failed: 0,
     expired: expired.length,
+    stuck: stuck.length,
   };
 
   for (const row of due) {
-    /*
-     * Due, but is it allowed yet?
-     *
-     * `sendAfter` is when the window opened; this asks whether it is still
-     * open. A row whose send failed all evening, or one written before a church
-     * changed its timezone, must not be pushed out at 9pm just because its
-     * timestamp has passed. It is moved to the next morning instead.
-     */
-    if (!withinSmsWindow(now, row.timezone)) {
-      const next = nextSmsWindowStart(now, row.timezone);
-      await db
-        .update(scheduledSms)
-        .set({ sendAfter: next })
-        .where(eq(scheduledSms.id, row.id));
-      report.held++;
-      continue;
-    }
-
-    // Claim it. The status condition is what makes this safe to run twice.
-    const claimed = await db
-      .update(scheduledSms)
-      .set({ status: "sending", attempts: row.attempts + 1 })
-      .where(and(eq(scheduledSms.id, row.id), eq(scheduledSms.status, "queued")))
-      .returning({ id: scheduledSms.id });
-    if (claimed.length === 0) continue;
-
-    const recipients = row.recipients ?? [];
-    if (recipients.length === 0) {
-      await db
-        .update(scheduledSms)
-        .set({ status: "failed", error: "Nobody left to send to." })
-        .where(eq(scheduledSms.id, row.id));
-      report.failed++;
-      continue;
-    }
-
-    const { sendChurchSmsBatch } = await import("@/lib/church-sms");
-    const res = await sendChurchSmsBatch({
-      churchId: row.churchId,
-      recipients: recipients.map((r) => ({ phone: r.phone, message: r.message })),
-      userId: row.createdBy ?? undefined,
-      label: row.reason ?? row.audience,
-      // Already checked above, and checking again here would be the one way
-      // this worker could queue the thing it is trying to send.
-      timing: "now",
-    });
-
-    if (res.ok !== true) {
-      const error =
-        res.ok === "queued"
-          ? "The window closed while this was sending."
-          : res.error;
-      const attempts = row.attempts + 1;
-      /*
-       * A failure is usually "not enough balance" or "sender ID not approved",
-       * and both are things a church fixes and then wants the message to go.
-       * So it goes back in the queue until the attempts run out, and only then
-       * is it marked failed — with the reason, where somebody can read it.
-       */
-      await db
-        .update(scheduledSms)
-        .set(
-          attempts >= MAX_ATTEMPTS
-            ? { status: "failed", error }
-            : {
-                status: "queued",
-                error,
-                sendAfter: new Date(now.getTime() + 30 * 60_000),
-              },
-        )
-        .where(eq(scheduledSms.id, row.id));
-      report.failed++;
-      continue;
-    }
-
-    /*
-     * It went. A send made from the composer gets its communication_log row
-     * now rather than when it was queued, so the history records what actually
-     * happened — the real counts, the real cost, at the real time.
-     */
-    let logId: string | null = null;
-    if (row.origin === "communication") {
-      const byPhone = new Map(recipients.map((r) => [r.phone, r]));
-      const outcomes: RecipientOutcome[] = res.outcomes.map((o) => {
-        const person = byPhone.get(o.phone);
-        return {
-          memberId: person?.memberId ?? null,
-          name: person?.name ?? null,
-          destination: o.phone,
-          status: o.status,
-          error: o.error ?? null,
-          providerMessageId: o.providerMessageId ?? null,
-        };
-      });
-      const [log] = await db
-        .insert(communicationLog)
-        .values({
-          churchId: row.churchId,
-          channel: "sms",
-          audience: row.audience,
-          body: row.body,
-          recipients: recipients.length,
-          sent: res.sent,
-          failed: res.failed,
-          skipped: res.skipped,
-          units: smsPages(row.body) * res.sent,
-          cost: res.cost,
-          createdBy: row.createdBy ?? undefined,
-        })
-        .returning({ id: communicationLog.id });
-      logId = log?.id ?? null;
-      if (log) await recordRecipients(log.id, row.churchId, outcomes);
-    }
-
-    await db
-      .update(scheduledSms)
-      .set({ status: "sent", sentAt: new Date(), error: null, logId })
-      .where(eq(scheduledSms.id, row.id));
-    report.sent++;
+    const outcome = await processRow(row, now);
+    if (outcome === "sent") report.sent++;
+    else if (outcome === "held") report.held++;
+    else if (outcome === "failed") report.failed++;
   }
 
   return report;
+}
+
+/**
+ * Send one queued row now - the composer's background send, started from
+ * `after()` once the person has been told it is going.
+ *
+ * Goes through the same claim as the cron, so if the cron reaches the row
+ * first this does nothing, and the other way round. If the process dies before
+ * this runs, the row is still "queued" and due, and the next cron pass sends it.
+ */
+export async function sendQueuedSmsNow(
+  id: string,
+): Promise<"sent" | "held" | "failed" | "claimed-elsewhere"> {
+  const [row] = await db
+    .select(dueColumns)
+    .from(scheduledSms)
+    .innerJoin(church, eq(church.id, scheduledSms.churchId))
+    .where(and(eq(scheduledSms.id, id), eq(scheduledSms.status, "queued")))
+    .limit(1);
+  if (!row) return "claimed-elsewhere";
+  return processRow(row, new Date());
+}
+
+async function processRow(
+  row: DueRow,
+  now: Date,
+): Promise<"sent" | "held" | "failed" | "claimed-elsewhere"> {
+  /*
+   * Due, but is it allowed yet?
+   *
+   * `sendAfter` is when the window opened; this asks whether it is still
+   * open. A row whose send failed all evening, or one written before a church
+   * changed its timezone, must not be pushed out at 9pm just because its
+   * timestamp has passed. It is moved to the next morning instead.
+   */
+  if (!withinSmsWindow(now, row.timezone)) {
+    const next = nextSmsWindowStart(now, row.timezone);
+    await db
+      .update(scheduledSms)
+      .set({ sendAfter: next })
+      .where(and(eq(scheduledSms.id, row.id), eq(scheduledSms.status, "queued")));
+    return "held";
+  }
+
+  // Claim it. The status condition is what makes this safe to run twice.
+  // `sendAfter` becomes the claim time, which is what the stuck-row recovery
+  // above measures from - no extra column needed.
+  const claimed = await db
+    .update(scheduledSms)
+    .set({ status: "sending", attempts: row.attempts + 1, sendAfter: now })
+    .where(and(eq(scheduledSms.id, row.id), eq(scheduledSms.status, "queued")))
+    .returning({ id: scheduledSms.id });
+  if (claimed.length === 0) return "claimed-elsewhere";
+
+  try {
+    return await sendClaimedRow(row, now);
+  } catch (e) {
+    /*
+     * Anything that throws after the claim - the wallet, the usage meter, the
+     * history insert - used to abort the whole pass and strand this row in
+     * "sending". Now it fails this row with a reason and the pass carries on.
+     * Not requeued: the gateway may already have taken some of it.
+     */
+    console.error(`[sms-queue] row ${row.id} (church ${row.churchId}) threw while sending:`, e);
+    await db
+      .update(scheduledSms)
+      .set({
+        status: "failed",
+        error:
+          "Sending stopped on an internal error: some messages may have gone out. Check the SMS history and the wallet before sending it again.",
+      })
+      .where(and(eq(scheduledSms.id, row.id), eq(scheduledSms.status, "sending")));
+    return "failed";
+  }
+}
+
+async function sendClaimedRow(
+  row: DueRow,
+  now: Date,
+): Promise<"sent" | "failed"> {
+  const attempts = row.attempts + 1;
+  const recipients = row.recipients ?? [];
+  if (recipients.length === 0) {
+    await db
+      .update(scheduledSms)
+      .set({ status: "failed", error: "Nobody left to send to." })
+      .where(eq(scheduledSms.id, row.id));
+    return "failed";
+  }
+
+  const { sendChurchSmsBatch } = await import("@/lib/church-sms");
+  const res = await sendChurchSmsBatch({
+    churchId: row.churchId,
+    recipients: recipients.map((r) => ({ phone: r.phone, message: r.message })),
+    userId: row.createdBy ?? undefined,
+    label: row.reason ?? row.audience,
+    // Already checked above, and checking again here would be the one way
+    // this worker could queue the thing it is trying to send.
+    timing: "now",
+  });
+
+  if (res.ok !== true) {
+    const error =
+      res.ok === "queued"
+        ? "The window closed while this was sending."
+        : res.error;
+    /*
+     * A failure is usually "not enough balance" or "sender ID not approved",
+     * and both are things a church fixes and then wants the message to go.
+     * So it goes back in the queue until the attempts run out, and only then
+     * is it marked failed — with the reason, where somebody can read it.
+     */
+    await db
+      .update(scheduledSms)
+      .set(
+        attempts >= MAX_SMS_ATTEMPTS
+          ? { status: "failed", error }
+          : {
+              status: "queued",
+              error,
+              sendAfter: new Date(now.getTime() + RETRY_AFTER_MS),
+            },
+      )
+      .where(eq(scheduledSms.id, row.id));
+    return "failed";
+  }
+
+  const verdict = queueVerdict({
+    sent: res.sent,
+    failed: res.failed,
+    unconfirmed: res.unconfirmed,
+    recipients: recipients.length,
+    attempts,
+    firstError: res.outcomes.find((o) => o.status === "failed")?.error ?? null,
+  });
+
+  /*
+   * The composer's send gets its communication_log row when the attempt is
+   * final - it went, in full or in part, or it is out of retries - so the
+   * history records what actually happened: the real counts, the real cost,
+   * at the real time. A row going back for another try writes nothing yet.
+   */
+  let logId: string | null = null;
+  if (row.origin === "communication" && !verdict.retry) {
+    const byPhone = new Map(recipients.map((r) => [r.phone, r]));
+    const outcomes: RecipientOutcome[] = res.outcomes.map((o) => {
+      const person = byPhone.get(o.phone);
+      return {
+        memberId: person?.memberId ?? null,
+        name: person?.name ?? null,
+        destination: o.phone,
+        status: o.status,
+        error: o.error ?? null,
+        providerMessageId: o.providerMessageId ?? null,
+      };
+    });
+    const [log] = await db
+      .insert(communicationLog)
+      .values({
+        churchId: row.churchId,
+        channel: "sms",
+        audience: row.audience,
+        body: row.body,
+        recipients: recipients.length,
+        sent: res.sent,
+        failed: res.failed,
+        skipped: res.skipped,
+        units: res.pages,
+        cost: res.cost,
+        createdBy: row.createdBy ?? undefined,
+      })
+      .returning({ id: communicationLog.id });
+    logId = log?.id ?? null;
+    if (log) await recordRecipients(log.id, row.churchId, outcomes);
+  }
+
+  if (verdict.status === "queued") {
+    await db
+      .update(scheduledSms)
+      .set({
+        status: "queued",
+        error: verdict.error,
+        sendAfter: new Date(now.getTime() + RETRY_AFTER_MS),
+      })
+      .where(eq(scheduledSms.id, row.id));
+    console.warn(
+      `[sms-queue] row ${row.id} (church ${row.churchId}): the gateway refused all ${res.failed}; retrying in 30 minutes (attempt ${attempts} of ${MAX_SMS_ATTEMPTS})`,
+    );
+    return "failed";
+  }
+
+  if (verdict.status === "failed") {
+    await db
+      .update(scheduledSms)
+      .set({ status: "failed", error: verdict.error, logId })
+      .where(eq(scheduledSms.id, row.id));
+    console.error(
+      `[sms-queue] row ${row.id} (church ${row.churchId}) failed for good: ${verdict.error}`,
+    );
+    return "failed";
+  }
+
+  await db
+    .update(scheduledSms)
+    .set({ status: "sent", sentAt: new Date(), error: verdict.error, logId })
+    .where(eq(scheduledSms.id, row.id));
+  return "sent";
 }

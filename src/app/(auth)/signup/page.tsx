@@ -412,7 +412,7 @@ function SignupForm() {
                 name="country"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                className="border-input bg-background focus-visible:ring-ring/50 h-11 w-full rounded-lg border px-3 text-sm focus-visible:ring-[3px] focus-visible:outline-none sm:h-10"
+                className="border-input bg-background focus-visible:ring-ring/50 h-11 w-full rounded-lg border px-3 text-base focus-visible:ring-[3px] focus-visible:outline-none sm:h-10 md:text-sm"
               >
                 {COUNTRIES.map((c) => (
                   <option key={c} value={c}>
@@ -619,6 +619,19 @@ function SignupForm() {
             Log in
           </Link>
         </p>
+        {/* This form makes a CHURCH. Somebody who only wants to bring
+            churches must not have to invent one to get an account. */}
+        {!inviteMode && (
+          <p className="text-muted-foreground mt-2 text-center text-xs">
+            {t("auth.notAChurch")}{" "}
+            <Link
+              href="/partner/join"
+              className="text-primary font-semibold hover:underline"
+            >
+              {t("auth.becomeAPartner")}
+            </Link>
+          </p>
+        )}
       </CardContent>
     </Card>
   );

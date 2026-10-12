@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { startGift } from "@/app/give/[slug]/actions";
 import type { PublicLink } from "@/lib/online-giving";
 import { formatMoney } from "@/lib/money";
+import { amountLocaleForCurrency, formatAmountInLocale, readAmount } from "@/lib/amount-parse";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +43,17 @@ export function GivePage({ link }: { link: PublicLink }) {
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
 
-  const value = Number((amount || "").replace(/[^\d.]/g, ""));
+  /*
+   * Read in the church's own convention, not English punctuation for
+   * everybody: "5.000" from a Maputo giver is five thousand meticais, and the
+   * old `replace(/[^\d.]/g, "")` gave the church five. When the reading had to
+   * lean on that convention it is shown back under the box, so the giver sees
+   * the figure before the gateway does — drawn in that same convention, or
+   * "= MT 5,000.00" would be as doubtful to a Maputo giver as what they typed.
+   */
+  const amountLocale = amountLocaleForCurrency(link.currency);
+  const read = readAmount(amount, amountLocale);
+  const value = read.value ?? 0;
   const belowMin = !!link.minAmount && value > 0 && value < link.minAmount;
   const canSubmit =
     !pending && !belowMin && (link.amountMode === "fixed" || value > 0) && !!email.trim();
@@ -203,6 +214,14 @@ export function GivePage({ link }: { link: PublicLink }) {
                       className="h-14 text-center text-2xl font-bold"
                       required
                     />
+                    {read.ambiguous && value > 0 && (
+                      <p
+                        className="text-muted-foreground text-center text-sm font-semibold"
+                        aria-live="polite"
+                      >
+                        = {formatAmountInLocale(value, link.currency, amountLocale)}
+                      </p>
+                    )}
                     {belowMin && link.minAmount && (
                       <p className="text-destructive text-xs">
                         {t("give.smallestGift", {

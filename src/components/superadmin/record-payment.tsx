@@ -44,6 +44,7 @@ export function RecordPayment({
   const [amount, setAmount] = useState("");
   const [plan, setPlan] = useState("growth");
   const [months, setMonths] = useState("1");
+  const [extendPlan, setExtendPlan] = useState(true);
   const [gateway, setGateway] = useState("transfer");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
@@ -56,19 +57,28 @@ export function RecordPayment({
     setAmount("");
     setPlan("growth");
     setMonths("1");
+    setExtendPlan(true);
     setGateway("transfer");
     setReference("");
     setNote("");
     setPaidOn(new Date().toISOString().slice(0, 10));
   }
 
+  const monthsN = Math.round(Number(months));
+  const monthsOk = Number.isFinite(monthsN) && monthsN >= 1 && monthsN <= 36;
+
   function submit() {
+    if (!monthsOk) {
+      toast.error("Enter the months this payment covers (1 to 36).");
+      return;
+    }
     start(async () => {
       const res = await recordOfflinePayment({
         churchId,
         amount: Number(amount),
         plan: plan as "growth",
-        months: Number(months) || 0,
+        months: monthsN,
+        extendPlan,
         gateway: gateway as "transfer",
         reference,
         note,
@@ -166,7 +176,7 @@ export function RecordPayment({
               <Input
                 id="rp-months"
                 type="number"
-                min={0}
+                min={1}
                 max={36}
                 value={months}
                 onChange={(e) => setMonths(e.target.value)}
@@ -200,6 +210,16 @@ export function RecordPayment({
               />
             </div>
 
+            <label className="flex items-start gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4"
+                checked={extendPlan}
+                onChange={(e) => setExtendPlan(e.target.checked)}
+              />
+              <span>Also extend their plan by these months</span>
+            </label>
+
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="rp-note">Note (optional)</Label>
               <Input
@@ -212,9 +232,11 @@ export function RecordPayment({
           </div>
 
           <p className="text-muted-foreground text-xs">
-            Months covered extends their plan from today, or from their current
-            renewal date if it is still ahead. Set it to 0 to log the money
-            without touching the plan.
+            Months covered is how much subscription this money pays for — it is
+            what the Partner&apos;s commission is priced across, so a year paid at
+            once is 12, never 1. With &ldquo;extend&rdquo; ticked the plan is
+            extended from their current renewal date, or today if that has
+            passed. Untick it if the plan was already set by hand.
           </p>
 
           <DialogFooter>
@@ -223,7 +245,7 @@ export function RecordPayment({
             </Button>
             <Button
               onClick={submit}
-              disabled={pending || !churchId || !(Number(amount) > 0)}
+              disabled={pending || !churchId || !(Number(amount) > 0) || !monthsOk}
             >
               {pending && <Loader2 className="size-4 animate-spin" />}
               Record payment

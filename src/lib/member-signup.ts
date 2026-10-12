@@ -8,10 +8,13 @@ import {
   groupMembership,
   member,
   memberSignup,
+  otpCode,
   type MemberSignup,
 } from "@/db/schema";
 import { normalizePhone, smsPages } from "@/lib/sms";
-import { normalizeBirthday } from "@/lib/birthday";
+import { isStorableDate, normalizeBirthday } from "@/lib/birthday";
+import { e164Phone, nationalNumber } from "@/lib/phone-intl";
+import { countryProfile } from "@/lib/country-profile";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { siteUrl } from "@/lib/site";
 import { notifyChurchManagers } from "@/lib/notifications";
@@ -106,7 +109,14 @@ export async function regenerateSignupSlug(
 
 export type PublicSignupData = {
   signup: MemberSignup;
-  church: { id: string; name: string; logo: string | null; theme: string };
+  church: {
+    id: string;
+    name: string;
+    logo: string | null;
+    theme: string;
+    /** Decides the dial code a local phone number is read with. */
+    country: string;
+  };
   groups: { id: string; name: string; type: string }[];
 };
 
@@ -127,6 +137,7 @@ export async function getSignupBySlug(
       name: church.name,
       logo: church.logo,
       theme: church.theme,
+      country: church.country,
     })
     .from(church)
     .where(eq(church.id, s.churchId))
@@ -191,13 +202,41 @@ export type CleanSignup = {
   children: CleanChild[];
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Validate + normalise submitted values. Returns errors or a clean payload. */
+/**
+ * The dial code a church's members write their numbers in.
+ *
+ * Read from the church row rather than assumed: every phone path here used to
+ * run through `normalizePhone`, which only knows Nigerian numbers, so a member
+ * in Maputo typing "84 123 4567" — nine digits, the way everybody there writes
+ * it — was told their own number was invalid, and a Kenyan's "0712 345 678"
+ * the same. Only typing +258 or +254 got through, and nothing said to.
+ */
+export async function churchDial(churchId: string): Promise<string> {
+  const [c] = await db
+    .select({ country: church.country })
+    .from(church)
+    .where(eq(church.id, churchId))
+    .limit(1);
+  return countryProfile(c?.country).dial;
+}
+
+/**
+ * Validate + normalise submitted values. Returns errors or a clean payload.
+ *
+ * `dial` is the church's dial code (see {@link churchDial}), and it is
+ * required. It used to be optional, and without it a phone was only checked
+ * for having seven digits: a Nigerian number one digit short — which the old
+ * Nigeria-only check had always refused — was accepted on /join, /m/<token>
+ * and stored as somebody no confirmation or birthday text could ever reach.
+ * There is no honest answer to "is this a valid phone number?" without
+ * knowing which country's numbers it is, so the caller has to say.
+ */
 export function cleanSignupValues(
   raw: SignupValues,
   signup: MemberSignup,
+  dial: string,
 ): { ok: true; value: CleanSignup } | { ok: false; error: string } {
   const firstName = (raw.firstName || "").trim();
   if (!firstName) return { ok: false, error: "Please enter your first name." };
@@ -206,9 +245,14 @@ export function cleanSignupValues(
   if (email && !EMAIL_RE.test(email))
     return { ok: false, error: "Please enter a valid email address." };
   const phone = (raw.phone || "").trim();
-  const phoneNorm = phone ? normalizePhone(phone) : null;
+  // E.164 against the church's own country, held to that country's length.
+  const phoneNorm = phone ? e164Phone(phone, dial) : null;
   if (phone && !phoneNorm)
-    return { ok: false, error: "Please enter a valid phone number." };
+    return {
+      ok: false,
+      error:
+        "Please enter a valid phone number (include your country code if it is from another country).",
+    };
 
   if (!email && !phoneNorm)
     return {
@@ -223,7 +267,10 @@ export function cleanSignupValues(
   if (dobRaw && !dob)
     return { ok: false, error: "Please enter a valid date of birth." };
   const wedding = (raw.weddingDate || "").trim();
-  if (wedding && !DATE_RE.test(wedding))
+  // A real calendar date, not just the right shape: "1990-02-30" passes a
+  // regex and then aborts the insert at Postgres, which on this public form
+  // surfaced as a bare server error.
+  if (wedding && !isStorableDate(wedding))
     return { ok: false, error: "Please enter a valid wedding date." };
 
   const gender =
@@ -278,14 +325,27 @@ export function cleanSignupValues(
   };
 }
 
-/** Existing member in this church matching the given email/phone, if any. */
+/**
+ * Existing member in this church matching the given email/phone, if any.
+ *
+ * `phone` may be in any shape — as typed, E.164, or digits — because it is
+ * reduced here to its national number with the church's own dial code and
+ * compared on THAT number's length. This used to be "the last ten digits",
+ * which is a Nigerian number's length and nobody else's: a nine-digit
+ * Mozambican or Kenyan national number never matched itself stored another
+ * way, and every returning visitor became a second person. `dial` is looked
+ * up from the church when the caller does not already have it.
+ */
 export async function findExistingMember(
   churchId: string,
   emailNorm: string | null,
-  phoneNorm: string | null,
+  phone: string | null,
+  dial?: string,
 ): Promise<{ id: string; email: string | null; phone: string | null; status: MemberStatus } | null> {
-  if (!emailNorm && !phoneNorm) return null;
-  const last = phoneNorm ? phoneNorm.slice(-10) : null;
+  if (!emailNorm && !phone) return null;
+  const national = phone
+    ? nationalNumber(phone, dial ?? (await churchDial(churchId)))
+    : null;
   const [found] = await db
     .select({
       id: member.id,
@@ -299,10 +359,12 @@ export async function findExistingMember(
         eq(member.churchId, churchId),
         or(
           emailNorm ? sql`lower(${member.email}) = ${emailNorm}` : sql`false`,
-          last
+          national
             ? and(
                 isNotNull(member.phone),
-                sql`right(regexp_replace(${member.phone}, '\\D', '', 'g'), 10) = ${last}`,
+                // The length is a number this function computed, never input,
+                // so it is inlined rather than bound.
+                sql`right(regexp_replace(${member.phone}, '\\D', '', 'g'), ${sql.raw(String(national.length))}) = ${national}`,
               )
             : sql`false`,
         ),
@@ -340,16 +402,21 @@ async function setGroupMemberships(
  * Register the children a parent added, as members under them (isMinor, linked
  * by guardianId, inheriting the parent's surname). Skips any child whose first
  * name already exists under this guardian, so a re-submit can't duplicate them.
- * Returns how many were created. Never throws — a child failure must not fail
- * the parent's registration.
+ *
+ * Returns how many were created and how many could NOT be — a child already
+ * on file is neither. Never throws, because a child failure must not fail the
+ * parent's registration; but `failed` is what lets the parent and the
+ * managers be told, rather than the screen saying "done" with children
+ * missing.
  */
 export async function createChildrenForGuardian(
   churchId: string,
   guardianId: string,
   parentLastName: string | null,
   children: CleanChild[],
-): Promise<number> {
-  if (!children.length) return 0;
+): Promise<{ created: number; failed: number }> {
+  if (!children.length) return { created: 0, failed: 0 };
+  let attempted = 0;
   try {
     const existing = await db
       .select({ firstName: member.firstName })
@@ -361,7 +428,8 @@ export async function createChildrenForGuardian(
     const toCreate = children.filter(
       (c) => !have.has(c.firstName.trim().toLowerCase()),
     );
-    if (!toCreate.length) return 0;
+    if (!toCreate.length) return { created: 0, failed: 0 };
+    attempted = toCreate.length;
     await db.insert(member).values(
       toCreate.map((c) => ({
         churchId,
@@ -376,26 +444,86 @@ export async function createChildrenForGuardian(
         joinedAt: sql`current_date`,
       })),
     );
-    return toCreate.length;
-  } catch {
-    return 0;
+    return { created: toCreate.length, failed: 0 };
+  } catch (e) {
+    /*
+     * Still never fails the parent's registration — but no longer silently.
+     * This used to be an empty catch, so a child whose details Postgres
+     * refused simply was not registered and the parent was told it worked.
+     */
+    console.error("[member-signup] createChildrenForGuardian failed", {
+      churchId,
+      guardianId,
+      e,
+    });
+    // One insert: nothing went in. Before the lookup, assume all of them.
+    return { created: 0, failed: attempted || children.length };
+  }
+}
+
+/** What the person is told when some of their children were not added. */
+export const CHILDREN_NOT_ADDED_NOTE =
+  "Some of the children you added could not be saved — please tell the church so they can add them.";
+
+/**
+ * Tell the managers that a parent's children did not go in.
+ *
+ * Sent whatever the sign-up's notification settings say: those are about
+ * "somebody registered", which the church may not want to hear about; this is
+ * "somebody's children are missing from your register", which only a person
+ * can put right.
+ */
+async function tellManagersChildrenMissing(
+  churchId: string,
+  guardianId: string,
+  failed: number,
+): Promise<void> {
+  try {
+    await notifyChurchManagers({
+      churchId,
+      title: "Children from a sign-up were not added",
+      body: `${failed} child${failed === 1 ? "" : "ren"} submitted on your public sign-up link could not be saved. Open the parent's record and add them by hand.`,
+      linkUrl: `/members/${guardianId}`,
+    });
+  } catch (e) {
+    console.error("[member-signup] children-missing notice failed", { churchId, guardianId, e });
   }
 }
 
 /**
  * Create a brand-new member from a self-registration (no match found).
- * Returns the new member id.
+ * Returns the new member id. Prefer {@link registerFromSignup}, which also
+ * says whether any of their children could not be added.
  */
 export async function createMemberFromSignup(
   churchId: string,
   data: CleanSignup,
   signup: MemberSignup,
 ): Promise<string> {
+  return (await registerFromSignup(churchId, data, signup)).id;
+}
+
+/**
+ * Create a brand-new member from a self-registration, and report how many of
+ * the children they added could not be saved — so the screen can say so
+ * instead of "done". The managers are told either way.
+ */
+export async function registerFromSignup(
+  churchId: string,
+  data: CleanSignup,
+  signup: MemberSignup,
+): Promise<{ id: string; childrenNotAdded: number }> {
   const status: MemberStatus = MEMBER_STATUSES.includes(
     signup.newMemberStatus as MemberStatus,
   )
     ? (signup.newMemberStatus as MemberStatus)
     : "active";
+
+  // Stored as E.164 against the church's own country, so every later match,
+  // text and export reads the same number the same way.
+  const phone = data.phone
+    ? (e164Phone(data.phone, await churchDial(churchId)) ?? data.phone)
+    : null;
 
   const [created] = await db
     .insert(member)
@@ -404,7 +532,7 @@ export async function createMemberFromSignup(
       firstName: data.firstName,
       lastName: data.lastName,
       gender: data.gender,
-      phone: data.phone,
+      phone,
       email: data.email,
       dateOfBirth: data.dateOfBirth,
       weddingDate: data.weddingDate,
@@ -417,13 +545,14 @@ export async function createMemberFromSignup(
     .returning({ id: member.id });
 
   await setGroupMemberships(churchId, created.id, data.groupIds);
-  await createChildrenForGuardian(
+  const kids = await createChildrenForGuardian(
     churchId,
     created.id,
     data.lastName,
     data.children,
   );
-  return created.id;
+  if (kids.failed > 0) await tellManagersChildrenMissing(churchId, created.id, kids.failed);
+  return { id: created.id, childrenNotAdded: kids.failed };
 }
 
 /** Where we can reach a member after a self-registration. */
@@ -431,6 +560,12 @@ export type MemberContact = {
   firstName: string;
   email: string | null;
   phone: string | null;
+  /**
+   * Children they added that could not be saved. Non-zero means the success
+   * message must add {@link CHILDREN_NOT_ADDED_NOTE}; the managers have
+   * already been told.
+   */
+  childrenNotAdded: number;
 };
 
 /**
@@ -461,7 +596,8 @@ export async function applyVerifiedUpdate(
   const patch: Record<string, unknown> = { firstName: data.firstName };
   if (data.lastName) patch.lastName = data.lastName;
   if (data.gender) patch.gender = data.gender;
-  if (data.phone) patch.phone = data.phone;
+  if (data.phone)
+    patch.phone = e164Phone(data.phone, await churchDial(churchId)) ?? data.phone;
   if (data.email) patch.email = data.email;
   if (data.dateOfBirth) patch.dateOfBirth = data.dateOfBirth;
   if (data.weddingDate) patch.weddingDate = data.weddingDate;
@@ -483,13 +619,20 @@ export async function applyVerifiedUpdate(
 
   await setGroupMemberships(churchId, memberId, data.groupIds);
   // Register any children they added, under this (now-verified) member.
-  await createChildrenForGuardian(
+  const kids = await createChildrenForGuardian(
     churchId,
     memberId,
     updated?.lastName ?? data.lastName,
     data.children,
   );
-  return updated ?? null;
+  if (kids.failed > 0) await tellManagersChildrenMissing(churchId, memberId, kids.failed);
+  if (!updated) return null;
+  return {
+    firstName: updated.firstName,
+    email: updated.email,
+    phone: updated.phone,
+    childrenNotAdded: kids.failed,
+  };
 }
 
 function maskEmail(email: string): string {
@@ -540,14 +683,42 @@ export async function sendSignupOtp(opts: {
         `<div style="font-size:30px;font-weight:800;letter-spacing:6px;margin:12px 0">${issued.code}</div>` +
         `This code expires in 10 minutes. If this wasn't you, you can ignore this email.`,
     );
-    await sendEmail({
-      to: email,
-      subject: `Your ${opts.churchName} verification code`,
-      html,
-      text: `Your verification code is ${issued.code}. It expires in 10 minutes.`,
-      fromName: opts.churchName,
-    }).catch(() => false);
-    return { ok: true, otpId: issued.id, channel: "email", masked: maskEmail(email) };
+    /*
+     * Read the answer. This used to be `.catch(() => false)` with the result
+     * thrown away, so a Resend 429 still told the person "we sent a code to
+     * jo**@…" — a code that never came, for a form they then could not finish.
+     */
+    let sent = false;
+    try {
+      sent = await sendEmail({
+        to: email,
+        subject: `Your ${opts.churchName} verification code`,
+        html,
+        text: `Your verification code is ${issued.code}. It expires in 10 minutes.`,
+        fromName: opts.churchName,
+      });
+    } catch (e) {
+      console.error("[member-signup] verification email threw", e);
+    }
+    if (sent)
+      return { ok: true, otpId: issued.id, channel: "email", masked: maskEmail(email) };
+
+    console.error(
+      `[member-signup] verification email failed for member ${opts.memberId} (church ${opts.churchId})`,
+    );
+    // Retire the undelivered code, so it does not count against the
+    // live-codes-per-destination throttle when they try again in a minute.
+    await db
+      .update(otpCode)
+      .set({ consumedAt: new Date() })
+      .where(eq(otpCode.id, issued.id));
+    if (!phone)
+      return {
+        ok: false,
+        error:
+          "We couldn't send your verification code by email just now. Please try again in a minute, or contact the church.",
+      };
+    // Otherwise fall through and try the phone on file instead.
   }
 
   // Fall back to SMS (needs an approved church sender + wallet balance).

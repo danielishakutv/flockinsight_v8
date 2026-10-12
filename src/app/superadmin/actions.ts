@@ -285,6 +285,15 @@ export async function deleteChurch(
       .update(session)
       .set({ activeOrganizationId: null })
       .where(eq(session.activeOrganizationId, id));
+    /*
+     * Its payments stay (church_id is SET NULL, not cascade: money received
+     * is not un-received by a delete). Stamp the name on them first, in the
+     * same transaction, so the finance page can still say whose they were.
+     */
+    await tx
+      .update(payment)
+      .set({ churchName: target.name })
+      .where(eq(payment.churchId, id));
     // Cascades remove staff, members, services, attendance, and invitations.
     await tx.delete(church).where(eq(church.id, id));
   });

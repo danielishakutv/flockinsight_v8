@@ -1,9 +1,12 @@
 import "server-only";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
+import { withJobLock, type LockPool } from "@/lib/scheduler-lock";
 import {
   MEDIA_TMP,
   commitUpload,
@@ -237,6 +240,16 @@ export type TranscodeOutcome =
  * There is no state in which this function loses a recording.
  */
 export async function transcodeMedia(mediaId: string): Promise<TranscodeOutcome> {
+  /*
+   * Claimed before anything else, atomically. The old code set "running" with
+   * an unconditional UPDATE after probing — so two calls for one row (the
+   * upload's own kick and the cron, in the same worker, where the advisory
+   * lock is re-entrant) both converted it, into the same output file, and the
+   * first to finish moved a file the second was still writing.
+   */
+  const claimed = await claimForTranscode(mediaId);
+  if (!claimed) return { status: "skipped", reason: "not waiting to be converted, or already being converted" };
+
   const [row] = await db
     .select({
       id: media.id,
@@ -251,51 +264,63 @@ export async function transcodeMedia(mediaId: string): Promise<TranscodeOutcome>
     .where(eq(media.id, mediaId))
     .limit(1);
 
-  if (!row || row.provider !== "local" || !row.storageKey)
+  if (!row || row.provider !== "local" || !row.storageKey) {
+    await settle(mediaId, { transcodeStatus: "skipped" });
     return { status: "skipped", reason: "not a locally stored file" };
+  }
 
   // Probed first: the encoder's ceiling is derived from what the source already
   // used, so a conversion can never make a file bigger.
   const source = await probe(row.storageKey);
   const plan = planFor(row.mime, row.format, source.bitrate);
   if (!plan) {
-    await db
-      .update(media)
-      .set({ transcodeStatus: "skipped" })
-      .where(eq(media.id, mediaId));
+    await settle(mediaId, { transcodeStatus: "skipped" });
     return { status: "skipped", reason: "already in a universally playable format" };
   }
 
   const sourceSize = await fileSize(row.storageKey);
   if (sourceSize === null) {
-    await db
-      .update(media)
-      .set({ transcodeStatus: "failed", transcodeError: "The original file is missing." })
-      .where(eq(media.id, mediaId));
+    await settle(mediaId, {
+      transcodeStatus: "failed",
+      transcodeError: "The original file is missing.",
+    });
     return { status: "failed", reason: "the original file is missing" };
   }
 
+  /*
+   * The lease, now that the size is known: as long as ffmpeg is allowed to
+   * run, plus a margin. Past it, a "running" row belongs to nobody — its worker
+   * was killed by a deploy or a restart — and the queue may claim it again.
+   */
+  const timeoutMs = timeoutFor(sourceSize);
   await db
     .update(media)
-    .set({ transcodeStatus: "running", transcodeError: null })
-    .where(eq(media.id, mediaId));
+    .set({ transcodeLeaseUntil: new Date(Date.now() + timeoutMs + LEASE_MARGIN_MS) })
+    .where(and(eq(media.id, mediaId), eq(media.transcodeStatus, "running")));
 
   const input = resolveKey(row.storageKey);
-  const outName = `${mediaId}-transcode.${plan.ext}`;
+  /*
+   * Unique per run. A retry after a killed worker, or anything else that ever
+   * runs twice, must never share an output path with a run still writing it.
+   * The sweep in media-store clears leftovers matching "-transcode.<ext>".
+   */
+  const outName = `${mediaId}-${randomUUID().slice(0, 8)}-transcode.${plan.ext}`;
   const outTmp = path.join(MEDIA_TMP, outName);
 
   const result = await run(
     FFMPEG,
     ["-nostdin", "-y", "-i", input, ...plan.args, outTmp],
-    { timeoutMs: timeoutFor(sourceSize) },
+    { timeoutMs },
   );
 
   let outSize: number | null = null;
   try {
-    const { stat } = await import("node:fs/promises");
     outSize = (await stat(outTmp)).size || null;
-  } catch {
-    // ffmpeg wrote nothing at all — handled as a failure just below.
+  } catch (e) {
+    // ffmpeg wrote nothing at all — handled as a failure just below. Anything
+    // other than "no such file" is worth a line of its own.
+    if ((e as NodeJS.ErrnoException)?.code !== "ENOENT")
+      console.error(`[transcode] could not read the output for ${mediaId}`, e);
     outSize = null;
   }
 
@@ -304,20 +329,17 @@ export async function transcodeMedia(mediaId: string): Promise<TranscodeOutcome>
       ? "The file took too long to convert."
       : (result.stderr.split("\n").filter(Boolean).pop() ?? "ffmpeg failed.").slice(0, 300);
     try {
-      const { rm } = await import("node:fs/promises");
       await rm(outTmp, { force: true });
-    } catch {
-      /* nothing to clean */
+    } catch (e) {
+      // The sweep will take it in a day; worth knowing it was left.
+      console.error(`[transcode] could not remove the failed output ${outName}`, e);
     }
     /*
      * Failure is recorded and the original is left exactly where it is. The file
      * still plays — just not on every device — which is a far better outcome
      * than a tidy error and no recording.
      */
-    await db
-      .update(media)
-      .set({ transcodeStatus: "failed", transcodeError: reason })
-      .where(eq(media.id, mediaId));
+    await settle(mediaId, { transcodeStatus: "failed", transcodeError: reason });
     console.error(`[transcode] ${mediaId} failed: ${reason}`);
     return { status: "failed", reason };
   }
@@ -345,6 +367,7 @@ export async function transcodeMedia(mediaId: string): Promise<TranscodeOutcome>
       durationSec: duration ?? undefined,
       transcodeStatus: "done",
       transcodeError: null,
+      transcodeLeaseUntil: null,
     })
     .where(eq(media.id, mediaId));
 
@@ -358,51 +381,157 @@ export async function transcodeMedia(mediaId: string): Promise<TranscodeOutcome>
   return { status: "done", bytes: outSize, savedBytes: Math.max(0, sourceSize - outSize) };
 }
 
+/** How long past ffmpeg's own timeout a lease runs before the row is free again. */
+const LEASE_MARGIN_MS = 15 * 60_000;
+/** A short lease for the moment between claiming a row and knowing its size. */
+const CLAIM_LEASE_MS = 15 * 60_000;
+/** A file that kills its worker this many times is not tried again. */
+export const MAX_TRANSCODE_ATTEMPTS = 3;
+
+/**
+ * A row the queue may take: waiting, or "running" under a lease that has run
+ * out — a deploy or restart killed ffmpeg along with its worker and left the
+ * row "running" for ever, which the old queue (pending only) never looked at.
+ * Rows from before the lease existed have none, and count as run out.
+ */
+function claimable(now: Date): SQL {
+  return and(
+    eq(media.provider, "local"),
+    isNotNull(media.storageKey),
+    lt(media.transcodeAttempts, MAX_TRANSCODE_ATTEMPTS),
+    or(
+      eq(media.transcodeStatus, "pending"),
+      and(
+        eq(media.transcodeStatus, "running"),
+        or(isNull(media.transcodeLeaseUntil), lt(media.transcodeLeaseUntil, now)),
+      ),
+    ),
+  )!;
+}
+
+/**
+ * Claim one row for conversion, or report that it is not ours to take.
+ *
+ * READ COMMITTED does not make "find, then mark" safe (see AGENTS.md), so the
+ * claim is one UPDATE whose WHERE is the whole rule, with the candidate row
+ * locked FOR UPDATE SKIP LOCKED: a second claimer either skips the locked row
+ * or, once the first commits, no longer matches it. The count returned is
+ * checked by the caller — no row back means somebody else has it.
+ */
+async function claimForTranscode(mediaId?: string): Promise<string | null> {
+  const now = new Date();
+  const candidate = db
+    .select({ id: media.id })
+    .from(media)
+    .where(and(claimable(now), mediaId ? eq(media.id, mediaId) : undefined))
+    .orderBy(asc(media.createdAt))
+    .limit(1)
+    .for("update", { skipLocked: true });
+
+  const rows = await db
+    .update(media)
+    .set({
+      transcodeStatus: "running",
+      transcodeError: null,
+      transcodeStartedAt: now,
+      transcodeLeaseUntil: new Date(now.getTime() + CLAIM_LEASE_MS),
+      transcodeAttempts: sql`${media.transcodeAttempts} + 1`,
+    })
+    // The rule repeated outside the subquery, so the row is still claimable at
+    // the moment it is written, not just when it was found.
+    .where(and(inArray(media.id, candidate), claimable(now)))
+    .returning({ id: media.id });
+  return rows[0]?.id ?? null;
+}
+
+/** Finish a claimed row: its outcome, and its lease handed back. */
+async function settle(
+  mediaId: string,
+  set: { transcodeStatus: "skipped" | "failed"; transcodeError?: string },
+): Promise<void> {
+  await db
+    .update(media)
+    .set({ ...set, transcodeLeaseUntil: null })
+    .where(eq(media.id, mediaId));
+}
+
+/**
+ * Rows whose conversion has been interrupted too often to try again. Marked
+ * failed with a reason, so the file is not left "running" for ever — it still
+ * plays in the format it arrived in.
+ */
+async function giveUpOnRepeatedInterruptions(now: Date): Promise<number> {
+  const rows = await db
+    .update(media)
+    .set({
+      transcodeStatus: "failed",
+      transcodeError: "Conversion was interrupted repeatedly, so it was not tried again.",
+      transcodeLeaseUntil: null,
+    })
+    .where(
+      and(
+        eq(media.provider, "local"),
+        eq(media.transcodeStatus, "running"),
+        sql`${media.transcodeAttempts} >= ${MAX_TRANSCODE_ATTEMPTS}`,
+        or(isNull(media.transcodeLeaseUntil), lt(media.transcodeLeaseUntil, now)),
+      ),
+    )
+    .returning({ id: media.id });
+  if (rows.length > 0)
+    console.error(`[transcode] gave up on ${rows.length} file(s) interrupted ${MAX_TRANSCODE_ATTEMPTS} times`);
+  return rows.length;
+}
+
 /**
  * Work through whatever is waiting, one file at a time.
  *
- * One at a time, and guarded by a Postgres advisory lock, because PM2 runs this
- * app as a cluster: without the lock both workers would transcode the same file
- * simultaneously, race each other to rename the output, and put two ffmpeg
- * processes on a box that is also serving church websites.
+ * One at a time per box, because PM2 runs this app as a cluster and the box is
+ * also serving church websites: two ffmpeg processes at once is CPU somebody's
+ * Sunday service needed. A Postgres advisory lock keeps it to one — taken,
+ * held and released on ONE checked-out connection (see scheduler-lock.ts).
+ * Taken through the pool with separate queries, as it used to be, the lock and
+ * the unlock ran on different connections: the unlock did nothing, and the
+ * lock either stuck to a pooled connection or vanished when that connection
+ * idled out in the middle of a forty-minute encode.
+ *
+ * The lock is a throttle, not the guard against double work: that is the
+ * atomic claim above, which holds whatever happens to the lock.
  */
-const QUEUE_LOCK = 8_421_337;
+const pool: LockPool = db.$client as unknown as LockPool;
 
 export async function runTranscodeQueue(limit = 3): Promise<{
   claimed: boolean;
   done: number;
   failed: number;
 }> {
-  const lockRes = await db.execute<{ locked: boolean }>(
-    sql`select pg_try_advisory_lock(${QUEUE_LOCK}) as locked`,
-  );
-  if (!lockRes.rows[0]?.locked) return { claimed: false, done: 0, failed: 0 };
-
   let done = 0;
   let failed = 0;
-  try {
-    for (let i = 0; i < limit; i++) {
-      const [next] = await db
-        .select({ id: media.id })
-        .from(media)
-        .where(
-          and(
-            eq(media.provider, "local"),
-            eq(media.transcodeStatus, "pending"),
-            isNotNull(media.storageKey),
-          ),
-        )
-        .orderBy(media.createdAt)
-        .limit(1);
-      if (!next) break;
+  const outcome = await withJobLock(
+    pool,
+    "media-transcode-queue",
+    async () => true,
+    async () => {
+      await giveUpOnRepeatedInterruptions(new Date());
+      for (let i = 0; i < limit; i++) {
+        /*
+         * Find the next claimable row, then let transcodeMedia claim it. If
+         * another worker claims it in between, this one reports "skipped" and
+         * the loop moves on — nothing runs twice.
+         */
+        const [next] = await db
+          .select({ id: media.id })
+          .from(media)
+          .where(claimable(new Date()))
+          .orderBy(asc(media.createdAt))
+          .limit(1);
+        if (!next) break;
 
-      const out = await transcodeMedia(next.id);
-      if (out.status === "done") done++;
-      else if (out.status === "failed") failed++;
-    }
-  } finally {
-    await db.execute(sql`select pg_advisory_unlock(${QUEUE_LOCK})`);
-  }
+        const out = await transcodeMedia(next.id);
+        if (out.status === "done") done++;
+        else if (out.status === "failed") failed++;
+      }
+    },
+  );
 
-  return { claimed: true, done, failed };
+  return { claimed: outcome === "ran", done, failed };
 }

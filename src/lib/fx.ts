@@ -100,9 +100,10 @@ async function loadRates(): Promise<Rates> {
         live: true,
       };
     }
-  } catch {
+  } catch (e) {
     // Network, timeout, or a shape we did not expect. Fall through — a stale
     // price beats a broken page, and `live: false` says which one this is.
+    console.warn("[fx] rate service unreachable; using the fallback table", e);
   }
   return {
     perNgn: FALLBACK_PER_NGN,
@@ -169,6 +170,20 @@ export function roundUpPrice(amount: number): number {
  * international cards can already pay. The surcharge is added in naira before
  * conversion, so the church sees one honest total in its own money rather than
  * a base price and a surprise on the statement.
+ *
+ * THE CHARGE IS THE BASE PLUS THE FEE, AND NOTHING ELSE. It used to be
+ * `roundUpPrice(base + fee)` — the two-significant-figure rounding written for
+ * DISPLAY figures, applied to the naira actually charged. On a monthly plan
+ * that added ₦900 nobody was told about; on an annual one (₦100,000 + ₦3,100
+ * became ₦110,000) it added ₦6,900, about 7%, while the page said the total
+ * "includes ₦3,100 toward card fees" — and a Partner earned commission on it.
+ * Now only the fee itself is rounded, up to a whole ₦100 so it never
+ * undercovers, and `surchargeNgn` is exactly `chargeNgn - baseNgn`: the figure
+ * the page discloses is the whole uplift, to the naira, and it is the same on
+ * every plan and both cycles.
+ *
+ * `roundUpPrice` still shapes `displayAmount`, which is what it was written
+ * for: a converted label, never a charge.
  */
 export function internationalPrice(
   baseNgn: number,
@@ -176,12 +191,15 @@ export function internationalPrice(
   rates: Rates,
 ): InternationalPrice {
   const usdPerNgn = rateFor(rates, "USD");
-  const surchargeNgn = usdPerNgn ? Math.ceil(INTERNATIONAL_SURCHARGE_USD / usdPerNgn) : 0;
+  // The 1e-9 absorbs float noise (2 ÷ (1/1550) is not always exactly 3100),
+  // which would otherwise round a whole ₦100 the wrong way.
+  const feeNgn = usdPerNgn
+    ? Math.ceil(INTERNATIONAL_SURCHARGE_USD / usdPerNgn / 100 - 1e-9) * 100
+    : 0;
 
-  const chargeNgn = Math.max(
-    INTERNATIONAL_FLOOR_NGN,
-    roundUpPrice(baseNgn + surchargeNgn),
-  );
+  const chargeNgn = Math.max(INTERNATIONAL_FLOOR_NGN, baseNgn + feeNgn);
+  // Everything above the base, a floor included, so "includes ₦X" is true.
+  const surchargeNgn = Math.max(0, chargeNgn - baseNgn);
 
   const rate = rateFor(rates, currency);
   return {

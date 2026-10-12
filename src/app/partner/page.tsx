@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
  * never do.
  */
 export default async function PartnerPage() {
-  const { user } = await requireUser();
+  const { user } = await requireUser("/partner");
   const me = await partnerForUser(user.id);
 
   // Not a Partner: send them to the page that explains the programme and lets

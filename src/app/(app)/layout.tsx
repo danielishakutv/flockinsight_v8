@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  getIsPartner,
   getIsSuperAdmin,
   getMustChangePassword,
   getMyChurches,
@@ -10,10 +11,8 @@ import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { computeStanding } from "@/lib/trial";
 import { getDemoState } from "@/lib/demo";
-import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
-import { planPriceLabel } from "@/lib/plans";
+import { gateOffers } from "@/lib/plan-offers";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
-import { annualTotal } from "@/lib/billing-cycle";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
 import { NavVisitRecorder } from "@/components/app/nav-visits";
@@ -44,8 +43,9 @@ export default async function AppLayout({
   if (await getMustChangePassword()) redirect("/set-password");
   const { user, church, impersonating } = await requireChurch();
   const { locale, dict } = await getI18n();
-  const [isSuperAdmin, access, unread, myChurches] = await Promise.all([
+  const [isSuperAdmin, isPartner, access, unread, myChurches] = await Promise.all([
     getIsSuperAdmin(),
+    getIsPartner(),
     getAccess(),
     unreadCount({
       churchId: church.id,
@@ -86,27 +86,24 @@ export default async function AppLayout({
      * where a church is choosing with its records behind it was the one screen
      * that never mentioned that a year costs two months less.
      */
-    const annualFreeMonths = await getAnnualFreeMonths();
-    const plans = (await getPlans())
-      .filter((p) => p.priceMonthly && p.priceMonthly > 0)
-      .map((p) => {
-        const yearly = annualTotal(p.priceMonthly, annualFreeMonths);
-        return {
-          id: p.id,
-          name: p.name,
-          tagline: p.tagline,
-          priceLabel: planPriceLabel(p),
-          annualPriceLabel:
-            yearly === null ? null : `₦${yearly.toLocaleString()}/yr`,
-        };
-      });
+    /*
+     * Priced by gateOffers, from the same book as the billing page and the
+     * same steps startCheckout bills with: the church's discount, the cycle,
+     * and — abroad — its own currency and the card fee. The gate used to
+     * print the undiscounted Nigerian list price in naira, and the button
+     * under it then charged something else.
+     */
+    const { offers, freeMonths, note } = await gateOffers(church);
     return (
-      <I18nProvider locale={locale} dict={dict}>
+      <I18nProvider locale={locale} dict={dict} timeZone={church.timezone}>
         <TrialGate
           churchName={church.name}
           canManageBilling={canManageBilling}
-          plans={plans}
-          annualFreeMonths={annualFreeMonths}
+          plans={offers}
+          annualFreeMonths={freeMonths}
+          currencyNote={note}
+          // A paid period that ran out, rather than a trial that did.
+          lapsed={Boolean(church.planRenewsAt)}
         />
       </I18nProvider>
     );
@@ -115,7 +112,7 @@ export default async function AppLayout({
     standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
 
   return (
-    <I18nProvider locale={locale} dict={dict}>
+    <I18nProvider locale={locale} dict={dict} timeZone={church.timezone}>
     <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
       {/*
         The status bar band. viewportFit is "cover", so the app is drawn behind
@@ -151,6 +148,7 @@ export default async function AppLayout({
           userEmail={user.email}
           userImage={user.image}
           isSuperAdmin={isSuperAdmin}
+          isPartner={isPartner}
           churches={myChurches.map((c) => ({ id: c.id, name: c.name }))}
           activeChurchId={church.id}
           perms={perms}
@@ -166,6 +164,7 @@ export default async function AppLayout({
             userEmail={user.email}
             userImage={user.image}
             isSuperAdmin={isSuperAdmin}
+            isPartner={isPartner}
             unread={unread}
             churches={myChurches.map((c) => ({ id: c.id, name: c.name }))}
             activeChurchId={church.id}

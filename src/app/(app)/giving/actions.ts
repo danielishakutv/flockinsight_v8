@@ -12,6 +12,7 @@ import { can } from "@/lib/permissions";
 import { sendGivingReceipt } from "@/lib/giving-receipts";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
+import { zMoney } from "@/lib/money-zod";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -32,13 +33,8 @@ const METHODS = [
 const givingSchema = z.object({
   id: z.string().uuid().optional(),
   categoryId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
-  amount: z.preprocess(
-    (v) => (typeof v === "string" ? Number(v.replace(/,/g, "")) : v),
-    z
-      .number({ message: "Enter an amount" })
-      .positive("Amount must be greater than 0")
-      .max(1_000_000_000_000),
-  ),
+  // The platform's one money parser: "1500,50" is 1500.50, not 150050.
+  amount: zMoney(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
   memberId: z.preprocess(emptyToNull, z.string().uuid().nullable()),
   giverName: z.preprocess(emptyToNull, z.string().trim().max(160).nullable()),

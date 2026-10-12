@@ -70,6 +70,8 @@ export function computeStanding(
     paymentWaivedUntil?: Date | string | null;
     planRenewsAt?: Date | string | null;
     trialEndsAt?: Date | string | null;
+    /** Only consulted for the lapsed-without-a-trial rule; see below. */
+    plan?: string | null;
   },
   now: Date = new Date(),
 ): Standing {
@@ -99,6 +101,22 @@ export function computeStanding(
       daysLeft: null,
       ...noWaiver,
     };
+  /*
+   * A paid period that has run out, on a church with no trial date. Before
+   * this, such a church — onboarded by hand with no trial, or grandfathered
+   * and later sold a plan — fell through to "none" once its renewal date
+   * passed, and kept every module for ever with nothing asking it to pay. A
+   * trial still running is checked first: it is free time the church has not
+   * used yet, whatever a lapsed payment says.
+   *
+   * Not Enterprise. Its price is negotiated and invoiced by hand, its renewal
+   * date is typed in by an operator, and the gate has nothing to sell it —
+   * the offers there are the self-serve tiers. Gating it would show a church
+   * on a contract "your plan has expired" with Growth and Pro as the way
+   * out. A lapsed Enterprise contract is a conversation, not a paywall.
+   */
+  if (!trialEnds && renews && c.plan !== "enterprise")
+    return { state: "expired", gated: true, trialEndsAt: null, daysLeft: 0, ...noWaiver };
   if (!trialEnds)
     return { state: "none", gated: false, trialEndsAt: null, daysLeft: null, ...noWaiver };
   if (trialEnds.getTime() > now.getTime())

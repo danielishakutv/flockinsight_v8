@@ -5,6 +5,7 @@ import { requireChurch } from "@/lib/session";
 import { requireCan, getAccess } from "@/lib/permissions";
 import { getStorageInfo } from "@/lib/storage";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
+import { hasFeature } from "@/lib/entitlements-server";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { MediaLibrary } from "@/components/media/media-library";
 import { getT } from "@/lib/i18n/server";
@@ -18,7 +19,7 @@ export default async function MediaPage() {
   const access = await getAccess();
   const canManage = access.isOwner || access.perms.has("media.manage");
 
-  const [rows, storage, receipts] = await Promise.all([
+  const [rows, storage, receipts, canSermons] = await Promise.all([
     db
       .select({
         id: media.id,
@@ -59,6 +60,8 @@ export default async function MediaPage() {
       })
       .from(media)
       .where(and(eq(media.churchId, church.id), eq(media.kind, "receipt"))),
+    // The sermon library is Pro's; below it the picker opens on Document.
+    hasFeature("mediaLibrary"),
   ]);
 
   return (
@@ -70,6 +73,7 @@ export default async function MediaPage() {
       <MediaLibrary
         configured={isCloudinaryConfigured()}
         canManage={canManage}
+        canSermons={canSermons}
         storage={storage}
         heldElsewhere={{
           bytes: Number(receipts[0]?.bytes ?? 0),

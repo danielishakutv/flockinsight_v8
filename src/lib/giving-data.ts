@@ -15,6 +15,7 @@ import {
 import { db } from "@/db";
 import { giving, givingCategory, member, project } from "@/db/schema";
 import { normalizeHeader } from "@/lib/members-data";
+import { parseMoney, type DecimalSeparator } from "@/lib/money-input";
 
 /** CSV column order for export and the template. */
 export const GIVING_CSV_HEADERS = [
@@ -44,7 +45,13 @@ export type GivingFieldKey =
   | "amount"
   | "giver"
   | "method"
-  | "note";
+  | "note"
+  /*
+   * The export and the template have always written a Project column; the
+   * import used to ignore it, so a file exported, corrected and imported back
+   * lost every project link and the project's "raised" stayed at zero.
+   */
+  | "project";
 
 const HEADER_ALIASES: Record<string, GivingFieldKey> = {
   date: "date",
@@ -70,6 +77,10 @@ const HEADER_ALIASES: Record<string, GivingFieldKey> = {
   notes: "note",
   reference: "note",
   description: "note",
+  project: "project",
+  projectname: "project",
+  appeal: "project",
+  campaign: "project",
 };
 
 export function headerToGivingField(header: string): GivingFieldKey | null {
@@ -99,13 +110,22 @@ export function normalizeMethod(v: string | undefined): GivingMethod | null {
   return "other";
 }
 
-/** Parse a money amount: strips currency symbols, commas and spaces. */
-export function normalizeAmount(v: string | undefined): number | null {
-  const cleaned = String(v ?? "").replace(/[^0-9.]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n * 100) / 100;
+/**
+ * Parse an imported amount through the platform's one money parser.
+ *
+ * This used to keep only digits and points, so a Mozambican or French
+ * spreadsheet's "1.500,00" imported as 1.5, "1 500,00" as 150000, and a
+ * reversal written "-200" as a positive gift of 200 — all saved, and all
+ * mirrored into the fund in Finance. Now a minus sign or brackets refuse the
+ * row, and the one genuinely ambiguous shape ("5.000": five thousand in
+ * Maputo, five in Lagos) is settled by the church's own convention, passed in
+ * as `decimal`. Without one it is refused rather than guessed.
+ */
+export function normalizeAmount(
+  v: string | undefined,
+  decimal?: DecimalSeparator,
+): number | null {
+  return parseMoney(String(v ?? ""), { decimal });
 }
 
 /* ============================================================
@@ -190,6 +210,31 @@ export function hasGivingFilters(f: GivingFilters): boolean {
 /** `%` and `_` are wildcards in LIKE — a giver searching "50%" means "50%". */
 function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * The query string that reproduces these filters (no page), for the export
+ * links: the statement and the CSV must print the list on screen, not the
+ * church's whole history. Same keys parseGivingFilters reads.
+ */
+export function givingFilterQuery(f: GivingFilters): string {
+  const qs = new URLSearchParams();
+  if (f.q) qs.set("q", f.q);
+  if (f.categoryId) qs.set("cat", f.categoryId);
+  if (f.method) qs.set("method", f.method);
+  if (f.projectId) qs.set("project", f.projectId);
+  if (f.from) qs.set("from", f.from);
+  if (f.to) qs.set("to", f.to);
+  return qs.toString();
+}
+
+/**
+ * The giving list's WHERE clause, for any query that must match the list
+ * exactly. It refers to member, givingCategory and project (the search runs
+ * across their names), so every caller must left-join all three.
+ */
+export function givingWhereFor(churchId: string, f: GivingFilters): SQL | undefined {
+  return givingWhere(churchId, f);
 }
 
 function givingWhere(churchId: string, f: GivingFilters): SQL | undefined {
@@ -278,9 +323,13 @@ export async function getGivingList(churchId: string, f: GivingFilters) {
   };
 }
 
-/** All giving for a church as CSV rows (matching GIVING_CSV_HEADERS). */
+/**
+ * Giving for a church as CSV rows (matching GIVING_CSV_HEADERS) — all of it,
+ * or, given the list's filters, exactly what the list shows.
+ */
 export async function getGivingExportRows(
   churchId: string,
+  filters?: GivingFilters,
 ): Promise<(string | number | null)[][]> {
   const rows = await db
     .select({
@@ -298,7 +347,7 @@ export async function getGivingExportRows(
     .leftJoin(givingCategory, eq(givingCategory.id, giving.categoryId))
     .leftJoin(member, eq(member.id, giving.memberId))
     .leftJoin(project, eq(project.id, giving.projectId))
-    .where(eq(giving.churchId, churchId))
+    .where(filters ? givingWhere(churchId, filters) : eq(giving.churchId, churchId))
     .orderBy(desc(giving.date), desc(giving.createdAt));
 
   return rows.map((r) => [

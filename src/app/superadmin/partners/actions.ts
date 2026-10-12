@@ -118,7 +118,10 @@ const decideSchema = z.object({
  * deserves its own week.
  *
  * Marking it PAID is what moves the earnings to paid. REJECTING hands them
- * back as available rather than destroying them.
+ * back as available rather than destroying them. Paid or rejected is final —
+ * `decidePayout` holds that under a row lock (PAYOUT_TRANSITIONS in
+ * lib/partners-shared.ts), and the partner_payout_final trigger holds it again
+ * in the database.
  */
 export async function decidePartnerPayout(
   input: z.input<typeof decideSchema>,
@@ -143,7 +146,13 @@ export async function decidePartnerPayout(
     note: parsed.data.note ?? null,
     decidedBy: session?.user?.id ?? null,
   });
-  if (!res.ok) return res;
+  if (!res.ok) {
+    // Refused because the request moved under a stale page (someone else
+    // decided it). Re-render the queue with it,
+    // so the next click is made against what is really there.
+    revalidatePath("/superadmin/partners");
+    return res;
+  }
 
   await recordAudit({
     action: "platform.partner.payout",

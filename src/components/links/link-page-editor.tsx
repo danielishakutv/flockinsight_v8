@@ -595,6 +595,7 @@ function ItemRow({
   const [label, setLabel] = useState(item.label);
   const [description, setDescription] = useState(item.description ?? "");
   const [open, setOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
@@ -610,7 +611,10 @@ function ItemRow({
   return (
     <li className="flex items-center gap-2 py-2.5">
       {/* Up / down rather than drag. A church secretary reorders this on a
-          phone, where dragging a list inside a scrolling page is a fight. */}
+          phone, where dragging a list inside a scrolling page is a fight —
+          so each arrow is a 40px target, not the bare 14px icon it used to
+          be, which a thumb missed or hit the wrong one of. Stacked, so the
+          row's width still goes to the link's name at 320px. */}
       {canManage && (
         <div className="flex shrink-0 flex-col">
           <button
@@ -618,18 +622,18 @@ function ItemRow({
             aria-label={`Move ${item.label} up`}
             disabled={first || pending}
             onClick={() => run(() => moveLinkItem(item.id, "up"))}
-            className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+            className="text-muted-foreground hover:text-foreground grid size-10 place-items-center rounded-md disabled:opacity-30"
           >
-            <ArrowUp className="size-3.5" />
+            <ArrowUp className="size-4" />
           </button>
           <button
             type="button"
             aria-label={`Move ${item.label} down`}
             disabled={last || pending}
             onClick={() => run(() => moveLinkItem(item.id, "down"))}
-            className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+            className="text-muted-foreground hover:text-foreground grid size-10 place-items-center rounded-md disabled:opacity-30"
           >
-            <ArrowDown className="size-3.5" />
+            <ArrowDown className="size-4" />
           </button>
         </div>
       )}
@@ -652,7 +656,7 @@ function ItemRow({
       </button>
 
       {canManage && (
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Switched off, not deleted: a church turns a link off between
               Sundays and back on again, and losing the wording each time is
               the reason people keep a notepad of their own links. */}
@@ -664,17 +668,64 @@ function ItemRow({
               run(() => updateLinkItem({ id: item.id, isActive: v }))
             }
           />
+          {/* Asks first. Removing is a hard delete with no undo, and it sat
+              4px from the switch whose whole point is to avoid losing a
+              link — one slip reaching for "off" deleted it. */}
           <button
             type="button"
             aria-label={`Remove ${item.label}`}
             disabled={pending}
-            onClick={() => run(() => removeLinkItem(item.id))}
-            className="text-muted-foreground hover:text-destructive p-1.5 disabled:opacity-40"
+            onClick={() => setConfirmRemove(true)}
+            className="text-muted-foreground hover:text-destructive grid size-10 place-items-center rounded-md disabled:opacity-40"
           >
             <Trash2 className="size-4" />
           </button>
         </div>
       )}
+
+      <Dialog
+        open={confirmRemove}
+        onOpenChange={(o) => !pending && setConfirmRemove(o)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="wrap-anywhere">Remove “{item.label}”?</DialogTitle>
+            <DialogDescription>
+              It comes off the page for good, wording and all. To hide it
+              between Sundays and bring it back later, use the switch instead.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setConfirmRemove(false)}
+            >
+              Keep it
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await removeLinkItem(item.id);
+                  if (!res.ok) {
+                    toast.error(res.error ?? "That did not work.");
+                    return;
+                  }
+                  setConfirmRemove(false);
+                  onChanged();
+                })
+              }
+            >
+              {pending && <Loader2 className="size-4 animate-spin" />}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

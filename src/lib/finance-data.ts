@@ -77,6 +77,11 @@ export type FinanceTransactionRow = {
   method: FinanceMethod | null;
   note: string | null;
   recordedByName: string | null;
+  /**
+   * The gift this row mirrors, when a giving fund wrote it. Such a row is
+   * changed or removed through the gift, never by hand in Finance.
+   */
+  givingId: string | null;
 };
 
 /* ============================================================
@@ -368,6 +373,7 @@ export async function getLedger(
         method: financeTransaction.method,
         note: financeTransaction.note,
         recordedByName: user.name,
+        givingId: financeTransaction.givingId,
       })
       .from(financeTransaction)
       .leftJoin(
@@ -434,21 +440,24 @@ export type FinanceSummary = {
 };
 
 /**
- * Headline figures for the page above the ledger.
+ * Headline figures: income, expense, net and the category split for whatever
+ * filter state it is given; cash on hand for every open account regardless.
  *
- * The income/expense pair honours the current date range; cash on hand
- * deliberately does not, because what an account holds is a fact about now,
- * not about the window someone happens to be looking at.
+ * It takes the WHOLE filter state, through the same whereFor as the ledger,
+ * because it used to take only the dates — and the finance statement PDF,
+ * filtered to "Rent, expenses, Q1", printed the whole church's Q1 income and
+ * expenses in its headline cards above a list of Rent entries. A statement
+ * handed to an auditor contradicted itself. The page's cards, which are
+ * documented as following the date range only, pass just the dates.
+ *
+ * Cash on hand deliberately ignores every filter, because what an account
+ * holds is a fact about now, not about the window someone is looking at.
  */
 export async function getFinanceSummary(
   churchId: string,
-  from: string,
-  to: string,
+  filters: FinanceFilterState,
 ): Promise<FinanceSummary> {
-  const range: (SQL | undefined)[] = [eq(financeTransaction.churchId, churchId)];
-  if (from && isIsoDate(from)) range.push(gte(financeTransaction.date, from));
-  if (to && isIsoDate(to)) range.push(lte(financeTransaction.date, to));
-  const where = and(...range);
+  const where = whereFor(churchId, filters);
 
   const [totals, byCategory, accounts] = await Promise.all([
     db

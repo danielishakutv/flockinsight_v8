@@ -8,6 +8,13 @@ import {
   type LocaleCode,
 } from "@/lib/i18n/locales";
 import { makeT, type TFunction } from "@/lib/i18n/translate";
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatTime,
+  formatWith,
+} from "@/lib/i18n/formatting";
 
 /**
  * The dictionary, handed down from the server.
@@ -19,22 +26,33 @@ import { makeT, type TFunction } from "@/lib/i18n/translate";
  * fetched once and then cached with the rest of the RSC tree.
  */
 
-type I18nValue = { locale: LocaleCode; t: TFunction };
+type I18nValue = {
+  locale: LocaleCode;
+  t: TFunction;
+  /**
+   * The church's IANA zone, when the page belongs to one. Undefined on pages
+   * with no church (auth, marketing), where formatting falls back to UTC
+   * rather than to whatever machine is rendering.
+   */
+  timeZone?: string;
+};
 
 const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({
   locale,
   dict,
+  timeZone,
   children,
 }: {
   locale: LocaleCode;
   dict: Dictionary;
+  timeZone?: string | null;
   children: React.ReactNode;
 }) {
   const value = useMemo<I18nValue>(
-    () => ({ locale, t: makeT(locale, dict) }),
-    [locale, dict],
+    () => ({ locale, t: makeT(locale, dict), timeZone: validZone(timeZone) }),
+    [locale, dict, timeZone],
   );
 
   /*
@@ -111,4 +129,57 @@ export function useLocale(): LocaleCode {
     throw new Error("useLocale() needs an <I18nProvider> above it.");
   }
   return ctx.locale;
+}
+
+/** A zone Intl will accept, or undefined. A bad value must not crash a page. */
+function validZone(tz: string | null | undefined): string | undefined {
+  if (!tz) return undefined;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return tz;
+  } catch {
+    // Not a zone this runtime knows; formatting falls back to UTC below.
+    return undefined;
+  }
+}
+
+/** UTC, not the machine: the server is in Berlin and the reader is not. */
+const FALLBACK_ZONE = "UTC";
+
+export type Formatters = {
+  locale: LocaleCode;
+  timeZone: string;
+  date: (v: Date | string | number, style?: "short" | "medium" | "long") => string;
+  time: (v: Date | string | number) => string;
+  dateTime: (v: Date | string | number) => string;
+  with: (v: Date | string | number, options: Intl.DateTimeFormatOptions) => string;
+  number: (n: number) => string;
+};
+
+/**
+ * Dates, times and numbers for a client component: in the reader's language
+ * and the CHURCH's timezone, identically on the server and in the browser.
+ *
+ * Use this instead of `toLocaleDateString(undefined, ...)` and friends in any
+ * component that renders on the server. Those take the locale and zone from
+ * the machine, and the server and the phone are different machines. Works
+ * with no provider above it too (English, UTC), so a component shared with
+ * the superadmin shell can call it unconditionally.
+ */
+export function useFormat(): Formatters {
+  const ctx = useContext(I18nContext);
+  const locale = ctx?.locale ?? DEFAULT_LOCALE;
+  const tz = ctx?.timeZone ?? FALLBACK_ZONE;
+  return useMemo<Formatters>(
+    () => ({
+      locale,
+      timeZone: tz,
+      date: (v, style = "medium") => formatDate(v, locale, style, tz),
+      time: (v) => formatTime(v, locale, tz),
+      dateTime: (v) => formatDateTime(v, locale, tz),
+      with: (v, options) => formatWith(v, locale, options, tz),
+      number: (n) => formatNumber(n, locale),
+    }),
+    [locale, tz],
+  );
 }

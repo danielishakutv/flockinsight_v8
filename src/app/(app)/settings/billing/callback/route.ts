@@ -1,54 +1,27 @@
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { payment } from "@/db/schema";
-import { paystackVerify } from "@/lib/paystack";
-import { activatePlan } from "@/lib/billing";
-import { awardReferralIfDue } from "@/lib/referrals";
-import { awardPartnerCommission } from "@/lib/partners";
-import type { PlanId } from "@/lib/plans";
+import { settleSubscriptionPayment } from "@/lib/billing";
+import { callbackStatus } from "@/lib/paystack-outcome";
 
-// Paystack redirects the browser here after checkout.
+/*
+ * Paystack sends the browser here after checkout.
+ *
+ * This is ONE of the ways a payment gets honoured, not the way. The browser
+ * may never come back (a bank app took over, a phone died, the payer closed
+ * the tab), may come back twice, or may come back while a bank transfer is
+ * still in flight. So all this does is ask the shared settle function, which
+ * the Paystack webhook (api/webhooks/paystack) and the reconcile cron call
+ * too, and which is idempotent: however many of them arrive, the plan is
+ * extended once.
+ *
+ * An unanswered verify or a transfer still "ongoing" shows "being confirmed",
+ * never "failed" — "failed" for money that then arrived is how a church ends
+ * up paying twice.
+ */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const ref = url.searchParams.get("reference") || url.searchParams.get("trxref");
   if (!ref) redirect("/settings/billing?status=error");
 
-  const [p] = await db
-    .select()
-    .from(payment)
-    .where(eq(payment.reference, ref))
-    .limit(1);
-  if (!p) redirect("/settings/billing?status=error");
-  if (p.status === "success") redirect("/settings/billing?status=success");
-
-  const v = await paystackVerify(ref);
-  if (v.ok && v.status === "success") {
-    await db
-      .update(payment)
-      .set({ status: "success", paidAt: new Date() })
-      .where(eq(payment.id, p.id));
-    await activatePlan(p.churchId, p.plan as PlanId, p.periodMonths);
-    // The referral bonus is paid here rather than at signup: we only give
-    // money away once a referred church has actually paid us. Idempotent, so
-    // a replayed callback — which Paystack does send — cannot pay twice, and
-    // it never throws, so a bonus failure can't fail a successful payment.
-    await awardReferralIfDue(p.churchId);
-    /*
-     * And the Partner's commission, for the same reason and with the same two
-     * properties: idempotent, because Paystack replays this callback, and it
-     * never throws, because a commission that failed to record must not turn
-     * a payment the church has already made into a failed one. Which payment
-     * of theirs this is decides whether it earns the first commission, the
-     * second, or the trail.
-     */
-    await awardPartnerCommission(p.id);
-    redirect("/settings/billing?status=success");
-  }
-
-  await db
-    .update(payment)
-    .set({ status: "failed" })
-    .where(eq(payment.id, p.id));
-  redirect("/settings/billing?status=failed");
+  const result = await settleSubscriptionPayment(ref);
+  redirect(`/settings/billing?status=${callbackStatus(result)}`);
 }

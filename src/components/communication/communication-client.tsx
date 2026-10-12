@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -22,7 +22,7 @@ import {
   sendCommunication,
 } from "@/app/(app)/communication/actions";
 import { COMM_TEMPLATES } from "@/lib/comm-templates";
-import { smsPages } from "@/lib/sms-pages";
+import { smsEncoding, smsPages } from "@/lib/sms-pages";
 import { formatMoney } from "@/lib/money";
 import { track } from "@/lib/track";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ import {
   withinSmsWindow,
 } from "@/lib/sms-window";
 import { QueuedSmsList, type QueuedSms } from "@/components/communication/queued-sms";
+import type { LogState } from "@/lib/comm-log-state";
 
 export type CommMember = {
   id: string;
@@ -67,6 +68,8 @@ type LogRow = {
   units: number;
   cost: number;
   createdAt: string;
+  /** Still going, cut short, or finished. See comm-log-state.ts. */
+  state: LogState;
 };
 
 const CHANNEL_ICON = { sms: MessageSquare, email: Mail, notification: Users };
@@ -128,6 +131,17 @@ export function CommunicationClient({
   /** The "it will go at 8am" message, after a send was held. */
   const [queuedNotice, setQueuedNotice] = useState<string | null>(null);
   const [alsoEmail, setAlsoEmail] = useState(true);
+  /**
+   * One id per message being sent, kept until the server gives a definite
+   * answer. If the request dies on the way (a timeout, a dropped connection)
+   * pressing Send again carries the same id, and the server recognises the
+   * second press instead of texting the whole congregation twice.
+   *
+   * Tied to what it was made for: change the wording or the audience and it
+   * is a different message, with a new id - otherwise a kept id would have
+   * the server refuse a genuinely new message as a repeat.
+   */
+  const requestIdRef = useRef<{ id: string; for: string } | null>(null);
 
   const contactKey = channel === "sms" ? "phone" : "email";
   const windowOpen = withinSmsWindow(new Date(), timezone);
@@ -157,6 +171,8 @@ export function CommunicationClient({
   }, [members, query]);
 
   const pages = smsPages(body);
+  // A single emoji, ₦ or curly quote shrinks every page from 160 to 70.
+  const unicode = channel === "sms" && smsEncoding(body) === "ucs2";
   const estCost = reach !== null ? smsPrice * pages * reach : null;
 
   function applyTemplate(id: string) {
@@ -217,22 +233,59 @@ export function CommunicationClient({
     if (channel === "sms" && !senderApproved)
       return toast.error(t("communication.yourSmsSenderIdIsn"));
 
+    const fingerprint = JSON.stringify([
+      channel,
+      audience,
+      audience === "group" ? groupId : "",
+      audience === "selected" ? [...selected].sort() : [],
+      audience === "contacts" ? allContacts : [],
+      channel === "email" ? subject : "",
+      body,
+    ]);
+    if (requestIdRef.current?.for !== fingerprint)
+      requestIdRef.current = { id: newRequestId(), for: fingerprint };
+    const requestId = requestIdRef.current.id;
     startTransition(async () => {
-      const res = await sendCommunication({
-        channel,
-        audience,
-        groupId: audience === "group" ? groupId : "",
-        memberIds: audience === "selected" ? [...selected] : [],
-        contacts: audience === "contacts" ? allContacts : [],
-        subject: channel === "email" ? subject : undefined,
-        body,
-        audienceLabel:
-          audience === "contacts"
-            ? allContacts.length === 1
-              ? `New contact: ${allContacts[0]}`
-              : `${allContacts.length} new contacts`
-            : audienceLabel(),
-      });
+      let res: Awaited<ReturnType<typeof sendCommunication>>;
+      try {
+        res = await sendCommunication({
+          channel,
+          audience,
+          groupId: audience === "group" ? groupId : "",
+          memberIds: audience === "selected" ? [...selected] : [],
+          contacts: audience === "contacts" ? allContacts : [],
+          subject: channel === "email" ? subject : undefined,
+          body,
+          audienceLabel:
+            audience === "contacts"
+              ? allContacts.length === 1
+                ? `New contact: ${allContacts[0]}`
+                : `${allContacts.length} new contacts`
+              : audienceLabel(),
+          requestId,
+        });
+      } catch (e) {
+        /*
+         * No answer is not the same as "failed". The request may have died
+         * after the server started sending, so this must not read as an
+         * invitation to press Send again. The id is kept: if they do, the
+         * server recognises it.
+         */
+        console.error("[communication] send did not return:", e);
+        toast.error(
+          "We could not confirm whether this was sent. Check History and the queue below before sending it again.",
+          { duration: 12_000 },
+        );
+        router.refresh();
+        return;
+      }
+      /*
+       * A definite answer: the next press is a new message - EXCEPT the
+       * server's own "this is already being sent". That press is still going,
+       * so the id is kept and a third press is refused as well, instead of
+       * slipping through with a fresh id as a second copy.
+       */
+      if (!(res.ok === false && res.duplicate)) requestIdRef.current = null;
       if (res.ok === false) {
         toast.error(res.error);
         return;
@@ -247,16 +300,40 @@ export function CommunicationClient({
        * go, and the composer keeps the wording so it can be cancelled and
        * re-sent differently if the timing is wrong.
        */
-      if (res.ok === "queued") {
+      if (res.ok === "queued" && !res.sendingNow) {
         setQueuedNotice(res.notice);
         toast.success(`Queued for ${res.count} ${res.count === 1 ? "person" : "people"}.`);
         router.refresh();
         return;
       }
+      if (res.ok === "queued") {
+        // Accepted and going out in the background. The notice stays on screen
+        // because the toast disappears long before a large send finishes.
+        setQueuedNotice(res.notice);
+        toast.success(`Sending to ${res.count} ${res.count === 1 ? "person" : "people"}…`);
+        track(channel === "sms" ? "sms.sent" : "email.sent", { value: res.count });
+        setBody("");
+        setSubject("");
+        setSelected(new Set());
+        setQuery("");
+        setContacts([]);
+        setContactDraft("");
+        router.refresh();
+        return;
+      }
+      setQueuedNotice(null);
       const cost = res.cost ? ` · ${formatMoney(res.cost, currency)}` : "";
-      toast.success(
-        `Sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ""}${cost}.`,
-      );
+      if (res.unconfirmed) {
+        // Not a success to wave through: these may have gone, so sending
+        // again would text some people twice. Said for long enough to read.
+        toast.warning(
+          `Sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ""}${cost}. The network did not confirm ${res.unconfirmed} more: they may have gone, so they were charged and not retried. Check History before sending to them again.`,
+          { duration: 15_000 },
+        );
+      } else
+        toast.success(
+          `Sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ""}${cost}.`,
+        );
       track(channel === "sms" ? "sms.sent" : "email.sent", { value: res.sent });
       // Reset the composer so the page is ready for the next message.
       setBody("");
@@ -599,11 +676,19 @@ export function CommunicationClient({
               {channel === "sms" && (
                 <>
                   {" "}
-                  · {body.trim().length} chars · {pages} page
+                  · {body.length} chars · {pages} page
                   {pages === 1 ? "" : "s"}
                 </>
               )}
             </p>
+            {unicode && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This message has a character that is not in the basic SMS alphabet (an
+                emoji, ₦, a curly quote or a dash, an accented letter), so each page
+                holds 70 characters instead of 160 and costs the same. Replace it to
+                fit more on a page.
+              </p>
+            )}
           </div>
 
           {/* SMS meta */}
@@ -692,6 +777,10 @@ export function CommunicationClient({
                         {r.channel === "notification" ? "Staff" : r.channel}
                       </Badge>
                       <span className="text-sm font-semibold">{r.audience}</span>
+                      {r.state === "sending" && <Badge variant="outline">Sending…</Badge>}
+                      {r.state === "interrupted" && (
+                        <Badge variant="destructive">Interrupted</Badge>
+                      )}
                     </div>
                     {r.subject && (
                       <p className="truncate text-sm font-medium">{r.subject}</p>
@@ -729,4 +818,11 @@ export function CommunicationClient({
       )}
     </div>
   );
+}
+
+/** A fresh id for one message. `randomUUID` needs a secure context. */
+function newRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+    return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }

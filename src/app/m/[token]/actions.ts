@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { church, member, memberSignup } from "@/db/schema";
 import {
   applyVerifiedUpdate,
+  churchDial,
   cleanSignupValues,
   ensureSignup,
   notifySignupManagers,
@@ -113,7 +114,11 @@ export async function submitMemberUpdate(input: {
   const loaded = await loadByToken(token);
   if (!loaded) return { ok: false, error: DEAD_LINK };
 
-  const cleaned = cleanSignupValues(input.values, loaded.signup);
+  const cleaned = cleanSignupValues(
+    input.values,
+    loaded.signup,
+    await churchDial(loaded.church.id),
+  );
   if (!cleaned.ok) return { ok: false, error: cleaned.error };
 
   if (loaded.signup.requireUpdateOtp) {

@@ -732,6 +732,7 @@ export function Sidebar({
   userEmail,
   userImage,
   isSuperAdmin = false,
+  isPartner = false,
   perms = [],
   churchSlug = null,
   isOwner = false,
@@ -745,6 +746,7 @@ export function Sidebar({
   userEmail: string;
   userImage?: string | null;
   isSuperAdmin?: boolean;
+  isPartner?: boolean;
   perms?: string[];
   /** For hiding a module that is only being piloted elsewhere. */
   churchSlug?: string | null;
@@ -1105,6 +1107,7 @@ export function Sidebar({
           email={userEmail}
           image={userImage}
           isSuperAdmin={isSuperAdmin}
+          isPartner={isPartner}
           churches={churches}
           activeChurchId={activeChurchId}
           className="w-full"

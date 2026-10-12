@@ -8,10 +8,17 @@
  * Creates its own church and removes exactly what it created.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { church, facility, facilityBooking, facilityClosure } from "@/db/schema";
-import { calendarFor, clashesFor, listBookings, pendingCount } from "@/lib/facilities";
+import {
+  calendarFor,
+  clashesFor,
+  isBookingOverlapViolation,
+  listBookings,
+  lockFacilityForBooking,
+  pendingCount,
+} from "@/lib/facilities";
 
 const stamp = Date.now();
 const churchId = `fac-check-${stamp}`;
@@ -279,5 +286,114 @@ describe("what the page reads", () => {
     );
     // Both of the 7th's bookings were declined/cancelled.
     expect(entries.filter((e) => e.kind === "booking")).toHaveLength(0);
+  });
+});
+
+describe("two managers approving one slot at the same moment", () => {
+  /*
+   * READ COMMITTED does not stop two "is it free? then take it" runs from both
+   * succeeding (AGENTS.md). Each approval takes the facility's row lock first,
+   * so the second WAITS — and then its clash check sees the first approval.
+   * The two transactions are interleaved by hand over one contested hall, so
+   * this fails without the lock rather than passing because they happened to
+   * run one after the other.
+   */
+  it("lets exactly one through", async () => {
+    const wedding = await book(hallId, "2027-03-06T10:00:00Z", "2027-03-06T14:00:00Z", "requested", "Wedding");
+    const youth = await book(hallId, "2027-03-06T11:00:00Z", "2027-03-06T13:00:00Z", "requested", "Youth");
+
+    let aHasLock!: () => void;
+    const aLocked = new Promise<void>((r) => (aHasLock = r));
+    let letAGo!: () => void;
+    const aMayFinish = new Promise<void>((r) => (letAGo = r));
+
+    const approve = (id: string, startsAt: string, endsAt: string, hold?: () => Promise<void>) =>
+      db.transaction(async (tx) => {
+        expect(await lockFacilityForBooking(tx, churchId, hallId)).toBe(true);
+        if (hold) await hold();
+        const clashes = await clashesFor(
+          {
+            churchId,
+            facilityId: hallId,
+            startsAt: at(startsAt),
+            endsAt: at(endsAt),
+            ignoreBookingId: id,
+            bufferMinutes: 60,
+          },
+          tx,
+        );
+        if (clashes.length > 0) return false;
+        const rows = await tx
+          .update(facilityBooking)
+          .set({ status: "approved" })
+          .where(and(eq(facilityBooking.id, id), eq(facilityBooking.status, "requested")))
+          .returning({ id: facilityBooking.id });
+        return rows.length === 1;
+      });
+
+    const a = approve(wedding, "2027-03-06T10:00:00Z", "2027-03-06T14:00:00Z", async () => {
+      aHasLock();
+      await aMayFinish;
+    });
+    await aLocked;
+    // B starts while A holds the lock, and must block on it.
+    const b = approve(youth, "2027-03-06T11:00:00Z", "2027-03-06T13:00:00Z");
+    await new Promise((r) => setTimeout(r, 300));
+    letAGo();
+
+    const [okA, okB] = await Promise.all([a, b]);
+    expect(okA).toBe(true);
+    expect(okB).toBe(false);
+
+    const rows = await db
+      .select({ id: facilityBooking.id, status: facilityBooking.status })
+      .from(facilityBooking)
+      .where(inArray(facilityBooking.id, [wedding, youth]));
+    expect(rows.filter((r) => r.status === "approved").map((r) => r.id)).toEqual([wedding]);
+  });
+
+  it("will not lock a facility from another church", async () => {
+    const other = await db.transaction((tx) => lockFacilityForBooking(tx, "zzcheck-not-this-church", hallId));
+    expect(other).toBe(false);
+  });
+});
+
+describe("the database's own rule, for a write path that forgets the lock", () => {
+  /*
+   * The row lock above is the application's half. This is the floor under it:
+   * the `facility_booking_no_overlap` exclusion constraint refuses a second
+   * APPROVED booking whose interval overlaps another on the same facility,
+   * whoever writes it — an import, a superadmin tool, a cron — with SQLSTATE
+   * 23P01, which `isBookingOverlapViolation` recognises.
+   */
+  it("refuses two overlapping approved bookings written directly", async () => {
+    await book(busId, "2027-04-10T10:00Z", "2027-04-10T12:00Z", "approved", "First");
+    const err = await book(busId, "2027-04-10T11:00Z", "2027-04-10T13:00Z", "approved", "Second").then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).not.toBeNull();
+    expect(isBookingOverlapViolation(err)).toBe(true);
+  });
+
+  it("allows one to start exactly when the other ends", async () => {
+    await book(busId, "2027-04-11T10:00Z", "2027-04-11T12:00Z", "approved", "Morning");
+    await expect(
+      book(busId, "2027-04-11T12:00Z", "2027-04-11T14:00Z", "approved", "Afternoon"),
+    ).resolves.toBeTruthy();
+  });
+
+  it("does not refuse a REQUEST over an approved booking — that is what the review is for", async () => {
+    await book(busId, "2027-04-12T10:00Z", "2027-04-12T12:00Z", "approved", "Held");
+    await expect(
+      book(busId, "2027-04-12T11:00Z", "2027-04-12T13:00Z", "requested", "Hoping"),
+    ).resolves.toBeTruthy();
+  });
+
+  it("does not stop two facilities being used at once", async () => {
+    await book(busId, "2027-04-13T10:00Z", "2027-04-13T12:00Z", "approved", "Bus");
+    await expect(
+      book(hallId, "2027-04-13T10:00Z", "2027-04-13T12:00Z", "approved", "Hall"),
+    ).resolves.toBeTruthy();
   });
 });

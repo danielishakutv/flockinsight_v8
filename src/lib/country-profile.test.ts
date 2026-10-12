@@ -4,10 +4,14 @@ import {
   SMS_COUNTRIES,
   countryProfile,
   currencyForCountry,
+  hasNumberingPlan,
+  isValidTimeZone,
   knownCountries,
   localeForCountry,
+  nationalLengthForDial,
   smsAvailableForCountry,
 } from "@/lib/country-profile";
+import { DICTIONARIES } from "@/lib/i18n/dictionaries";
 import { CURRENCIES } from "@/lib/money";
 import { COUNTRIES } from "@/lib/geo";
 import { LOCALES } from "@/lib/i18n/locales";
@@ -72,9 +76,43 @@ describe("language", () => {
     expect(localeForCountry("France")).toBe("fr");
   });
 
-  it("starts an East African church in Swahili where that is the lingua franca", () => {
-    expect(localeForCountry("Kenya")).toBe("sw");
-    expect(localeForCountry("Tanzania")).toBe("sw");
+  it("starts an East African church in English until Swahili is complete", () => {
+    // About a third of the app is in Swahili, unreviewed; defaulting a Kenyan
+    // pastor into it gave every screen two languages at once.
+    expect(localeForCountry("Kenya")).toBe("en");
+    expect(localeForCountry("Tanzania")).toBe("en");
+  });
+
+  it("never starts a country in a language that is mostly untranslated", () => {
+    const leaves = (o: unknown): number =>
+      o && typeof o === "object"
+        ? Object.values(o as Record<string, unknown>).reduce<number>(
+            (n, v) => n + leaves(v),
+            0,
+          )
+        : 1;
+    const full = leaves(DICTIONARIES.en);
+    for (const c of knownCountries()) {
+      const loc = localeForCountry(c);
+      if (loc === "en") continue;
+      const share = leaves(DICTIONARIES[loc]) / full;
+      expect(share, `${c} starts in ${loc}, ${Math.round(share * 100)}% translated`).toBeGreaterThanOrEqual(0.5);
+    }
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts every timezone a country profile lands on", () => {
+    for (const c of knownCountries()) expect(isValidTimeZone(countryProfile(c).tz), c).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+  });
+
+  it("refuses what Intl would throw on, which used to stop the crons for everybody", () => {
+    expect(isValidTimeZone("GMT+2")).toBe(false);
+    expect(isValidTimeZone("Africa/Atlantis")).toBe(false);
+    expect(isValidTimeZone("Africa/Maputo ")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+    expect(isValidTimeZone(null)).toBe(false);
   });
 });
 
@@ -154,6 +192,20 @@ describe("dial codes", () => {
     expect(countryProfile("Mozambique").dial).toBe("258");
     expect(countryProfile("Nigeria").dial).toBe("234");
     expect(countryProfile("Kenya").dial).toBe("254");
+  });
+
+  it("has a numbering plan for every country it has a dial code for", () => {
+    // Without one, a country's numbers are only checked for being 7–12 digits,
+    // which is how a Nigerian number one digit short used to get through.
+    for (const country of knownCountries()) {
+      const dial = countryProfile(country).dial;
+      expect(hasNumberingPlan(dial), `${country} (+${dial})`).toBe(true);
+    }
+  });
+
+  it("holds Nigeria to exactly ten digits, as Termii does", () => {
+    expect(nationalLengthForDial("234")).toEqual([10, 10]);
+    expect(nationalLengthForDial("+234")).toEqual([10, 10]);
   });
 });
 

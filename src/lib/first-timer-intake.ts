@@ -1,10 +1,12 @@
 import "server-only";
-import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { church, firstTimerSignup, member } from "@/db/schema";
-import { findExistingMember } from "@/lib/member-signup";
-import { normalizePhone } from "@/lib/sms";
+import { churchDial, findExistingMember } from "@/lib/member-signup";
+import { memberLimitStatus } from "@/lib/plan-limits";
+import { planName } from "@/lib/plans";
+import { e164Phone } from "@/lib/phone-intl";
 import { randomSuffix, slugify } from "@/lib/slug";
 import { siteUrl } from "@/lib/site";
 import {
@@ -231,6 +233,18 @@ export async function registerFirstTimer(opts: {
    * follow-up. Somebody did just ask to be contacted, and a human will look.
    */
   allowPatchExisting?: boolean;
+  /**
+   * Refuse a NEW row when the church is at its plan's member limit.
+   *
+   * True for the staff form: Members → Add and the CSV import already refuse
+   * at the limit, and without this First-timers → Add was a way round it —
+   * every row it writes is a full member row that every count includes.
+   *
+   * Checked only once we know the person is new. Recognising somebody already
+   * on the register adds nobody, so a match is never refused. Left false on
+   * the public link, so a visitor is never turned away at the door.
+   */
+  enforceMemberLimit?: boolean;
 }): Promise<{ ok: true; result: IntakeOutcome } | { ok: false; error: string }> {
   const parsed = cleanIntake(opts.intake);
   if (!parsed.ok) return { ok: false, error: parsed.error };
@@ -275,10 +289,18 @@ export async function registerFirstTimer(opts: {
     }
   }
 
-  const phoneNorm = d.phone ? normalizePhone(d.phone) : null;
+  /*
+   * Read and stored with the church's OWN dial code. This was
+   * `normalizePhone`, which only knows Nigerian numbers: a Mozambican's
+   * "84 123 4567" normalised to nothing, so phone matching was skipped and a
+   * visitor who came back the next Sunday was written down a second time —
+   * the one thing this module exists to stop.
+   */
+  const dial = await churchDial(opts.churchId);
+  const phone = d.phone ? (e164Phone(d.phone, dial) ?? d.phone) : null;
   const emailNorm = d.email ? d.email.toLowerCase() : null;
 
-  const existing = await findExistingMember(opts.churchId, emailNorm, phoneNorm);
+  const existing = await findExistingMember(opts.churchId, emailNorm, phone, dial);
 
   if (existing) {
     const [current] = await db
@@ -313,7 +335,7 @@ export async function registerFirstTimer(opts: {
       if (!current?.firstVisitDate) patch.firstVisitDate = d.firstVisitDate;
       if (!current?.gender && d.gender) patch.gender = d.gender;
       if (!current?.email && d.email) patch.email = d.email;
-      if (!current?.phone && d.phone) patch.phone = d.phone;
+      if (!current?.phone && phone) patch.phone = phone;
       if (!current?.address && d.address) patch.address = d.address;
       if (!current?.city && d.city) patch.city = d.city;
       if (!current?.state && d.state) patch.state = d.state;
@@ -340,6 +362,15 @@ export async function registerFirstTimer(opts: {
     };
   }
 
+  if (opts.enforceMemberLimit) {
+    const limit = await memberLimitStatus(opts.churchId);
+    if (limit.atLimit)
+      return {
+        ok: false,
+        error: `You've reached the ${planName(limit.plan)} plan limit of ${limit.limit} members. Upgrade your plan to add more.`,
+      };
+  }
+
   const [created] = await db
     .insert(member)
     .values({
@@ -347,7 +378,7 @@ export async function registerFirstTimer(opts: {
       firstName: d.firstName,
       lastName: d.lastName,
       gender: d.gender,
-      phone: d.phone,
+      phone,
       email: d.email,
       address: d.address,
       city: d.city,
@@ -371,6 +402,67 @@ export async function registerFirstTimer(opts: {
     .returning({ id: member.id });
 
   return { ok: true, result: { outcome: "created", memberId: created.id } };
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Before somebody is deleted, write their name onto everyone they invited.
+ *
+ * `invited_by_id` is ON DELETE SET NULL, and `invited_by_name` is documented
+ * as the name "of someone since removed" — but nothing ever copied it, so
+ * deleting an inviter erased the inviter from every first-timer they brought,
+ * on the First-timers page, the member report and the CSV.
+ *
+ * Call inside the same transaction as the delete. Built from column builders
+ * and a plain IN list rather than a correlated subquery in raw `sql`, which is
+ * the join-less qualifier trap in AGENTS.md. Never overwrites a name already
+ * there.
+ */
+export async function preserveInviterNames(
+  tx: Tx,
+  churchId: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const inviters = await tx
+    .select({ id: member.id, firstName: member.firstName, lastName: member.lastName })
+    .from(member)
+    .where(and(eq(member.churchId, churchId), inArray(member.id, ids)))
+    .for("update");
+  if (inviters.length === 0) return;
+
+  // Only the ones who actually invited somebody still unnamed.
+  const used = await tx
+    .selectDistinct({ id: member.invitedById })
+    .from(member)
+    .where(
+      and(
+        eq(member.churchId, churchId),
+        inArray(
+          member.invitedById,
+          inviters.map((i) => i.id),
+        ),
+        isNull(member.invitedByName),
+      ),
+    );
+  const usedIds = new Set(used.map((u) => u.id));
+
+  for (const inv of inviters) {
+    if (!usedIds.has(inv.id)) continue;
+    const name = [inv.firstName, inv.lastName].filter(Boolean).join(" ").trim();
+    if (!name) continue;
+    await tx
+      .update(member)
+      .set({ invitedByName: name.slice(0, 120) })
+      .where(
+        and(
+          eq(member.churchId, churchId),
+          eq(member.invitedById, inv.id),
+          isNull(member.invitedByName),
+        ),
+      );
+  }
 }
 
 /** Recent first-timers, newest visit first, for the module's own page. */

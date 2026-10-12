@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { livestream, livestreamOutput } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
+import { parseWallClockInput } from "@/lib/wall-clock-input";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
@@ -32,7 +33,7 @@ const DENIED: ActionResult = {
 async function guard() {
   const { church, user } = await requireChurch();
   if (!(await can("meetings.manage"))) return null;
-  return { churchId: church.id, userId: user.id };
+  return { churchId: church.id, userId: user.id, timezone: church.timezone };
 }
 
 /**
@@ -101,8 +102,9 @@ export async function createLivestream(input: unknown): Promise<ActionResult> {
   }
   const v = parsed.data;
 
-  const scheduledFor = v.scheduledFor ? new Date(v.scheduledFor) : null;
-  if (scheduledFor && Number.isNaN(scheduledFor.getTime())) {
+  // In the church's timezone, not the server's — see lib/wall-clock-input.
+  const scheduledFor = v.scheduledFor ? parseWallClockInput(v.scheduledFor, g.timezone) : null;
+  if (v.scheduledFor && !scheduledFor) {
     return { ok: false, error: "Pick a real date and time." };
   }
 

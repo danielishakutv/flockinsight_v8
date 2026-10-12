@@ -144,8 +144,10 @@ export async function GET(request: Request) {
           sent++;
           byKind[kind] = (byKind[kind] ?? 0) + 1;
         }
-      } catch {
-        /* keep going */
+      } catch (e) {
+        // One owner's failure must not stop the rest — but it is recorded, so
+        // "sent: 0" and "every send threw" can be told apart.
+        console.error(`[cron/reminders] ${kind} email to ${o.churchName} failed`, e);
       }
     }
   }

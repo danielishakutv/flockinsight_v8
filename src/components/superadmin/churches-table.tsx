@@ -237,7 +237,7 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
             className="pl-9"
           />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground text-xs font-semibold">
             Sort
           </span>

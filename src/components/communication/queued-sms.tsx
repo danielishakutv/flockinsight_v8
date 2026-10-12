@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Clock, Loader2, X } from "lucide-react";
+import { AlertTriangle, Clock, Loader2, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { cancelQueuedSmsAction } from "@/app/(app)/communication/actions";
 import { SMS_WINDOW_LABEL } from "@/lib/sms-window";
@@ -33,7 +33,8 @@ function originLabel(origin: string): string {
 }
 
 /**
- * SMS waiting for the delivery window, and anything that failed inside it.
+ * SMS waiting for the delivery window, going out right now, or that went
+ * wrong - failed outright, or reached only some of its list.
  *
  * This list is the reason the whole feature is honest. A message held until
  * morning is invisible otherwise — not in the history (it has not been sent)
@@ -76,12 +77,21 @@ export function QueuedSmsList({
         </CardTitle>
         <p className="text-muted-foreground text-sm">
           Networks deliver SMS between {SMS_WINDOW_LABEL}. These go out at the
-          times shown, and nothing is charged until they do.
+          times shown, and only the messages that actually go are charged.
         </p>
       </CardHeader>
       <CardContent className="divide-y p-0">
         {items.map((q) => {
+          /*
+           * Four states, and each says which it is. "Sending" and "partly sent"
+           * used to be invisible: a row interrupted mid-send, or one where the
+           * gateway refused some numbers, vanished from this list and from the
+           * history alike.
+           */
           const failed = q.status === "failed";
+          const sending = q.status === "sending";
+          const partial = q.status === "sent";
+          const waiting = q.status === "queued";
           return (
             <div key={q.id} className="flex flex-wrap items-start gap-3 p-4">
               <div className="min-w-0 flex-1">
@@ -96,6 +106,16 @@ export function QueuedSmsList({
                       <AlertTriangle className="size-3" /> Didn&apos;t send
                     </Badge>
                   )}
+                  {sending && (
+                    <Badge variant="secondary" className="gap-1">
+                      <Send className="size-3" /> Sending now
+                    </Badge>
+                  )}
+                  {partial && (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertTriangle className="size-3" /> Partly sent
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                   {q.body ?? (
@@ -106,13 +126,15 @@ export function QueuedSmsList({
                   )}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {failed ? (
+                  {failed || partial ? (
                     // The reason, not "failed". It is almost always something
                     // the church can fix — a wallet to top up, a sender ID
                     // still waiting for approval.
                     <span className="text-destructive">
                       {q.error ?? "We couldn't send this one."}
                     </span>
+                  ) : sending ? (
+                    <>Going out now. It moves to History when it is done.</>
                   ) : (
                     <>
                       Goes out{" "}
@@ -128,8 +150,15 @@ export function QueuedSmsList({
                   )}
                   {q.createdByName ? ` · composed by ${q.createdByName}` : ""}
                 </p>
+                {waiting && q.error && (
+                  // Waiting again after an attempt the gateway refused: say why,
+                  // or the next retry looks like the first.
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Last attempt: {q.error}
+                  </p>
+                )}
               </div>
-              {canManage && !failed && (
+              {canManage && waiting && (
                 <Button
                   variant="ghost"
                   size="sm"

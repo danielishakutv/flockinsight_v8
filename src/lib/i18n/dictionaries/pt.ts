@@ -150,6 +150,7 @@ export const pt: PartialDictionary = {
   },
 
   nav: {
+    partnerDashboard: "Painel de Parceiro",
     dashboard: "Painel",
     dashboardDesc: "A sua igreja num relance",
     attendance: "Presenças",
@@ -232,6 +233,12 @@ export const pt: PartialDictionary = {
   },
 
   auth: {
+    logInForPartner: "Entre no seu painel de Parceiro.",
+    noPartnerAccount: "Ainda não tem conta?",
+    createPartnerAccount: "Criar uma conta de Parceiro",
+    bringingChurches: "Está trazendo igrejas para o FlockInsight?",
+    becomeAPartner: "Tornar-se Parceiro",
+    notAChurch: "Não está cadastrando uma igreja?",
     youAposReIn: "Entrou",
     invitationUnavailable: "Convite indisponível",
     goToLogin: "Ir para o início de sessão",

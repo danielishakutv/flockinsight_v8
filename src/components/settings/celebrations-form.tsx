@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/components/i18n-provider";
+import { SmsUnavailableRow } from "@/components/settings/sms-unavailable-row";
 
 type State = CelebrationInput;
 
@@ -99,18 +100,22 @@ export function CelebrationsForm({
   initial,
   timezone,
   smsApproved,
+  smsAvailable,
   queue,
 }: {
   initial: State;
   timezone: string;
   smsApproved: boolean;
+  /** False where SMS cannot be delivered (lib/country-profile.ts). */
+  smsAvailable: boolean;
   queue: QueueItem[];
 }) {
   const t = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [testing, startTest] = useTransition();
-  const [f, setF] = useState<State>(initial);
+  // A saved "on" from before SMS was withheld here must not show its fields.
+  const [f, setF] = useState<State>({ ...initial, sms: initial.sms && smsAvailable });
   const set = (patch: Partial<State>) => setF((p) => ({ ...p, ...patch }));
 
   function save() {
@@ -151,12 +156,16 @@ export function CelebrationsForm({
               checked={f.email}
               onChange={(v) => set({ email: v })}
             />
-            <ToggleRow
-              title="SMS"
-              desc="Uses your SMS wallet."
-              checked={f.sms}
-              onChange={(v) => set({ sms: v })}
-            />
+            {smsAvailable ? (
+              <ToggleRow
+                title="SMS"
+                desc="Uses your SMS wallet."
+                checked={f.sms}
+                onChange={(v) => set({ sms: v })}
+              />
+            ) : (
+              <SmsUnavailableRow />
+            )}
           </div>
           {f.sms && !smsApproved && (
             <p className="flex items-center gap-2 rounded-lg bg-amber-500/10 p-3 text-xs font-medium text-amber-700 dark:text-amber-400">

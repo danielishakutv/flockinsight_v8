@@ -176,11 +176,79 @@ describe("a transcode never puts the file at risk", () => {
   });
 
   it("runs the queue without two workers colliding", async () => {
-    // The advisory lock is what stops a PM2 cluster transcoding one file twice.
+    // The lock is a throttle; at least one run must get it.
     const [a, b] = await Promise.all([runTranscodeQueue(1), runTranscodeQueue(1)]);
-    const claimed = [a.claimed, b.claimed].filter(Boolean).length;
-    expect(claimed).toBeLessThanOrEqual(2);
     expect(a.claimed || b.claimed).toBe(true);
+  });
+
+  it("claims one row exactly once, however many ask at the same moment", async () => {
+    /*
+     * The guard against double work is the claim, not the lock: two calls for
+     * one row — the upload's own kick and the cron, in one worker — used to
+     * both convert it into the same output file.
+     */
+    const { id } = await makeLocalMedia({ bytes: 4096 });
+    const outs = await Promise.all([transcodeMedia(id), transcodeMedia(id), transcodeMedia(id)]);
+    const [row] = await db
+      .select({ attempts: media.transcodeAttempts })
+      .from(media)
+      .where(eq(media.id, id));
+    expect(row.attempts).toBe(1);
+    const turnedAway = outs.filter(
+      (o) => o.status === "skipped" && /already being converted|not waiting/.test(o.reason),
+    );
+    expect(turnedAway.length).toBe(2);
+  });
+
+  it("takes back a conversion whose worker died, once its lease has run out", async () => {
+    // A deploy killed ffmpeg and left the row "running" for ever.
+    const { id } = await makeLocalMedia({ bytes: 4096 });
+    await db
+      .update(media)
+      .set({
+        transcodeStatus: "running",
+        transcodeAttempts: 1,
+        transcodeLeaseUntil: new Date(Date.now() - 60_000),
+      })
+      .where(eq(media.id, id));
+    const out = await transcodeMedia(id);
+    expect(out.status).not.toBe("skipped");
+    const [row] = await db
+      .select({ attempts: media.transcodeAttempts, status: media.transcodeStatus })
+      .from(media)
+      .where(eq(media.id, id));
+    expect(row.attempts).toBe(2);
+    expect(row.status).not.toBe("running");
+  });
+
+  it("leaves a conversion alone while its lease is still current", async () => {
+    const { id } = await makeLocalMedia({ bytes: 4096 });
+    await db
+      .update(media)
+      .set({
+        transcodeStatus: "running",
+        transcodeAttempts: 1,
+        transcodeLeaseUntil: new Date(Date.now() + 60 * 60_000),
+      })
+      .where(eq(media.id, id));
+    expect((await transcodeMedia(id)).status).toBe("skipped");
+    expect((await read(id)).transcodeStatus).toBe("running");
+  });
+
+  it("gives up on a file that has killed its worker three times", async () => {
+    const { id } = await makeLocalMedia({ bytes: 4096 });
+    await db
+      .update(media)
+      .set({
+        transcodeStatus: "running",
+        transcodeAttempts: 3,
+        transcodeLeaseUntil: new Date(Date.now() - 60_000),
+      })
+      .where(eq(media.id, id));
+    await runTranscodeQueue(0);
+    const after = await read(id);
+    expect(after.transcodeStatus).toBe("failed");
+    expect(after.transcodeError).toMatch(/interrupted repeatedly/i);
   });
 });
 

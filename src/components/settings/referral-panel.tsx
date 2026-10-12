@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Copy, Gift, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/money";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,19 +31,25 @@ function fmt(iso: string | null) {
 
 export function ReferralPanel({
   link,
-  currency,
   rewards,
   summary,
   churches,
 }: {
   link: string;
-  currency: string;
+  /**
+   * @deprecated Ignored. Rewards are wallet credits, and the wallet is naira
+   * for every church: this used to print a ₦2,000 reward as "KSh 2,000". To
+   * be removed from the referrals page.
+   */
+  currency?: string;
   rewards: { referrer: number; referred: number };
   summary: { total: number; subscribed: number; pending: number; earned: number };
   churches: ReferredRow[];
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  // Wallet credits, so naira — see lib/wallet-currency.ts.
+  const currency = WALLET_CURRENCY;
 
   async function copy() {
     try {

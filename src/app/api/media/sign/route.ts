@@ -1,13 +1,19 @@
-import { requireChurch } from "@/lib/session";
-import { can } from "@/lib/permissions";
+import { churchForApi, refusalResponse } from "@/lib/api-church";
 import { randomUUID } from "crypto";
 import {
   isCloudinaryConfigured,
   signDirectUpload,
   MAX_ASSET_BYTES,
 } from "@/lib/cloudinary";
-import { classifyMime, permForKind, MEDIA_KINDS, type MediaKind } from "@/lib/media";
-import { getStorageInfo } from "@/lib/storage";
+import {
+  canUploadKind,
+  classifyMime,
+  refuseUploadKind,
+  MEDIA_KINDS,
+  type MediaKind,
+} from "@/lib/media";
+import { LIBRARY_FORBIDDEN } from "@/lib/media-upload-rules";
+import { issueUploadTicket } from "@/lib/media-upload-tickets";
 import { formatBytes } from "@/lib/storage-bytes";
 
 export const runtime = "nodejs";
@@ -36,7 +42,9 @@ function json(data: unknown, status = 200) {
 }
 
 export async function POST(request: Request) {
-  const { church } = await requireChurch();
+  const who = await churchForApi();
+  if (!who.ok) return refusalResponse(who);
+  const { church, user } = who;
 
   if (!isCloudinaryConfigured())
     return json(
@@ -57,11 +65,23 @@ export async function POST(request: Request) {
   const mime = String(body.mime ?? "");
   const bytes = Math.max(0, Math.round(Number(body.bytes ?? 0)) || 0);
 
-  if (!(await can(permForKind(kind))))
-    return json({ ok: false, error: "You can't upload this." }, 403);
+  if (!(await canUploadKind(kind)))
+    return json({ ok: false, code: "forbidden", error: LIBRARY_FORBIDDEN }, 403);
 
   if (church.status === "suspended")
     return json({ ok: false, error: "This church's account is paused." }, 403);
+
+  // The sermon library is Pro's; the same answer every upload route gives.
+  const gate = await refuseUploadKind(kind);
+  if (gate) return json(gate, 403);
+
+  /*
+   * A size is required. The quota check below used to be skipped when it was
+   * zero or missing, so `{bytes: 0}` bought a ticket at a full quota. The real
+   * client always sends the file's size; nothing honest sends 0.
+   */
+  if (bytes <= 0)
+    return json({ ok: false, error: "Say how big the file is before uploading it." }, 400);
 
   /*
    * The per-file ceiling, checked before a single byte moves.
@@ -82,24 +102,40 @@ export async function POST(request: Request) {
       413,
     );
 
-  const info = await getStorageInfo(church.id, church.storageExtraBytes);
-  if (bytes > 0 && info.used + bytes > info.limit)
-    return json(
-      {
-        ok: false,
-        error: `Not enough storage — this file is ${formatBytes(bytes)} and you have ${formatBytes(info.free)} free. Free up space or upgrade your storage.`,
-        quota: { used: info.used, limit: info.limit },
-      },
-      413,
-    );
-
   const { resourceType, audio } = classifyMime(mime);
 
+  /*
+   * One ticket, one asset. The public id is chosen here and signed (with
+   * overwrite=false), so the ticket cannot be reused for a second file or to
+   * replace the first — and /complete re-checks the quota against the size
+   * Cloudinary actually stored, because the size here is only the browser's
+   * word.
+   *
+   * And the ticket is WRITTEN DOWN before it is handed out. An upload that
+   * never reaches /complete used to be counted against nobody, and tickets
+   * could be asked for without limit. Now its declared size is reserved while
+   * it is open, a church may hold only a few at once, and the storage cron
+   * destroys the asset of any ticket nobody completed. See `issueUploadTicket`.
+   */
+  const name = randomUUID();
+  const folder = `flockinsight/${church.id}`;
+  const verdict = await issueUploadTicket({
+    churchId: church.id,
+    storageExtraBytes: church.storageExtraBytes,
+    publicId: `${folder}/${name}`,
+    resourceType,
+    bytes,
+    userId: user.id,
+  });
+  if (!verdict.ok)
+    return json({ ok: false, code: verdict.code, error: verdict.error }, verdict.status);
+
   const ticket = signDirectUpload({
-    folder: `flockinsight/${church.id}`,
+    folder,
     resourceType,
     audio,
     uniqueUploadId: randomUUID(),
+    publicId: name,
   });
   if (!ticket)
     return json({ ok: false, error: "Media uploads aren't set up yet." }, 503);

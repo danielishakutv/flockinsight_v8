@@ -47,6 +47,7 @@ import {
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { notifyChurchManagers, notifyUser } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
+import { zMoney, zOptionalMoney } from "@/lib/money-zod";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { destroyFromCloudinary, type ResourceType } from "@/lib/cloudinary";
 
@@ -60,22 +61,12 @@ const fail = (error: string) => ({ ok: false as const, error });
 const emptyToNull = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? null : v;
 
-const money = z.preprocess(
-  (v) => (v === "" || v === null || v === undefined ? null : parseAmount(v)),
-  z
-    .number()
-    .min(0, "An amount can't be negative")
-    .max(1_000_000_000_000, "That amount is too large")
-    .nullable(),
-);
+// Both read by the platform's one money parser (lib/money-input), so a figure
+// typed on a comma-decimal keypad is not multiplied by a hundred, and one that
+// cannot be read one way only is refused with a sentence that says so.
+const money = zOptionalMoney({ allowZero: true });
 
-const positiveMoney = z.preprocess(
-  (v) => parseAmount(v),
-  z
-    .number({ message: "Enter an amount" })
-    .positive("The amount must be more than zero")
-    .max(1_000_000_000_000, "That amount is too large"),
-);
+const positiveMoney = zMoney();
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a valid date");
 const METHODS = ["cash", "transfer", "card", "cheque", "online", "other"] as const;

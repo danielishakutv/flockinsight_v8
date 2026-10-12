@@ -1,4 +1,5 @@
 import { requireChurch } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { getAttendanceRows } from "@/lib/attendance-export";
 import {
   ATTENDANCE_CSV_HEADERS,
@@ -16,6 +17,17 @@ function csvCell(value: string | number | null): string {
 export async function GET(request: Request) {
   const { church } = await requireChurch();
   const isTemplate = new URL(request.url).searchParams.get("template") === "1";
+  /*
+   * A route handler is its own entry point: no page guard or layout runs before
+   * it, so the permission is checked here. 403, not a redirect — a redirect
+   * inside a download saves the sign-in page as a .csv. The template carries
+   * only the sample row, so it needs no permission.
+   */
+  if (!isTemplate && !(await can("attendance.view"))) {
+    return new Response("You don't have permission to export attendance.", {
+      status: 403,
+    });
+  }
 
   const header = [...ATTENDANCE_CSV_HEADERS];
   const body = isTemplate

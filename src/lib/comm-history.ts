@@ -9,6 +9,7 @@ import {
   rangeStart,
   type HistoryFilters,
 } from "@/lib/comm-history-shared";
+import { logState, type LogState } from "@/lib/comm-log-state";
 
 /* ============================================================
  * Sent message history & analytics — the query layer behind the
@@ -135,6 +136,8 @@ export type HistoryRow = {
   cost: number;
   sentBy: string | null;
   createdAt: string;
+  /** Still going, cut short, or finished. See comm-log-state.ts. */
+  state: LogState;
 };
 
 const rowCols = {
@@ -151,6 +154,8 @@ const rowCols = {
   cost: communicationLog.cost,
   sentBy: user.name,
   createdAt: communicationLog.createdAt,
+  status: communicationLog.status,
+  updatedAt: communicationLog.updatedAt,
 };
 
 type RawRow = {
@@ -167,10 +172,17 @@ type RawRow = {
   cost: number;
   sentBy: string | null;
   createdAt: Date;
+  status: string;
+  updatedAt: Date;
 };
 
-function toRow(r: RawRow): HistoryRow {
-  return { ...r, cost: Number(r.cost), createdAt: r.createdAt.toISOString() };
+function toRow({ status, updatedAt, ...r }: RawRow): HistoryRow {
+  return {
+    ...r,
+    cost: Number(r.cost),
+    createdAt: r.createdAt.toISOString(),
+    state: logState(status, updatedAt),
+  };
 }
 
 /** One page of the log, newest first, plus the total match count. */

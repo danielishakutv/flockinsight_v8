@@ -2,7 +2,8 @@ import "server-only";
 import { and, isNotNull, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
-import { deleteMedia } from "@/lib/media";
+import { deleteMedia, retryMediaOrphans } from "@/lib/media";
+import { reapAbandonedUploadTickets } from "@/lib/media-upload-tickets";
 
 /**
  * Sweeping away media that has expired.
@@ -31,7 +32,12 @@ import { deleteMedia } from "@/lib/media";
 export async function pruneExpiredMedia(
   now: Date = new Date(),
   limit = 200,
-): Promise<{ removed: number; failed: number }> {
+): Promise<{
+  removed: number;
+  failed: number;
+  orphansCleared: number;
+  ticketsReaped: number;
+}> {
   const due = await db
     .select({ id: media.id, churchId: media.churchId })
     .from(media)
@@ -52,5 +58,28 @@ export async function pruneExpiredMedia(
       failed++;
     }
   }
-  return { removed, failed };
+  /*
+   * And the Cloudinary assets whose rows went while Cloudinary was refusing
+   * deletes (see `rememberOrphan`). Part of the same daily housekeeping, so the
+   * list of leftovers is actually worked through rather than only written.
+   */
+  /*
+   * Direct uploads that were signed for and never completed (see
+   * `mediaUploadTicket`). An asset Cloudinary will not delete today goes on
+   * the orphan list, which the step below works through.
+   */
+  let ticketsReaped = 0;
+  try {
+    ticketsReaped = (await reapAbandonedUploadTickets(now)).reaped;
+  } catch (e) {
+    console.error("[media-prune] could not sweep abandoned upload tickets", e);
+  }
+
+  let orphansCleared = 0;
+  try {
+    orphansCleared = (await retryMediaOrphans(50, now)).cleared;
+  } catch (e) {
+    console.error("[media-prune] could not retry leftover Cloudinary assets", e);
+  }
+  return { removed, failed, orphansCleared, ticketsReaped };
 }

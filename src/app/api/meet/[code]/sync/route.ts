@@ -4,6 +4,7 @@ import { meeting, meetingParticipant } from "@/db/schema";
 import {
   getMeetingByCode,
   heartbeat,
+  listMessages,
   postSignals,
   readSignals,
   roster,
@@ -52,6 +53,8 @@ type Incoming = {
   wait?: unknown;
   state?: Record<string, unknown>;
   signals?: unknown;
+  /** Asked once, on the first poll after leaving the lobby: the chat so far. */
+  history?: unknown;
 };
 
 type OutgoingSignal = { toPeer?: string | null; type: SignalType; payload: Record<string, unknown> };
@@ -248,10 +251,26 @@ export async function POST(
 
   const room = current[0];
 
+  /*
+   * The chat from before this person arrived, when they ask for it.
+   *
+   * /join no longer hands it to somebody still in the lobby, so a peer that has
+   * just been let in asks once, on its first poll inside (`history: true`).
+   * Only ever past the lobby check above: a waiting peer never reaches here.
+   */
+  const history =
+    body?.history === true && m.allowChat
+      ? (await listMessages(m.id, 200)).map((x) => ({
+          ...x,
+          createdAt: x.createdAt.toISOString(),
+        }))
+      : undefined;
+
   return json({
     ok: true,
     cursor: nextCursor,
     signals,
+    ...(history ? { messages: history } : {}),
     roster: people,
     stage: parseStage(room?.stage),
     slides: room?.slides ?? [],

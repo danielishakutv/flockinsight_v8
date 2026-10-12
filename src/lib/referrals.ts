@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { creditWallet } from "@/lib/wallet";
@@ -68,16 +68,33 @@ export async function setReferralRewards(r: ReferralRewards): Promise<void> {
  * ------------------------------------------------------------------ */
 
 export type AwardResult =
-  | { awarded: false; reason: "no-referrer" | "already-paid" | "nothing-to-pay" }
+  | {
+      awarded: false;
+      reason: "no-referrer" | "already-paid" | "nothing-to-pay" | "not-paid" | "failed";
+    }
   | { awarded: true; referrerId: string; referrer: number; referred: number };
 
 /**
  * Pay the referral bonus for a church that has just paid for the first time.
  *
- * Safe to call after every payment: it stamps `referralRewardedAt` inside the
- * same check that reads it, so a replayed Paystack callback — which does
- * happen — cannot pay twice. Never throws: a payment must succeed even if
- * crediting a bonus somehow fails.
+ * Safe to call after every payment, and as often as anyone likes:
+ *
+ * - **Real money only.** It checks for itself that the church has a
+ *   successful payment of more than ₦0, so a caller that forgets — a free
+ *   activation, a 100% discount, an admin setting a plan by hand — cannot pay
+ *   a reward for a payment that never happened ("not-paid").
+ * - **The claim and the credits are ONE transaction.** `referralRewardedAt` is
+ *   stamped by a conditional UPDATE (`where referral_rewarded_at is null`), so
+ *   a replayed callback blocks on the row lock and then matches nothing — and
+ *   both wallet credits run inside the same transaction. It used to stamp the
+ *   church first and credit afterwards in separate transactions: a credit that
+ *   failed left the church marked rewarded for ever with nobody paid, and
+ *   nothing showed it. Now a failure rolls the stamp back with the credits,
+ *   and the next payment, callback or reconcile sweep tries again.
+ *
+ * Never throws: a payment must succeed even if crediting a bonus fails. A
+ * failure is logged, written to the audit trail as critical with the church,
+ * and returned as "failed" rather than dressed up as "nothing to pay".
  */
 export async function awardReferralIfDue(churchId: string): Promise<AwardResult> {
   try {
@@ -100,52 +117,95 @@ export async function awardReferralIfDue(churchId: string): Promise<AwardResult>
       return { awarded: false, reason: "nothing-to-pay" };
     }
 
-    // Claim the payout first, conditionally. If another request got here at
-    // the same time its update matches zero rows and it stops — so exactly one
-    // of them pays out.
-    const claimed = await db
-      .update(church)
-      .set({ referralRewardedAt: new Date() })
+    const [paid] = await db
+      .select({ id: payment.id })
+      .from(payment)
       .where(
-        and(eq(church.id, churchId), sql`${church.referralRewardedAt} is null`),
+        and(
+          eq(payment.churchId, churchId),
+          eq(payment.status, "success"),
+          gt(payment.amount, 0),
+        ),
       )
-      .returning({ id: church.id });
-    if (claimed.length === 0) return { awarded: false, reason: "already-paid" };
-
-    const [referrer] = await db
-      .select({ name: church.name })
-      .from(church)
-      .where(eq(church.id, c.referredByChurchId))
       .limit(1);
+    if (!paid) return { awarded: false, reason: "not-paid" };
 
-    if (rewards.referrer > 0) {
-      await creditWallet({
-        churchId: c.referredByChurchId,
-        amount: rewards.referrer,
-        category: "adjustment",
-        reason: `Referral reward — ${c.name} joined and subscribed`,
-      });
-    }
-    if (rewards.referred > 0) {
-      await creditWallet({
-        churchId: c.id,
-        amount: rewards.referred,
-        category: "adjustment",
-        reason: referrer?.name
-          ? `Welcome credit — referred by ${referrer.name}`
-          : "Welcome credit — referral",
-      });
-    }
+    const referrerId = c.referredByChurchId;
+    return await db.transaction(async (tx) => {
+      // Looked up before anything is written: a referrer that no longer
+      // exists means there is nobody to reward, not a failure to retry.
+      const [referrer] = await tx
+        .select({ name: church.name })
+        .from(church)
+        .where(eq(church.id, referrerId))
+        .limit(1);
+      if (!referrer) return { awarded: false as const, reason: "no-referrer" as const };
 
-    return {
-      awarded: true,
-      referrerId: c.referredByChurchId,
-      referrer: rewards.referrer,
-      referred: rewards.referred,
-    };
+      // The claim. A concurrent caller waits on this row and then matches
+      // zero rows, so exactly one of them pays.
+      const claimed = await tx
+        .update(church)
+        .set({ referralRewardedAt: new Date() })
+        .where(and(eq(church.id, churchId), isNull(church.referralRewardedAt)))
+        .returning({ id: church.id });
+      if (claimed.length === 0) {
+        return { awarded: false as const, reason: "already-paid" as const };
+      }
+
+      // In the claim's transaction: if either credit throws, the stamp above
+      // is rolled back with it.
+      if (rewards.referrer > 0) {
+        await creditWallet(
+          {
+            churchId: referrerId,
+            amount: rewards.referrer,
+            category: "adjustment",
+            reason: `Referral reward — ${c.name} joined and subscribed`,
+          },
+          tx,
+        );
+      }
+      if (rewards.referred > 0) {
+        await creditWallet(
+          {
+            churchId: c.id,
+            amount: rewards.referred,
+            category: "adjustment",
+            reason: `Welcome credit — referred by ${referrer.name}`,
+          },
+          tx,
+        );
+      }
+
+      return {
+        awarded: true as const,
+        referrerId,
+        referrer: rewards.referrer,
+        referred: rewards.referred,
+      };
+    });
   } catch (e) {
-    console.error("[referrals] awardReferralIfDue failed", e);
-    return { awarded: false, reason: "nothing-to-pay" };
+    const error = e instanceof Error ? e.message : String(e);
+    console.error(`[referrals] awardReferralIfDue failed for church ${churchId}`, e);
+    try {
+      // Imported here so the reward path does not pull the audit module (and
+      // its request context) into everything that awards a referral.
+      const { auditSystem } = await import("@/lib/audit");
+      await auditSystem({
+        action: "platform.referral.award_failed",
+        summary: `Referral reward for church ${churchId} could not be paid: ${error}. Nothing was credited and the church is not marked rewarded; it will be retried on the next payment or reconcile run.`,
+        targetType: "church",
+        targetId: churchId,
+        severity: "critical",
+        meta: { churchId, error },
+      });
+    } catch (auditErr) {
+      console.error(
+        `[referrals] and the audit entry for that failure could not be written either (church ${churchId})`,
+        auditErr,
+      );
+    }
+    return { awarded: false, reason: "failed" };
   }
 }
 
@@ -174,9 +234,11 @@ export type ReferralSummary = {
 /**
  * Who this church has referred, and what it has earned.
  *
- * "Subscribed" is a successful payment rather than a paid plan flag, because a
- * superadmin can set a church's plan by hand and that should not pay anybody a
- * referral bonus.
+ * "Subscribed" is a successful payment OF MONEY rather than a paid plan flag,
+ * because a superadmin can set a church's plan by hand and that should not pay
+ * anybody a referral bonus. That hand-set plan still records a "successful"
+ * payment — of ₦0 — and counting it showed a church as Subscribed for a reward
+ * that, rightly, never came.
  */
 export async function referralSummary(churchId: string): Promise<ReferralSummary> {
   const rewards = await getReferralRewards();
@@ -205,10 +267,14 @@ export async function referralSummary(churchId: string): Promise<ReferralSummary
       .select({ churchId: payment.churchId })
       .from(payment)
       .where(
-        and(inArray(payment.churchId, ids), eq(payment.status, "success")),
+        and(
+          inArray(payment.churchId, ids),
+          eq(payment.status, "success"),
+          gt(payment.amount, 0),
+        ),
       )
       .groupBy(payment.churchId);
-    for (const p of paidRows) paid.add(p.churchId);
+    for (const p of paidRows) if (p.churchId) paid.add(p.churchId);
   }
 
   const churches: ReferredChurch[] = rows.map((r) => ({

@@ -79,6 +79,7 @@ export default async function MeetingDetailPage({
     church.timezone,
   );
   const inSeries = series.length > 1;
+  // In the church's clock, like `repeats` above — never the server's.
   const when = m.scheduledFor
     ? m.scheduledFor.toLocaleString("en-GB", {
         weekday: "long",
@@ -86,6 +87,7 @@ export default async function MeetingDetailPage({
         month: "long",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: church.timezone,
       })
     : null;
   const ran =
@@ -191,6 +193,7 @@ export default async function MeetingDetailPage({
                             {r.joinedAt.toLocaleTimeString("en-GB", {
                               hour: "2-digit",
                               minute: "2-digit",
+                              timeZone: church.timezone,
                             })}
                           </td>
                           <td className="text-muted-foreground px-2 py-2">
@@ -198,6 +201,7 @@ export default async function MeetingDetailPage({
                               ? r.leftAt.toLocaleTimeString("en-GB", {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: church.timezone,
                                 })
                               : "—"}
                           </td>
@@ -269,6 +273,7 @@ export default async function MeetingDetailPage({
                         {line.createdAt.toLocaleTimeString("en-GB", {
                           hour: "2-digit",
                           minute: "2-digit",
+                          timeZone: church.timezone,
                         })}
                       </span>
                       {line.kind === "chat" && (

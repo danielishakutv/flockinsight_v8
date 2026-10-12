@@ -11,6 +11,7 @@ import {
   getGivingList,
   hasGivingFilters,
   parseGivingFilters,
+  givingFilterQuery,
 } from "@/lib/giving-data";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -152,7 +153,11 @@ export default async function GivingPage({
                 <span className="hidden sm:inline">{t("giving.projects")}</span>
               </Link>
             </Button>
-            <GivingDataMenu hasData={hasAnyRecords} canManage={canManage} />
+            <GivingDataMenu
+              hasData={hasAnyRecords}
+              canManage={canManage}
+              exportQuery={givingFilterQuery(filters)}
+            />
           </>
         }
       />

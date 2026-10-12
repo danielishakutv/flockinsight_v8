@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloudUpload, Loader2 } from "lucide-react";
+import { CloudUpload, Download, Loader2 } from "lucide-react";
 import {
+  downloadEntry,
+  getPending,
   listPending,
   noteFailure,
   noteProgress,
@@ -62,9 +64,22 @@ export function RecordingUploader() {
    * Whether the server refused us for want of a session.
    *
    * Shown rather than retried silently: this is the one upload failure the
-   * person can actually do something about.
+   * person can fix by themselves, in this browser.
    */
   const [needsSignIn, setNeedsSignIn] = useState(false);
+  /**
+   * Any OTHER refusal the server explained — a role that cannot save it, a
+   * paused account, a recording the server no longer has. Shown in the
+   * server's own words, because "sign in" is the wrong instruction for every
+   * one of them and used to be the only one this showed.
+   */
+  const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * Which recording the refusal is about, so the widget can hand it back. A
+   * refusal that says "download it from this device" is no use from a widget
+   * with no way to do that.
+   */
+  const [refusedId, setRefusedId] = useState<string | null>(null);
   const [active, setActive] = useState<{
     title: string;
     sentBytes: number;
@@ -109,29 +124,48 @@ export function RecordingUploader() {
         return false;
       }
 
+      /*
+       * What it is filed as. A recording with a server row is a meeting
+       * recording, which the plan never gates (`sermonNeedsLibraryPlan`). One
+       * WITHOUT a row — an entry from an older build, or a meeting whose
+       * recording.start failed — would otherwise be a "sermon" from the active
+       * church: below Pro that is refused with an upgrade message, and retried
+       * for ever. Filed as a plain file it lands, and the church can move it.
+       */
+      const kind = entry.recordingId ? "sermon" : "file";
+
       // Start or resume. The server tells us where it actually got to.
+      const recordingQuery = entry.recordingId
+        ? `&recordingId=${encodeURIComponent(entry.recordingId)}`
+        : "";
       const startRes = await fetch("/api/media/chunk?action=start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "sermon",
+          kind,
           mime: entry.mime,
           bytes: entry.bytes,
           name: entry.filename,
           uploadId: entry.uploadId ?? undefined,
+          // The server files a recording by the MEETING's church, and lets
+          // whoever recorded or hosted it send it — so it has to know which.
+          recordingId: entry.recordingId ?? undefined,
         }),
       });
       /*
-       * Not signed in on this device, which is a real and silent case.
+       * Branch on what the server SAID, not on the status alone.
        *
-       * `/api/media/chunk` needs a church session, and a host can run a whole
-       * meeting from the host LINK without ever signing in — so every attempt
-       * came back 401, was recorded as an ordinary failure, and retried with
-       * backoff for ever. The recording sat on the device, the row sat at
-       * "uploading" until a cron called it failed, and nobody was told the one
-       * thing that would have fixed it.
+       * Every 401 and 403 used to mean "nobody is signed in", so a host whose
+       * role could not save to the library was told to sign in — for ever, an
+       * instruction that could not help — while a host who really was signed
+       * out never saw it: the route redirected to /login, fetch followed, and
+       * the sign-in page came back as a 200 that failed to parse. The route
+       * answers in JSON with a `code` now; anything that is NOT JSON is still
+       * read as "signed out", in case some route on the way redirects again.
        */
-      if (startRes.status === 401 || startRes.status === 403) {
+      const isJson = (startRes.headers.get("content-type") ?? "").includes("application/json");
+      const start = isJson ? await startRes.json().catch(() => null) : null;
+      if (!isJson || startRes.redirected || start?.code === "signin") {
         await noteFailure(
           entry.id,
           "This recording is saved on this device but can't be sent yet: " +
@@ -139,15 +173,34 @@ export function RecordingUploader() {
             "Sign in at flockinsight.com in this browser and it will upload itself.",
         );
         setNeedsSignIn(true);
+        setRefusal(null);
         return false;
       }
-
-      const start = await startRes.json().catch(() => null);
       if (!start?.ok) {
-        await noteFailure(entry.id, start?.error ?? "Could not start the upload.");
+        const why: string = start?.error ?? "Could not start the upload.";
+        await noteFailure(entry.id, why);
+        // A refusal with a code is one a person has to act on; say it.
+        if (start?.code) {
+          setRefusal(why);
+          setRefusedId(entry.id);
+        }
+        setNeedsSignIn(false);
         return false;
       }
       setNeedsSignIn(false);
+      setRefusal(null);
+      setRefusedId(null);
+
+      /*
+       * Already in the library: a finish that committed but whose answer never
+       * arrived. Nothing more to send — let the device copy go now, instead of
+       * re-sending the whole service only to be told the same thing at finish.
+       */
+      if (start.alreadySaved === true) {
+        await releaseRecording(entry.id);
+        setActive(null);
+        return true;
+      }
 
       const uploadId: string = start.uploadId;
       let offset: number = Math.min(Number(start.received) || 0, entry.bytes);
@@ -174,8 +227,14 @@ export function RecordingUploader() {
         const began = Date.now();
         let res: Response;
         try {
+          /*
+           * With its offset. The server writes the chunk at that position
+           * rather than appending it, so a chunk sent twice — a lost answer, a
+           * second tab — lands on top of itself instead of shifting the rest of
+           * the file 8 MB late.
+           */
           res = await fetch(
-            `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}`,
+            `/api/media/chunk?action=append&uploadId=${encodeURIComponent(uploadId)}&offset=${offset}${recordingQuery}`,
             { method: "POST", body: slice },
           );
         } catch {
@@ -186,6 +245,19 @@ export function RecordingUploader() {
         }
 
         const data = await res.json().catch(() => null);
+        if (data?.ok === true && data.alreadySaved === true) {
+          // Another tab or browser finished it while this one was sending.
+          await releaseRecording(entry.id);
+          setActive(null);
+          return true;
+        }
+        if (res.status === 409 && data?.conflict) {
+          // The server holds a different amount than we thought (another tab,
+          // or a chunk it never got). Carry on from what it actually has.
+          offset = Math.min(Number(data.received) || 0, entry.bytes);
+          await noteProgress(entry.id, uploadId, offset);
+          continue;
+        }
         if (!res.ok || !data?.ok) {
           if (data?.error) {
             // The server explained itself — quota, permission. Recording it
@@ -212,7 +284,7 @@ export function RecordingUploader() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uploadId,
-          kind: "sermon",
+          kind,
           mime: entry.mime,
           name: entry.filename,
           title: `${entry.meetingTitle} — recording`,
@@ -223,8 +295,14 @@ export function RecordingUploader() {
         }),
       });
       const fin = await finRes.json().catch(() => null);
-      if (!fin?.ok) {
-        await noteFailure(entry.id, fin?.error ?? "The upload could not be saved.");
+      // Nothing but an explicit ok lets the device copy go.
+      if (fin?.ok !== true) {
+        const why: string = fin?.error ?? "The upload could not be saved.";
+        await noteFailure(entry.id, why);
+        if (fin?.code) {
+          setRefusal(why);
+          setRefusedId(entry.id);
+        }
         setActive(null);
         return false;
       }
@@ -241,10 +319,7 @@ export function RecordingUploader() {
     [currentBudget],
   );
 
-  const tick = useCallback(async () => {
-    if (busy.current) return;
-    if (!vaultSupported()) return;
-    busy.current = true;
+  const work = useCallback(async () => {
     try {
       const pending = await listPending();
       if (pending.length === 0) {
@@ -271,10 +346,40 @@ export function RecordingUploader() {
     } catch (e) {
       // Never let the background uploader take a page down with it.
       console.error("[recording-uploader] tick failed", e);
+    }
+  }, [sendOne]);
+
+  const tick = useCallback(async () => {
+    if (busy.current) return;
+    if (!vaultSupported()) return;
+    busy.current = true;
+    try {
+      /*
+       * One uploader per BROWSER, not per tab. Every tab mounts this, and the
+       * vault is shared between them, so two open tabs used to send the same
+       * recording side by side. The server now places each chunk at its offset
+       * so that is no longer corrupting — but it is still twice the bandwidth
+       * on the connections that can least spare it. A tab that cannot take the
+       * lock simply skips this round.
+       */
+      const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+      if (locks?.request) {
+        await locks.request(
+          "flockinsight-recording-uploader",
+          { ifAvailable: true },
+          async (lock) => {
+            if (lock) await work();
+          },
+        );
+      } else {
+        await work();
+      }
+    } catch (e) {
+      console.error("[recording-uploader] could not take the upload lock", e);
     } finally {
       busy.current = false;
     }
-  }, [sendOne]);
+  }, [work]);
 
   useEffect(() => {
     let alive = true;
@@ -301,6 +406,20 @@ export function RecordingUploader() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [tick]);
+
+  /** Hand the refused recording back, read fresh from the vault. */
+  const downloadRefused = useCallback(async () => {
+    if (!refusedId) return;
+    const entry = await getPending(refusedId);
+    if (!entry) {
+      // Released (it was saved after all) or the browser cleared it; say which
+      // one we cannot tell, rather than doing nothing.
+      setRefusal("That recording is no longer on this device.");
+      setRefusedId(null);
+      return;
+    }
+    downloadEntry(entry);
+  }, [refusedId]);
 
   if (!active && !waiting) return null;
 
@@ -358,6 +477,22 @@ export function RecordingUploader() {
           signing in, and the upload needs a church session — so without this
           the recording simply never left the device and nothing said why.
         */}
+        {refusal && !needsSignIn && (
+          <div className="mt-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+            <p>{refusal}</p>
+            {refusedId && (
+              <button
+                type="button"
+                onClick={() => void downloadRefused()}
+                className="mt-1.5 inline-flex items-center gap-1 font-semibold underline"
+              >
+                <Download className="size-3.5" aria-hidden />
+                Download it from this device
+              </button>
+            )}
+          </div>
+        )}
+
         {needsSignIn && (
           <p className="mt-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
             It is safe on this device, but nobody is signed in to the church

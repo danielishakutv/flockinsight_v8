@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { media } from "@/db/schema";
 import { withAttachment } from "@/lib/cloudinary";
-import { fileSize, parseRange, streamFile } from "@/lib/media-store";
+import { fileSize, localMimeEssence, parseRange, streamFile } from "@/lib/media-store";
 
 export const runtime = "nodejs";
 
@@ -34,6 +34,27 @@ const UUID_RE =
 // If private media is ever needed, this is the place: require a session, scope
 // the row to the caller's church, and move Cloudinary to signed URLs. Two of
 // those three are here; the third is the reason it has not been done.
+/**
+ * Headers every byte served from this origin carries.
+ *
+ * This route answers on flockinsight.com itself, unauthenticated, with bytes a
+ * church uploaded. So what the browser does with them is decided here and not
+ * left to the file: nosniff so a type is never guessed, and a sandbox CSP so
+ * that even a response a browser DID decide to render as a document could run
+ * no script and reach nothing.
+ */
+const LOCKDOWN: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "sandbox; default-src 'none'; media-src 'self'; img-src 'self'",
+};
+
+/** Types the legacy database-backed rows may be served as, inline. */
+const LEGACY_INLINE = /^(image\/(png|jpe?g|gif|webp|avif|heic|heif)|application\/pdf)$/;
+
+function attachment(name: string): string {
+  return `attachment; filename="${encodeURIComponent(name)}"`;
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -88,16 +109,23 @@ export async function GET(
       return new Response("Not found", { status: 404 });
     }
 
+    /*
+     * The type is re-checked on the way OUT as well as on the way in. A row
+     * written before the allow-list existed may hold whatever a browser sent —
+     * "video/mp4, text/html" was enough to have a page run script on this
+     * origin. Anything that is not a plain allowed audio/video type is served
+     * as an opaque download instead.
+     */
+    const safe = localMimeEssence(row.mime);
     const common: Record<string, string> = {
-      "Content-Type": row.mime,
+      ...LOCKDOWN,
+      "Content-Type": safe ?? "application/octet-stream",
       // The bytes behind a given id never change — a transcode writes a NEW key
       // and updates the row — so this is safe to cache hard.
       "Cache-Control": "public, max-age=31536000, immutable",
       "Accept-Ranges": "bytes",
     };
-    if (download)
-      common["Content-Disposition"] =
-        `attachment; filename="${encodeURIComponent(name)}"`;
+    if (download || !safe) common["Content-Disposition"] = attachment(name);
 
     const range = parseRange(req.headers.get("range"), size);
     if (range) {
@@ -115,7 +143,7 @@ export async function GET(
     if (req.headers.get("range") && !range) {
       return new Response(null, {
         status: 416,
-        headers: { "Content-Range": `bytes */${size}` },
+        headers: { ...LOCKDOWN, "Content-Range": `bytes */${size}` },
       });
     }
 
@@ -126,11 +154,24 @@ export async function GET(
 
   // Legacy db-backed bytes.
   if (!row.data) return new Response("Not found", { status: 404 });
+  /*
+   * Legacy rows are images and PDFs from before Cloudinary. Only those exact
+   * types are shown inline; anything else — an SVG, which is a document that
+   * can carry script, or a type with a second one smuggled after a comma — is
+   * a download, whatever the row says.
+   */
+  const essence = String(row.mime ?? "").split(";")[0].trim().toLowerCase();
+  const inline = LEGACY_INLINE.test(essence);
   const headers: Record<string, string> = {
-    "Content-Type": row.mime,
+    // Except the CSP for a PDF: Chrome will not open its built-in PDF viewer
+    // in a sandboxed document and shows a blank page. A PDF cannot run script
+    // on this origin either way; nosniff still holds.
+    ...(essence === "application/pdf"
+      ? { "X-Content-Type-Options": "nosniff" }
+      : LOCKDOWN),
+    "Content-Type": inline ? essence : "application/octet-stream",
     "Cache-Control": "public, max-age=31536000, immutable",
   };
-  if (download)
-    headers["Content-Disposition"] = `attachment; filename="${encodeURIComponent(name)}"`;
+  if (download || !inline) headers["Content-Disposition"] = attachment(name);
   return new Response(new Uint8Array(row.data), { headers });
 }

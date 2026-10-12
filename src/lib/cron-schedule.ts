@@ -117,6 +117,18 @@ export const CRON_JOBS = {
     cron: "*/5 * * * *",
   },
 
+  /*
+   * The safety net under the Paystack webhook: settles platform checkouts
+   * still pending after ten minutes. A missed webhook is a church that has
+   * paid and is still locked out, so this is time-sensitive — but it asks
+   * Paystack about each reference, so not every five minutes.
+   */
+  "payment-reconcile": {
+    label: "Payment reconcile",
+    intervalMinutes: 15,
+    cron: "*/15 * * * *",
+  },
+
   // Meeting housekeeping: closes rooms whose last person vanished, and sweeps
   // the signalling buffer. Cheap, and wanted often — a room that shows as live
   // for an hour after everyone left is the thing people notice.

@@ -117,11 +117,18 @@ export type FinancePdfArgs = {
   /** Total matching rows, which may exceed what is printed. */
   totalRows: number;
   rangeLabel: string;
+  /**
+   * The non-date filters in force ("Expense · Category: Rent"), or null. The
+   * headline figures follow them, so the page must say so.
+   */
+  filterLabel?: string | null;
 };
 
 export async function renderFinancePdf(args: FinancePdfArgs): Promise<Buffer> {
   const { brand, currency, summary, accounts, rows, totalRows, rangeLabel } =
     args;
+  const filterLabel = args.filterLabel ?? null;
+  const periodHint = filterLabel ? "matching the filters" : "in this period";
   const generated = format(new Date(), "d MMM yyyy 'at' HH:mm");
   const shown = rows.slice(0, MAX_ROWS);
   const open = accounts.filter((a) => a.isActive);
@@ -139,6 +146,9 @@ export async function renderFinancePdf(args: FinancePdfArgs): Promise<Buffer> {
         />
 
         <View style={s.body}>
+          {filterLabel && (
+            <Text style={s.cardHint}>Filtered: {filterLabel}</Text>
+          )}
           {/* Headline figures */}
           <View style={s.cards}>
             <View style={s.card}>
@@ -146,14 +156,14 @@ export async function renderFinancePdf(args: FinancePdfArgs): Promise<Buffer> {
               <Text style={[s.cardValue, { color: "#047857" }]}>
                 {money(summary.income)}
               </Text>
-              <Text style={s.cardHint}>in this period</Text>
+              <Text style={s.cardHint}>{periodHint}</Text>
             </View>
             <View style={s.card}>
               <Text style={s.cardLabel}>EXPENSES</Text>
               <Text style={[s.cardValue, { color: "#be123c" }]}>
                 {money(summary.expense)}
               </Text>
-              <Text style={s.cardHint}>in this period</Text>
+              <Text style={s.cardHint}>{periodHint}</Text>
             </View>
             <View style={s.card}>
               <Text style={s.cardLabel}>NET</Text>

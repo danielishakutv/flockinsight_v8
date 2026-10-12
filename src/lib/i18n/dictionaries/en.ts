@@ -176,6 +176,7 @@ export const en = {
    * Getting around
    * ========================================================== */
   nav: {
+    partnerDashboard: "Partner dashboard",
     dashboard: "Dashboard",
     dashboardDesc: "Your church at a glance",
     attendance: "Attendance",
@@ -284,6 +285,12 @@ export const en = {
    * Signing in
    * ========================================================== */
   auth: {
+    logInForPartner: "Log in to your Partner dashboard.",
+    noPartnerAccount: "No account yet?",
+    createPartnerAccount: "Create a Partner account",
+    bringingChurches: "Bringing churches to FlockInsight?",
+    becomeAPartner: "Become a Partner",
+    notAChurch: "Not signing up a church?",
     youAposReIn: "You’re in",
     invitationUnavailable: "Invitation unavailable",
     goToLogin: "Go to login",
