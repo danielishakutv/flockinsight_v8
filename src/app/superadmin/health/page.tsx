@@ -97,7 +97,12 @@ async function Float() {
 }
 
 async function Crons() {
-  return <CronTable jobs={await getCronLiveness()} />;
+  return (
+    <CronTable
+      jobs={await getCronLiveness()}
+      inAppCron={process.env.IN_APP_CRON === "true"}
+    />
+  );
 }
 
 async function Integrations() {

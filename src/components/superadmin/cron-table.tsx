@@ -1,14 +1,34 @@
 import { formatDistanceToNowStrict } from "date-fns";
 import { AlertTriangle, CheckCircle2, CircleSlash, XCircle } from "lucide-react";
 import type { CronLiveness } from "@/lib/cron-run";
+import { describeMeta } from "@/lib/cron-meta";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /**
- * Cron liveness. The point is being able to tell "ran and had nothing to do"
- * apart from "has not run since the server rebooted".
+ * "took 23ms", or "took 1.2s" once it is worth a decimal.
+ *
+ * Nearly every job here finishes in under fifty milliseconds — two churches
+ * and no birthdays is two queries — and `toFixed(1)` rendered all of them as
+ * "took 0.0s", which reads as "did nothing" to anyone looking for a fault.
  */
-export function CronTable({ jobs }: { jobs: CronLiveness[] }) {
+function took(ms: number): string {
+  return ms < 1000 ? `took ${ms}ms` : `took ${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Cron liveness. The point is being able to tell "ran and had nothing to do"
+ * apart from "has not run since the server rebooted" — and, since each run
+ * now records what it did, apart from "ran and did nothing".
+ */
+export function CronTable({
+  jobs,
+  inAppCron,
+}: {
+  jobs: CronLiveness[];
+  /** Whether the app schedules itself (IN_APP_CRON), which changes the advice. */
+  inAppCron: boolean;
+}) {
   const broken = jobs.filter((j) => j.overdue || j.lastOk === false).length;
 
   return (
@@ -28,6 +48,7 @@ export function CronTable({ jobs }: { jobs: CronLiveness[] }) {
       <CardContent className="space-y-1">
         {jobs.map((j) => {
           const neverRan = j.lastRunAt === null;
+          const summary = neverRan ? "" : describeMeta(j.lastMeta);
           return (
             <div
               key={j.job}
@@ -51,19 +72,30 @@ export function CronTable({ jobs }: { jobs: CronLiveness[] }) {
                 <p className="truncate text-sm font-semibold">{j.label}</p>
                 <p className="text-muted-foreground truncate text-xs">
                   {neverRan
-                    ? "Never run — add it to the crontab"
+                    ? inAppCron
+                      ? "Never run — if this stays past a minute, check CRON_SECRET and the [scheduler] log lines"
+                      : "Never run — add it to the crontab"
                     : `Ran ${formatDistanceToNowStrict(j.lastRunAt!, {
                         addSuffix: true,
-                      })}${
-                        j.lastDurationMs !== null
-                          ? ` · took ${(j.lastDurationMs / 1000).toFixed(1)}s`
-                          : ""
-                      }`}
+                      })}${j.lastDurationMs !== null ? ` · ${took(j.lastDurationMs)}` : ""}`}
                   {j.lastError ? ` · ${j.lastError.slice(0, 60)}` : ""}
                 </p>
+                {summary && (
+                  <p
+                    className="text-muted-foreground/80 truncate text-xs"
+                    title={summary}
+                  >
+                    {summary}
+                  </p>
+                )}
               </div>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                every {j.intervalMinutes}m
+              <span className="text-muted-foreground shrink-0 text-right text-xs tabular-nums">
+                <span className="block">every {j.intervalMinutes}m</span>
+                <span className="block">
+                  {j.due
+                    ? "due now"
+                    : `next ${formatDistanceToNowStrict(j.nextRunAt, { addSuffix: true })}`}
+                </span>
               </span>
             </div>
           );

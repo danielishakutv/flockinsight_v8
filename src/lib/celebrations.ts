@@ -97,7 +97,10 @@ async function loadChurches() {
 type ChurchRow = Awaited<ReturnType<typeof loadChurches>>[number];
 
 /**
- * Send birthday & anniversary messages due today. Run hourly via cron.
+ * Send birthday & anniversary messages due today. Run every five minutes by
+ * the scheduler, so "send at 08:00" is honoured at 08:00 — see CRON_JOBS. A
+ * failed greeting is retried an hour later, not at the next sweep (see
+ * claimDecision), so the attempt budget is still three across the window.
  *
  * THREE THINGS THIS GOT WRONG, AND WHY IT NOW LOOKS LIKE first-timers.ts.
  *

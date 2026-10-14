@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   CRON_JOBS,
   cronIntervalMinutes,
+  cronMatches,
   isCronDue,
   isCronOverdue,
+  lastFireAtOrBefore,
+  msUntilNextMinute,
+  nextFireAfter,
   type CronJob,
 } from "@/lib/cron-schedule";
 
 const NOW = new Date("2026-08-11T12:00:00Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000);
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
+const at = (iso: string) => new Date(iso);
 
 describe("isCronOverdue", () => {
   it("never having run is overdue", () => {
@@ -58,22 +63,42 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
     }
   });
 
-  it("declares the hourly jobs as hourly", () => {
-    for (const job of [
-      "service-reminders",
-      "celebrations",
-      // Hourly because it honours each church's own local send time; a daily
-      // sweep could only ever satisfy the churches whose hour it happened to
-      // land after. See the note on the job.
-      "first-timers",
-    ] as const) {
-      expect(CRON_JOBS[job].intervalMinutes).toBe(60);
+  /*
+   * The four daily jobs send email to church owners, and the hours are the
+   * ones the crontab had been using: morning where most churches are. A
+   * "quiet hours" tidy-up once moved them to 02:00 UTC — 03:00 in Lagos —
+   * where an inactivity nudge is buried by breakfast.
+   */
+  it("sends the daily owner emails in the morning, UTC+1", () => {
+    expect(CRON_JOBS.reminders.cron).toBe("0 7 * * *");
+    expect(CRON_JOBS["trial-reminders"].cron).toBe("0 6 * * *");
+  });
+
+  it("runs first-timer follow-up hourly, on the hour", () => {
+    // Hourly because it honours each church's own local send time; a daily
+    // sweep could only ever satisfy the churches whose hour it happened to
+    // land after. On the hour so "10:00" is met at 10:00.
+    expect(CRON_JOBS["first-timers"].intervalMinutes).toBe(60);
+    expect(CRON_JOBS["first-timers"].cron).toBe("0 * * * *");
+  });
+
+  /*
+   * A church types the send time, to the minute. Hourly could only honour it
+   * to the hour — and the drifting stopwatch it ran on sent "08:00" birthday
+   * texts at 08:29. Both jobs claim each send before making it, so running
+   * every five minutes is safe; see celebration-runs.ts for why a failure is
+   * still retried hourly rather than at the next sweep.
+   */
+  it("sweeps birthdays and service reminders every five minutes", () => {
+    for (const job of ["celebrations", "service-reminders"] as const) {
+      expect(CRON_JOBS[job].intervalMinutes).toBe(5);
+      expect(CRON_JOBS[job].cron).toBe("*/5 * * * *");
     }
   });
 
   it("declares the minute-level jobs tightly enough to notice a delay", () => {
     for (const job of ["broadcasts", "devotionals"] as const) {
-      expect(CRON_JOBS[job].intervalMinutes).toBeLessThanOrEqual(15);
+      expect(CRON_JOBS[job].intervalMinutes).toBeLessThanOrEqual(5);
     }
   });
 
@@ -107,6 +132,19 @@ describe("every job carries the cron expression that actually runs it", () => {
     }
   });
 
+  it("every expression can be fired on — a last and a next minute exist", () => {
+    for (const job of jobs) {
+      const last = lastFireAtOrBefore(CRON_JOBS[job].cron, NOW);
+      const next = nextFireAfter(CRON_JOBS[job].cron, NOW);
+      expect(last.getTime(), job).toBeLessThanOrEqual(NOW.getTime());
+      expect(next.getTime(), job).toBeGreaterThan(NOW.getTime());
+      expect(
+        (next.getTime() - last.getTime()) / 60_000,
+        `${job}: gap between consecutive fires`,
+      ).toBeLessThanOrEqual(CRON_JOBS[job].intervalMinutes);
+    }
+  });
+
   // The specific job that was missing. Named, so deleting its line fails here.
   it("flushes the SMS queue every five minutes", () => {
     expect(CRON_JOBS["sms-queue"].cron).toBe("*/5 * * * *");
@@ -128,51 +166,210 @@ describe("cronIntervalMinutes", () => {
     expect(cronIntervalMinutes("10 * * * *")).toBe(60);
     expect(cronIntervalMinutes("0 */2 * * *")).toBe(120);
     expect(cronIntervalMinutes("0 2 * * *")).toBe(1440);
+    expect(cronIntervalMinutes("* * * * *")).toBe(1);
   });
 
   it("refuses to guess at anything else", () => {
     expect(() => cronIntervalMinutes("0 2 * * 1")).toThrow();
     expect(() => cronIntervalMinutes("0,30 * * * *")).toThrow();
     expect(() => cronIntervalMinutes("0 2 * *")).toThrow();
+    expect(() => cronIntervalMinutes("*/5 2 * * *")).toThrow();
+  });
+
+  it("refuses a step that is not a fixed interval", () => {
+    // */7 fires at :56 and then :00 — four minutes later, not seven.
+    expect(() => cronIntervalMinutes("*/7 * * * *")).toThrow(/divide 60/);
+    expect(() => cronIntervalMinutes("0 */5 * * *")).toThrow(/divide 24/);
+  });
+
+  it("refuses a value off the clock", () => {
+    expect(() => cronIntervalMinutes("60 * * * *")).toThrow(/out of range/);
+    expect(() => cronIntervalMinutes("0 24 * * *")).toThrow(/out of range/);
+  });
+});
+
+describe("cronMatches", () => {
+  it("matches a step on the multiples, in UTC", () => {
+    expect(cronMatches("*/5 * * * *", at("2026-08-11T12:05:00Z"))).toBe(true);
+    expect(cronMatches("*/5 * * * *", at("2026-08-11T12:05:59Z"))).toBe(true);
+    expect(cronMatches("*/5 * * * *", at("2026-08-11T12:06:00Z"))).toBe(false);
+  });
+
+  it("matches a fixed minute every hour", () => {
+    expect(cronMatches("20 * * * *", at("2026-08-11T03:20:00Z"))).toBe(true);
+    expect(cronMatches("20 * * * *", at("2026-08-11T03:21:00Z"))).toBe(false);
+  });
+
+  it("matches a daily hour and minute", () => {
+    expect(cronMatches("0 7 * * *", at("2026-08-11T07:00:30Z"))).toBe(true);
+    expect(cronMatches("0 7 * * *", at("2026-08-11T08:00:00Z"))).toBe(false);
+  });
+
+  it("matches a stepped hour at a fixed minute", () => {
+    expect(cronMatches("0 */2 * * *", at("2026-08-11T14:00:00Z"))).toBe(true);
+    expect(cronMatches("0 */2 * * *", at("2026-08-11T15:00:00Z"))).toBe(false);
+  });
+
+  it("reads the clock in UTC whatever offset the instant was written in", () => {
+    // 08:20 at +02:00 is 06:20 UTC. The server lives in CEST; the schedule
+    // does not.
+    const d = at("2026-08-11T08:20:00+02:00");
+    expect(cronMatches("20 6 * * *", d)).toBe(true);
+    expect(cronMatches("20 8 * * *", d)).toBe(false);
+  });
+});
+
+describe("lastFireAtOrBefore / nextFireAfter", () => {
+  it("finds the step just gone and the step to come", () => {
+    const now = at("2026-08-11T12:07:40Z");
+    expect(lastFireAtOrBefore("*/5 * * * *", now).toISOString()).toBe(
+      "2026-08-11T12:05:00.000Z",
+    );
+    expect(nextFireAfter("*/5 * * * *", now).toISOString()).toBe(
+      "2026-08-11T12:10:00.000Z",
+    );
+  });
+
+  it("treats the named minute itself as 'at or before', and not as 'after'", () => {
+    const now = at("2026-08-11T12:05:00.250Z");
+    expect(lastFireAtOrBefore("*/5 * * * *", now).toISOString()).toBe(
+      "2026-08-11T12:05:00.000Z",
+    );
+    expect(nextFireAfter("*/5 * * * *", now).toISOString()).toBe(
+      "2026-08-11T12:10:00.000Z",
+    );
+  });
+
+  it("crosses midnight for a daily job", () => {
+    const now = at("2026-08-11T03:00:00Z");
+    expect(lastFireAtOrBefore("0 7 * * *", now).toISOString()).toBe(
+      "2026-08-10T07:00:00.000Z",
+    );
+    expect(nextFireAfter("0 7 * * *", now).toISOString()).toBe(
+      "2026-08-11T07:00:00.000Z",
+    );
+  });
+
+  it("crosses the hour for a fixed minute", () => {
+    const now = at("2026-08-11T12:10:00Z");
+    expect(lastFireAtOrBefore("20 * * * *", now).toISOString()).toBe(
+      "2026-08-11T11:20:00.000Z",
+    );
+    expect(nextFireAfter("20 * * * *", now).toISOString()).toBe(
+      "2026-08-11T12:20:00.000Z",
+    );
   });
 });
 
 /*
- * The in-app scheduler used `isCronOverdue` to decide what to run, so every
- * job ran at up to half its declared rate — the 5-minute SMS queue flush went
- * every 10 minutes, and nothing reported it because the health page applies
- * the same lenient rule.
+ * The in-app scheduler used to run a job once `intervalMinutes` had elapsed
+ * since its last START — a stopwatch, checked once a minute. The hourly
+ * birthday sweep therefore ran at whatever minute its first run landed on,
+ * and slipped a minute later every few hours: :00 became :33 in nine days,
+ * and a church that asked for greetings at 08:00 got them at 08:29.
  */
-describe("isCronDue is the interval, with no grace in it", () => {
+describe("isCronDue follows the expression, not a stopwatch", () => {
   it("never having run is due", () => {
-    expect(isCronDue(null, 5, NOW)).toBe(true);
+    expect(isCronDue(null, "*/5 * * * *", NOW)).toBe(true);
   });
 
-  it("is due the moment the interval has elapsed", () => {
-    expect(isCronDue(minutesAgo(4), 5, NOW)).toBe(false);
-    expect(isCronDue(minutesAgo(5), 5, NOW)).toBe(true);
+  it("is not due again inside the minute it just ran in", () => {
+    const ranAt = at("2026-08-11T12:05:00.400Z");
+    expect(isCronDue(ranAt, "*/5 * * * *", at("2026-08-11T12:05:00.600Z"))).toBe(false);
+    expect(isCronDue(ranAt, "*/5 * * * *", at("2026-08-11T12:09:59.900Z"))).toBe(false);
   });
 
-  it("fires a 5-minute job at 5 minutes, where overdue waits for 10", () => {
-    const at6 = minutesAgo(6);
-    expect(isCronDue(at6, 5, NOW)).toBe(true);
-    expect(isCronOverdue(at6, 5, NOW)).toBe(false);
+  it("is due the moment the next named minute arrives", () => {
+    const ranAt = at("2026-08-11T12:05:00.400Z");
+    expect(isCronDue(ranAt, "*/5 * * * *", at("2026-08-11T12:10:00.250Z"))).toBe(true);
   });
 
-  it("fires a 15-minute job at 15 minutes, not 30", () => {
-    const at16 = minutesAgo(16);
-    expect(isCronDue(at16, 15, NOW)).toBe(true);
-    expect(isCronOverdue(at16, 15, NOW)).toBe(false);
+  it("a run started by hand does not move the schedule", () => {
+    // Somebody curled the route at 08:10. The :20 fire still happens.
+    const manual = at("2026-08-11T08:10:00Z");
+    expect(isCronDue(manual, "20 * * * *", at("2026-08-11T08:19:00Z"))).toBe(false);
+    expect(isCronDue(manual, "20 * * * *", at("2026-08-11T08:20:00.250Z"))).toBe(true);
+  });
+
+  it("a job that missed several minutes is due once, not once per minute missed", () => {
+    // Deployed at 12:03, back at 12:31: the :05 .. :30 fires were missed.
+    const ranAt = at("2026-08-11T12:00:00.300Z");
+    const back = at("2026-08-11T12:31:00.250Z");
+    expect(isCronDue(ranAt, "*/5 * * * *", back)).toBe(true);
+    // Having run at 12:31, it is not due again until :35 — the backlog is not
+    // replayed.
+    const caughtUp = at("2026-08-11T12:31:00.900Z");
+    expect(isCronDue(caughtUp, "*/5 * * * *", at("2026-08-11T12:32:00.250Z"))).toBe(false);
+    expect(isCronDue(caughtUp, "*/5 * * * *", at("2026-08-11T12:35:00.250Z"))).toBe(true);
+  });
+
+  it("a daily job that ran yesterday at its hour is due today at its hour, and not before", () => {
+    const ranAt = at("2026-08-10T07:00:00.300Z");
+    expect(isCronDue(ranAt, "0 7 * * *", at("2026-08-11T06:59:00.250Z"))).toBe(false);
+    expect(isCronDue(ranAt, "0 7 * * *", at("2026-08-11T07:00:00.250Z"))).toBe(true);
+  });
+
+  /*
+   * The whole point, as a simulation: ticks just after every minute for six
+   * hours, each run recorded a few hundred milliseconds in, the way the real
+   * scheduler does. Under the stopwatch rule the hourly job's minute crept
+   * later each hour; under the expression it stays put.
+   */
+  it("keeps an hourly job on its minute across hours of ticks", () => {
+    const expr = "20 * * * *";
+    let lastRunAt: Date | null = at("2026-08-11T00:20:00.400Z");
+    const runs: string[] = [];
+    const start = at("2026-08-11T00:21:00.250Z");
+    for (let i = 0; i < 6 * 60; i++) {
+      const tickAt = new Date(start.getTime() + i * 60_000);
+      if (isCronDue(lastRunAt, expr, tickAt)) {
+        lastRunAt = new Date(tickAt.getTime() + 150); // the route's own clock
+        runs.push(lastRunAt.toISOString().slice(11, 19));
+      }
+    }
+    expect(runs).toEqual([
+      "01:20:00",
+      "02:20:00",
+      "03:20:00",
+      "04:20:00",
+      "05:20:00",
+      "06:20:00",
+    ]);
+  });
+
+  it("keeps a five-minute job on the fives", () => {
+    const expr = "*/5 * * * *";
+    let lastRunAt: Date | null = null;
+    const minutes: number[] = [];
+    const start = at("2026-08-11T09:02:00.250Z");
+    for (let i = 0; i < 60; i++) {
+      const tickAt = new Date(start.getTime() + i * 60_000);
+      if (isCronDue(lastRunAt, expr, tickAt)) {
+        lastRunAt = new Date(tickAt.getTime() + 150);
+        minutes.push(lastRunAt.getUTCMinutes());
+      }
+    }
+    // The first tick runs it (never run); every one after that is on a five.
+    expect(minutes).toEqual([2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 0]);
   });
 
   it("anything overdue is also due", () => {
-    for (const interval of [5, 10, 15, 30, 60, 120, 1440]) {
+    for (const job of Object.keys(CRON_JOBS) as CronJob[]) {
+      const { cron, intervalMinutes } = CRON_JOBS[job];
       for (const mins of [0, 1, 7, 20, 90, 1500, 5000]) {
         const last = minutesAgo(mins);
-        if (isCronOverdue(last, interval, NOW)) {
-          expect(isCronDue(last, interval, NOW), `${interval}/${mins}`).toBe(true);
+        if (isCronOverdue(last, intervalMinutes, NOW)) {
+          expect(isCronDue(last, cron, NOW), `${job}/${mins}`).toBe(true);
         }
       }
     }
+  });
+});
+
+describe("msUntilNextMinute", () => {
+  it("counts down to :00 seconds", () => {
+    expect(msUntilNextMinute(at("2026-08-11T12:05:00.000Z"))).toBe(60_000);
+    expect(msUntilNextMinute(at("2026-08-11T12:05:00.250Z"))).toBe(59_750);
+    expect(msUntilNextMinute(at("2026-08-11T12:05:59.000Z"))).toBe(1_000);
   });
 });

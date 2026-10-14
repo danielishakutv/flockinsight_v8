@@ -96,6 +96,11 @@ function render(): string {
     "# `pm2 restart all --update-env` (without --update-env the old value is",
     "# kept and nothing changes), then re-run this script with --install.",
     "SHELL=/bin/bash",
+    "# The expressions are UTC — the same clock the in-app scheduler fires them",
+    "# on. cronie honours CRON_TZ; Debian's vixie cron ignores it and runs the",
+    "# box's local time, so on such a box either set the system timezone to UTC",
+    "# or expect the daily jobs to move with its summer time.",
+    "CRON_TZ=UTC",
     `CRON_KEY=${secret}`,
     "",
   ];

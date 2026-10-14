@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db";
-import type { CronJob } from "@/lib/cron-schedule";
+import { msUntilNextMinute, type CronJob } from "@/lib/cron-schedule";
 import { getCronLiveness, isJobStillDue } from "@/lib/cron-run";
 import { withJobLock, type LockPool } from "@/lib/scheduler-lock";
 
@@ -31,12 +31,29 @@ import { withJobLock, type LockPool } from "@/lib/scheduler-lock";
  * reads — not a timer in memory. A worker that restarts does not re-run
  * everything, and two workers cannot disagree about when a job last ran.
  *
+ * WHEN A JOB IS DUE is its cron expression, in UTC, and the ticks land just
+ * after the top of each minute so a job named for :20 runs at :20:00, not
+ * somewhere in the minute after. This used to be a stopwatch — "an hour since
+ * the last start" checked once a minute — and a stopwatch drifts: the birthday
+ * sweep slid from :00 to :33 in nine days and would have gone on round the
+ * clock. See `isCronDue` in cron-schedule.ts.
+ *
  * Opt-in via `IN_APP_CRON=true`, because running both this and a crontab would
  * double every job. Turn it on, then remove the crontab lines.
  */
 
-/** How often to look for work. Jobs are due on their own intervals. */
-const TICK_MS = 60_000;
+/**
+ * The first tick waits for the server to be answering on its own port before
+ * it calls itself; after that, ticks follow the clock.
+ */
+const BOOT_DELAY_MS = 20_000;
+
+/**
+ * How far past :00 seconds a tick lands. A timer that fires a hair early would
+ * read the previous minute and run nothing; a quarter of a second is well
+ * clear of that and still inside the minute a job is named for.
+ */
+const SETTLE_MS = 250;
 
 /*
  * The lock itself — one pooled connection held for the whole job, and a fresh
@@ -139,9 +156,10 @@ export function startScheduler(): void {
   /*
    * One tick at a time per worker.
    *
-   * `setInterval` does not wait for the last tick, and a tick can run for many
-   * minutes. Without this a second tick on the SAME worker would start while
-   * the first was still inside a job, and walk the list beside it.
+   * The next tick is only armed once the current one has finished, and a tick
+   * can run for many minutes. A second tick on the SAME worker starting while
+   * the first was still inside a job would walk the list beside it; the guard
+   * is belt and braces against that ever being reintroduced.
    */
   let ticking = false;
 
@@ -155,8 +173,23 @@ export function startScheduler(): void {
     }
   };
 
-  // A first pass shortly after boot rather than immediately: the server needs
-  // to be answering on its own port before it calls itself.
-  setTimeout(() => void tick(), 20_000);
-  setInterval(() => void tick(), TICK_MS);
+  /*
+   * Follow the clock, not an interval.
+   *
+   * `setInterval(60_000)` keeps whatever phase it started with and slips a
+   * little each round, so a job's minute is whichever one the ticks happened
+   * to fall in. Arming a fresh timeout for the next :00 after every tick keeps
+   * them on the minute for as long as the process lives — and a tick that
+   * spends three minutes inside a slow job simply resumes on the minute after
+   * it finishes, with every named minute it missed caught up in one run.
+   */
+  const armNextTick = () => {
+    setTimeout(() => {
+      void tick().finally(armNextTick);
+    }, msUntilNextMinute(new Date()) + SETTLE_MS);
+  };
+
+  setTimeout(() => {
+    void tick().finally(armNextTick);
+  }, BOOT_DELAY_MS);
 }

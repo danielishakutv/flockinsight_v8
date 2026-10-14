@@ -12,11 +12,26 @@
  * to type. Nothing could detect that: the health page can say a job is overdue,
  * but not that it was never meant to run in the first place.
  *
- * So the cron expression lives here, beside the job, and
- * `scripts/print-crontab.ts` renders the server's crontab from it. Adding a
- * job to this object is adding it to the schedule; there is no second place to
- * remember. `cron-schedule.test.ts` fails the build if an expression and its
- * declared interval disagree.
+ * So the cron expression lives here, beside the job. The in-app scheduler
+ * (`scheduler.ts`) fires on it, `scripts/print-crontab.ts` can render a
+ * crontab from it, and `cron-schedule.test.ts` fails the build if an
+ * expression and its declared interval disagree. Adding a job to this object
+ * is adding it to the schedule; there is no second place to remember.
+ *
+ * THE EXPRESSIONS ARE WHAT FIRES, AND THEY ARE IN UTC.
+ *
+ * Until 2026-10-14 the in-app scheduler never read `cron`. It ran a job once
+ * `intervalMinutes` had passed since the job last STARTED, which is a
+ * stopwatch, not a schedule: an hourly job fired at whatever minute its first
+ * run happened to land on, and because a tick is a minute wide and the test
+ * was "at least an hour", every few runs slipped a minute later. Nine days
+ * after the switch the birthday sweep had drifted from :00 to :33, so a church
+ * that asked for greetings at 08:00 got them at 08:29 — and the drift had no
+ * end. `isCronDue` now asks whether a minute matching the expression has
+ * passed since the last start, and the scheduler ticks just after the top of
+ * each minute, so a job runs within a second of the minute it names. Evaluated
+ * in UTC, so the box's own timezone and its daylight-saving changes cannot
+ * move anything.
  *
  * Pure — no database, no server-only imports — so the rules can be unit-tested
  * directly. `cron-run.ts` owns the recording and reading.
@@ -26,57 +41,72 @@ export type CronJobMeta = {
   label: string;
   /** How often it is expected to run; what "overdue" is measured against. */
   intervalMinutes: number;
-  /** The five-field crontab expression. Rendered by print-crontab.ts. */
+  /** The five-field crontab expression, in UTC. This is what fires the job. */
   cron: string;
 };
 
 export const CRON_JOBS = {
   /*
-   * Daily, staggered through the quiet hours so they never contend for the
-   * database or the mail server at the same minute.
+   * Daily. The hours are UTC, chosen so the emails these send land in the
+   * morning where most churches are (UTC+1): an owner nudged at 03:00 has
+   * buried it by breakfast. They are also the hours these four had been
+   * running at since the crontab days, so nothing moved when the app took the
+   * schedule over. Each has its own minute, so the heavier ones never start
+   * together.
    */
-  reminders: {
-    label: "Inactivity reminders",
-    intervalMinutes: 1440,
-    cron: "0 2 * * *",
-  },
   storage: {
     label: "Storage add-on billing",
     intervalMinutes: 1440,
-    cron: "15 2 * * *",
-  },
-  "trial-reminders": {
-    label: "Trial ending reminders",
-    intervalMinutes: 1440,
-    cron: "30 2 * * *",
+    cron: "20 0 * * *",
   },
   "branch-reports": {
     label: "Branch roll-up reports",
     intervalMinutes: 1440,
-    cron: "45 2 * * *",
+    cron: "0 4 * * *",
+  },
+  "trial-reminders": {
+    label: "Trial ending reminders",
+    intervalMinutes: 1440,
+    cron: "0 6 * * *",
+  },
+  reminders: {
+    label: "Inactivity reminders",
+    intervalMinutes: 1440,
+    cron: "0 7 * * *",
   },
 
-  // Hourly.
+  /*
+   * EVERY FIVE MINUTES, NOT HOURLY, because a church types the send time.
+   *
+   * The settings page takes any "HH:MM", and a sweep that runs once an hour
+   * can only honour it to the hour: "send at 08:00" was met at 08:20 by the
+   * old expression and at 08:29 by the drifting stopwatch, and "08:30" would
+   * have waited for 09:00. Both of these claim each send before making it (a
+   * reminder_run row, a celebration_run row), so running them often is safe,
+   * and a pass with nothing due is one query. A failed greeting is still
+   * retried at hourly spacing — see celebration-runs.ts — so the retry budget
+   * across the send window is unchanged.
+   */
   "service-reminders": {
     label: "Service reminders",
-    intervalMinutes: 60,
-    cron: "10 * * * *",
+    intervalMinutes: 5,
+    cron: "*/5 * * * *",
   },
   celebrations: {
     label: "Birthdays & anniversaries",
-    intervalMinutes: 60,
-    cron: "20 * * * *",
+    intervalMinutes: 5,
+    cron: "*/5 * * * *",
   },
+
   /*
-   * HOURLY, NOT DAILY — changed once the sequence started honouring the
-   * church's own `sendTime`.
+   * HOURLY, ON THE HOUR — not daily, and not at five past.
    *
    * A church sets "send the welcome at 10:00" in its own timezone. A sweep
    * that runs once a day at a fixed UTC hour can only ever satisfy churches
-   * whose send time falls before it, and on a UTC box 10:00 in Lagos is a
-   * different hour again — so the setting was unreachable, and the sends
-   * landed in the middle of the night, outside the hours SMS may be delivered
-   * in. Hourly means every church's own hour comes round.
+   * whose send time falls before it, so this is hourly, and it sends anything
+   * whose hour has come rather than only what falls in a window — so a missed
+   * tick delays a welcome by an hour, never a day. On the hour, so a whole-hour
+   * setting is met on the minute.
    *
    * Cheap to run often: idempotent per member per stage per channel, so a
    * sweep with nothing due is two queries and no sends.
@@ -84,27 +114,29 @@ export const CRON_JOBS = {
   "first-timers": {
     label: "First-timer follow-up",
     intervalMinutes: 60,
-    cron: "5 * * * *",
+    cron: "0 * * * *",
   },
 
-  // Time-sensitive: these deliver things people are waiting for, so a delay
-  // matters and they run every few minutes.
+  /*
+   * Time-sensitive: these deliver things people are waiting for at a time
+   * somebody chose, so they run every five minutes. Both were fifteen for a
+   * while, which sent a broadcast scheduled for 10:05 at 10:15.
+   */
   broadcasts: {
     label: "Scheduled broadcasts",
-    intervalMinutes: 15,
-    cron: "*/15 * * * *",
+    intervalMinutes: 5,
+    cron: "*/5 * * * *",
   },
   devotionals: {
     label: "Devotional delivery",
-    intervalMinutes: 15,
-    cron: "*/15 * * * *",
+    intervalMinutes: 5,
+    cron: "*/5 * * * *",
   },
   /*
    * The SMS held overnight for the 8am-8pm delivery window.
    *
-   * Five minutes, the shortest interval here: at 8am a queue that built up
-   * overnight is a church's Sunday reminders, and every tick of delay is a
-   * minute later than they asked for.
+   * At 8am a queue that built up overnight is a church's Sunday reminders,
+   * and every tick of delay is a minute later than they asked for.
    *
    * THIS IS THE JOB THAT WAS MISSING FROM THE SERVER. If it is not running,
    * nothing else reports it — the messages queue successfully and simply stay
@@ -161,6 +193,8 @@ export const CRON_JOBS = {
 
 export type CronJob = keyof typeof CRON_JOBS;
 
+const MINUTE_MS = 60_000;
+
 /**
  * Grace on top of the expected interval before a job is called late.
  *
@@ -176,23 +210,25 @@ function graceMinutes(intervalMinutes: number): number {
 /**
  * Is it time to run this job? A job that has never run always is.
  *
- * NOT the same question as `isCronOverdue`, and the difference cost the queue
- * half its speed. The in-app scheduler used the overdue rule to decide what to
- * run, and the overdue rule adds a grace period before complaining — so a job
- * declared every 5 minutes only became "overdue" after 10, and ran at half the
- * rate it asked for. Queued SMS waited twice as long as intended, and a
- * 15-minute broadcast job ran every half hour.
+ * NOT the same question as `isCronOverdue`. Overdue is the interval plus
+ * patience — the rule for deciding whether to complain. Due is "has a minute
+ * this expression names gone by since the job last started": the rule for
+ * deciding whether to run, and the only one a schedule can be built on.
  *
- * Due is the interval, exactly. Overdue is the interval plus patience. The
- * scheduler wants the first; the health page and the alerts want the second.
+ * Two consequences worth knowing. A run started by hand (curl, the health
+ * page) does not move the schedule — the next named minute still fires, as it
+ * would under cron. And a job that missed several named minutes (a deploy, a
+ * long run of its own) is run ONCE to catch up, not once per minute missed:
+ * the question is whether the latest fire time is after the last start, and
+ * the answer is the same whether one minute was missed or forty.
  */
 export function isCronDue(
   lastRunAt: Date | null,
-  intervalMinutes: number,
+  cron: string,
   now: Date = new Date(),
 ): boolean {
   if (lastRunAt === null) return true;
-  return now.getTime() - lastRunAt.getTime() >= intervalMinutes * 60_000;
+  return lastFireAtOrBefore(cron, now).getTime() > lastRunAt.getTime();
 }
 
 /** Has this job missed its window? A job that has never run always has. */
@@ -202,48 +238,136 @@ export function isCronOverdue(
   now: Date = new Date(),
 ): boolean {
   if (lastRunAt === null) return true;
-  const allowedMs = (intervalMinutes + graceMinutes(intervalMinutes)) * 60_000;
+  const allowedMs = (intervalMinutes + graceMinutes(intervalMinutes)) * MINUTE_MS;
   return now.getTime() - lastRunAt.getTime() > allowedMs;
 }
 
+type ParsedCron = { minute: string; hour: string };
+
 /**
- * How often a five-field cron expression actually fires, in minutes.
+ * Read a five-field expression, refusing anything this module cannot reason
+ * about exactly.
  *
- * Deliberately narrow: it understands only the shapes used above — a wildcard,
- * a fixed value, and a step — and throws on anything else rather than guessing.
- * Its whole job is to catch an expression that disagrees with the interval
- * declared next to it, so a wrong answer would be worse than no answer.
+ * Deliberately narrow: a wildcard, a fixed value, or a step that divides the
+ * field evenly, and only daily-or-shorter schedules. A minute step of seven
+ * would fire at :56 and then :00, four minutes later, which is not "every 7
+ * minutes" by anybody's reckoning; a day-of-week would make the interval test
+ * lie. (Steps are not written out here: the two characters that open one
+ * also close a comment like this.) The
+ * whole point of these helpers is to catch an expression that disagrees with
+ * what is written beside it, so a wrong answer is worse than no answer.
  */
-export function cronIntervalMinutes(expr: string): number {
+function parseFive(expr: string): ParsedCron {
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) {
     throw new Error(`not a five-field cron expression: "${expr}"`);
   }
   const [minute, hour, dom, month, dow] = parts;
 
-  const step = (field: string): number | null => {
-    const m = /^\*\/(\d+)$/.exec(field);
-    return m ? Number(m[1]) : null;
-  };
-  const fixed = (field: string): boolean => /^\d+$/.test(field);
-
-  const assertSimple = (field: string, name: string) => {
-    if (field !== "*" && !fixed(field) && step(field) === null) {
+  const checks: [string, string, number][] = [
+    [minute, "minute", 60],
+    [hour, "hour", 24],
+  ];
+  for (const [field, name, size] of checks) {
+    const s = step(field);
+    if (field !== "*" && !fixed(field) && s === null) {
       throw new Error(`unsupported ${name} field "${field}" in "${expr}"`);
     }
-  };
-  for (const [f, n] of [
-    [minute, "minute"],
-    [hour, "hour"],
-    [dom, "day-of-month"],
-    [month, "month"],
-    [dow, "day-of-week"],
-  ] as const) {
-    assertSimple(f, n);
+    if (fixed(field) && Number(field) >= size) {
+      throw new Error(`${name} ${field} is out of range in "${expr}"`);
+    }
+    if (s !== null && (s < 1 || size % s !== 0)) {
+      throw new Error(
+        `a ${name} step must divide ${size} evenly, so "${field}" in "${expr}" is not a fixed interval`,
+      );
+    }
   }
   if (dom !== "*" || month !== "*" || dow !== "*") {
     throw new Error(`only daily-or-shorter schedules are supported: "${expr}"`);
   }
+  return { minute, hour };
+}
+
+function step(field: string): number | null {
+  const m = /^\*\/(\d+)$/.exec(field);
+  return m ? Number(m[1]) : null;
+}
+
+function fixed(field: string): boolean {
+  return /^\d+$/.test(field);
+}
+
+function fieldMatches(field: string, value: number): boolean {
+  if (field === "*") return true;
+  const s = step(field);
+  if (s !== null) return value % s === 0;
+  return value === Number(field);
+}
+
+function matchesParsed(p: ParsedCron, at: Date): boolean {
+  return (
+    fieldMatches(p.minute, at.getUTCMinutes()) &&
+    fieldMatches(p.hour, at.getUTCHours())
+  );
+}
+
+/** Does the expression name this UTC minute? Seconds are ignored. */
+export function cronMatches(expr: string, at: Date): boolean {
+  return matchesParsed(parseFive(expr), at);
+}
+
+/*
+ * A day and one minute: every expression this module accepts fires at least
+ * once a day, so a search that long cannot miss. Walking minute by minute is
+ * a few hundred comparisons for a daily job and one for a `* * * * *`, which
+ * is nothing per tick — and it is the same predicate as `cronMatches`, so the
+ * two cannot disagree the way a cleverer closed form could.
+ */
+const SEARCH_MINUTES = 1441;
+
+function floorToMinute(at: Date): Date {
+  return new Date(Math.floor(at.getTime() / MINUTE_MS) * MINUTE_MS);
+}
+
+/** The most recent minute at or before `now` that the expression fires on. */
+export function lastFireAtOrBefore(expr: string, now: Date): Date {
+  const p = parseFive(expr);
+  const t = floorToMinute(now);
+  for (let i = 0; i < SEARCH_MINUTES; i++) {
+    if (matchesParsed(p, t)) return t;
+    t.setTime(t.getTime() - MINUTE_MS);
+  }
+  throw new Error(`"${expr}" did not fire in the day before ${now.toISOString()}`);
+}
+
+/** The first minute strictly after `now` that the expression fires on. */
+export function nextFireAfter(expr: string, now: Date): Date {
+  const p = parseFive(expr);
+  const t = new Date(floorToMinute(now).getTime() + MINUTE_MS);
+  for (let i = 0; i < SEARCH_MINUTES; i++) {
+    if (matchesParsed(p, t)) return t;
+    t.setTime(t.getTime() + MINUTE_MS);
+  }
+  throw new Error(`"${expr}" does not fire in the day after ${now.toISOString()}`);
+}
+
+/**
+ * How long until the clock next reads :00 seconds. The scheduler ticks on
+ * that, so a job named for a minute runs in that minute rather than up to a
+ * minute into the next one.
+ */
+export function msUntilNextMinute(now: Date): number {
+  return MINUTE_MS - (now.getTime() % MINUTE_MS);
+}
+
+/**
+ * How often a five-field cron expression actually fires, in minutes.
+ *
+ * Its whole job is to catch an expression that disagrees with the interval
+ * declared next to it, and it accepts only the shapes `parseFive` does.
+ */
+export function cronIntervalMinutes(expr: string): number {
+  const { minute, hour } = parseFive(expr);
 
   const minuteStep = step(minute);
   if (minuteStep !== null) {

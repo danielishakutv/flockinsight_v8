@@ -16,7 +16,7 @@ import {
   weekendRecordEmail,
 } from "@/lib/reminder-emails";
 import { runFirstTimers } from "@/lib/first-timers";
-import { withCronRun } from "@/lib/cron-run";
+import { pruneCronRuns, withCronRun } from "@/lib/cron-run";
 import { getChurchHealth } from "@/lib/platform-health";
 import { shouldRemind, type ReminderKind } from "@/lib/reminder-rules";
 
@@ -212,6 +212,13 @@ export async function GET(request: Request) {
     await pruneOldEvents(180);
   } catch (e) {
     console.error("[cron/reminders] analytics prune failed", e);
+  }
+  // Cron heartbeats older than two months. Nothing reads past the latest row
+  // per job, and at five-minute cadences the table grows by ~1,700 rows a day.
+  try {
+    await pruneCronRuns(60);
+  } catch (e) {
+    console.error("[cron/reminders] cron_run prune failed", e);
   }
 
   // Settle any SMS sender IDs the network has now approved/rejected, notifying

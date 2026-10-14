@@ -6,13 +6,27 @@
  * makes the write conditional on the state it read — so two overlapping runs
  * can never both claim the same greeting.
  *
- * The cron runs hourly and a church's send window is two and a half hours, so
- * a failure gets up to three attempts on the day: enough for "the wallet was
- * empty at 8, topped up by 9", without retrying a church that never fixes it
- * every hour for ever.
+ * A church's send window is two and a half hours and a failure gets up to
+ * three attempts on the day, an hour apart: enough for "the wallet was empty
+ * at 8, topped up by 9", without retrying a church that never fixes it every
+ * hour for ever.
+ *
+ * The cron now runs every FIVE minutes, so that "send at 08:00" means 08:00
+ * rather than some minute of the following hour. The hourly spacing between
+ * attempts is therefore kept here, on the row's own clock, instead of falling
+ * out of the cron's cadence: without it a wallet that was empty at 08:00
+ * would have been asked again at 08:05 and 08:10 and then given up for the
+ * day, before anyone had had a chance to top it up.
  */
 
 export const CELEBRATION_MAX_ATTEMPTS = 3;
+
+/**
+ * How long a failed greeting waits before it is tried again. Just under an
+ * hour, so a sweep landing on the hour sees it as ready rather than four
+ * seconds short.
+ */
+export const RETRY_AFTER_MS = 55 * 60_000;
 
 /**
  * A "pending" row older than this belongs to a run that died mid-send (a
@@ -32,9 +46,10 @@ export type RunState = {
 
 /**
  * - `insert`: nothing yet today; claim a new row.
- * - `reclaim`: a failure (or a dead email claim) with attempts left; send again.
+ * - `reclaim`: a failure an hour old (or a dead email claim) with attempts
+ *   left; send again.
  * - `abandon`: a dead SMS claim; settle it as failed and send nothing.
- * - `leave`: somebody else's, or finished.
+ * - `leave`: somebody else's, finished, or a failure too recent to retry.
  */
 export type ClaimDecision = "insert" | "reclaim" | "abandon" | "leave";
 
@@ -47,8 +62,8 @@ export function claimDecision(
   // Delivered, or handed to the 8am–8pm queue, which owns it from there.
   if (existing.outcome === "sent" || existing.outcome === "queued") return "leave";
   if (existing.attempts >= CELEBRATION_MAX_ATTEMPTS) return "leave";
+  const age = now.getTime() - new Date(existing.updatedAt).getTime();
   if (existing.outcome === "pending") {
-    const age = now.getTime() - new Date(existing.updatedAt).getTime();
     if (age < PENDING_STALE_MS) return "leave";
     /*
      * A dead SMS claim may well have been sent — and charged — before the
@@ -58,8 +73,10 @@ export function claimDecision(
      * final. So it is settled, not retried. An email costs nothing and a
      * second one is harmless, so a dead email claim is still retried.
      */
-    if (channel === "sms") return "abandon";
+    return channel === "sms" ? "abandon" : "reclaim";
   }
+  // A failure: tried again an hour on, not at the next five-minute sweep.
+  if (age < RETRY_AFTER_MS) return "leave";
   return "reclaim";
 }
 

@@ -29,6 +29,22 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.78.0",
+    date: "2026-10-14",
+    summary:
+      "Birthday greetings and service reminders go out at the time you set, to the minute. The scheduled jobs now run on the clock rather than on a stopwatch that had been slipping later every day.",
+    changes: {
+      Fixed: [
+        "Birthday and anniversary greetings were going out up to half an hour after the time a church had set — 08:00 had become 08:29 — and the delay was growing every week. The sweep now runs every five minutes, on the minute, so 08:00 means 08:00.",
+        "Service reminders had the same drift for the same reason, and are fixed the same way: a reminder set for 08:30 goes at 08:30, not at the next hour.",
+        "A scheduled broadcast or devotional could go out up to fifteen minutes after its time. It is now within five.",
+      ],
+      Improved: [
+        "Platform Admin → Health shows what each scheduled job actually did on its last run and when it next runs, instead of a duration rounded to 0.0s.",
+      ],
+    },
+  },
+  {
     version: "0.77.0",
     date: "2026-10-11",
     summary:

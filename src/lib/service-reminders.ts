@@ -51,8 +51,15 @@ function toMinutes(hm: string): number {
 }
 
 // How long after the configured time the cron may still fire the reminder
-// (so an hourly cron always catches it, but it never sends hours late).
+// (so a missed sweep or two is caught up, but it never sends hours late).
 const SEND_WINDOW_MIN = 150;
+
+type Recipient = {
+  firstName: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+};
 
 export type ReminderSummary = {
   churchesChecked: number;
@@ -63,8 +70,9 @@ export type ReminderSummary = {
 
 /**
  * Send due service reminders. Idempotent: a reminder for a given service
- * occurrence is sent at most once (reminder_run unique index). Designed to be
- * called hourly by a cron.
+ * occurrence is sent at most once (reminder_run unique index). Called every
+ * five minutes by the scheduler, so a church's "send at 08:30" is met at
+ * 08:30 rather than at the next hour; the claim is what makes that safe.
  */
 export async function runServiceReminders(): Promise<ReminderSummary> {
   const churches = await db
@@ -121,20 +129,32 @@ export async function runServiceReminders(): Promise<ReminderSummary> {
       );
     if (services.length === 0) continue;
 
-    // Recipients (fetched once per church).
-    const members = await db
-      .select({
-        firstName: member.firstName,
-        phone: member.phone,
-        email: member.email,
-        status: member.status,
-      })
-      .from(member)
-      .where(eq(member.churchId, c.churchId));
-    const audience =
-      c.audience === "all"
-        ? members
-        : members.filter((m) => m.status === "active");
+    /*
+     * Recipients, fetched once per church — and only once a service has
+     * actually been claimed below. This sweep runs every five minutes for two
+     * and a half hours after the church's send time, and every pass but the
+     * first finds each occurrence already claimed; loading the whole
+     * membership on each of those would be thirty reads of a thousand rows
+     * for nothing.
+     */
+    let recipients: Recipient[] | null = null;
+    const loadAudience = async (): Promise<Recipient[]> => {
+      if (recipients) return recipients;
+      const members = await db
+        .select({
+          firstName: member.firstName,
+          phone: member.phone,
+          email: member.email,
+          status: member.status,
+        })
+        .from(member)
+        .where(eq(member.churchId, c.churchId));
+      recipients =
+        c.audience === "all"
+          ? members
+          : members.filter((m) => m.status === "active");
+      return recipients;
+    };
 
     for (const svc of services) {
       // Claim this occurrence; if it already exists, someone sent it already.
@@ -144,6 +164,7 @@ export async function runServiceReminders(): Promise<ReminderSummary> {
         .onConflictDoNothing()
         .returning({ id: reminderRun.id });
       if (!run) continue;
+      const audience = await loadAudience();
 
       summary.services++;
       const base = {

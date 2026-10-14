@@ -131,12 +131,19 @@ export async function evaluateConditions(
       // real, but it would otherwise fire eight critical emails the moment
       // this feature is first deployed. That one stays on the dashboard.
       const lastRunAt = c.lastRunAt;
+      // Under IN_APP_CRON a job that has never run means the scheduler is not
+      // running it — no CRON_SECRET, or a loopback call to the wrong port —
+      // and "add it to the crontab" would send somebody to the wrong place.
+      const neverRanAdvice =
+        process.env.IN_APP_CRON === "true"
+          ? "the in-app scheduler is not running it; check CRON_SECRET and the [scheduler] lines in the server log."
+          : "add it to the crontab.";
       alerts.push({
         key: `cron.${c.job}.overdue`,
         severity: lastRunAt === null ? "warning" : "critical",
         message:
           lastRunAt === null
-            ? `The "${c.label}" job has never run — add it to the crontab.`
+            ? `The "${c.label}" job has never run — ${neverRanAdvice}`
             : `The "${c.label}" job has not run since ${lastRunAt
                 .toISOString()
                 .slice(0, 16)

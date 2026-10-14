@@ -5,8 +5,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/cron/celebrations — run hourly. Sends birthday & anniversary
- * messages due today. Auth via ?key=CRON_SECRET or Bearer header.
+ * GET /api/cron/celebrations — run every five minutes (see CRON_JOBS). Sends
+ * birthday & anniversary messages whose church's send time has come. Auth via
+ * ?key=CRON_SECRET or Bearer header.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;

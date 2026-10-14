@@ -122,14 +122,20 @@ describe("claimDecision: a failed greeting is retried, a sent one never", () => 
     }
   });
 
-  it("retries a failure until the attempts run out", () => {
+  it("retries a failure an hour on, until the attempts run out", () => {
+    const anHour = 60 * 60_000;
     for (const ch of ["sms", "email"] as const) {
+      // The sweep runs every five minutes now; a failure waits an hour for
+      // its retry rather than being asked again at the next sweep.
       expect(claimDecision({ outcome: "failed", attempts: 1, updatedAt: ago(0) }, now, ch)).toBe(
-        "reclaim",
+        "leave",
       );
       expect(
+        claimDecision({ outcome: "failed", attempts: 1, updatedAt: ago(anHour) }, now, ch),
+      ).toBe("reclaim");
+      expect(
         claimDecision(
-          { outcome: "failed", attempts: CELEBRATION_MAX_ATTEMPTS, updatedAt: ago(0) },
+          { outcome: "failed", attempts: CELEBRATION_MAX_ATTEMPTS, updatedAt: ago(anHour) },
           now,
           ch,
         ),
