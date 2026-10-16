@@ -94,20 +94,32 @@ export function claimDecision(
  */
 export function matchSmsOutcomes<J extends { phone: string }>(
   jobs: J[],
-  outcomes: { phone: string; status: "sent" | "failed" | "skipped"; error?: string }[],
+  outcomes: {
+    phone: string;
+    status: "sent" | "failed" | "skipped";
+    error?: string;
+    providerMessageId?: string | null;
+  }[],
 ): {
-  settled: { job: J; ok: boolean; error: string | null }[];
+  settled: { job: J; ok: boolean; error: string | null; providerMessageId?: string | null }[];
   unreported: J[];
 } {
   const pending = new Map<string, J[]>();
   for (const j of jobs) pending.set(j.phone, [...(pending.get(j.phone) ?? []), j]);
-  const settled: { job: J; ok: boolean; error: string | null }[] = [];
+  const settled: {
+    job: J;
+    ok: boolean;
+    error: string | null;
+    providerMessageId?: string | null;
+  }[] = [];
   for (const o of outcomes) {
     const job = pending.get(o.phone)?.shift();
     if (!job) continue; // An outcome for a number this run did not send to.
     settled.push(
       o.status === "sent"
-        ? { job, ok: true, error: null }
+        ? // The gateway's id travels with the verdict, so the history row can
+          // be matched by the delivery report that follows.
+          { job, ok: true, error: null, providerMessageId: o.providerMessageId }
         : { job, ok: false, error: o.error ?? `The number was ${o.status}.` },
     );
   }

@@ -1,8 +1,15 @@
 import "server-only";
 import { and, eq, gte, inArray, like, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { church, member, celebrationRun, celebrationSetting } from "@/db/schema";
+import {
+  church,
+  member,
+  celebrationRun,
+  celebrationSetting,
+  communicationLog,
+} from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
+import { recordRecipients, tally, type RecipientOutcome } from "@/lib/comm-recipients";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { fillTemplate } from "@/lib/service-reminders";
@@ -327,6 +334,7 @@ async function runChurch(
 
   // ----- Email -----
   let emails = 0;
+  const emailHistory: RecipientOutcome[] = [];
   for (const job of jobs) {
     if (job.channel !== "email" || !job.email) continue;
     let ok = false;
@@ -344,6 +352,13 @@ async function runChurch(
       // Recorded, never swallowed: this used to be an empty catch.
       detail = err instanceof Error ? err.message : String(err);
     }
+    emailHistory.push({
+      memberId: job.memberId,
+      name: job.name,
+      destination: job.email,
+      status: ok ? "sent" : "failed",
+      error: detail,
+    });
     if (ok) {
       emails++;
       await finishRun(job.runId, "sent", null);
@@ -357,12 +372,30 @@ async function runChurch(
   }
   if (emails > 0) await recordUsage("email", c.churchId, emails);
   summary.emails += emails;
+  const firstEmail = jobs.find((j) => j.channel === "email" && j.email);
+  if (firstEmail)
+    await logToHistory(c.churchId, "email", {
+      subject: firstEmail.subject,
+      body: firstEmail.body,
+      outcomes: emailHistory,
+    });
 
   // ----- SMS -----
   const smsJobs = jobs
     .filter((j) => j.channel === "sms" && j.phone)
     .map((j) => ({ ...j, phone: j.phone as string }));
   if (smsJobs.length === 0) return;
+  const smsHistory = (status: "sent" | "failed", error: string | null) =>
+    logToHistory(c.churchId, "sms", {
+      body: smsJobs[0].message,
+      outcomes: smsJobs.map((j) => ({
+        memberId: j.memberId,
+        name: j.name,
+        destination: j.phone,
+        status,
+        error,
+      })),
+    });
 
   let res: Awaited<ReturnType<typeof sendChurchSmsBatch>>;
   try {
@@ -374,7 +407,8 @@ async function runChurch(
         memberId: j.memberId,
         name: j.name,
       })),
-      label: "Birthday & anniversary wishes",
+      // Also the history label if the batch waits in the 8am queue.
+      label: CELEBRATION_AUDIENCE,
       origin: "celebrations",
     });
   } catch (e) {
@@ -387,6 +421,7 @@ async function runChurch(
     summary.failed += smsJobs.length;
     for (const j of smsJobs) await finishRun(j.runId, "failed", detail, { final: true });
     console.error(`[celebrations] SMS batch threw for church ${c.churchId}`, e);
+    await smsHistory("failed", detail);
     return;
   }
 
@@ -406,11 +441,13 @@ async function runChurch(
       `[celebrations] SMS failed for church ${c.churchId} (${smsJobs.length} greeting(s)): ${res.error}`,
     );
     await tellManagersOnceAWeek(c.churchId, runStart, smsJobs.length, res.error);
+    await smsHistory("failed", `${SMS_BATCH_REFUSED}${res.error}`);
     return;
   }
 
   if (res.ok === "queued") {
-    // The queue owns these now, so they are not retried here.
+    // The queue owns these now, so they are not retried here — and it writes
+    // the history row when they actually go (origin "celebrations").
     summary.queued += res.count;
     for (const j of smsJobs) await finishRun(j.runId, "queued", res.notice);
     console.log(
@@ -422,7 +459,16 @@ async function runChurch(
   // `ok === true`: settle each greeting with its own number's verdict.
   summary.sms += res.sent;
   const { settled, unreported } = matchSmsOutcomes(smsJobs, res.outcomes);
+  const history: RecipientOutcome[] = [];
   for (const s of settled) {
+    history.push({
+      memberId: s.job.memberId,
+      name: s.job.name,
+      destination: s.job.phone,
+      status: s.ok ? "sent" : "failed",
+      error: s.error,
+      providerMessageId: s.providerMessageId ?? null,
+    });
     if (s.ok) {
       await finishRun(s.job.runId, "sent", null);
     } else {
@@ -434,11 +480,83 @@ async function runChurch(
     // Left "pending" it would read as in flight — one state meaning two things.
     summary.failed++;
     await finishRun(j.runId, "failed", "The gateway did not report on this number.");
+    history.push({
+      memberId: j.memberId,
+      name: j.name,
+      destination: j.phone,
+      status: "failed",
+      error: "The gateway did not report on this number.",
+    });
     console.error(
       `[celebrations] no gateway outcome for a recipient of church ${c.churchId} (member ${j.memberId})`,
     );
   }
+  await logToHistory(c.churchId, "sms", {
+    body: smsJobs[0].message,
+    outcomes: history,
+    units: res.pages,
+    cost: res.cost,
+  });
 }
+
+/**
+ * Put an automatic greeting in Communication → History, beside what the
+ * church sent by hand.
+ *
+ * It used to be recorded only in celebration_run, which no page reads. On
+ * 15 Oct 2026 RPM Magami's 08:00 birthday text to a member went, and Termii
+ * reported it delivered — but nothing anywhere in the app said so, so an admin
+ * concluded "it doesn't go by itself", sent it again by hand at 11:12, and the
+ * member got two and the church paid twice. A greeting that went and cannot
+ * be seen is, to the church, a greeting that did not go.
+ *
+ * The recipient rows carry the gateway's message id, so Termii's delivery
+ * report can turn "sent" into "delivered". Best-effort: failing to write the
+ * history must never undo or repeat a greeting that already went.
+ */
+async function logToHistory(
+  churchId: string,
+  channel: Channel,
+  o: {
+    subject?: string;
+    body: string;
+    outcomes: RecipientOutcome[];
+    units?: number;
+    cost?: number;
+  },
+): Promise<void> {
+  if (o.outcomes.length === 0) return;
+  try {
+    const counts = tally(o.outcomes);
+    const [log] = await db
+      .insert(communicationLog)
+      .values({
+        churchId,
+        channel,
+        audience: CELEBRATION_AUDIENCE,
+        subject: o.subject ?? null,
+        // The first person's message stands for the batch, as the queue does;
+        // each recipient got their own name in it.
+        body: o.body,
+        recipients: counts.recipients,
+        sent: counts.sent,
+        failed: counts.failed,
+        skipped: counts.skipped,
+        units: o.units ?? 0,
+        cost: o.cost ?? 0,
+      })
+      .returning({ id: communicationLog.id });
+    if (log) await recordRecipients(log.id, churchId, o.outcomes);
+  } catch (e) {
+    console.error(
+      `[celebrations] greeting went but could not be written to the history for church ${churchId}:`,
+      e,
+    );
+  }
+}
+
+/** How automatic greetings are labelled in Communication → History. */
+const CELEBRATION_AUDIENCE = "Birthday & anniversary wishes (automatic)";
 
 /**
  * Take ownership of one greeting on one channel for this run, or decline.

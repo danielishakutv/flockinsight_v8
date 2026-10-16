@@ -122,6 +122,14 @@ describe("matchSmsOutcomes", () => {
     ]);
   });
 
+  it("keeps the gateway's message id, so the history row can be matched by the delivery report", () => {
+    const { settled } = matchSmsOutcomes(
+      [{ id: "a", phone: "0801" }],
+      [{ phone: "0801", status: "sent", providerMessageId: "3017607" }],
+    );
+    expect(settled[0].providerMessageId).toBe("3017607");
+  });
+
   it("returns what the gateway never reported on", () => {
     const jobs = [
       { id: "a", phone: "0801" },

@@ -530,9 +530,15 @@ async function sendClaimedRow(
    * final - it went, in full or in part, or it is out of retries - so the
    * history records what actually happened: the real counts, the real cost,
    * at the real time. A row going back for another try writes nothing yet.
+   *
+   * Birthday greetings too: one that waited for 08:00 and then went must be
+   * as visible as one that went at once, or the church sends it again by
+   * hand. Their text is the church's own template filled with a name, so it
+   * carries no link and is safe to show. Other automatic senders stay out
+   * until somebody has checked theirs the same way.
    */
   let logId: string | null = null;
-  if (row.origin === "communication" && !verdict.retry) {
+  if ((row.origin === "communication" || row.origin === "celebrations") && !verdict.retry) {
     const byPhone = new Map(recipients.map((r) => [r.phone, r]));
     const outcomes: RecipientOutcome[] = res.outcomes.map((o) => {
       const person = byPhone.get(o.phone);
