@@ -126,6 +126,20 @@ export type PeerDiagnostics = {
    * stream, or has never been given dimensions.
    */
   element?: { width: number; paused: boolean; readyState: number } | null;
+  /**
+   * How long after this person appeared in the roster their voice arrived,
+   * in milliseconds. SFU rooms only; null until heard.
+   */
+  heardAfterMs?: number | null;
+};
+
+/** The recording in progress in the room, as the server reports it. */
+export type RecordingState = {
+  id: string;
+  mode: string;
+  /** "server" (the recording service) or "browser" (the host's own tab). */
+  source: string;
+  startedAt: string | null;
 };
 
 export type MeetingClientEvents = {
@@ -159,6 +173,12 @@ export type MeetingClientEvents = {
   onSpotlight?: (peerId: string | null, at: string) => void;
   onControl?: (payload: Record<string, unknown>) => void;
   onRecording?: (payload: Record<string, unknown>) => void;
+  /**
+   * Whether a recording is running, from the server on every poll. The
+   * roster's authority applied to the REC pill: everybody sees the same
+   * answer, and a host who reloads mid-recording still finds the Stop button.
+   */
+  onRecordingState?: (recording: RecordingState | null) => void;
   onEnded?: (reason: string) => void;
   onError?: (message: string) => void;
   /**
@@ -219,6 +239,16 @@ export type MeetingClientInit = {
    * `meeting.transport` in the schema for why it can never change mid-call.
    */
   transport?: "mesh" | "sfu";
+  /**
+   * Who was already in the room when we joined.
+   *
+   * Handed over so the first pulls are made the moment the engine starts,
+   * rather than when the first poll happens to return — which, in a quiet
+   * room, is when its twelve-second hold expires. Somebody who joined muted
+   * with the camera off sent nothing that would return it sooner, and sat in
+   * silence for that long.
+   */
+  roster?: RosterEntry[];
   events: MeetingClientEvents;
 };
 
@@ -522,6 +552,8 @@ export class MeetingClient {
    */
 
   private onDeviceChange: (() => void) | null = null;
+  /** The roster at join time, acted on once when the engine starts. */
+  private initialRoster: RosterEntry[] | null;
 
   constructor(init: MeetingClientInit) {
     this.code = init.code;
@@ -530,6 +562,7 @@ export class MeetingClient {
     this.cursor = init.cursor;
     this.events = init.events;
     this.transport = init.transport ?? "mesh";
+    this.initialRoster = init.roster ?? null;
     this.rtcConfig = {
       iceServers: init.iceServers,
       iceTransportPolicy: init.iceTransportPolicy ?? "all",
@@ -566,7 +599,7 @@ export class MeetingClient {
    * detail of this class and of nothing above it.
    */
   private buildSfu(): SfuTransport {
-    return new SfuTransport(
+    const sfu = new SfuTransport(
       async (action, body) => {
         const res = await fetch(`/api/meet/${this.code}/sfu`, {
           method: "POST",
@@ -612,6 +645,10 @@ export class MeetingClient {
         onError: (message) => this.events.onError?.(message),
       },
     );
+    // Both media sessions are asked for now, so the first publish and the
+    // first pull do not each begin with that round trip.
+    sfu.prepare();
+    return sfu;
   }
 
   start(): void {
@@ -619,6 +656,20 @@ export class MeetingClient {
     this.running = true;
     void this.listenLoop();
     this.statsTimer = setInterval(() => void this.sampleStats(), STATS_INTERVAL_MS);
+
+    /*
+     * Act on who is already here, now. Waiting for the first poll to return
+     * is waiting for something to HAPPEN in the room, and in a quiet room
+     * nothing does for up to twelve seconds.
+     */
+    const roster = this.initialRoster;
+    this.initialRoster = null;
+    if (roster && roster.length > 0) {
+      this.rosterCache = roster;
+      this.applyMyRole(roster);
+      this.events.onRoster?.(roster);
+      this.reconcilePeers(roster);
+    }
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.onVisibility);
     }
@@ -853,6 +904,7 @@ export class MeetingClient {
     /** The server's clock when this answer was built. Orders room state. */
     serverTime?: string;
     spotlightPeerId?: string | null;
+    recording?: RecordingState | null;
     ended?: boolean;
     removed?: boolean;
     waitingForHost?: boolean;
@@ -892,6 +944,14 @@ export class MeetingClient {
       this.events.onSpotlight?.(
         typeof data.spotlightPeerId === "string" ? data.spotlightPeerId : null,
         at,
+      );
+    }
+    if ("recording" in data) {
+      const r = data.recording;
+      this.events.onRecordingState?.(
+        r && typeof r.id === "string"
+          ? { id: r.id, mode: String(r.mode ?? "video"), source: String(r.source ?? "browser"), startedAt: r.startedAt ?? null }
+          : null,
       );
     }
     if (data.roster) {
@@ -1786,7 +1846,17 @@ export class MeetingClient {
       this.sfu ??= this.buildSfu();
       void this.sfu
         .setLocal({
-          mic: this.state.micOn ? (this.micStream?.getAudioTracks()[0] ?? null) : null,
+          /*
+           * The microphone stays attached while muted. `setMic` disables the
+           * track, which sends silence (and with DTX, almost nothing), so
+           * nobody hears a thing — but the track stays alive on the media
+           * server. Swapping it for null, as the mesh does, sends NOTHING,
+           * and a track with no packets for thirty seconds is one the media
+           * server may let go of, after which nobody could pull it again when
+           * the person unmuted. A recording on the server depends on the same
+           * track staying put.
+           */
+          mic: this.micStream?.getAudioTracks()[0] ?? null,
           camera: this.state.cameraOn ? (this.camStream?.getVideoTracks()[0] ?? null) : null,
           screen: this.state.sharing ? (this.screenStream?.getVideoTracks()[0] ?? null) : null,
         })
@@ -2693,6 +2763,7 @@ export class MeetingClient {
       // The SFU path keeps the tuning and the jitter buffer but not RED — see
       // `reshapeAudioIfNeeded`.
       audioRedundancy: false,
+      heardAfterMs: d.heardAfterMs,
     }));
   }
 

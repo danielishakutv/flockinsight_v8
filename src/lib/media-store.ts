@@ -470,6 +470,33 @@ export async function sweepStaleUploads(
     return { removed: 0, bytes: 0 };
   }
 
+  /*
+   * The recording service's work directories. A finished recording's
+   * segments are renamed to `<id>.done` beside the file that was filed from
+   * them, as an operator's second chance; a week later nobody is coming back
+   * for them. A directory WITHOUT the suffix is a recording in progress or
+   * one that failed, and is never touched here.
+   */
+  try {
+    const { readdir, rm } = await import("node:fs/promises");
+    const dir = path.join(MEDIA_TMP, "recordings");
+    const weekAgo = now.getTime() - 7 * 86_400_000;
+    for (const name of await readdir(dir)) {
+      if (!name.endsWith(".done")) continue;
+      const full = path.join(dir, name);
+      try {
+        const st = await stat(full);
+        if (st.mtimeMs >= weekAgo) continue;
+        await rm(full, { recursive: true, force: true });
+        removed++;
+      } catch {
+        /* vanished or unreadable */
+      }
+    }
+  } catch {
+    /* no recordings directory yet */
+  }
+
   if (removed > 0) {
     console.log(
       `[media-store] cleared ${removed} abandoned partial upload(s), ${(bytes / 1048576).toFixed(1)} MB`,

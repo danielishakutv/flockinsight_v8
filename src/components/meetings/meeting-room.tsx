@@ -334,7 +334,24 @@ export function MeetingRoom(props: {
   const [floaters, setFloaters] = useState<
     { id: string; emoji: string; left: number; name: string }[]
   >([]);
-  const [recording, setRecording] = useState<{ id: string | null; mode: RecorderMode } | null>(null);
+  /**
+   * The recording in progress, if any, and WHERE it is being made.
+   *
+   * "server": the recording service is capturing the room through the media
+   * server; this browser pressed a button and does nothing else. "browser":
+   * this tab is compositing and capturing it — a mesh room, or the service
+   * being down — and the file goes through the vault and the uploader after.
+   * The server reports it on every poll, so every participant sees the pill.
+   */
+  const [recording, setRecording] = useState<{
+    id: string | null;
+    mode: RecorderMode;
+    source: "server" | "browser";
+    startedAt: number | null;
+  } | null>(null);
+  const recordingRef = useRef<typeof recording>(null);
+  /** The call ended while a server recording was running: say it is being saved. */
+  const [savingOnServer, setSavingOnServer] = useState(false);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [savingRecording, setSavingRecording] = useState(false);
@@ -605,8 +622,27 @@ export function MeetingRoom(props: {
           // Decided by the server before anybody joined. Everyone in a room
           // uses the same one; see the note on `meeting.transport`.
           transport: data.meeting.transport === "sfu" ? "sfu" : "mesh",
+          // Who is already here, so their voices are asked for at once.
+          roster: data.roster ?? [],
           events: {
             onRoster: setRoster,
+            onRecordingState: (rec) => {
+              if (rec) {
+                setRecording((prev) => {
+                  // A browser recording this tab is running already knows
+                  // its own id and clock; the server's word adds nothing.
+                  if (prev?.source === "browser" && recorderRef.current) return prev;
+                  return {
+                    id: rec.id,
+                    mode: rec.mode === "audio" ? "audio" : "video",
+                    source: rec.source === "server" ? "server" : "browser",
+                    startedAt: rec.startedAt ? Date.parse(rec.startedAt) : null,
+                  };
+                });
+              } else if (!recorderRef.current) {
+                setRecording(null);
+              }
+            },
             onStage: (next, at) => applyRoomState(at, { stage: next }),
             onMedia: setMedia,
             onLocalState: (s) => {
@@ -633,8 +669,19 @@ export function MeetingRoom(props: {
                 );
               if (payload.state === "stopped")
                 toast.info(t("meetings.recordingStopped"));
+              // The recording service, reporting back to the room.
+              if (payload.state === "saved")
+                toast.success(t("meetings.savedToLibrary"));
+              if (payload.state === "failed")
+                toast.error(
+                  t("meetings.recordingFailedOnServer", {
+                    reason: String(payload.reason ?? ""),
+                  }),
+                  { duration: 15000 },
+                );
             },
             onEnded: (reason) => {
+              if (recordingRef.current?.source === "server") setSavingOnServer(true);
               /*
                * The engine reports in English because it has no dictionary.
                * Mapped here to the translated sentence, with the original kept
@@ -845,11 +892,20 @@ export function MeetingRoom(props: {
    * ========================================================== */
 
   useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
+  useEffect(() => {
     if (phase !== "live") return;
     const t = setInterval(() => {
       if (startedAt) setElapsed(Math.round((Date.now() - startedAt) / 1000));
       if (recorderRef.current?.running) {
         setRecordingElapsed(recorderRef.current.elapsedSec);
+      } else {
+        const rec = recordingRef.current;
+        if (rec?.source === "server" && rec.startedAt) {
+          setRecordingElapsed(Math.max(0, Math.round((Date.now() - rec.startedAt) / 1000)));
+        }
       }
     }, 1000);
     return () => clearInterval(t);
@@ -1290,13 +1346,48 @@ export function MeetingRoom(props: {
    * Recording
    * ========================================================== */
 
+  /**
+   * Tell the server a recording did not save.
+   *
+   * Every failing path calls this. Before it existed the browser handled its own
+   * errors well — a toast, a note in the local vault — and the row it had created
+   * when recording started stayed "uploading" for ever. Eleven production
+   * recordings sat like that: zero bytes, no error, and a host who believed they
+   * had a recording.
+   *
+   * Best-effort and never allowed to throw: this runs inside a catch, and a
+   * failure to report a failure must not replace the real error with its own.
+   * The server's stalled-recording sweep is the backstop for when even this
+   * cannot get through.
+   */
+  const reportRecordingFailure = useCallback(
+    async (recordingId: string | null, stage: string, reason: string) => {
+      if (!recordingId || !me) return;
+      try {
+        await fetch(`/api/meet/${props.code}/recording/failed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            peer: me.peerId,
+            secret: me.secret,
+            recordingId,
+            stage,
+            reason,
+          }),
+          // The host often closes the tab the moment they see it failed; this
+          // lets the browser deliver it anyway.
+          keepalive: true,
+        });
+      } catch (e) {
+        console.error("[meetings] could not report the recording failure", e);
+      }
+    },
+    [me, props.code],
+  );
+
   const startRecording = useCallback(
     async (mode: RecorderMode) => {
       if (!meeting || !me) return;
-      if (!recordingSupported(mode)) {
-        toast.error(t("common.somethingWentWrong"));
-        return;
-      }
 
       /*
        * One recording at a time, and the guard has to be synchronous.
@@ -1313,8 +1404,57 @@ export function MeetingRoom(props: {
        */
       // Both refs, so the guard is synchronous and this callback's identity
       // does not change every time the recording state does.
-      if (recorderRef.current || startingRecordingRef.current) return;
+      if (recorderRef.current || startingRecordingRef.current || recordingRef.current) return;
       startingRecordingRef.current = true;
+
+      /*
+       * The server decides where this is recorded, so it is asked first.
+       *
+       * On the media server, the recording service captures the room and this
+       * tab is not involved: no canvas, no vault, no upload, nothing to lose
+       * when the phone sleeps. That is every real meeting. Only a mesh room,
+       * or a moment when the service is down, comes back "browser" — and then
+       * the old recorder runs here exactly as it used to.
+       */
+      let id: string | null = null;
+      let inBrowser = false;
+      try {
+        const res = await runAction("recording.start", { mode });
+        if (!res?.ok) return;
+        id = typeof res.recordingId === "string" ? res.recordingId : null;
+        if (res.source !== "browser") {
+          const next = {
+            id,
+            mode,
+            source: "server" as const,
+            startedAt: typeof res.startedAt === "string" ? Date.parse(res.startedAt) : Date.now(),
+          };
+          // The ref as well, at once: the guard above has to see it before
+          // the next render, or a second tap starts a second recording.
+          recordingRef.current = next;
+          setRecording(next);
+          setRecordingElapsed(0);
+          toast.success(t("meetings.recordingOnServer"), { duration: 8000 });
+          return;
+        }
+        inBrowser = true;
+      } catch (e) {
+        console.error("[meetings] recording.start failed", e);
+        toast.error(t("common.somethingWentWrong"));
+        return;
+      } finally {
+        // Released on every path that does not go on to a browser recorder;
+        // that path releases it once its own start has settled.
+        if (!inBrowser) startingRecordingRef.current = false;
+      }
+
+      if (!recordingSupported(mode)) {
+        startingRecordingRef.current = false;
+        toast.error(t("common.somethingWentWrong"));
+        await runAction("recording.stop", { recordingId: id });
+        await reportRecordingFailure(id, "capture", "This browser cannot record.");
+        return;
+      }
 
       const recorder = new MeetingRecorder({
         mode,
@@ -1361,17 +1501,14 @@ export function MeetingRoom(props: {
       let started = false;
       try {
         started = await recorder.start();
-        if (!started) return;
+        if (!started) {
+          // The row exists on the server; say plainly that nothing was made.
+          await runAction("recording.stop", { recordingId: id });
+          await reportRecordingFailure(id, "capture", "The browser's recorder would not start.");
+          return;
+        }
         recorderRef.current = recorder;
-
-        /*
-         * Said on screen BEFORE the round trip, so the pill and the menu
-         * change the instant the recorder is running. Waiting for the server
-         * is what made the host press it twice.
-         */
-        setRecording({ id: null, mode });
-        const res = await runAction("recording.start", { mode });
-        setRecording({ id: (res?.recordingId as string) ?? null, mode });
+        setRecording({ id, mode, source: "browser", startedAt: Date.now() });
       } finally {
         startingRecordingRef.current = false;
         // A recorder that would not start must not leave the room believing
@@ -1383,7 +1520,7 @@ export function MeetingRoom(props: {
         t("meetings.recordingStarted", { name: t("meetings.host") }),
       );
     },
-    [meeting, me, props.churchName, props.title, runAction, t],
+    [meeting, me, props.churchName, props.title, runAction, reportRecordingFailure, t],
   );
 
   /** What is still only on this device. */
@@ -1426,44 +1563,6 @@ export function MeetingRoom(props: {
    * network, the laptop lid — the recording is still on this device and the
    * Unsaved recordings panel will offer it back.
    */
-  /**
-   * Tell the server a recording did not save.
-   *
-   * Every failing path calls this. Before it existed the browser handled its own
-   * errors well — a toast, a note in the local vault — and the row it had created
-   * when recording started stayed "uploading" for ever. Eleven production
-   * recordings sat like that: zero bytes, no error, and a host who believed they
-   * had a recording.
-   *
-   * Best-effort and never allowed to throw: this runs inside a catch, and a
-   * failure to report a failure must not replace the real error with its own.
-   * The server's stalled-recording sweep is the backstop for when even this
-   * cannot get through.
-   */
-  const reportRecordingFailure = useCallback(
-    async (recordingId: string | null, stage: string, reason: string) => {
-      if (!recordingId || !me) return;
-      try {
-        await fetch(`/api/meet/${props.code}/recording/failed`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            peer: me.peerId,
-            secret: me.secret,
-            recordingId,
-            stage,
-            reason,
-          }),
-          // The host often closes the tab the moment they see it failed; this
-          // lets the browser deliver it anyway.
-          keepalive: true,
-        });
-      } catch (e) {
-        console.error("[meetings] could not report the recording failure", e);
-      }
-    },
-    [me, props.code],
-  );
 
   /*
    * Tell the rest of the app a meeting is running.
@@ -1517,6 +1616,19 @@ export function MeetingRoom(props: {
 
   const stopRecording = useCallback(async () => {
     const recorder = recorderRef.current;
+
+    /*
+     * A server recording: one word to the server, which stops the capture
+     * and files the result. Nothing here to wind down.
+     */
+    if (!recorder && recording?.source === "server") {
+      const res = await runAction("recording.stop", { recordingId: recording.id });
+      if (!res?.ok) return;
+      setRecording(null);
+      toast.info(t("meetings.recordingSavingOnServer"), { duration: 8000 });
+      return;
+    }
+
     /*
      * No recorder, but the server may still think one is running — if this
      * returned silently the row stayed "uploading" for ever. Say so instead.
@@ -1682,6 +1794,11 @@ export function MeetingRoom(props: {
         <h1 className="text-xl font-bold">
           {endedReason || t("meetings.meetingEnded")}
         </h1>
+        {savingOnServer && (
+          <p className="max-w-sm rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            {t("meetings.recordingSavingOnServer")}
+          </p>
+        )}
         {pendingSave && (
           /*
             Three states, and only the third asks anything of the host.

@@ -4824,9 +4824,20 @@ export const meetingMessage = pgTable(
 );
 
 /**
- * A recording. The capture happens in the host's browser — the server never
- * sees the media stream — and the finished file is uploaded here, so a church
- * that never records pays nothing for the feature.
+ * A recording.
+ *
+ * Two ways one is made, and `source` says which.
+ *
+ * "server": the recording service (`src/recorder/`) subscribes to every
+ * microphone in the room through the media server's WebSocket adapter, mixes
+ * the voices on the VPS and writes the file there. The host's browser is not
+ * involved at all — it presses Record and Stop, and nothing else. This is what
+ * every SFU room uses, because a recording made on a pastor's phone and
+ * uploaded afterwards failed more often than it worked.
+ *
+ * "browser": the old path, still used by a mesh room, where the host's browser
+ * composites and captures the meeting, keeps the file in its vault and uploads
+ * it afterwards through `/api/media/chunk`.
  */
 export const meetingRecording = pgTable(
   "meeting_recording",
@@ -4843,8 +4854,23 @@ export const meetingRecording = pgTable(
     title: text().notNull(),
     /** "video" (composited stage) or "audio" (voices only — far smaller). */
     mode: text().notNull().default("video"),
-    /** "uploading" | "ready" | "failed" | "local-only". */
+    /**
+     * "recording"  — the server is capturing it right now (source "server")
+     * "processing" — Stop was pressed; the server is assembling the file
+     * "uploading"  — a browser-made file on its way to the server
+     * "ready" | "failed" | "local-only"
+     */
     status: text().notNull().default("uploading"),
+    /** "server" | "browser" — see the note above. */
+    source: text().notNull().default("browser"),
+    /**
+     * The recording service's last sign of life on this row, while it is
+     * "recording" or "processing". The stalled-recording sweep gives up on a
+     * server recording only when this has gone quiet for a long time: a
+     * restart of the service resumes a recording within seconds, and failing
+     * one that is about to be resumed is its own kind of loss.
+     */
+    recorderHeartbeatAt: timestamp({ withTimezone: true }),
     bytes: bigint({ mode: "number" }).notNull().default(0),
     durationSec: integer().notNull().default(0),
     url: text(),

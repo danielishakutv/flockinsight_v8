@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meeting, meetingParticipant } from "@/db/schema";
 import {
+  activeRecording,
   getMeetingByCode,
   heartbeat,
   listMessages,
@@ -235,7 +236,7 @@ export async function POST(
   const nextCursor =
     signals.length > 0 ? signals[signals.length - 1].id : await signalCursor(m.id);
 
-  const [people, current] = await Promise.all([
+  const [people, current, recording] = await Promise.all([
     roster(m.id),
     db
       .select({
@@ -247,6 +248,9 @@ export async function POST(
       .from(meeting)
       .where(eq(meeting.id, m.id))
       .limit(1),
+    // The recording in progress, from the one place that knows: so every
+    // participant's REC pill agrees, and a host back from a reload can stop it.
+    activeRecording(m.id),
   ]);
 
   const room = current[0];
@@ -275,6 +279,7 @@ export async function POST(
     stage: parseStage(room?.stage),
     slides: room?.slides ?? [],
     spotlightPeerId: room?.spotlightPeerId ?? null,
+    recording,
     status: room?.status ?? m.status,
     ended: room?.status === "ended" || room?.status === "cancelled",
     serverTime: new Date().toISOString(),

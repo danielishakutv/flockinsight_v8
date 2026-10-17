@@ -1693,6 +1693,12 @@ export const en = {
     stopRecording: "Stop recording",
     recordingStarted: "{name} is recording this meeting.",
     recordingStopped: "Recording stopped.",
+    recordingOnServer:
+      "Recording on the server. Stop it from the menu when you're done — it goes straight into the media library, even if you leave.",
+    recordingSavingOnServer:
+      "Recording stopped. It's being saved to your media library and will appear there in a moment.",
+    recordingFailedOnServer: "The recording did not save: {reason}",
+    diagHeardAfter: "first heard after",
     recordingReady: "Your recording is ready ({duration})",
     recordingReadyHint:
       "It's on this device. Save a copy to the church media library, or download it.",

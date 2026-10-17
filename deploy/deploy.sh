@@ -298,6 +298,27 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
+# The recording service comes up alongside. Its health is reported rather
+# than failed on: a release with a broken recorder still serves every page,
+# and the app falls back to recording in the browser while it is down. But
+# it is said loudly, because a quiet failure here is a Sunday service
+# recorded nowhere.
+RECORDER_PORT="$(grep -E '^[[:space:]]*RECORDER_PORT[[:space:]]*=' "$SHARED/.env" 2>/dev/null | head -1 | tr -dc '0-9')"
+RECORDER_PORT="${RECORDER_PORT:-3007}"
+recorder_ok=""
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 3 "http://127.0.0.1:$RECORDER_PORT/health" 2>/dev/null | grep -q '"ok":true'; then
+    recorder_ok=yes
+    break
+  fi
+  sleep 1
+done
+if [ -n "$recorder_ok" ]; then
+  note "recording service answers on $RECORDER_PORT"
+else
+  printf '\n\033[1;33mWARNING: the recording service is not answering on %s — recordings will fall back to the browser. Check: pm2 logs flockinsight-recorder\033[0m\n' "$RECORDER_PORT" >&2
+fi
+
 if [ "${live:-0}" -lt 5 ]; then
   log "Verification failed — rolling back"
   if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then

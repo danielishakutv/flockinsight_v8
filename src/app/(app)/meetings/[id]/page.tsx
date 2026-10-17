@@ -237,7 +237,9 @@ export default async function MeetingDetailPage({
                         {r.status === "local-only" &&
                           " · kept on the host's device, not uploaded"}
                         {r.status === "uploading" && " · still uploading"}
-                        {r.status === "failed" && " · upload failed"}
+                        {r.status === "recording" && " · recording now"}
+                        {r.status === "processing" && " · being saved"}
+                        {r.status === "failed" && " · did not save"}
                       </p>
                       {r.error && <p className="mt-1 text-xs text-amber-600">{r.error}</p>}
                     </div>

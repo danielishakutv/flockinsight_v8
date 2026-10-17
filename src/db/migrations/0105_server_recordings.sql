@@ -1,0 +1,2 @@
+ALTER TABLE "meeting_recording" ADD COLUMN "source" text DEFAULT 'browser' NOT NULL;--> statement-breakpoint
+ALTER TABLE "meeting_recording" ADD COLUMN "recorder_heartbeat_at" timestamp with time zone;

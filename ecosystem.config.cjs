@@ -78,5 +78,37 @@ module.exports = {
         PORT,
       },
     },
+
+    /*
+     * The recording service — see src/recorder/main.ts.
+     *
+     * Its own process, in FORK mode with ONE instance, and that is not a
+     * detail. The media server streams each microphone to a WebSocket on
+     * this box, and the socket has to land on the process holding that
+     * recording's mixer and encoder. A cluster balances connections across
+     * workers; one process has nowhere else to put them.
+     *
+     * Same release directory and the same .env as the app. tsx runs the
+     * TypeScript directly, as the one-off scripts do, with a tsconfig that
+     * stubs `server-only` (which exists to blow up outside Next). It is given
+     * long to stop: on SIGTERM it closes every segment cleanly so the next
+     * process can resume them.
+     */
+    {
+      name: "flockinsight-recorder",
+      cwd: CURRENT,
+      script: "node_modules/tsx/dist/cli.mjs",
+      args: "--tsconfig tsconfig.recorder.json src/recorder/main.ts",
+      interpreter: "node",
+      exec_mode: "fork",
+      instances: 1,
+      autorestart: true,
+      max_memory_restart: "700M",
+      kill_timeout: 45000,
+      listen_timeout: 30000,
+      env: {
+        NODE_ENV: "production",
+      },
+    },
   ],
 };

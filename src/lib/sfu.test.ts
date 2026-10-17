@@ -107,6 +107,45 @@ describe("pullTracks", () => {
   });
 });
 
+describe("WebSocket adapters", () => {
+  it("asks for a stream of one track to our endpoint", async () => {
+    const spy = mockFetch(() =>
+      Response.json({ tracks: [{ adapterId: "ad-1", trackName: "mic" }] }),
+    );
+    const { createWebSocketAdapters } = await import("@/lib/sfu");
+
+    const out = await createWebSocketAdapters([
+      {
+        location: "remote",
+        sessionId: "pub-1",
+        trackName: "mic",
+        endpoint: "wss://flockinsight.com/rtc-ingest/x",
+        outputCodec: "pcm",
+      },
+    ]);
+
+    const [url, init] = spy.mock.calls[0];
+    expect(url).toBe("https://rtc.live.cloudflare.com/v1/apps/app-1/adapters/websocket/new");
+    const body = JSON.parse(init.body as string);
+    expect(body.tracks[0]).toMatchObject({ location: "remote", sessionId: "pub-1", outputCodec: "pcm" });
+    expect(out.tracks[0].adapterId).toBe("ad-1");
+  });
+
+  it("closes by adapter id, and refuses more than four at once", async () => {
+    const spy = mockFetch(() => Response.json({ tracks: [{ adapterId: "ad-1" }] }));
+    const { closeWebSocketAdapters } = await import("@/lib/sfu");
+
+    await closeWebSocketAdapters(["ad-1"]);
+    const body = JSON.parse(spy.mock.calls[0][1].body as string);
+    expect(body.tracks).toEqual([{ adapterId: "ad-1" }]);
+
+    // The API takes one to four; a fifth would be a 406 from Cloudflare and a
+    // recording with a voice missing. Refused here, where it can be batched.
+    await expect(closeWebSocketAdapters(["1", "2", "3", "4", "5"])).rejects.toThrow(/one to four/);
+    expect(await closeWebSocketAdapters([])).toEqual({ tracks: [] });
+  });
+});
+
 describe("failures", () => {
   it("carries Cloudflare's own explanation rather than a status code", async () => {
     mockFetch(() =>

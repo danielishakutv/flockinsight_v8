@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meetingParticipant } from "@/db/schema";
-import { getMeetingByCode } from "@/lib/meetings";
+import { getMeetingByCode, postSignals } from "@/lib/meetings";
 import {
   closeTracks,
   newSession,
@@ -191,6 +191,22 @@ export async function POST(
           .update(meetingParticipant)
           .set({ sfuSessionId: sessionId })
           .where(eq(meetingParticipant.id, peer.id));
+
+        /*
+         * And wake the room. This is the line that was missing, and it is
+         * most of why a new arrival took so long to be heard.
+         *
+         * Everybody else learns that this person can be pulled from the
+         * roster, and the roster arrives only when their long-poll returns.
+         * Nothing here used to post a signal, so their polls sat through the
+         * full twelve-second hold before anybody asked the media server for
+         * this voice — on top of the time the publish itself took. A roster
+         * signal returns every poll in the room now, with the session id in
+         * it, and the pull follows within a second.
+         */
+        await postSignals(m.id, peer.peerId, [
+          { toPeer: null, type: "roster", payload: { reason: "publish", peerId: peer.peerId } },
+        ]);
 
         return json({ ok: true, ...result });
       }

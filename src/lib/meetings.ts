@@ -10,6 +10,7 @@ import {
   meetingRecording,
   meetingSignal,
   member,
+  platformSetting,
   role,
   staff,
   user,
@@ -1286,6 +1287,15 @@ export async function endMeeting(meetingId: string): Promise<void> {
 
   notifyRoom(meetingId);
 
+  // A recording made on the server has no host's browser to stop it.
+  try {
+    await stopServerRecordingsFor(meetingId);
+  } catch (e) {
+    // The recording service also stops on its own when it sees the meeting
+    // has ended; this only makes it prompt.
+    console.error("[meetings] could not stop the server recording for", meetingId, e);
+  }
+
   /*
    * And put the next one on the calendar, for a meeting that repeats.
    *
@@ -1804,12 +1814,77 @@ export async function lowerAllHands(meetingId: string) {
  * Recordings
  * ========================================================== */
 
+/**
+ * Is the recording service here to make a recording right now?
+ *
+ * It writes its own heartbeat into `platform_setting` every ten seconds (see
+ * `recorder/supervisor.ts`). A host pressing Record while it is down must not
+ * get a row that nothing will ever capture — the room falls back to recording
+ * in the browser instead, which is slower to save but never silent.
+ */
+export async function recorderAlive(maxAgeMs = 45_000): Promise<boolean> {
+  const [row] = await db
+    .select({ value: platformSetting.value })
+    .from(platformSetting)
+    .where(eq(platformSetting.key, "recorder_alive_at"))
+    .limit(1);
+  const at = row ? Date.parse(row.value) : NaN;
+  return Number.isFinite(at) && Date.now() - at < maxAgeMs;
+}
+
+/** Wake the recording service so it looks at its rows now, not in two seconds. */
+export async function notifyRecorder(meetingId: string): Promise<void> {
+  try {
+    await db.execute(sql`select pg_notify('flockinsight_recorder', ${meetingId})`);
+  } catch (e) {
+    // It polls anyway; this only costs a moment.
+    console.warn("[meetings] could not notify the recording service", e);
+  }
+}
+
+/**
+ * The recording in progress in this room, if any — for the sync response, so
+ * every participant's REC pill reads from one authority and a host who
+ * reloads the page can still press Stop.
+ */
+export async function activeRecording(meetingId: string): Promise<{
+  id: string;
+  mode: string;
+  source: string;
+  startedAt: string | null;
+} | null> {
+  const [row] = await db
+    .select({
+      id: meetingRecording.id,
+      mode: meetingRecording.mode,
+      source: meetingRecording.source,
+      startedAt: meetingRecording.startedAt,
+    })
+    .from(meetingRecording)
+    .where(
+      and(
+        eq(meetingRecording.meetingId, meetingId),
+        inArray(meetingRecording.status, ["recording", "uploading"]),
+        isNull(meetingRecording.stoppedAt),
+      ),
+    )
+    .orderBy(desc(meetingRecording.startedAt))
+    .limit(1);
+  if (!row) return null;
+  return { ...row, startedAt: row.startedAt?.toISOString() ?? null };
+}
+
 export async function startRecordingRow(opts: {
   meetingId: string;
   churchId: string;
   title: string;
   mode: "video" | "audio";
   createdBy: string | null;
+  /**
+   * "server": the recording service captures it (status "recording").
+   * "browser": the host's browser does, and uploads afterwards ("uploading").
+   */
+  source: "server" | "browser";
 }): Promise<string> {
   /*
    * One active row per meeting.
@@ -1839,7 +1914,8 @@ export async function startRecordingRow(opts: {
     .where(
       and(
         eq(meetingRecording.meetingId, opts.meetingId),
-        eq(meetingRecording.status, "uploading"),
+        inArray(meetingRecording.status, ["uploading", "recording"]),
+        isNull(meetingRecording.stoppedAt),
         gte(meetingRecording.startedAt, recent),
       ),
     )
@@ -1854,7 +1930,8 @@ export async function startRecordingRow(opts: {
       churchId: opts.churchId,
       title: opts.title.slice(0, 200),
       mode: opts.mode,
-      status: "uploading",
+      status: opts.source === "server" ? "recording" : "uploading",
+      source: opts.source,
       startedAt: new Date(),
       lastActivityAt: new Date(),
       createdBy: opts.createdBy,
@@ -1872,6 +1949,11 @@ export const STALLED_NEVER_STOPPED =
   "The recording never reached the server — the device that was recording closed or lost its connection before the recording was stopped.";
 export const STALLED_GONE_QUIET =
   "Not uploaded yet — nothing has arrived from the device that made this recording for a week. If it is still on that device, open FlockInsight there, signed in, and it will finish uploading.";
+export const STALLED_RECORDER_GONE =
+  "The recording service stopped responding while this was being recorded. Whatever it captured before that is kept on the server; ask support to recover it.";
+
+/** A server recording is given up on after this long without a heartbeat. */
+export const RECORDER_SILENT_MINUTES = 15;
 
 /**
  * Recordings that claim to still be uploading, long after anything could be.
@@ -1958,6 +2040,28 @@ export async function failStalledRecordings(
     marked += rows.length;
   }
 
+  /*
+   * SERVER recordings are judged on the recording service's own heartbeat,
+   * which it writes every ten seconds while capturing or assembling. A quarter
+   * of an hour of silence is a service that is not coming back for this row —
+   * a restart resumes within seconds, so this never fires on a deploy. The
+   * segments it wrote are left on disk; the words say so.
+   */
+  const recorderSilentBefore = new Date(now.getTime() - RECORDER_SILENT_MINUTES * 60_000);
+  const heartbeat = sql`coalesce(${meetingRecording.recorderHeartbeatAt}, ${meetingRecording.lastActivityAt}, ${meetingRecording.startedAt}, ${meetingRecording.createdAt})`;
+  const gone = await db
+    .update(meetingRecording)
+    .set({ status: "failed", error: STALLED_RECORDER_GONE })
+    .where(
+      and(
+        eq(meetingRecording.source, "server"),
+        inArray(meetingRecording.status, ["recording", "processing"]),
+        sql`${heartbeat} < ${recorderSilentBefore}`,
+      ),
+    )
+    .returning({ id: meetingRecording.id });
+  marked += gone.length;
+
   if (marked > 0) {
     // One line per sweep, not per row: this is a number somebody should watch.
     console.error(`[meetings] marked ${marked} stalled recording(s) as failed`);
@@ -1988,12 +2092,38 @@ export async function markRecordingStopped(opts: {
       and(
         eq(meetingRecording.meetingId, opts.meetingId),
         eq(meetingRecording.churchId, opts.churchId),
-        eq(meetingRecording.status, "uploading"),
+        inArray(meetingRecording.status, ["uploading", "recording"]),
         isNull(meetingRecording.stoppedAt),
         named ? eq(meetingRecording.id, named) : undefined,
       ),
     )
+    .returning({ id: meetingRecording.id, source: meetingRecording.source });
+  // A server recording is finished by the recording service; tell it now.
+  if (rows.some((r) => r.source === "server")) await notifyRecorder(opts.meetingId);
+  return rows.length;
+}
+
+/**
+ * The meeting is over: every server recording still running in it stops.
+ *
+ * Only server rows. A browser recording's `stoppedAt` is written by the host's
+ * own Stop, and the stalled sweep reads a missing one as "the tab died before
+ * Stop" — setting it here would turn that half-hour verdict into a week's.
+ */
+export async function stopServerRecordingsFor(meetingId: string): Promise<number> {
+  const rows = await db
+    .update(meetingRecording)
+    .set({ stoppedAt: new Date(), lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(meetingRecording.meetingId, meetingId),
+        eq(meetingRecording.source, "server"),
+        eq(meetingRecording.status, "recording"),
+        isNull(meetingRecording.stoppedAt),
+      ),
+    )
     .returning({ id: meetingRecording.id });
+  if (rows.length > 0) await notifyRecorder(meetingId);
   return rows.length;
 }
 

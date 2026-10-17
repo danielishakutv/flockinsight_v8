@@ -282,6 +282,16 @@ function LinkLine({ link, cameraOn }: { link: PeerDiagnostics; cameraOn: boolean
         </span>
       )}
       {/*
+        How long this person took to be heard after they appeared, measured.
+        "It takes forever to hear a new person" is this number, and showing
+        it is how a slow join stops being an argument about what forever means.
+      */}
+      {typeof link.heardAfterMs === "number" && (
+        <span className={cn("block", link.heardAfterMs > 8000 && "text-amber-400")}>
+          {`${t("meetings.diagHeardAfter")} ${(link.heardAfterMs / 1000).toFixed(1)}s`}
+        </span>
+      )}
+      {/*
         The last link in the chain, and the one `getStats` cannot see. Frames
         can decode perfectly into an element that is paused, or that was never
         given the stream at all — which is precisely what happened here.

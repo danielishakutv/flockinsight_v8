@@ -11,8 +11,10 @@ import {
   heartbeat,
   lowerAllHands,
   markRecordingStopped,
+  notifyRecorder,
   participantByPeerId,
   postSignals,
+  recorderAlive,
   removeParticipant,
   requestMute,
   setParticipantRole,
@@ -21,6 +23,9 @@ import {
   startRecordingRow,
 } from "@/lib/meetings";
 import { isHostRole, type Stage } from "@/lib/meetings-shared";
+import { isSfuConfigured } from "@/lib/sfu";
+import { getStorageInfo } from "@/lib/storage";
+import { formatBytes } from "@/lib/storage-bytes";
 import { SLIDE_KINDS } from "@/lib/media-slide-kinds";
 import { lookupVerse } from "@/lib/scripture";
 import { DEFAULT_TRANSLATION } from "@/lib/scripture-shared";
@@ -454,17 +459,43 @@ export async function POST(
        * the congregation sat down at ten.
        */
       const [owner] = await db
-        .select({ timezone: church.timezone })
+        .select({ timezone: church.timezone, storageExtraBytes: church.storageExtraBytes })
         .from(church)
         .where(eq(church.id, m.churchId))
         .limit(1);
+
+      /*
+       * WHERE it is recorded.
+       *
+       * On the server, whenever it can be: the room is on the media server
+       * (every real meeting is) and the recording service is alive. The
+       * host's browser then does nothing but press the button — no canvas, no
+       * upload, nothing to lose when the phone sleeps. Only a mesh room, or a
+       * moment when the service is down, falls back to recording in the
+       * browser, and the answer says which so the room knows what to start.
+       */
+      const onServer =
+        m.transport === "sfu" && isSfuConfigured() && (await recorderAlive());
+      if (onServer) {
+        const info = await getStorageInfo(m.churchId, owner?.storageExtraBytes ?? 0);
+        if (info.free < 20 * 1024 * 1024) {
+          return fail(
+            `Not enough storage to record — ${formatBytes(info.free)} free. Free up space in the media library or add storage, then try again.`,
+            413,
+            { code: "storage" },
+          );
+        }
+      }
+
       const id = await startRecordingRow({
         meetingId: m.id,
         churchId: m.churchId,
         title: `${m.title} — ${recordingStamp(new Date(), owner?.timezone)}`,
         mode,
         createdBy: peer.userId,
+        source: onServer ? "server" : "browser",
       });
+      if (onServer) await notifyRecorder(m.id);
       await broadcast("recording", { state: "started", by: peer.displayName, mode });
       await addMessage({
         meetingId: m.id,
@@ -476,11 +507,16 @@ export async function POST(
       });
       await log({
         action: "meetings.recording.create",
-        summary: `Started recording "${m.title}" (${mode})`,
-        meta: { mode, recordingId: id },
+        summary: `Started recording "${m.title}" (${mode}, ${onServer ? "on the server" : "in the browser"})`,
+        meta: { mode, recordingId: id, source: onServer ? "server" : "browser" },
         severity: "notice",
       });
-      return json({ ok: true, recordingId: id });
+      return json({
+        ok: true,
+        recordingId: id,
+        source: onServer ? "server" : "browser",
+        startedAt: new Date().toISOString(),
+      });
     }
 
     case "recording.stop": {

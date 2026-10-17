@@ -220,4 +220,68 @@ export async function closeTracks(
   });
 }
 
+/* ============================================================
+ * WebSocket adapters — how the recording service hears a room
+ *
+ * The media server will stream any published track to a WebSocket endpoint
+ * of ours, decoded: a microphone as PCM, a camera as JPEG frames. That is
+ * what a server-side recording is built on. No WebRTC on the VPS, no browser
+ * in the loop, and the server retries the endpoint by itself for fifteen
+ * seconds if our process restarts underneath it.
+ *
+ * One adapter per (session, track). The endpoint carries its own credential
+ * in the path — the adapter cannot send headers — see `recorder/tokens.ts`.
+ * ========================================================== */
+
+export type AdapterRequest = {
+  location: "remote";
+  sessionId: string;
+  trackName: string;
+  /** A `wss://` URL. Localhost is not reachable; redirects are not followed. */
+  endpoint: string;
+  outputCodec: "pcm" | "jpeg";
+};
+
+export type AdapterResult = {
+  adapterId?: string;
+  trackName?: string;
+  sessionId?: string;
+  endpoint?: string;
+  errorCode?: string;
+  errorDescription?: string;
+};
+
+/**
+ * Ask the media server to start streaming these tracks to us. One to four
+ * per call. A 200 can still carry per-item failures, and only every item
+ * failing is a non-2xx — so the caller reads each entry.
+ */
+export async function createWebSocketAdapters(
+  tracks: AdapterRequest[],
+): Promise<{ tracks: AdapterResult[] }> {
+  if (tracks.length === 0 || tracks.length > 4) {
+    throw new SfuError("An adapter request takes one to four tracks.", 400);
+  }
+  const data = await call<{ tracks?: AdapterResult[] }>("/adapters/websocket/new", {
+    method: "POST",
+    body: { tracks },
+  });
+  return { tracks: data?.tracks ?? [] };
+}
+
+/** Stop streaming. Idempotent: an adapter already gone counts as closed. */
+export async function closeWebSocketAdapters(
+  adapterIds: string[],
+): Promise<{ tracks: { adapterId?: string; bytesProcessed?: number; errorCode?: string; errorDescription?: string }[] }> {
+  if (adapterIds.length === 0) return { tracks: [] };
+  if (adapterIds.length > 4) {
+    throw new SfuError("An adapter close takes one to four adapters.", 400);
+  }
+  const data = await call<{ tracks?: { adapterId?: string; bytesProcessed?: number; errorCode?: string; errorDescription?: string }[] }>(
+    "/adapters/websocket/close",
+    { method: "POST", body: { tracks: adapterIds.map((adapterId) => ({ adapterId })) } },
+  );
+  return { tracks: data?.tracks ?? [] };
+}
+
 export { SfuError };
