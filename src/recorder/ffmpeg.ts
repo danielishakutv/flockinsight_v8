@@ -412,25 +412,71 @@ export async function renderCard(
   if (result.code !== 0) throw new Error(`card render failed: ${lastLine(result.stderr)}`);
 }
 
+/**
+ * Where a slide may be fetched from, as an absolute URL — or null.
+ *
+ * A slide's URL is a media row's, so it is our own `/media/<id>` (relative,
+ * resolved against the site) or a Cloudinary image. Nothing else is fetched:
+ * this process runs on the VPS beside every other site's app and the
+ * database, and a URL it would fetch for anybody is a door into all of them.
+ */
+export function slideUrlAllowed(url: string, siteOrigin: string | undefined): URL | null {
+  let site: URL | null = null;
+  try {
+    site = siteOrigin ? new URL(siteOrigin) : null;
+  } catch {
+    site = null;
+  }
+  let u: URL;
+  try {
+    u = site ? new URL(url, site) : new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && !(site && u.origin === site.origin)) return null;
+  if (u.username || u.password) return null;
+  if (site && u.origin === site.origin) return u;
+  if (u.hostname === "res.cloudinary.com" && u.port === "") return u;
+  return null;
+}
+
+/** JPEG, PNG, GIF or WebP, by their first bytes — never what a server claims. */
+export function looksLikeImage(b: Uint8Array): boolean {
+  const at = (i: number, ...v: number[]) => v.every((x, j) => b[i + j] === x);
+  return (
+    at(0, 0xff, 0xd8, 0xff) ||
+    at(0, 0x89, 0x50, 0x4e, 0x47) ||
+    at(0, 0x47, 0x49, 0x46, 0x38) ||
+    (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50))
+  );
+}
+
 /** A slide image from the library, scaled onto a 1280x720 JPEG. */
 export async function renderSlide(
   url: string,
   out: string,
   fetchImpl: typeof fetch = fetch,
+  siteOrigin: string | undefined = process.env.BETTER_AUTH_URL,
 ): Promise<void> {
   await mkdir(path.dirname(out), { recursive: true });
-  const res = await fetchImpl(url, { signal: AbortSignal.timeout(15_000) });
+  const target = slideUrlAllowed(url, siteOrigin);
+  if (!target) throw new Error("slide is not from the media library");
+  // No redirects: an allowed host must not be able to bounce us elsewhere.
+  const res = await fetchImpl(target, { signal: AbortSignal.timeout(15_000), redirect: "error" });
   if (!res.ok) throw new Error(`slide fetch ${res.status}`);
   const bytes = Buffer.from(await res.arrayBuffer());
   if (bytes.length === 0 || bytes.length > 25 * 1024 * 1024) {
     throw new Error(`slide is ${bytes.length} bytes`);
   }
+  if (!looksLikeImage(bytes)) throw new Error("slide is not an image");
   const src = out.replace(/\.jpg$/i, ".src");
   await writeFile(src, bytes);
   const result = await run(
     FFMPEG,
     [
-      "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src,
+      // `image2pipe`, not ffmpeg's guess: a guessed format can be a playlist,
+      // and a playlist can name local files.
+      "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "image2pipe", "-i", src,
       "-vf", `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=decrease,pad=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a0f1c`,
       "-frames:v", "1", "-q:v", "3", out,
     ],
