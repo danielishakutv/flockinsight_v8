@@ -87,8 +87,10 @@ const GATHER_SETTLE_MS = 350;
 const GATHER_CAP_MS = 2_500;
 /** How long a pull waits for our own transport to come up before asking. */
 const CONNECT_WAIT_MS = 5_000;
-/** "Disconnected" answers in a row, while we believe we are connected, before rebuilding. */
+/** "Disconnected" answers in a row, while our end is not still connecting, before rebuilding. */
 const STALLS_BEFORE_REBUILD = 3;
+/** A session minted ahead of need is used only this soon after; older ones are minted again. */
+const MINTED_FRESH_MS = 10_000;
 /** Samples (4s apart) with no bytes on a track the roster says is on, before re-pulling it. */
 const STALE_SAMPLES = 3;
 
@@ -131,6 +133,7 @@ export class SfuTransport {
     publisher: null,
     subscriber: null,
   };
+  private mintedAt = { publisher: 0, subscriber: 0 };
 
   /** Our own sendonly transceivers, by track name. */
   private senders = new Map<string, RTCRtpTransceiver>();
@@ -245,7 +248,15 @@ export class SfuTransport {
 
   private mint(which: "publisher" | "subscriber"): Promise<Session> {
     const existing = this.minted[which];
-    if (existing) return existing;
+    /*
+     * A session minted ahead of time is only good while it is fresh. One that
+     * sat unused — the host alone in the room, nobody yet to pull — is one the
+     * media server has given up on: every pull on it came back "Session
+     * appears to be disconnected", for good, and that person heard nobody.
+     * Seen on production. So an old one is replaced rather than used.
+     */
+    if (existing && Date.now() - this.mintedAt[which] < MINTED_FRESH_MS) return existing;
+    this.mintedAt[which] = Date.now();
     const p = this.session().catch((e: unknown) => {
       // Forgotten on failure, so the next caller asks again rather than
       // inheriting a rejection for the rest of the call.
@@ -737,7 +748,14 @@ export class SfuTransport {
         const message = e instanceof Error ? e.message : String(e);
         if (/disconnected|not connected/i.test(message)) {
           const state = this.subscriber?.connectionState;
-          const settling = state === "new" || state === "connecting";
+          /*
+           * Only "connecting" is settling: an answer was applied and the
+           * transport is on its way up. "new" used to count as settling too,
+           * but a session that never negotiated anything never leaves "new",
+           * so its refusals were never counted and it was never rebuilt — the
+           * person heard nobody for the whole meeting. Seen on production.
+           */
+          const settling = state === "connecting";
           this.subscriberStalls += settling ? 0 : 1;
           if (this.subscriberStalls >= STALLS_BEFORE_REBUILD) {
             console.warn(

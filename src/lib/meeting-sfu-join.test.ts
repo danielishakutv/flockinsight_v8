@@ -323,6 +323,46 @@ describe("a new arrival is heard quickly", () => {
       "a fresh session should have been minted for the rebuilt subscriber",
     ).toBeGreaterThanOrEqual(2);
   });
+
+  /*
+   * Both seen on production: the host alone in the room early, a subscriber
+   * session minted ahead of need and never used, and when people arrived
+   * every pull on it came back "disconnected" — for good, because a
+   * connection that never negotiated stays "new", and "new" was not counted.
+   */
+  it("does not use a session minted ahead of need once it has gone stale", async () => {
+    vi.useFakeTimers();
+    const sfu = transport();
+    sfu.prepare();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.filter((c) => c.action === "session")).toHaveLength(2);
+
+    // Alone in the room for a while; then somebody arrives.
+    await vi.advanceTimersByTimeAsync(30_000);
+    await sfu.sync([person("me"), person("a")], "me");
+    expect(calls.filter((c) => c.action === "session"), "a fresh subscriber session").toHaveLength(3);
+    expect(calls.find((c) => c.action === "pull")?.body.session).toBe("s-3");
+    sfu.close();
+  });
+
+  it("rebuilds a subscriber that never connected and keeps being refused", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("RTCPeerConnection", function RTCPeerConnectionNew() {
+      const pc = makeFakePc();
+      pc.connectionState = "new";
+      return pc;
+    });
+    behaviour.pull = () =>
+      Promise.reject(new Error("Session appears to be disconnected. Please check if the PeerConnection is connected."));
+
+    const sfu = transport();
+    await sfu.sync([person("me"), person("a")], "me");
+    const firstPc = pcs[0];
+    await vi.advanceTimersByTimeAsync(1600);
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(firstPc.closed, "a session that never connected must not be waited on for ever").toBe(true);
+    sfu.close();
+  });
 });
 
 describe("a track that is not there yet", () => {
