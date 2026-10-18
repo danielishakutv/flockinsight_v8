@@ -197,6 +197,16 @@ export class SfuTransport {
   private lastRoster: RosterEntry[] = [];
   private myPeerId = "";
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * What this person last asked to send, so the transport can publish it
+   * again by itself. Without it a publisher that failed waited for the next
+   * `setLocal` — which only comes when somebody touches the mic or camera
+   * button, so a person who simply sat and talked was mute for the rest of
+   * the meeting. Found by the three-browser harness on production.
+   */
+  private lastLocal: { mic: MediaStreamTrack | null; camera: MediaStreamTrack | null; screen: MediaStreamTrack | null } | null = null;
+  private republishTimer: ReturnType<typeof setTimeout> | null = null;
+  private republishAttempts = 0;
   /** Consecutive pulls the server refused as "disconnected". */
   private subscriberStalls = 0;
 
@@ -402,6 +412,7 @@ export class SfuTransport {
     camera: MediaStreamTrack | null;
     screen: MediaStreamTrack | null;
   }): Promise<void> {
+    this.lastLocal = tracks;
     await this.queue("pub", async () => {
       if (this.stopped) return;
 
@@ -422,6 +433,8 @@ export class SfuTransport {
           this.events.onError?.(
             "We could not reach the media server to send your voice. Trying again.",
           );
+          // And actually try again: nothing else will until a button is pressed.
+          this.scheduleRepublish();
           return;
         }
         this.publisherSession = session.id;
@@ -431,6 +444,7 @@ export class SfuTransport {
           const pc = this.publisher;
           if (!pc) return;
           this.events.onState(pc.connectionState);
+          if (pc.connectionState === "connected") this.republishAttempts = 0;
           if (pc.connectionState === "failed") this.resetPublisher();
         };
       }
@@ -1302,6 +1316,29 @@ export class SfuTransport {
     this.events.onError(
       "Your connection to the meeting dropped. Putting it back together.",
     );
+    this.scheduleRepublish();
+  }
+
+  /**
+   * Publish what was last asked for again, on a backoff: 1s, 2s, 4s, 8s, then
+   * every 15s for as long as the meeting lasts. One pending attempt at a time;
+   * a `setLocal` from a button press in the meantime simply gets there first,
+   * and the attempt it makes redundant finds the publisher already built.
+   */
+  private scheduleRepublish(): void {
+    if (this.stopped || this.republishTimer || !this.lastLocal) return;
+    const delay = Math.min(15_000, 1000 * 2 ** this.republishAttempts);
+    this.republishAttempts += 1;
+    this.republishTimer = setTimeout(() => {
+      this.republishTimer = null;
+      if (this.stopped || !this.lastLocal) return;
+      this.setLocal(this.lastLocal).catch((e: unknown) => {
+        console.error("[sfu] republishing failed; trying again", e);
+        // A publish that threw part-way leaves a connection that will never
+        // carry anything: start again from nothing.
+        this.resetPublisher();
+      });
+    }, delay);
   }
 
   /**
@@ -1341,6 +1378,8 @@ export class SfuTransport {
     this.stopped = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    if (this.republishTimer) clearTimeout(this.republishTimer);
+    this.republishTimer = null;
     for (const pc of [this.publisher, this.subscriber]) {
       try {
         pc?.close();

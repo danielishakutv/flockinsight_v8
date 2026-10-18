@@ -372,6 +372,49 @@ describe("a publisher that started again", () => {
   });
 });
 
+describe("a microphone whose connection failed", () => {
+  /*
+   * Found on production by the three-browser harness: the third person's
+   * publishing connection failed, the transport threw it away "so the next
+   * setLocal builds it again" — and the next setLocal only comes from a press
+   * of the mic or camera button. Somebody who just sat and talked was never
+   * heard again. Now the transport publishes again by itself.
+   */
+  it("is published again without anybody touching a button", async () => {
+    vi.useFakeTimers();
+    const sfu = transport();
+    await sfu.setLocal({ mic: micTrack, camera: null, screen: null });
+    expect(calls.filter((c) => c.action === "publish")).toHaveLength(1);
+
+    const publisher = pcs[0] as unknown as RTCPeerConnection & { connectionState: string };
+    publisher.connectionState = "failed";
+    publisher.onconnectionstatechange?.(new Event("connectionstatechange"));
+
+    await vi.advanceTimersByTimeAsync(1100);
+    const publishes = calls.filter((c) => c.action === "publish");
+    expect(publishes, "the microphone should be published again on its own").toHaveLength(2);
+    expect(publishes[1].body.session).not.toBe(publishes[0].body.session);
+    sfu.close();
+  });
+
+  it("keeps asking when the media server will not open a session", async () => {
+    vi.useFakeTimers();
+    let refusals = 2;
+    behaviour.session = async () => {
+      if (refusals-- > 0) throw new Error("503");
+      return { sessionId: `s-${++sessionCounter}`, proof: "p" };
+    };
+    const sfu = transport();
+    await sfu.setLocal({ mic: micTrack, camera: null, screen: null });
+    expect(calls.filter((c) => c.action === "publish")).toHaveLength(0);
+
+    // 1s, then 2s: the third attempt is granted.
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(calls.filter((c) => c.action === "publish")).toHaveLength(1);
+    sfu.close();
+  });
+});
+
 describe("measuring it", () => {
   it("reports how long after the roster named somebody their voice arrived", async () => {
     vi.useFakeTimers();

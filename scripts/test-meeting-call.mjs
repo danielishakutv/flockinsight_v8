@@ -28,6 +28,7 @@
  *   SETTLE_MS=60000 node scripts/test-meeting-call.mjs  # allow longer to converge
  *   HEADED=1 node scripts/test-meeting-call.mjs      # watch it happen
  *   KEEP=1 node scripts/test-meeting-call.mjs        # leave Chrome open
+ *   RECORD=audio node scripts/test-meeting-call.mjs  # host records (audio|video) while the room talks
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -437,6 +438,42 @@ async function press(cdp, predicate) {
   return box.text;
 }
 
+/**
+ * Choose an item from the host's "More" menu, the way a finger does: the menu
+ * is Radix, so it opens on a real pointer press and nothing else.
+ */
+async function hostMenu(cdp, itemText) {
+  await press(cdp, `(b) => /^more$/i.test(b.getAttribute("aria-label") || "")`);
+  const item = JSON.stringify(itemText);
+  await waitFor(
+    cdp,
+    `[...document.querySelectorAll("[role=menuitem]")].some((e) => e.textContent.includes(${item}))`,
+    `the "${itemText}" menu item`,
+    8000,
+  );
+  const box = await evaluate(
+    cdp,
+    `(() => {
+       const el = [...document.querySelectorAll("[role=menuitem]")].find((e) => e.textContent.includes(${item}));
+       const r = el.getBoundingClientRect();
+       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+     })()`,
+  );
+  for (const type of ["mousePressed", "mouseReleased"]) {
+    await cdp.send("Input.dispatchMouseEvent", {
+      type, x: box.x, y: box.y, button: "left", clickCount: 1, buttons: type === "mousePressed" ? 1 : 0,
+    });
+  }
+}
+
+/** What the toasts on screen say right now. */
+async function toasts(cdp) {
+  return evaluate(
+    cdp,
+    `[...document.querySelectorAll("[data-sonner-toast]")].map((t) => t.textContent.trim()).join(" | ")`,
+  );
+}
+
 async function waitFor(cdp, expression, what, ms = 25000) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
@@ -448,30 +485,49 @@ async function waitFor(cdp, expression, what, ms = 25000) {
 
 /* ------------------------------------------------------------------ the run */
 
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await db.connect();
+/*
+ * MEETING_CODE + HOST_KEY join a meeting that already exists, and touch no
+ * database: how this is pointed at PRODUCTION, where "the first church" would
+ * be a real congregation. Create the meeting on the server, in a test church,
+ * and end it there afterwards.
+ *
+ *   SMOKE_BASE=https://flockinsight.com MEETING_CODE=... HOST_KEY=... node scripts/test-meeting-call.mjs
+ */
+const existing = process.env.MEETING_CODE
+  ? { code: process.env.MEETING_CODE, hostKey: process.env.HOST_KEY || "" }
+  : null;
+const db = existing ? null : new pg.Client({ connectionString: process.env.DATABASE_URL });
+let meeting;
+let hostKey;
+if (existing) {
+  hostKey = existing.hostKey;
+  meeting = { id: null, code: existing.code, allow_attendee_mic: "?", allow_attendee_camera: "?", mute_on_entry: "?" };
+  console.log(`Joining existing meeting ${meeting.code} at ${BASE}`);
+} else {
+  await db.connect();
 
-const { rows: churches } = await db.query(
-  "select id, name from church order by created_at limit 1",
-);
-if (churches.length === 0) {
-  console.log("No church in this database - nothing to join.");
-  process.exit(0);
+  const { rows: churches } = await db.query(
+    "select id, name from church order by created_at limit 1",
+  );
+  if (churches.length === 0) {
+    console.log("No church in this database - nothing to join.");
+    process.exit(0);
+  }
+  const church = churches[0];
+
+  const code = `zzz-call-${Date.now().toString(36).slice(-3)}`.slice(0, 20);
+  hostKey = `hk-${Date.now().toString(36)}-call`;
+  const { rows: made } = await db.query(
+    `insert into meeting (church_id, code, title, kind, status, access, allow_chat,
+                          allow_recording, max_participants, host_key, mute_on_entry,
+                          low_data_default)
+     values ($1, $2, 'Audio matrix test', 'prayer', 'scheduled', 'open', true, true, 12, $3, false, false)
+     returning id, code, allow_attendee_mic, allow_attendee_camera, mute_on_entry`,
+    [church.id, code, hostKey],
+  );
+  meeting = made[0];
+  console.log(`Church: ${church.name}`);
 }
-const church = churches[0];
-
-const code = `zzz-call-${Date.now().toString(36).slice(-3)}`.slice(0, 20);
-const hostKey = `hk-${Date.now().toString(36)}-call`;
-const { rows: made } = await db.query(
-  `insert into meeting (church_id, code, title, kind, status, access, allow_chat,
-                        allow_recording, max_participants, host_key, mute_on_entry,
-                        low_data_default)
-   values ($1, $2, 'Audio matrix test', 'prayer', 'scheduled', 'open', true, true, 12, $3, false, false)
-   returning id, code, allow_attendee_mic, allow_attendee_camera, mute_on_entry`,
-  [church.id, code, hostKey],
-);
-const meeting = made[0];
-console.log(`Church: ${church.name}`);
 console.log(
   `Meeting ${meeting.code} - attendee mic: ${meeting.allow_attendee_mic}, ` +
     `attendee camera: ${meeting.allow_attendee_camera}, mute on entry: ${meeting.mute_on_entry}\n`,
@@ -555,8 +611,27 @@ try {
     await new Promise((r) => setTimeout(r, 2500));
   }
 
+  /*
+   * RECORD=audio|video: the host presses Record before the room talks and
+   * Stop after it. Which path the recording took, and whether it was filed,
+   * is for whoever runs this to read from the database afterwards.
+   */
+  const RECORD = process.env.RECORD === "video" ? "Record video" : process.env.RECORD ? "Record audio only" : "";
+  const host = tabs.find((t) => t.isHost);
+  if (RECORD) {
+    await hostMenu(host.cdp, RECORD);
+    await new Promise((r) => setTimeout(r, 3000));
+    console.log(`  Host pressed "${RECORD}" - on screen: ${(await toasts(host.cdp)) || "(no toast)"}`);
+  }
+
   console.log(`\nAll ${PEOPLE} in the room. Listening for ${SECONDS}s...`);
   await new Promise((r) => setTimeout(r, SECONDS * 1000));
+
+  if (RECORD) {
+    await hostMenu(host.cdp, "Stop recording");
+    await new Promise((r) => setTimeout(r, 3000));
+    console.log(`  Host pressed "Stop recording" - on screen: ${(await toasts(host.cdp)) || "(no toast)"}`);
+  }
 
   /*
    * Then wait for the room to be finished negotiating.
@@ -705,10 +780,12 @@ try {
         .join(" ")}`,
     );
   }
-  await db
-    .query("update meeting set status = 'ended' where id = $1", [meeting.id])
-    .catch((e) => console.warn(`could not end the test meeting: ${e.message}`));
-  await db.end();
+  if (db) {
+    await db
+      .query("update meeting set status = 'ended' where id = $1", [meeting.id])
+      .catch((e) => console.warn(`could not end the test meeting: ${e.message}`));
+    await db.end();
+  }
 }
 
 console.log(`\n${failures === 0 ? "All clear." : `${failures} failing check(s).`}`);
