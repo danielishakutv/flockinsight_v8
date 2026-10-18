@@ -44,8 +44,18 @@ import "server-only";
 
 const BASE = "https://rtc.live.cloudflare.com/v1";
 
-/** How long any one call to Cloudflare may take before we give up on it. */
-const TIMEOUT_MS = 8000;
+/**
+ * How long any one call to Cloudflare may take before we give up on it.
+ *
+ * Long enough to HEAR the answer. Measured on production: the media server
+ * holds `tracks/new` against a session whose connection is not up yet — about
+ * five seconds before answering 410, sometimes past eight — while every other
+ * call answers in under 120ms. At eight seconds we aborted requests the media
+ * server then carried out anyway, and the pulled track arrived later on a mid
+ * nothing here had mapped. Apache allows 300s and Cloudflare's edge 100s, so
+ * nothing in between cuts this off sooner.
+ */
+const TIMEOUT_MS = 15_000;
 
 export type SessionDescription = { type: "offer" | "answer"; sdp: string };
 
