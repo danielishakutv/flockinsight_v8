@@ -412,6 +412,37 @@ describe("a publisher that started again", () => {
   });
 });
 
+describe("a track nobody here asked for", () => {
+  it("is closed on the media server rather than decoded for the rest of the meeting", async () => {
+    /*
+     * Seen on production during a burst of Cloudflare API timeouts: the
+     * server carried out a pull whose answer never came back, so the next
+     * description brought a track no mapping named.
+     */
+    vi.useFakeTimers();
+    let lost = 1;
+    behaviour.pull = (body) => {
+      if (lost-- > 0) {
+        // The media server allocates the mid; the answer is lost on the way.
+        midBase += ((body.tracks as unknown[]) ?? []).length;
+        return Promise.reject(new Error("Could not reach the media server: timeout"));
+      }
+      return okPull(body);
+    };
+
+    const sfu = transport();
+    await sfu.sync([person("me"), person("a")], "me");
+    await vi.advanceTimersByTimeAsync(1600);
+    await vi.advanceTimersByTimeAsync(100);
+
+    const close = calls.find((c) => c.action === "close");
+    expect(close, "the orphaned track should have been handed back").toBeTruthy();
+    expect(close?.body.mids).toEqual(["0"]);
+    expect(mediaEvents).toContain("a");
+    sfu.close();
+  });
+});
+
 describe("a microphone whose connection failed", () => {
   /*
    * Found on production by the three-browser harness: the third person's

@@ -291,6 +291,38 @@ const SPY = `
 })();
 `;
 
+/**
+ * Voices actually arriving, per track, as a RATE: every inbound audio stream
+ * on every live connection, sampled twice three seconds apart. On the SFU one
+ * connection carries every voice in the room, so "bytes on the connection"
+ * cannot tell two voices from one; this can. A stream whose total stopped
+ * growing is not counted, however large the total.
+ */
+const FLOW = `
+(async () => {
+  const sample = async () => {
+    const m = new Map();
+    for (const [i, pc] of window.__pcs.entries()) {
+      if (pc.signalingState === "closed") continue;
+      (await pc.getStats()).forEach((r) => {
+        if (r.type === "inbound-rtp" && r.kind === "audio") m.set(i + ":" + (r.mid ?? r.trackIdentifier ?? r.id), r.bytesReceived || 0);
+        if (r.type === "outbound-rtp" && r.kind === "audio") m.set("out:" + i + ":" + (r.mid ?? r.id), r.bytesSent || 0);
+      });
+    }
+    return m;
+  };
+  const a = await sample();
+  await new Promise((r) => setTimeout(r, 3000));
+  const b = await sample();
+  const rising = [...b].filter(([k, v]) => v - (a.get(k) ?? 0) > 300).map(([k]) => k);
+  return {
+    voicesIn: rising.filter((k) => !k.startsWith("out:")).length,
+    voiceOut: rising.some((k) => k.startsWith("out:")),
+    streamsIn: [...b.keys()].filter((k) => !k.startsWith("out:")).length,
+  };
+})()
+`;
+
 /** What one tab can see: what it sends, and what it hears from each peer. */
 const REPORT = `
 (async () => {
@@ -680,6 +712,18 @@ try {
   for (const tab of tabs) {
     reports.push({ tab, report: await evaluate(tab.cdp, REPORT) });
   }
+  // Sampled in every tab at once, so the three-second windows overlap.
+  const flows = await Promise.all(tabs.map((tab) => evaluate(tab.cdp, FLOW)));
+  reports.forEach((r, i) => (r.flow = flows[i]));
+  /*
+   * An SFU room is one sendonly connection and one recvonly connection per
+   * person, whatever the size of the room; a mesh is one sendrecv connection
+   * per other person. Read off the transceivers rather than assumed.
+   */
+  const sfuRoom = reports.some(({ report }) =>
+    report.peers.some((p) => p.signalling !== "closed" && p.transceiverDirections.length > 0 &&
+      p.transceiverDirections.every((d) => d.includes(":sendonly/"))),
+  );
 
   console.log("Each person, and every connection they hold:\n");
   for (const { tab, report } of reports) {
@@ -713,9 +757,25 @@ try {
 
   /* ---------------------------------------------------------- the verdicts */
 
-  console.log("Verdicts:\n");
-  for (const { tab, report } of reports) {
+  console.log(`Verdicts (${sfuRoom ? "SFU" : "mesh"} room):\n`);
+  for (const { tab, report, flow } of reports) {
     const expected = PEOPLE - 1;
+
+    if (sfuRoom) {
+      // Per voice, as a rate; see FLOW. The mesh verdicts below count
+      // connections, which on the SFU are always two whatever the room.
+      ok(
+        `${tab.name}'s voice is leaving`,
+        flow.voiceOut,
+        flow.voiceOut ? "bytes rising" : "nothing sent in 3s",
+      );
+      ok(
+        `${tab.name} hears all ${expected} others`,
+        flow.voicesIn === expected,
+        `${flow.voicesIn} voice(s) flowing of ${flow.streamsIn} audio stream(s) held`,
+      );
+      continue;
+    }
 
     /*
      * Live connections only.

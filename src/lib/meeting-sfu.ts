@@ -134,6 +134,11 @@ export class SfuTransport {
     subscriber: null,
   };
   private mintedAt = { publisher: 0, subscriber: 0 };
+  /** Mids the media server sent that nothing here asked for; see `closeOrphans`. */
+  private orphans = new Set<string>();
+  /** Mids already handed back, which a later description may still list. */
+  private handedBack = new Set<string>();
+  private orphanTries = new Map<string, number>();
 
   /** Our own sendonly transceivers, by track name. */
   private senders = new Map<string, RTCRtpTransceiver>();
@@ -833,6 +838,9 @@ export class SfuTransport {
         this.pulled.add(key);
         this.pulledFrom.set(key, who.sessionId);
         this.incoming.set(t.mid, who);
+        // A mid can be used again for a new track once it has been closed.
+        this.handedBack.delete(t.mid);
+        this.orphanTries.delete(t.mid);
       });
 
       const offer = res.sessionDescription as RTCSessionDescriptionInit | undefined;
@@ -857,7 +865,49 @@ export class SfuTransport {
       });
       this.tuneAudio();
 
+      if (this.orphans.size > 0) void this.closeOrphans();
       if (this.pendingWork()) this.scheduleRetry(RETRY_TICK_MS);
+    });
+  }
+
+  /**
+   * Close tracks the media server is sending that nothing here asked for.
+   *
+   * A pull the server carried out whose answer never reached us — a timeout,
+   * a 502 on the way back — leaves a track on the session that no mapping
+   * names. The next description brings it along, it arrives on an "unmapped
+   * mid", and it is never played; but it is decoded and buffered for the rest
+   * of the meeting, which is the churn cost this file exists to avoid. Seen
+   * on production during a burst of Cloudflare API timeouts. So it is handed
+   * back, and asked for again properly if it was somebody's.
+   */
+  private closeOrphans(): Promise<void> {
+    return this.queue("sub", async () => {
+      if (this.stopped || !this.subscriber || !this.subscriberSession) return;
+      const mids = [...this.orphans].filter((m) => !this.incoming.has(m));
+      this.orphans.clear();
+      if (mids.length === 0) return;
+      try {
+        await this.api("close", {
+          session: this.subscriberSession,
+          proof: this.subscriberProof,
+          mids,
+        });
+        for (const m of mids) {
+          this.handedBack.add(m);
+          this.orphanTries.delete(m);
+        }
+      } catch (e) {
+        // Tried again after the next pull that succeeds, three times at most:
+        // a close the server keeps refusing must not ride along on every pull.
+        for (const m of mids) {
+          const tries = (this.orphanTries.get(m) ?? 0) + 1;
+          this.orphanTries.set(m, tries);
+          if (tries < 3) this.orphans.add(m);
+          else this.handedBack.add(m);
+        }
+        console.warn(`[sfu] could not close ${mids.length} orphaned track(s); will try again`, e);
+      }
     });
   }
 
@@ -990,6 +1040,8 @@ export class SfuTransport {
       );
       return [];
     }
+    // Closed on purpose: a later description that still lists them is not an orphan.
+    for (const m of mids) this.handedBack.add(m);
     return mids.filter((mid) => this.incoming.has(mid));
   }
 
@@ -997,9 +1049,11 @@ export class SfuTransport {
     const mid = e.transceiver.mid;
     const who = mid ? this.incoming.get(mid) : undefined;
     if (!who) {
-      // Nothing to guess at. An unmapped track means the answer and the event
-      // disagreed, which is a bug worth seeing rather than papering over.
-      console.warn("[sfu] a track arrived on an unmapped mid", mid);
+      // Nothing to guess at: an orphan of a pull whose answer was lost (see
+      // `closeOrphans`). Not played, and handed back once this pull settles.
+      if (!mid || this.handedBack.has(mid)) return;
+      console.warn("[sfu] a track arrived on an unmapped mid; closing it", mid);
+      this.orphans.add(mid);
       return;
     }
 
@@ -1379,6 +1433,9 @@ export class SfuTransport {
     this.subscriberProof = "";
     this.minted.subscriber = null;
     this.subscriberStalls = 0;
+    this.orphans.clear();
+    this.handedBack.clear();
+    this.orphanTries.clear();
     for (const [peerId] of this.media) this.events.onGone(peerId);
     this.media.clear();
     this.incoming.clear();
