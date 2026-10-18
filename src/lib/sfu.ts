@@ -106,6 +106,20 @@ async function call<T>(
     throw new SfuError("The SFU is not configured on this server.", 503);
   }
 
+  /*
+   * Timed, per endpoint. Calls from this box to the media server have been
+   * seen to hit the eight-second timeout in bursts while a probe from the same
+   * box answered in under 120ms — so which endpoint stalls, and for how long,
+   * is the measurement that tells "Cloudflare holds this request" apart from
+   * "this process stalled". The session id is masked; the shape is the point.
+   */
+  const started = Date.now();
+  const endpoint = `${init.method} ${path.replace(/\/sessions\/[^/]+/, "/sessions/:id")}`;
+  const logSlow = (outcome: string) => {
+    const ms = Date.now() - started;
+    if (ms >= 2000) console.warn(`[sfu] slow media server call: ${endpoint} ${outcome} after ${ms}ms`);
+  };
+
   let res: Response;
   try {
     res = await fetch(`${BASE}/apps/${appId}${path}`, {
@@ -120,6 +134,7 @@ async function call<T>(
   } catch (e) {
     // A timeout or a DNS failure. Distinct from a rejection, because the
     // caller can retry this one.
+    logSlow(`failed (${(e as Error).name})`);
     throw new SfuError(
       `Could not reach the media server: ${(e as Error).message}`,
       504,
@@ -127,6 +142,7 @@ async function call<T>(
   }
 
   const text = await res.text();
+  logSlow(String(res.status));
   let data: unknown = null;
   try {
     data = text ? JSON.parse(text) : null;
