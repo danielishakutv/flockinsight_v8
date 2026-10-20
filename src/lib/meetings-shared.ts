@@ -561,11 +561,14 @@ export const QUALITY_LABEL: Record<MeetingQuality, string> = {
  *     good link does not need it and should not pay for it.
  *   dtx — send nothing while nobody is speaking. In a meeting where one
  *     person talks and nine listen, this alone is most of the saving.
- *   jitterBufferMs — how much audio to hold back before playing it. THE dial
- *     for "the voice keeps seizing". Packets on a mobile link do not arrive
- *     late one at a time, they arrive in gusts, and a player with nothing in
- *     hand has to invent the gap. Holding 400ms costs 400ms of delay, which
- *     nobody notices in a prayer meeting, and turns a gust into nothing at all.
+ *   jitterBufferMs — the least audio to hold back before playing it. A floor,
+ *     not a ceiling: the browser's own jitter buffer still grows by itself
+ *     when packets start arriving in gusts, which on a mobile link they do.
+ *     The floor only decides how much delay a call pays when they do not.
+ *     It used to be 200ms on a good link and 700ms on a poor one, and people
+ *     noticed — "the audio delay" was a reported fault — so it is half that
+ *     now: enough cushion that a gust does not seize the voice, without
+ *     charging every sentence for one that may never come.
  *
  * All of it is cheap to be wrong about: the worst outcome of a profile a
  * browser will not accept is that it keeps using its own.
@@ -626,7 +629,7 @@ export function audioProfileFor(opts: {
         fec: true,
         dtx: true,
         redundancy: true,
-        jitterBufferMs: 700,
+        jitterBufferMs: 350,
         label: "Voice, protected",
       };
     if (weak)
@@ -637,7 +640,7 @@ export function audioProfileFor(opts: {
         fec: true,
         dtx: true,
         redundancy: true,
-        jitterBufferMs: 450,
+        jitterBufferMs: 220,
         label: "Voice, protected",
       };
     return {
@@ -647,7 +650,7 @@ export function audioProfileFor(opts: {
       fec: true,
       dtx: true,
       redundancy: false,
-      jitterBufferMs: 300,
+      jitterBufferMs: 150,
       label: "Voice",
     };
   }
@@ -660,7 +663,7 @@ export function audioProfileFor(opts: {
       fec: true,
       dtx: true,
       redundancy: true,
-      jitterBufferMs: 700,
+      jitterBufferMs: 350,
       label: "Speech, protected",
     };
   if (weak)
@@ -671,7 +674,7 @@ export function audioProfileFor(opts: {
       fec: true,
       dtx: true,
       redundancy: true,
-      jitterBufferMs: 400,
+      jitterBufferMs: 200,
       label: "Speech, protected",
     };
   return {
@@ -681,7 +684,7 @@ export function audioProfileFor(opts: {
     fec: true,
     dtx: true,
     redundancy: false,
-    jitterBufferMs: 200,
+    jitterBufferMs: 100,
     label: "Speech",
   };
 }

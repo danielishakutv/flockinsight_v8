@@ -217,3 +217,32 @@ because that is how anybody pulls anybody. So naming one proves nothing. The
 route hands back an HMAC proof when it mints a session and requires it on every
 later action; without that, any guest could close any participant's tracks for
 the whole room.
+
+Four rules of the media server itself, **measured against the real Cloudflare
+SFU** on 2026-10-21 (a headless Chrome and a timed proxy, not a reading of the
+docs) — each was the cause of somebody not being heard:
+
+1. **A session created and left idle dies.** Fifteen seconds after
+   `sessions/new`, the first pull on it was held 5.6s and refused 410. Never
+   mint ahead of need: the first publish and the first pull create their own
+   session in the same request.
+2. **A published track with no packets for 30s is deleted.** A camera turned
+   off by `replaceTrack(null)` was gone for good; turning it back on showed
+   nobody anything. Off cameras and screens send a 1 fps black placeholder; a
+   track idle past the limit anyway is published afresh.
+3. **A pull including a track with no media is held 8.5s**
+   (`empty_track_error`) — and every other track in that request waits with
+   it. Voices are pulled before pictures, and a track that failed once is
+   retried alone.
+4. **A call whose answer was lost wedges the session** ("renegotiation is
+   expected before pulling") for ever. A 410, an out-of-order refusal or an
+   uncertain outcome means: replace the connection at once.
+
+Every client-side recovery is reported to the server log as
+`[sfu] client <code> <peer> <kind>: …`, including how long each voice took to
+arrive (`heard`). Read those before theorising about a real meeting.
+
+**Recording is server-only.** The recording service (`src/recorder`) captures
+the room from the media server; when it is down, Record is refused with a
+sentence and a critical platform alert fires. The in-browser recorder failed
+12 of 27 times on production and is retired.

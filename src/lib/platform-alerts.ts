@@ -60,6 +60,30 @@ async function staleTicketCount(): Promise<number> {
   return Number((res.rows[0] as { n?: string } | undefined)?.n ?? 0);
 }
 
+/** How long the recording service may stay quiet before somebody is woken. */
+const RECORDER_SILENT_MINUTES = 3;
+
+/**
+ * Whether the recording service has gone quiet.
+ *
+ * It writes `recorder_alive_at` every ten seconds. Recording has no fallback
+ * any more — a host pressing Record while the service is down is told it is
+ * unavailable — so a dead service is a feature that has stopped for every
+ * church, and it is worth an email. Null when it has never run at all (a
+ * server it was never installed on), which stays quiet for the same reason a
+ * cron that has never run does.
+ */
+async function recorderSilentMinutes(): Promise<number | null> {
+  if (!process.env.CLOUDFLARE_REALTIME_APP_ID) return null;
+  const res = await db.execute(sql`
+    select value from platform_setting where key = 'recorder_alive_at'
+  `);
+  const value = (res.rows[0] as { value?: string } | undefined)?.value;
+  const at = value ? Date.parse(value) : NaN;
+  if (!Number.isFinite(at)) return null;
+  return (Date.now() - at) / 60_000;
+}
+
 async function pendingSenderIdCount(): Promise<number> {
   const res = await db.execute(sql`
     select count(*) as n from church
@@ -73,11 +97,12 @@ export async function evaluateConditions(
   float?: FloatOverview,
 ): Promise<EvaluatedAlert[]> {
   const f = float ?? (await getFloatOverviewFresh());
-  const [crons, backups, staleTickets, pendingSenders] = await Promise.all([
+  const [crons, backups, staleTickets, pendingSenders, recorderQuiet] = await Promise.all([
     getCronLiveness(),
     backupState(),
     staleTicketCount(),
     pendingSenderIdCount(),
+    recorderSilentMinutes(),
   ]);
 
   const alerts: EvaluatedAlert[] = [];
@@ -158,6 +183,17 @@ export async function evaluateConditions(
         href: "/superadmin/health",
       });
     }
+  }
+
+  if (recorderQuiet !== null && recorderQuiet > RECORDER_SILENT_MINUTES) {
+    alerts.push({
+      key: "recorder.silent",
+      severity: "critical",
+      message:
+        `The meeting recording service has not answered for ${Math.round(recorderQuiet)} minutes, ` +
+        "so hosts pressing Record are being told it is unavailable. Check: pm2 logs flockinsight-recorder.",
+      href: "/superadmin/health",
+    });
   }
 
   if (backups === "stale") {

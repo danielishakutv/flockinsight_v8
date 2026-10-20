@@ -330,7 +330,7 @@ done
 if [ -n "$recorder_ok" ]; then
   note "recording service answers on $RECORDER_PORT"
 else
-  printf '\n\033[1;33mWARNING: the recording service is not answering on %s — recordings will fall back to the browser. Check: pm2 logs flockinsight-recorder\033[0m\n' "$RECORDER_PORT" >&2
+  printf '\n\033[1;33mWARNING: the recording service is not answering on %s — hosts pressing Record will be told it is unavailable. Check: pm2 logs flockinsight-recorder\033[0m\n' "$RECORDER_PORT" >&2
 fi
 
 # --------------------------------------------------------------- tidy up

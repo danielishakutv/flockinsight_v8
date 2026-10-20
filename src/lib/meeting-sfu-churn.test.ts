@@ -76,9 +76,10 @@ function fakeApi() {
 
   return async (action: string, body: Record<string, unknown>) => {
     calls.push({ action, body });
-    if (action === "session") return { sessionId: `s-${++midCounter}` };
+    // A publish or pull that names no session creates one, as the route does.
+    const created = body.session ? {} : { sessionId: `s-${++midCounter}`, proof: "p" };
     if (action === "publish") {
-      return { sessionDescription: { type: "answer", sdp: sdpWith(1) } };
+      return { ...created, sessionDescription: { type: "answer", sdp: sdpWith(1) } };
     }
     if (action === "pull") {
       const tracks = (body.tracks as { trackName: string }[]) ?? [];
@@ -88,6 +89,7 @@ function fakeApi() {
         return { mid: String(mid), trackName: t.trackName };
       });
       return {
+        ...created,
         tracks: out,
         sessionDescription: { type: "offer", sdp: sdpWith(highWater) },
       };

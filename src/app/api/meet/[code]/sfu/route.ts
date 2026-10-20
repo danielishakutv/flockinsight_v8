@@ -51,6 +51,9 @@ type Body = {
   sdp?: unknown;
   tracks?: unknown;
   mids?: unknown;
+  /** For "event": what happened, and a line about it. */
+  kind?: unknown;
+  detail?: unknown;
 };
 
 /** The only track names this room will ever ask for. */
@@ -114,6 +117,42 @@ function proofHolds(participantId: string, sessionId: string, given: unknown): b
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/* ============================================================
+ * What the browser reports back
+ *
+ * The transport recovers from a lot by itself — a session the media server
+ * finished, a connection that dropped, a voice that took nine seconds to
+ * arrive — and all of it happens in somebody's browser, where no log of ours
+ * can see it. The "event" action is how it says so: one line in the server
+ * log per event, so the morning after a service can be read rather than
+ * guessed at. Bounded per participant, because it is written by the client.
+ * ========================================================== */
+
+const EVENT_KINDS = new Set([
+  "subscriber-rebuilt",
+  "publisher-rebuilt",
+  "publisher-renewed",
+  "track-unavailable",
+  "track-stale",
+  "heard",
+]);
+const EVENTS_PER_PARTICIPANT = 60;
+const eventCounts = new Map<string, number>();
+
+function logClientEvent(participantId: string, peerId: string, meetingCode: string, body: Body): Response {
+  const kind = str(body?.kind, 40);
+  if (!EVENT_KINDS.has(kind)) return fail("Unknown event.", 400);
+  const seen = eventCounts.get(participantId) ?? 0;
+  if (seen >= EVENTS_PER_PARTICIPANT) return json({ ok: true, logged: false });
+  eventCounts.set(participantId, seen + 1);
+  // Keep the map from growing for the life of the process.
+  if (eventCounts.size > 5_000) eventCounts.clear();
+  // Printable characters only: this is client text going into a server log.
+  const detail = str(body?.detail, 300).replace(/[^\x20-\x7e]/g, "?");
+  console.warn(`[sfu] client ${meetingCode} ${peerId.slice(0, 8)} ${kind}: ${detail}`);
+  return json({ ok: true, logged: true });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ code: string }> },
@@ -139,35 +178,50 @@ export async function POST(
    */
   if (!peer.admitted) return fail("You're still waiting to be let in.", 403);
 
+  if (action === "event") return logClientEvent(peer.id, peer.peerId, m.code, body ?? {});
+
   /*
-   * And every action but the first has to prove the session is its own.
+   * A publish or a pull that names no session creates one, in the same
+   * request. A session made ahead of need and left idle is one the media
+   * server lets go of — measured: fifteen seconds after it was made, the first
+   * pull on it was held for 5.6s and refused 410 — so the browser no longer
+   * asks for sessions in advance. This also takes a round trip off the join.
    */
-  if (action !== "session") {
-    const sessionId = str(body?.session, 200);
-    if (!sessionId) return fail("Malformed request.", 400);
-    if (!proofHolds(peer.id, sessionId, body?.proof)) {
+  const named = str(body?.session, 200);
+  const creating = (action === "publish" || action === "pull") && !named;
+
+  /*
+   * And every other action has to prove the session is its own.
+   */
+  if (action !== "session" && !creating) {
+    if (!named) return fail("Malformed request.", 400);
+    if (!proofHolds(peer.id, named, body?.proof)) {
       console.warn(
-        `[sfu] ${peer.peerId} named session ${sessionId.slice(0, 8)}… without a valid proof`,
+        `[sfu] ${peer.peerId} named session ${named.slice(0, 8)}… without a valid proof`,
       );
       return fail("That media session isn't yours.", 403);
     }
   }
 
+  /** A new session, with the proof that travels with it to this peer only. */
+  const mint = async () => {
+    const sessionId = await newSession();
+    return { sessionId, proof: sessionProof(peer.id, sessionId) };
+  };
+
   try {
     switch (action) {
       /* ------------------------------------------------- a new session */
       case "session": {
-        const sessionId = await newSession();
-        // The proof travels with it, and only ever to the peer it was made
-        // for. See the note above.
-        return json({ ok: true, sessionId, proof: sessionProof(peer.id, sessionId) });
+        // Kept for a browser still running the previous build. See the note
+        // above for why the current one never asks.
+        return json({ ok: true, ...(await mint()) });
       }
 
       /* ------------------------------------------- publish my own media */
       case "publish": {
-        const sessionId = str(body?.session, 200);
         const offer = description(body?.sdp);
-        if (!sessionId || !offer) return fail("Malformed publish.", 400);
+        if (!offer) return fail("Malformed publish.", 400);
 
         const raw = Array.isArray(body?.tracks) ? body.tracks : [];
         const tracks: LocalTrack[] = [];
@@ -179,6 +233,8 @@ export async function POST(
         }
         if (tracks.length === 0) return fail("Nothing to publish.", 400);
 
+        const minted = creating ? await mint() : null;
+        const sessionId = minted?.sessionId ?? named;
         const result = await publishTracks(sessionId, offer, tracks);
 
         /*
@@ -208,14 +264,11 @@ export async function POST(
           { toPeer: null, type: "roster", payload: { reason: "publish", peerId: peer.peerId } },
         ]);
 
-        return json({ ok: true, ...result });
+        return json({ ok: true, ...result, ...(minted ?? {}) });
       }
 
       /* ------------------------------------ subscribe to everybody else */
       case "pull": {
-        const sessionId = str(body?.session, 200);
-        if (!sessionId) return fail("Malformed pull.", 400);
-
         const raw = Array.isArray(body?.tracks) ? body.tracks : [];
         const wanted: RemoteTrack[] = [];
         for (const t of raw) {
@@ -245,8 +298,9 @@ export async function POST(
           return fail("Those people are no longer in this meeting.", 404);
         }
 
-        const result = await pullTracks(sessionId, allowed);
-        return json({ ok: true, ...result });
+        const minted = creating ? await mint() : null;
+        const result = await pullTracks(minted?.sessionId ?? named, allowed);
+        return json({ ok: true, ...result, ...(minted ?? {}) });
       }
 
       /* ------------------------------ answer an offer the SFU just made */
@@ -279,7 +333,16 @@ export async function POST(
       // Cloudflare's own words where there are any: "session not found" is
       // worth far more to whoever reads the log than a bare 502.
       console.error(`[sfu] ${action} failed: ${e.message}`, e.code ?? "");
-      return fail(e.message, e.status >= 500 ? 502 : e.status);
+      /*
+       * The code and whether the outcome is known travel back with it: they
+       * decide whether the browser can go on using the session, and a bare
+       * message cannot say that. A timeout (504) or a media server failure
+       * leaves the change unknown, and the browser replaces the session.
+       */
+      return fail(e.message, e.status >= 500 ? 502 : e.status, {
+        code: e.code ?? null,
+        uncertain: e.status >= 500,
+      });
     }
     console.error("[sfu] unexpected failure", e);
     return fail("The media server could not be reached.", 502);

@@ -35,7 +35,7 @@ import {
   type SignalType,
   type Stage,
 } from "@/lib/meetings-shared";
-import { SfuTransport } from "@/lib/meeting-sfu";
+import { SfuApiError, SfuTransport } from "@/lib/meeting-sfu";
 
 export type TrackSlot = "audio" | "camera" | "screen";
 
@@ -611,9 +611,16 @@ export class MeetingClient {
             ...body,
           }),
         });
-        const data = (await res.json()) as Record<string, unknown>;
+        // A body that is not JSON (an HTML error page from a proxy) still has
+        // a status, and the status is what the transport decides on.
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (!res.ok || data.ok === false) {
-          throw new Error(String(data.error ?? `sfu ${action} failed`));
+          throw new SfuApiError(
+            String(data.error ?? `sfu ${action} failed (${res.status})`),
+            res.status,
+            typeof data.code === "string" ? data.code : null,
+            data.uncertain === true || res.status >= 500,
+          );
         }
         return data;
       },
@@ -645,9 +652,6 @@ export class MeetingClient {
         onError: (message) => this.events.onError?.(message),
       },
     );
-    // Both media sessions are asked for now, so the first publish and the
-    // first pull do not each begin with that round trip.
-    sfu.prepare();
     return sfu;
   }
 

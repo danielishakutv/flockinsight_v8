@@ -1,4 +1,13 @@
 /**
+ * RETIRED on 2026-10-21. Nothing imports this module.
+ *
+ * Meetings are recorded on the server now, by the recording service fed from
+ * the media server (see src/recorder and the `recording.start` action). The
+ * in-browser recorder below failed twelve times in twenty-seven on production
+ * — sleeping phones, closed tabs, uploads that never finished — and each
+ * failure was a service a church believed it had kept. It is left in place,
+ * unused and out of every bundle, only until its removal is approved.
+ *
  * Recording, done entirely in the host's browser.
  *
  * A canvas is painted with whatever the meeting currently looks like — the

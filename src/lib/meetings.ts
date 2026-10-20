@@ -1819,8 +1819,8 @@ export async function lowerAllHands(meetingId: string) {
  *
  * It writes its own heartbeat into `platform_setting` every ten seconds (see
  * `recorder/supervisor.ts`). A host pressing Record while it is down must not
- * get a row that nothing will ever capture — the room falls back to recording
- * in the browser instead, which is slower to save but never silent.
+ * get a row that nothing will ever capture — they are told the service is not
+ * answering, while there is still time to try again.
  */
 export async function recorderAlive(maxAgeMs = 45_000): Promise<boolean> {
   const [row] = await db

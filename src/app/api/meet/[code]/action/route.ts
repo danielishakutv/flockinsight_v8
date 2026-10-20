@@ -2,6 +2,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/db";
 import { church, media, meeting } from "@/db/schema";
 import {
+  activeRecording,
   addMessage,
   admitParticipant,
   sendChatHistoryTo,
@@ -465,26 +466,56 @@ export async function POST(
         .limit(1);
 
       /*
-       * WHERE it is recorded.
+       * Recorded on the server, and only there.
        *
-       * On the server, whenever it can be: the room is on the media server
-       * (every real meeting is) and the recording service is alive. The
-       * host's browser then does nothing but press the button — no canvas, no
-       * upload, nothing to lose when the phone sleeps. Only a mesh room, or a
-       * moment when the service is down, falls back to recording in the
-       * browser, and the answer says which so the room knows what to start.
+       * The host's browser used to be the fallback — a canvas composite and an
+       * upload afterwards — and it failed twelve times in twenty-seven: phones
+       * slept, tabs closed, uploads never finished, and every failure was a
+       * service a church believed it had kept. The recording service captures
+       * the room from the media server instead, so nothing the host's device
+       * does can lose it. When the service cannot take a recording, the host
+       * is told so now, while there is still time to do something about it,
+       * rather than finding out after the service that nothing was kept.
        */
-      const onServer =
-        m.transport === "sfu" && isSfuConfigured() && (await recorderAlive());
-      if (onServer) {
-        const info = await getStorageInfo(m.churchId, owner?.storageExtraBytes ?? 0);
-        if (info.free < 20 * 1024 * 1024) {
-          return fail(
-            `Not enough storage to record — ${formatBytes(info.free)} free. Free up space in the media library or add storage, then try again.`,
-            413,
-            { code: "storage" },
-          );
-        }
+      if (m.transport !== "sfu" || !isSfuConfigured()) {
+        console.error(`[meet/recording] ${m.code}: refused — the room is not on the media server`);
+        return fail(
+          "This meeting can't be recorded: it isn't running through our media server. Start a new meeting and try again.",
+          409,
+          { code: "unavailable" },
+        );
+      }
+      if (!(await recorderAlive())) {
+        console.error(`[meet/recording] ${m.code}: refused — the recording service is not answering`);
+        return fail(
+          "The recording service isn't answering right now, so nothing would be saved. Please try again in a minute.",
+          503,
+          { code: "unavailable" },
+        );
+      }
+      const info = await getStorageInfo(m.churchId, owner?.storageExtraBytes ?? 0);
+      if (info.free < 20 * 1024 * 1024) {
+        return fail(
+          `Not enough storage to record — ${formatBytes(info.free)} free. Free up space in the media library or add storage, then try again.`,
+          413,
+          { code: "storage" },
+        );
+      }
+
+      /*
+       * One recording at a time. A second Record — two hosts, or a double tap
+       * on a slow connection — would start a second capture of the same room
+       * and keep two copies of the service.
+       */
+      const already = await activeRecording(m.id);
+      if (already) {
+        return json({
+          ok: true,
+          recordingId: already.id,
+          source: "server",
+          startedAt: already.startedAt ?? new Date().toISOString(),
+          already: true,
+        });
       }
 
       const id = await startRecordingRow({
@@ -493,9 +524,9 @@ export async function POST(
         title: `${m.title} — ${recordingStamp(new Date(), owner?.timezone)}`,
         mode,
         createdBy: peer.userId,
-        source: onServer ? "server" : "browser",
+        source: "server",
       });
-      if (onServer) await notifyRecorder(m.id);
+      await notifyRecorder(m.id);
       await broadcast("recording", { state: "started", by: peer.displayName, mode });
       await addMessage({
         meetingId: m.id,
@@ -507,14 +538,14 @@ export async function POST(
       });
       await log({
         action: "meetings.recording.create",
-        summary: `Started recording "${m.title}" (${mode}, ${onServer ? "on the server" : "in the browser"})`,
-        meta: { mode, recordingId: id, source: onServer ? "server" : "browser" },
+        summary: `Started recording "${m.title}" (${mode}, on the server)`,
+        meta: { mode, recordingId: id, source: "server" },
         severity: "notice",
       });
       return json({
         ok: true,
         recordingId: id,
-        source: onServer ? "server" : "browser",
+        source: "server",
         startedAt: new Date().toISOString(),
       });
     }
