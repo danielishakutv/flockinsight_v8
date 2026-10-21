@@ -70,6 +70,24 @@ export function normalisePageSlug(input: string): string {
     .slice(0, SLUG_MAX);
 }
 
+/**
+ * `normalisePageSlug` for each keystroke: the same tidying, except that a
+ * hyphen at the end survives.
+ *
+ * Stripping it as it was typed made "sunday-service" impossible to type in
+ * order — the hyphen vanished, and the next letter joined the word before it.
+ * Run `normalisePageSlug` on blur and before saving.
+ */
+export function tidyTypedPageSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, SLUG_MAX);
+}
+
 /** What is wrong with this slug, in words a church can act on. Null = fine. */
 export function pageSlugProblem(slug: string): string | null {
   if (!slug) return "Choose a short word for the address.";

@@ -23,6 +23,7 @@ import {
   normalisePageSlug,
   pageSlugProblem,
   reorder,
+  tidyTypedPageSlug,
 } from "@/lib/link-page-shared";
 
 /**
@@ -37,6 +38,18 @@ describe("the address", () => {
     expect(normalisePageSlug("Grace!!! Chapel???")).toBe("grace-chapel");
     expect(normalisePageSlug("grace---chapel")).toBe("grace-chapel");
     expect(normalisePageSlug("--grace--")).toBe("grace");
+  });
+
+  it("keeps a hyphen just typed, so a two-word address can be typed in order", () => {
+    // Each keystroke, as the field sees it: the hyphen must survive "sunday-".
+    let field = "";
+    for (const ch of "Sunday Service") field = tidyTypedPageSlug(field + ch);
+    expect(field).toBe("sunday-service");
+    expect(tidyTypedPageSlug("sunday-")).toBe("sunday-");
+    expect(tidyTypedPageSlug("sunday ")).toBe("sunday-");
+    expect(tidyTypedPageSlug("-sunday--")).toBe("sunday-");
+    // And the full tidy, on blur and on save, still takes it off.
+    expect(normalisePageSlug(tidyTypedPageSlug("sunday-"))).toBe("sunday");
   });
 
   it("writes it the way it will be stored, so the field cannot lie", () => {

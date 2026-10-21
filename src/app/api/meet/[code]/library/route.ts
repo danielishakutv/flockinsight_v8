@@ -34,6 +34,13 @@ export async function GET(
     url.searchParams.get("secret") ?? "",
   );
   if (!peer) return fail("You've been signed out of this meeting.", 401);
+  // A host tab that a newer one replaced, or that has left, is not running
+  // this meeting any more.
+  if (peer.leftAt && (m.status === "live" || m.status === "scheduled"))
+    return fail(
+      "This meeting was opened again in another tab or on another device. Rejoin here to carry on.",
+      401,
+    );
   if (!isHostRole(peer.role)) return fail("Only the host can pick slides.", 403);
 
   const q = escapeLike((url.searchParams.get("q") ?? "").trim().slice(0, 80));

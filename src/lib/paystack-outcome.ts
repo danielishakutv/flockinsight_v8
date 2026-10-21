@@ -43,6 +43,28 @@ export function toKobo(naira: number): number {
   return Math.round(Number(naira) * 100);
 }
 
+export const MIN_TOPUP_NAIRA = 100;
+export const MAX_TOPUP_NAIRA = 10_000_000;
+
+/**
+ * Why a wallet or SMS top-up cannot be asked for in this amount, or null.
+ *
+ * Whole naira only. Paystack is charged toKobo(amount), rounded in floating
+ * point, while the row keeps the same figure in numeric(14,2), which Postgres
+ * rounds half away from zero. For ₦128.015 that is 12,801 kobo charged against
+ * 12,802 expected, so classifyCharge calls a full payment short on every
+ * callback, webhook and reconcile, and the money is never credited. A whole
+ * number means the same thing on both sides.
+ */
+export function topupAmountProblem(amount: number): string | null {
+  if (!Number.isFinite(amount) || amount < MIN_TOPUP_NAIRA)
+    return `Minimum top-up is ₦${MIN_TOPUP_NAIRA}.`;
+  if (amount > MAX_TOPUP_NAIRA) return "That amount is too large.";
+  if (!Number.isInteger(amount))
+    return "Enter a whole naira amount — a top-up can't include kobo.";
+  return null;
+}
+
 export function classifyCharge(
   v: VerifyAnswer,
   expectedNaira: number,

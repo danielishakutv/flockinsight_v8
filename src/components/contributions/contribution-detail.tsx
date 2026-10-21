@@ -31,6 +31,7 @@ import {
   deleteContribution,
   deleteEntry,
   deletePayout,
+  postPayoutToFinance,
   rejectEntry,
   releaseProof,
   removeContributor,
@@ -79,6 +80,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   EntryStatusBadge,
   Figure,
@@ -1481,6 +1489,7 @@ function PayoutsPanel({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [objecting, setObjecting] = useState<PayoutRow | null>(null);
+  const [posting, setPosting] = useState<PayoutRow | null>(null);
   const [reason, setReason] = useState("");
   const available = pot.balance - pot.pendingOut;
 
@@ -1571,10 +1580,6 @@ function PayoutsPanel({
                               const res = await voteOnPayout({
                                 payoutId: p.id,
                                 decision: "confirm",
-                                financeAccountId:
-                                  canPostToFinance && p.kind === "handover"
-                                    ? (financeAccounts[0]?.id ?? null)
-                                    : null,
                               });
                               if (res.ok) {
                                 toast.success(t("contributions.approved"));
@@ -1591,6 +1596,21 @@ function PayoutsPanel({
                           {t("contributions.approve")}
                         </Button>
                       )}
+                      {p.status === "approved" &&
+                        p.kind === "handover" &&
+                        !p.financeTransactionId &&
+                        canPostToFinance &&
+                        financeAccounts.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() => setPosting(p)}
+                          >
+                            <ArrowDownToLine className="size-4" aria-hidden />
+                            {t("contributions.postIntoFinance")}
+                          </Button>
+                        )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -1719,6 +1739,143 @@ function PayoutsPanel({
           });
         }}
       />
+
+      <PostToFinanceDialog
+        payout={posting}
+        onOpenChange={(next) => {
+          if (!next) setPosting(null);
+        }}
+        currency={currency}
+        financeAccounts={financeAccounts}
+      />
     </div>
+  );
+}
+
+/**
+ * Choosing the account an approved hand-over goes into.
+ *
+ * Its own step, never a side effect of approving: whoever gives the last
+ * approval may not manage Finance, and the account is a choice for somebody
+ * who does. Approving used to post silently into whichever account sorted
+ * first. With more than one account nothing is preselected, so the account
+ * is always one somebody picked.
+ */
+function PostToFinanceDialog({
+  payout,
+  onOpenChange,
+  currency,
+  financeAccounts,
+}: {
+  payout: PayoutRow | null;
+  onOpenChange: (next: boolean) => void;
+  currency: string;
+  financeAccounts: { id: string; name: string }[];
+}) {
+  const t = useT();
+  return (
+    <Dialog open={!!payout} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("contributions.postIntoFinance")}</DialogTitle>
+        </DialogHeader>
+        {/* Keyed by payout so the choice is born fresh for each one. */}
+        {payout && (
+          <PostToFinanceForm
+            key={payout.id}
+            payout={payout}
+            onOpenChange={onOpenChange}
+            currency={currency}
+            financeAccounts={financeAccounts}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PostToFinanceForm({
+  payout,
+  onOpenChange,
+  currency,
+  financeAccounts,
+}: {
+  payout: PayoutRow;
+  onOpenChange: (next: boolean) => void;
+  currency: string;
+  financeAccounts: { id: string; name: string }[];
+}) {
+  const t = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  // "" shows the placeholder: nothing chosen yet.
+  const [accountId, setAccountId] = useState(
+    financeAccounts.length === 1 ? financeAccounts[0].id : "",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  function submit() {
+    if (!accountId) return;
+    setError(null);
+    start(async () => {
+      const res = await postPayoutToFinance({
+        payoutId: payout.id,
+        financeAccountId: accountId,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success(t("contributions.postedToFinance"));
+      onOpenChange(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <div className="space-y-3">
+        <p className="font-bold tabular-nums">
+          {formatMoney(payout.amount, currency)}
+          {payout.payee && (
+            <span className="text-muted-foreground font-normal"> · {payout.payee}</span>
+          )}
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {t("contributions.postIntoFinanceHint")}
+        </p>
+        <div className="space-y-1.5">
+          <label htmlFor="post-account" className="text-sm font-semibold">
+            {t("contributions.financeAccount")}
+          </label>
+          <Select value={accountId} onValueChange={setAccountId}>
+            <SelectTrigger id="post-account">
+              <SelectValue placeholder={t("contributions.pickAccount")} />
+            </SelectTrigger>
+            <SelectContent>
+              {financeAccounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {error && (
+          <p className="text-destructive text-sm font-medium" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          {t("common.cancel")}
+        </Button>
+        <Button onClick={submit} disabled={pending || !accountId}>
+          {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {t("contributions.postIntoFinance")}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

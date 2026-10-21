@@ -21,7 +21,7 @@
  * Relative imports, not the @/ alias: this module is loaded both by the app
  * and by `tsx scripts/seed-demo-church.ts`.
  */
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { designFor } from "./qr/simple";
 import {
@@ -263,6 +263,58 @@ export async function seedDemoData(churchId: string) {
     console.log(`    ✓ ${s}`);
   };
 
+  /*
+   * The manifest is saved whether or not the seed finishes.
+   *
+   * Every id goes into it the moment its insert returns, so a run that fails
+   * halfway still holds an exact list of the rows it did write — nothing it
+   * did not. It used to be saved only at the end, so a failed run left its
+   * services, households and giving categories outside any manifest; the
+   * reset keeps those tables, and every later failed run added another set
+   * beside them, twelve times a day.
+   */
+  try {
+    await seedRows(churchId, man, note);
+  } catch (e) {
+    try {
+      await saveManifest(man);
+      console.error(
+        `[demo-seed] failed part-way; the ${manifestRows(man)} rows it wrote are in the manifest for the next undo`,
+      );
+    } catch (saveError) {
+      console.error(
+        `[demo-seed] failed part-way, and saving the partial manifest failed too — ${manifestRows(man)} rows are not tracked`,
+        saveError,
+      );
+    }
+    throw e;
+  }
+
+  // On a re-seed the previous manifest is replaced.
+  await saveManifest(man);
+  note(`manifest saved — ${manifestRows(man)} rows recorded for --undo`);
+
+  return out;
+}
+
+async function saveManifest(man: Manifest) {
+  await db
+    .insert(platformSetting)
+    .values({ key: manifestKey(man.churchId), value: JSON.stringify(man) })
+    .onConflictDoUpdate({
+      target: platformSetting.key,
+      set: { value: JSON.stringify(man) },
+    });
+}
+
+function manifestRows(man: Manifest): number {
+  return Object.values(man).reduce(
+    (n, v) => n + (Array.isArray(v) ? v.length : 0),
+    0,
+  );
+}
+
+async function seedRows(churchId: string, man: Manifest, note: (s: string) => void) {
   /* ---------- services ---------- */
   const services = await db
     .insert(service)
@@ -699,28 +751,66 @@ export async function seedDemoData(churchId: string) {
   note(`1 project with ${pledgeRows.length} pledges`);
 
   /* ---------- finance ---------- */
-  const accounts = await db
+  /*
+   * A name that is already taken is used as it stands, not inserted again.
+   *
+   * Accounts and categories are unique by name within a church, and nothing
+   * but this manifest ever removes them — resetChurch leaves the finance
+   * tables alone. So a demo visitor who deleted the empty "Building Fund
+   * Account", or the unused "Offering", and made it again left a row the
+   * reset could not clear, and a plain insert then failed on the name every
+   * two hours from then on.
+   *
+   * Only the rows inserted HERE go into the manifest. Taking the existing one
+   * into it would make the next undo delete something this seed never made,
+   * and the CLI can seed a small real church whose own "Offering" and "Rent"
+   * came from Finance's starting categories.
+   */
+  const ACCOUNT_NAMES = ["Main Current Account", "Offering Box (Cash)", "Building Fund Account"];
+  const newAccounts = await db
     .insert(financeAccount)
     .values([
-      { churchId, name: "Main Current Account", type: "bank", institution: "GTBank", openingBalance: 1_850_000, note: null },
-      { churchId, name: "Offering Box (Cash)", type: "cash", openingBalance: 120_000, note: null },
-      { churchId, name: "Building Fund Account", type: "bank", institution: "Zenith Bank", openingBalance: 0, note: null },
+      { churchId, name: ACCOUNT_NAMES[0], type: "bank", institution: "GTBank", openingBalance: 1_850_000, note: null },
+      { churchId, name: ACCOUNT_NAMES[1], type: "cash", openingBalance: 120_000, note: null },
+      { churchId, name: ACCOUNT_NAMES[2], type: "bank", institution: "Zenith Bank", openingBalance: 0, note: null },
     ])
-    .returning({ id: financeAccount.id, name: financeAccount.name });
-  man.financeAccount.push(...accounts.map((r) => r.id));
+    .onConflictDoNothing({ target: [financeAccount.churchId, financeAccount.name] })
+    .returning({ id: financeAccount.id });
+  man.financeAccount.push(...newAccounts.map((r) => r.id));
+  const accounts = await db
+    .select({ id: financeAccount.id, name: financeAccount.name })
+    .from(financeAccount)
+    .where(and(eq(financeAccount.churchId, churchId), inArray(financeAccount.name, ACCOUNT_NAMES)));
 
-  const incomeCats = await db
+  const newCats = await db
     .insert(financeCategory)
-    .values(INCOME_CATEGORIES.map((name) => ({ churchId, name, kind: "income" as const })))
-    .returning({ id: financeCategory.id, name: financeCategory.name });
-  man.financeCategory.push(...incomeCats.map((r) => r.id));
-  const expenseCats = await db
-    .insert(financeCategory)
-    .values(EXPENSE_CATEGORIES.map((name) => ({ churchId, name, kind: "expense" as const })))
-    .returning({ id: financeCategory.id, name: financeCategory.name });
-  man.financeCategory.push(...expenseCats.map((r) => r.id));
+    .values([
+      ...INCOME_CATEGORIES.map((name) => ({ churchId, name, kind: "income" as const })),
+      ...EXPENSE_CATEGORIES.map((name) => ({ churchId, name, kind: "expense" as const })),
+    ])
+    .onConflictDoNothing({
+      target: [financeCategory.churchId, financeCategory.kind, financeCategory.name],
+    })
+    .returning({ id: financeCategory.id });
+  man.financeCategory.push(...newCats.map((r) => r.id));
+  const financeCats = await db
+    .select({ id: financeCategory.id, name: financeCategory.name, kind: financeCategory.kind })
+    .from(financeCategory)
+    .where(
+      and(
+        eq(financeCategory.churchId, churchId),
+        inArray(financeCategory.name, [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]),
+      ),
+    );
+  // In the lists' own order: the loop below draws random numbers per
+  // category, and the seed is deterministic only if that order is.
+  const catsOf = (kind: "income" | "expense", names: readonly string[]) =>
+    names.flatMap((name) => financeCats.filter((c) => c.kind === kind && c.name === name));
+  const incomeCats = catsOf("income", INCOME_CATEGORIES);
+  const expenseCats = catsOf("expense", EXPENSE_CATEGORIES);
 
-  const main = accounts[0];
+  const main = accounts.find((a) => a.name === ACCOUNT_NAMES[0]);
+  if (!main) throw new Error(`demo seed: "${ACCOUNT_NAMES[0]}" is missing after it was inserted`);
   const txns: (typeof financeTransaction.$inferInsert)[] = [];
   for (let m = 17; m >= 0; m--) {
     const d = daysAgo(m * 30);
@@ -1165,23 +1255,5 @@ export async function seedDemoData(churchId: string) {
   note(
     `${linkRows.length} short links with ${statRows.length} days of figures, ${codeRows.length} QR codes`,
   );
-
-  // Persist the manifest last: if anything above failed, --undo would have
-  // had an incomplete list anyway, and a half-written manifest is worse than
-  // none. On a re-seed the previous manifest is replaced.
-  await db
-    .insert(platformSetting)
-    .values({ key: manifestKey(churchId), value: JSON.stringify(man) })
-    .onConflictDoUpdate({
-      target: platformSetting.key,
-      set: { value: JSON.stringify(man) },
-    });
-  const total = Object.values(man).reduce(
-    (n, v) => n + (Array.isArray(v) ? v.length : 0),
-    0,
-  );
-  note(`manifest saved — ${total} rows recorded for --undo`);
-
-  return out;
 }
 

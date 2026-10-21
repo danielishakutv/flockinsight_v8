@@ -39,6 +39,7 @@ import {
   stopRepeating,
 } from "@/app/(app)/meetings/actions";
 import { describeRepeat, type MeetingRepeat } from "@/lib/meeting-recurrence";
+import { toLocalDateInput, toWallClockInput } from "@/lib/wall-clock-input";
 import {
   formatDuration,
   MEETING_KIND_LABEL,
@@ -90,12 +91,15 @@ export function MeetingsList({
   origin,
   canManage,
   canRepeat,
+  timezone,
 }: {
   meetings: MeetingRow[];
   origin: string;
   canManage: boolean;
   /** Whether this church's plan includes repeating meetings. */
   canRepeat: boolean;
+  /** The church's IANA zone: the edit dialog shows and saves times in it. */
+  timezone: string;
 }) {
   const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -120,9 +124,14 @@ export function MeetingsList({
       title: m.title,
       description: m.description ?? "",
       kind: m.kind as MeetingKind,
-      // datetime-local wants the local wall clock with no zone, which is
-      // exactly what toISOString does NOT give — so it is built by hand.
-      scheduledFor: m.scheduledFor ? toLocalInput(new Date(m.scheduledFor)) : "",
+      /*
+       * The wall clock in the CHURCH's zone, which is the zone saveMeeting
+       * reads the field back in. Built from the browser's own clock, an
+       * administrator in London editing a Lagos meeting's title saw 17:30 for
+       * an 18:30 meeting, saved it, and moved the meeting — and its repeat —
+       * an hour earlier.
+       */
+      scheduledFor: m.scheduledFor ? toWallClockInput(new Date(m.scheduledFor), timezone) : "",
       durationMin: m.durationMin,
       access: m.access as MeetingAccess,
       lobby: m.lobby,
@@ -138,7 +147,7 @@ export function MeetingsList({
       lowDataDefault: m.lowDataDefault,
       repeat: (m.repeat as MeetingRepeat) ?? "none",
       // The date input wants "2027-03-31" and nothing else.
-      repeatUntil: m.repeatUntil ? toLocalInput(new Date(m.repeatUntil)).slice(0, 10) : "",
+      repeatUntil: m.repeatUntil ? toLocalDateInput(new Date(m.repeatUntil), timezone) : "",
     });
     setDialogOpen(true);
   };
@@ -512,10 +521,4 @@ function MeetingCard({
       </CardContent>
     </Card>
   );
-}
-
-/** "2026-10-05T18:30" in the viewer's own timezone. */
-function toLocalInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

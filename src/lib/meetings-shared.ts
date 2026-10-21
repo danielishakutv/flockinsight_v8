@@ -237,6 +237,27 @@ export const SIGNAL_TYPES = [
 ] as const;
 export type SignalType = (typeof SIGNAL_TYPES)[number];
 
+/**
+ * What a browser may post through /sync, which relays it to the room as it is.
+ *
+ * Only peer-to-peer traffic. Anything that changes the room — control, stage,
+ * roster, chat — goes through /action, where the caller's role is checked.
+ *
+ * And not `bye`. Its payload names who is leaving, and every client believes
+ * it, so a guest who posted `bye` naming the preacher's peer id (every roster
+ * carries it) made every phone in the room drop the preacher's audio, and
+ * could do it again every second. Only the server says goodbye on somebody's
+ * behalf: /leave for the person leaving, /join for a session it retired.
+ */
+export const CLIENT_SIGNAL_TYPES: readonly SignalType[] = [
+  "offer",
+  "answer",
+  "ice",
+  "pause",
+  "reaction",
+  "renegotiate",
+];
+
 export type SignalEnvelope = {
   id: number;
   fromPeer: string;
@@ -898,6 +919,26 @@ export function isJoinable(m: {
   const start = new Date(m.scheduledFor).getTime();
   const now = Date.now();
   return now >= start - 10 * 60_000 && now <= start + (m.durationMin + 120) * 60_000;
+}
+
+/**
+ * Is a scheduled meeting still inside the time it was booked for?
+ *
+ * The housekeeping cron closes a live room nobody has been in for five
+ * minutes. A host who opened the room at 9:30 to check their camera and closed
+ * the tab at 9:35 made a 10:00 meeting "live" with nobody in it, and the cron
+ * ended it at 9:40 — so at 9:58 the whole congregation, the host included, got
+ * "This meeting has ended" and the link was dead. Until its slot is over an
+ * empty room is a room people have not reached yet, not an abandoned one.
+ *
+ * False for a meeting with no scheduled time: there is no slot to protect.
+ */
+export function insideBookedSlot(
+  m: { scheduledFor: Date | null; durationMin: number },
+  now: number = Date.now(),
+): boolean {
+  if (!m.scheduledFor) return false;
+  return now < m.scheduledFor.getTime() + m.durationMin * 60_000;
 }
 
 /**

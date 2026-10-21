@@ -40,6 +40,7 @@ export function ProofField({
   disabled,
   compact = false,
   labels,
+  onBusyChange,
 }: {
   value: ProofValue;
   onChange: (next: ProofValue) => void;
@@ -47,6 +48,13 @@ export function ProofField({
   slug?: string;
   disabled?: boolean;
   compact?: boolean;
+  /**
+   * Told when an upload starts and ends, so the form can hold its submit
+   * button. Without it, "I have paid" pressed while a receipt was still
+   * uploading saved the claim with no receipt, and the upload that finished
+   * afterwards went nowhere.
+   */
+  onBusyChange?: (busy: boolean) => void;
   /**
    * The three words shown on the control. Passed in rather than read from the
    * dictionary here because the wording differs by caller: a leader sees
@@ -77,6 +85,7 @@ export function ProofField({
     }
 
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const form = new FormData();
       form.append("file", file);
@@ -108,6 +117,7 @@ export function ProofField({
       setError(t("contributions.uploadDropped"));
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
       if (inputRef.current) inputRef.current.value = "";
     }
   }

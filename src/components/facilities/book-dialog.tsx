@@ -97,9 +97,9 @@ export function BookDialog({
    *
    * Clicking the 14th must not present yesterday's half-filled form, and the
    * React answer to that is a fresh component rather than an effect that
-   * assigns over the old one. The parent gives this dialog a `key` built from
-   * the day and the facility, so picking a different one remounts it and the
-   * initialiser below runs again with the right defaults.
+   * assigns over the old one. The parent gives this dialog a new `key` every
+   * time it opens, so it remounts and the initialiser below runs again with
+   * the right defaults.
    */
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 

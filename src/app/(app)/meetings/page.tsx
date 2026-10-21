@@ -157,6 +157,7 @@ export default async function MeetingsPage() {
           origin={siteUrl()}
           canManage={canManage}
           canRepeat={canRepeatMeetings(church.plan)}
+          timezone={church.timezone}
         />
       )}
     </PageContainer>

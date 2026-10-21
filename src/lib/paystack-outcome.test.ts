@@ -4,6 +4,7 @@ import {
   classifyCharge,
   referenceKind,
   toKobo,
+  topupAmountProblem,
   type VerifyAnswer,
 } from "@/lib/paystack-outcome";
 
@@ -84,5 +85,36 @@ describe("referenceKind", () => {
     expect(referenceKind("FREE-abcd1234-1760000000000")).toBeNull();
     expect(referenceKind("MANUAL-abcd1234-1760000000000")).toBeNull();
     expect(referenceKind("GIVE-xyz")).toBeNull();
+  });
+});
+
+describe("topupAmountProblem", () => {
+  /*
+   * Why whole naira: what Paystack is charged (toKobo, floating point) and
+   * what the numeric(14,2) row keeps (Postgres, half away from zero) disagree
+   * on some x.xx5 amounts. Postgres stores 128.015 as 128.02.
+   */
+  it("refuses the amount that was charged and then never credited", () => {
+    const stored = 128.02;
+    expect(classifyCharge(paid(toKobo(128.015)), stored)).toBe("mismatch");
+    expect(topupAmountProblem(128.015)).toMatch(/whole naira/);
+  });
+
+  it("refuses kobo of any kind, not only the amounts that happen to break", () => {
+    expect(topupAmountProblem(100.5)).toMatch(/whole naira/);
+    expect(topupAmountProblem(1500.25)).toMatch(/whole naira/);
+  });
+
+  it("keeps the existing floor and ceiling", () => {
+    expect(topupAmountProblem(99)).toMatch(/Minimum/);
+    expect(topupAmountProblem(Number.NaN)).toMatch(/Minimum/);
+    expect(topupAmountProblem(10_000_001)).toMatch(/too large/);
+  });
+
+  it("accepts whole naira, whose kobo figure is the same on both sides", () => {
+    for (const n of [100, 128, 5000, 10_000_000]) {
+      expect(topupAmountProblem(n)).toBeNull();
+      expect(classifyCharge(paid(toKobo(n)), n)).toBe("success");
+    }
   });
 });

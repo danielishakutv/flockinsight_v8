@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { endOfLocalDay, parseWallClockInput, toWallClockInput } from "@/lib/wall-clock-input";
+import {
+  endOfLocalDay,
+  parseWallClockInput,
+  toLocalDateInput,
+  toWallClockInput,
+} from "@/lib/wall-clock-input";
 
 const originalTz = process.env.TZ;
 afterEach(() => {
@@ -58,5 +63,35 @@ describe("a time a church types is read in the church's timezone", () => {
       "2026-10-31T20:59:59.999Z",
     );
     expect(endOfLocalDay("2026-10-31T00:00", "Africa/Nairobi")).toBeNull();
+  });
+
+  it("fills the edit dialog in the church's zone, not the editor's", () => {
+    /*
+     * A Lagos church's 18:30 meeting, edited by an administrator whose laptop
+     * is in London. The dialog used the browser's clock, showed 17:30, and
+     * saving it (read in Lagos time) moved the meeting an hour earlier.
+     */
+    const meeting = parseWallClockInput("2026-12-02T18:30", "Africa/Lagos")!;
+    for (const tz of ["Europe/London", "America/New_York", "UTC"]) {
+      process.env.TZ = tz;
+      const shown = toWallClockInput(meeting, "Africa/Lagos");
+      expect(shown).toBe("2026-12-02T18:30");
+      expect(parseWallClockInput(shown, "Africa/Lagos")?.getTime()).toBe(meeting.getTime());
+    }
+  });
+});
+
+describe("the calendar day something happened on", () => {
+  it("is the church's day, not UTC's", () => {
+    // A 7:30pm Wednesday service in New York in winter is 00:30 UTC on
+    // Thursday, and was filed in attendance on the Thursday.
+    const service = parseWallClockInput("2026-12-02T19:30", "America/New_York")!;
+    expect(service.toISOString().slice(0, 10)).toBe("2026-12-03");
+    expect(toLocalDateInput(service, "America/New_York")).toBe("2026-12-02");
+  });
+
+  it("round-trips a repeat's end date through the edit dialog", () => {
+    const until = endOfLocalDay("2027-03-31", "Africa/Nairobi")!;
+    expect(toLocalDateInput(until, "Africa/Nairobi")).toBe("2027-03-31");
   });
 });

@@ -180,7 +180,7 @@ export function GivingDataMenu({
               />
               <p className="text-muted-foreground text-xs">
                 New category names in the file are created automatically. Giver
-                is saved as text.
+                is saved as text. A gift already recorded is not added again.
               </p>
             </div>
           )}

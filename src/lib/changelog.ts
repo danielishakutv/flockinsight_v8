@@ -29,6 +29,44 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.79.0",
+    date: "2026-10-21",
+    summary:
+      "Meetings you can rely on: new arrivals are heard within a second or two instead of up to half a minute, a camera turned off and on again comes back for everyone, and every recording is made on our servers, so a phone that sleeps or a tab that closes can no longer lose your service.",
+    changes: {
+      Fixed: [
+        "Somebody joining a meeting could wait up to thirty seconds before hearing anyone, or before anyone heard them. The connection to our media server was being prepared too early and had gone stale by the time it was needed; it is now made at the moment it is used.",
+        "A camera that was switched off for more than half a minute and then switched on again stayed blank for everybody for the rest of the meeting. It now comes straight back.",
+        "When one person's camera was slow to start, everyone else's voices could arrive eight seconds late with it. Voices are now always fetched first, on their own.",
+        "After a brief network hiccup a participant could stop hearing new arrivals for the rest of the meeting. The connection now repairs itself within a couple of seconds, and a phone that switches between wifi and mobile data reconnects by itself.",
+        "Voices play with about half the delay they had before on a good connection, so conversation feels natural rather than like a phone call to another continent.",
+        "Guests who knock before the host arrives now appear in the waiting list, and letting someone in or saying no clears them from it.",
+        "A scheduled meeting is no longer closed early because somebody joined to test their camera and left before it began.",
+        "Somebody the host removes from a meeting can't simply rejoin from the same device.",
+        "\"Stop repeating\" on a weekly meeting now stays stopped, and copies made with \"Run this meeting again\" get the same quality settings as a new meeting.",
+        "Editing a meeting no longer shifts its time when your computer's clock is set to a different time zone from the church's.",
+        "On iPhones and iPads, a voice that Safari held back is played as soon as you tap the screen, instead of staying silent.",
+        "Pressing \"Record attendance from this meeting\" twice no longer counts the meeting twice.",
+        "Service reminders that fail to send are now shown in History instead of disappearing, and first-timer welcome messages are no longer sent twice on busy mornings.",
+        "Hand-over payouts that need two signatures post into the Finance account that was actually chosen, only once both have approved.",
+        "Attendance exports and imports keep youth and senior counts, and importing the same giving file twice no longer doubles the money.",
+        "Public forms show why a submission was refused instead of spinning, and the sign-in link on a members-only meeting or livestream brings you back to it afterwards.",
+        "A livestream page reconnects by itself when the stream drops, and says so, instead of freezing.",
+        "Forms, dialogs and the collection settings now always open with the right values, never the last item's.",
+      ],
+      Security: [
+        "A team member can only give others the permissions they hold themselves.",
+        "Public forms, the welcome link and sign-up are protected against floods of automated submissions, and a church's member limit applies to them.",
+        "Streaming keys are only shown to people who can manage meetings, and the shared demo account can no longer be changed by visitors.",
+        "Uploads that never finish can no longer use up a church's storage or the server's disk.",
+      ],
+      Changed: [
+        "Recordings are made only on our servers now. Press Record and the recording service captures the meeting directly — nothing is uploaded from your device afterwards, so closing the tab, a phone going to sleep or a weak connection can no longer cost you a recording. If the recording service is ever unavailable, you are told at once when you press Record, rather than finding out after the service.",
+        "A recording made on an older version and still waiting on your device is still offered back after a meeting, and uploads itself as before.",
+      ],
+    },
+  },
+  {
     version: "0.78.0",
     date: "2026-10-14",
     summary:

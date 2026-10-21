@@ -28,7 +28,7 @@ import {
   type FormFieldType,
   type FormStatus,
 } from "@/lib/forms-shared";
-import { slugify } from "@/lib/slug";
+import { slugify, slugifyTyping } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -119,7 +119,7 @@ export function FormBuilder({
         id: f.id,
         title: f.title,
         description: f.description,
-        slug: f.slug,
+        slug: slugify(f.slug),
         status: f.status,
         fields: f.fields,
         confirmationMessage: f.confirmationMessage,
@@ -200,7 +200,10 @@ export function FormBuilder({
               <span className="text-muted-foreground text-sm">{baseUrl}/f/</span>
               <Input
                 value={f.slug}
-                onChange={(e) => set({ slug: slugify(e.target.value) })}
+                // Tidied as it is typed without eating a hyphen just typed;
+                // finished off when the field is left.
+                onChange={(e) => set({ slug: slugifyTyping(e.target.value) })}
+                onBlur={() => set({ slug: slugify(f.slug) })}
                 className="w-48"
                 placeholder={t("forms.myForm")}
               />

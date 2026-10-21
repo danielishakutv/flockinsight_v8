@@ -419,6 +419,22 @@ export function churchHasFeature(
   return planIncludes(plan, feature) && pilotAllows(feature, churchSlug, pilots);
 }
 
+/**
+ * The same question for a church read BY ID, on a path with no signed-in
+ * church for `hasFeature` to read — a public link that writes into a church's
+ * records answers to that church's plan, not the visitor's.
+ *
+ * The demonstration church shows everything, exactly as `activePlan` treats
+ * it, so its public pages work the way its signed-in pages do.
+ */
+export function churchRowHasFeature(
+  row: { plan: string | null; slug: string | null; isDemo: boolean | null },
+  feature: FeatureKey,
+  pilots: PilotMap = PILOT_ONLY,
+): boolean {
+  return churchHasFeature(row.isDemo ? "enterprise" : row.plan, row.slug, feature, pilots);
+}
+
 /** The lowest plan that includes a feature. */
 export function minPlanFor(feature: FeatureKey): PlanId {
   return FEATURES[feature].plan;

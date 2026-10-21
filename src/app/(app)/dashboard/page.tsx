@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { InstallNotice } from "@/components/pwa/install-notice";
-import { asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import {
   CalendarDays,
@@ -147,7 +147,15 @@ export default async function DashboardPage() {
         total: attendanceSession.totalCount,
       })
       .from(attendanceSession)
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+      // Scoped to the session's church: a service id is global, so an id from
+      // elsewhere must never print another church's service name here.
+      .leftJoin(
+        service,
+        and(
+          eq(service.id, attendanceSession.serviceId),
+          eq(service.churchId, attendanceSession.churchId),
+        ),
+      )
       .where(eq(attendanceSession.churchId, church.id))
       .orderBy(desc(attendanceSession.date), desc(attendanceSession.createdAt))
       .limit(5),

@@ -20,6 +20,7 @@ import {
   startSmsTopup,
 } from "@/app/(app)/settings/sms/actions";
 import { formatMoney } from "@/lib/money";
+import { topupAmountProblem } from "@/lib/paystack-outcome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,11 +82,29 @@ export function SmsSettings({
   const [paying, setPaying] = useState(false);
   const toasted = useRef(false);
 
+  // Back from Paystack into a page restored from the bfcache: let the dialog
+  // close and the button work again. The same as the wallet top-up.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPaying(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   useEffect(() => {
     if (toasted.current || !payStatus) return;
     toasted.current = true;
     if (payStatus === "success") toast.success(t("settings.walletToppedUp"));
     else if (payStatus === "failed") toast.error(t("settings.paymentFailedOrCancelled"));
+    // Not a failure: a transfer still in flight, or Paystack slow to answer.
+    // The webhook credits it. Showing nothing here, with the old balance on
+    // screen, reads as "it failed" and is how people come to pay twice.
+    else if (payStatus === "pending")
+      toast.info(
+        "Your top-up is being confirmed. Your wallet is credited by itself as soon as Paystack confirms it — there is no need to pay again.",
+        { duration: 10_000 },
+      );
     else if (payStatus === "error") toast.error(t("settings.somethingWentWrong"));
     router.replace("/settings/sms");
   }, [payStatus, router, t]);
@@ -94,13 +113,34 @@ export function SmsSettings({
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 100)
       return toast.error(t("settings.minimumTopUpIs100"));
+    // Refused here because a kobo amount is charged by Paystack and then
+    // never credited (see topupAmountProblem).
+    const problem = topupAmountProblem(amt);
+    if (problem) return toast.error(problem);
     setPaying(true);
-    const res = await startSmsTopup(amt);
+    let res: Awaited<ReturnType<typeof startSmsTopup>>;
+    try {
+      res = await startSmsTopup(amt);
+    } catch (e) {
+      // A lost signal, or a tab older than the last deploy. The dialog cannot
+      // be closed while `paying` is set, so leaving it set here would trap the
+      // person behind a spinner with no way out but a reload.
+      console.error("sms top-up: could not start checkout", e);
+      setPaying(false);
+      toast.error(
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "You appear to be offline. Check your connection and try again. Nothing was charged."
+          : "We couldn't reach FlockInsight. Reload the page (the app may have just been updated) and try again. Nothing was charged.",
+      );
+      return;
+    }
     if (!res.ok) {
       toast.error(res.error);
       setPaying(false);
       return;
     }
+    // `paying` stays set while the browser leaves for Paystack, so a second
+    // tap cannot open a second checkout.
     window.location.href = res.url; // to Paystack
   }
 

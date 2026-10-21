@@ -131,6 +131,9 @@ export async function adminSetBilling(input: {
     reference: `ADMIN-${churchId.slice(0, 8)}-${Date.now()}`,
     status: "success",
     periodMonths: months || 1,
+    // With 0 months this row only changed the plan, so a void must not wind
+    // the renewal back a month that the church's real payment bought.
+    extendsPlan: months > 0,
     note:
       (input.note && input.note.slice(0, 200)) ||
       `Admin set ${plan}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,

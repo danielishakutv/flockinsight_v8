@@ -178,6 +178,13 @@ export async function POST(
    */
   if (!peer.admitted) return fail("You're still waiting to be let in.", 403);
 
+  /*
+   * Nor anybody who has left. A session that left — or that the same person
+   * opening the meeting again replaced — is out of every roster, so it could
+   * otherwise go on listening to the whole room with nobody able to see it.
+   */
+  if (peer.leftAt) return fail("You've left this meeting.", 401, { code: "replaced" });
+
   if (action === "event") return logClientEvent(peer.id, peer.peerId, m.code, body ?? {});
 
   /*

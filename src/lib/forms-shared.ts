@@ -1,6 +1,8 @@
 // Pure form helpers + types — safe to import from client OR server.
 // (No DB/session here; server logic lives in the form actions.)
 
+import { isValidEmail } from "@/lib/email-address";
+
 export type FormFieldType =
   | "short_text"
   | "long_text"
@@ -100,8 +102,6 @@ export function blankField(type: FormFieldType = "short_text"): FormField {
   };
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /**
  * Validate a set of submitted values against the form's fields.
  * Returns a map of fieldId -> error message (empty = valid). Used on both the
@@ -124,8 +124,10 @@ export function validateSubmission(
       continue;
     }
     if (empty) continue;
-    if (f.type === "email" && typeof v === "string" && !EMAIL_RE.test(v.trim()))
-      errors[f.id] = "Enter a valid email address.";
+    // The mailer's rule: "name@gmail.com1" passed the old regex, became a
+    // member's address, and every email to it was refused at send time.
+    if (f.type === "email" && typeof v === "string" && !isValidEmail(v))
+      errors[f.id] = "Enter a valid email address — check it for a typo.";
     if (f.type === "number" && typeof v === "string" && v !== "" && isNaN(Number(v)))
       errors[f.id] = "Enter a number.";
     if (f.type === "scale") {

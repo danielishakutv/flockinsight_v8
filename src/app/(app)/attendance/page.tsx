@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, ClipboardList, Plus } from "lucide-react";
 import { db } from "@/db";
@@ -36,7 +36,15 @@ export default async function AttendancePage() {
       newConverts: attendanceSession.newConvertCount,
     })
     .from(attendanceSession)
-    .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+    // Scoped to the session's church: a service id is global, so an id from
+    // elsewhere must never print another church's service name here.
+    .leftJoin(
+      service,
+      and(
+        eq(service.id, attendanceSession.serviceId),
+        eq(service.churchId, attendanceSession.churchId),
+      ),
+    )
     .where(eq(attendanceSession.churchId, church.id))
     .orderBy(desc(attendanceSession.date), desc(attendanceSession.createdAt));
 

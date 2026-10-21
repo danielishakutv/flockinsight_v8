@@ -4,6 +4,7 @@ import { church } from "@/db/schema";
 import { debitWallet } from "@/lib/wallet";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { withCronRun } from "@/lib/cron-run";
 import { pruneExpiredMedia } from "@/lib/media-prune";
 
@@ -39,7 +40,6 @@ export async function GET(request: Request) {
       id: church.id,
       cost: church.storageMonthlyCost,
       renewsAt: church.storageRenewsAt,
-      currency: church.currency,
     })
     .from(church)
     .where(
@@ -81,7 +81,9 @@ export async function GET(request: Request) {
       await notifyChurchManagers({
         churchId: c.id,
         title: "Storage add-on paused",
-        body: `We couldn't renew your storage add-on (${formatMoney(c.cost, c.currency)}/mo) — your wallet was too low. Your files are safe, but you'll need to top up and re-subscribe to keep uploading beyond 200MB.`,
+        // The add-on is charged from the naira wallet, whatever the church's
+        // own currency is (see wallet-currency.ts).
+        body: `We couldn't renew your storage add-on (${formatMoney(c.cost, WALLET_CURRENCY)}/mo) — your wallet was too low. Your files are safe, but you'll need to top up and re-subscribe to keep uploading beyond 200MB.`,
         linkUrl: "/settings/storage",
       });
     }

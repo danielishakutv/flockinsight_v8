@@ -15,7 +15,6 @@ import {
   reLoginEmail,
   weekendRecordEmail,
 } from "@/lib/reminder-emails";
-import { runFirstTimers } from "@/lib/first-timers";
 import { pruneCronRuns, withCronRun } from "@/lib/cron-run";
 import { getChurchHealth } from "@/lib/platform-health";
 import { shouldRemind, type ReminderKind } from "@/lib/reminder-rules";
@@ -184,21 +183,12 @@ export async function GET(request: Request) {
   }
 
   /*
-   * A safety net, NOT the schedule.
-   *
-   * This comment used to say the first-timer sequence ran here "without
-   * needing a separate crontab entry", which is how nobody noticed that its
-   * timing mattered. It needs an HOURLY run of its own to honour each church's
-   * local send time — see /api/cron/first-timers. The call stays because it is
-   * idempotent and costs nothing when there is nothing due, so it catches the
-   * case where the hourly job is missing.
+   * The first-timer sequence is NOT run here any more. It used to be, as a
+   * "safety net" behind its own hourly job (/api/cron/first-timers). But both
+   * fire at 07:00 UTC under different scheduler locks, so the two sweeps ran
+   * side by side every morning and could send the same welcome twice. The
+   * hourly job is in CRON_JOBS, and the health page says so if it stops.
    */
-  let firstTimers: Awaited<ReturnType<typeof runFirstTimers>> | null = null;
-  try {
-    firstTimers = await runFirstTimers();
-  } catch (e) {
-    console.error("[cron/reminders] first-timers failed", e);
-  }
 
   // Housekeeping: clear out expired one-time codes + old analytics events.
   try {
@@ -269,7 +259,6 @@ export async function GET(request: Request) {
       byKind,
       skippedNotStarted,
       activation,
-      firstTimers,
       senderIds,
       pledges,
       contributions,

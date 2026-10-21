@@ -176,6 +176,15 @@ export const ALL_PERMISSIONS: PermissionKey[] = PERMISSION_CATALOG.flatMap((m) =
   m.perms.map((p) => p.key),
 );
 
+/** "Finance (Manage)": a permission key named the way the roles page names it. */
+export function permissionLabel(key: PermissionKey): string {
+  for (const m of PERMISSION_CATALOG) {
+    const p = m.perms.find((x) => x.key === key);
+    if (p) return `${m.label} (${p.label})`;
+  }
+  return key;
+}
+
 /** Sensible starting permissions for the seeded "Member" role. */
 export const MEMBER_DEFAULT_PERMISSIONS: PermissionKey[] = [
   "attendance.view",

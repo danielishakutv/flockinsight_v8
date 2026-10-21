@@ -820,7 +820,21 @@ export class MeetingClient {
         });
 
         if (res.status === 401) {
-          this.shutdown("You were signed out of this meeting.");
+          /*
+           * "Replaced" is this same person opening the meeting again in
+           * another tab or on another device, which the server has to say,
+           * or it reads as being thrown out. Both sentences keep "signed out":
+           * that is what offers the Rejoin button.
+           */
+          const why = (await res.json().catch((e: unknown) => {
+            console.warn("[meeting] a refused poll carried no reason", e);
+            return {};
+          })) as { code?: string };
+          this.shutdown(
+            why.code === "replaced"
+              ? "You were signed out of this meeting because it was opened again in another tab or on another device."
+              : "You were signed out of this meeting.",
+          );
           return;
         }
         if (!res.ok) throw new Error(`sync ${res.status}`);

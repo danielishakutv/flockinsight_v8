@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_OPEN_UPLOADS,
   defaultUploadCategory,
+  partialUploadVerdict,
   recordingUploadVerdict,
   sermonNeedsLibraryPlan,
   type RecordingFacts,
@@ -90,5 +92,46 @@ describe("the sermon library is gated on every upload route alike", () => {
   it("opens the picker on Document below Pro, so the first photo goes through", () => {
     expect(defaultUploadCategory(false)).toBe("file");
     expect(defaultUploadCategory(true)).toBe("sermon");
+  });
+});
+
+describe("partial uploads are bounded per church, not per upload id", () => {
+  const MB = 1024 * 1024;
+  const base = {
+    used: 50 * MB,
+    limit: 200 * MB,
+    otherPartialBytes: 0,
+    endsAt: 8 * MB,
+    isNew: false,
+    openUploads: 0,
+  };
+
+  it("lets an ordinary upload carry on", () => {
+    expect(partialUploadVerdict(base)).toEqual({ ok: true });
+  });
+
+  it("counts the church's other half-sent uploads against its storage", () => {
+    // Each fresh id used to get the whole quota to itself.
+    expect(
+      partialUploadVerdict({ ...base, otherPartialBytes: 145 * MB, endsAt: 8 * MB }),
+    ).toEqual({ ok: false, reason: "full" });
+    expect(
+      partialUploadVerdict({ ...base, otherPartialBytes: 140 * MB, endsAt: 8 * MB }),
+    ).toEqual({ ok: true });
+  });
+
+  it("holds a new upload back while too many are already open", () => {
+    expect(
+      partialUploadVerdict({ ...base, isNew: true, openUploads: MAX_OPEN_UPLOADS }),
+    ).toEqual({ ok: false, reason: "busy" });
+    expect(
+      partialUploadVerdict({ ...base, isNew: true, openUploads: MAX_OPEN_UPLOADS - 1 }),
+    ).toEqual({ ok: true });
+  });
+
+  it("never stops an upload already under way for being one of many", () => {
+    expect(
+      partialUploadVerdict({ ...base, isNew: false, openUploads: MAX_OPEN_UPLOADS + 3 }),
+    ).toEqual({ ok: true });
   });
 });

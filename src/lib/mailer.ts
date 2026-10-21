@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { randomUUID } from "node:crypto";
 import { sendViaZepto, zeptoConfigured } from "@/lib/zeptomail";
 import { normalizeEmail } from "@/lib/email-address";
+import { escapeHtml } from "@/lib/html-escape";
 import {
   SendPacer,
   isRetryableNetworkError,
@@ -411,4 +412,20 @@ export function emailLayout(title: string, body: string, cta?: { label: string; 
     }
     <p style="font-size:12px;color:#8a86a0;margin-top:24px">If you didn't request this, you can ignore this email.</p>
   </div>`;
+}
+
+/**
+ * emailLayout for a message that is plain text: a church's template with a
+ * member's name filled in.
+ *
+ * emailLayout drops `title` and `body` in as raw HTML. The automatic senders
+ * (birthdays, service reminders, first-timers, pledges) handed it the filled
+ * template as it was, so a first name typed into the public welcome form as
+ * `<a href="…">Confirm your visit</a>` arrived as a live link in an email from
+ * the church's name. Here everything is escaped and only the line breaks are
+ * turned into markup. The templates are plain-text boxes, so nothing a church
+ * wrote is lost.
+ */
+export function plainTextEmailLayout(title: string, text: string): string {
+  return emailLayout(escapeHtml(title), escapeHtml(text).replace(/\n/g, "<br>"));
 }

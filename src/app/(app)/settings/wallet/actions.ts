@@ -5,10 +5,10 @@ import { walletTopup } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
+import { topupAmountProblem } from "@/lib/paystack-outcome";
 import { audit } from "@/lib/audit";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
-const MIN_TOPUP = 100;
 
 export type TopupResult =
   | { ok: true; url: string }
@@ -19,10 +19,10 @@ export async function startWalletTopup(amount: number): Promise<TopupResult> {
   const { church: c, user } = await requireChurch();
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to do that." };
-  if (!Number.isFinite(amount) || amount < MIN_TOPUP)
-    return { ok: false, error: `Minimum top-up is ₦${MIN_TOPUP}.` };
-  if (amount > 10_000_000)
-    return { ok: false, error: "That amount is too large." };
+  // Whole naira, so the figure Paystack charges and the figure the row keeps
+  // are the same number (see topupAmountProblem).
+  const problem = topupAmountProblem(amount);
+  if (problem) return { ok: false, error: problem };
   if (!isPaystackConfigured())
     return { ok: false, error: "Online payment isn't set up yet. Contact us." };
 

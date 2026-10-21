@@ -1,5 +1,6 @@
 import { unescapeCsvCell } from "@/lib/csv";
 import { normalizeBirthday } from "@/lib/birthday";
+import { normalizeEmail } from "@/lib/email-address";
 import { e164Phone, nationalNumber } from "@/lib/phone-intl";
 import {
   headerToField,
@@ -86,7 +87,13 @@ export type ImportPlan = {
 /** Error lines kept for the reply. Enough to act on, not a 5,000-line wall. */
 export const MAX_IMPORT_ERRORS = 25;
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * The loose shape the import used to accept as an address. A duplicate key
+ * only, never what is stored: it lets a member saved under it before the
+ * mailer's rule be recognised in their own exported row, without taking
+ * "nil", "N/A" or "-" in an empty email column for anybody's address.
+ */
+const ADDRESS_SHAPED = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function clip(v: string | undefined, max: number): string | null {
   const s = (v ?? "").trim();
@@ -154,7 +161,18 @@ export function planMemberImport(
   const note = (msg: string) => {
     if (errors.length < MAX_IMPORT_ERRORS) errors.push(msg);
   };
+  /*
+   * The register's addresses as stored AND as normalizeEmail reads them. A
+   * row's address is normalised before it is compared, so without the second
+   * form a member stored as "ada@example.com." would no longer match the
+   * "ada@example.com" their own exported row now becomes, and re-importing
+   * the export would add them twice.
+   */
   const seenEmails = new Set(opts.existingEmails);
+  for (const stored of opts.existingEmails) {
+    const normal = normalizeEmail(stored);
+    if (normal) seenEmails.add(normal);
+  }
   // A copy, so planning never changes the caller's map.
   const seenPhones: PhoneOwners = new Map(
     [...opts.existingPhones].map(([k, v]) => [k, new Set(v)]),
@@ -181,13 +199,27 @@ export function planMemberImport(
     }
 
     const emailRaw = get("email").trim();
-    const email = emailRaw && EMAIL_RE.test(emailRaw) ? emailRaw : null;
+    // The mailer's rule, so nothing is imported that every email would then
+    // be refused at. Lower-cased by normalizeEmail, so it is its own key.
+    const email = emailRaw ? normalizeEmail(emailRaw) : null;
+    /*
+     * The cell as written still counts for duplicates, when it is shaped like
+     * an address. A member already stored with an address the mailer refuses
+     * exports it as it is; matched only on the normalised form, that row
+     * would come back in as a second person. Without the shape test, "nil" in
+     * the email column made every later row saying "nil" a duplicate of the
+     * first, and they were skipped.
+     */
+    const emailAsWritten =
+      emailRaw && ADDRESS_SHAPED.test(emailRaw) ? emailRaw.toLowerCase() : null;
     const phoneRaw = get("phone").trim();
     const phoneKey = phoneRaw ? nationalNumber(phoneRaw, opts.dial) : null;
-    const emailKey = email ? email.toLowerCase() : null;
+    const emailKey = email;
     const phoneNames = phoneKey ? seenPhones.get(phoneKey) : undefined;
 
-    const sameEmail = !!emailKey && seenEmails.has(emailKey);
+    const sameEmail =
+      (!!emailKey && seenEmails.has(emailKey)) ||
+      (!!emailAsWritten && seenEmails.has(emailAsWritten));
     const samePhoneAndName = !!phoneNames && phoneNames.has(firstNameKey(firstName));
     if (sameEmail || samePhoneAndName) {
       skipped++;
@@ -226,6 +258,7 @@ export function planMemberImport(
     }
 
     if (emailKey) seenEmails.add(emailKey);
+    if (emailAsWritten) seenEmails.add(emailAsWritten);
     if (phoneKey) addPhoneOwner(seenPhones, phoneKey, firstName);
     if (who) seenPeople.add(who);
 
@@ -236,6 +269,10 @@ export function planMemberImport(
      */
     if (dobRaw && !dateOfBirth)
       note(`Row ${rowNo}: date of birth "${dobRaw}" is not a date we can read — left blank`);
+    // Named for the same reason: dropping it without a word left a member
+    // nobody could email and no row number to go and correct.
+    if (emailRaw && !email)
+      note(`Row ${rowNo}: email "${emailRaw.slice(0, 80)}" is not an address we can send to — left blank`);
     const joinedRaw = get("joinedAt").trim();
     const joinedAt = joinedRaw ? normalizeDate(joinedRaw) : null;
     if (joinedRaw && !joinedAt)

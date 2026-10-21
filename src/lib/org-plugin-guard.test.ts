@@ -6,7 +6,9 @@ import {
   TEAM_PATHS,
   UNLIMITED_PLAN_INVITATION_CAP,
   invitationCapFor,
+  invitesAboveMember,
   orgEndpointPolicy,
+  requestedOrgRoles,
 } from "./org-plugin-guard";
 import {
   GENERIC_INVITATION_ERROR,
@@ -54,6 +56,36 @@ describe("orgEndpointPolicy", () => {
   });
 });
 
+/*
+ * A plain "admin" invitation is the legacy full-access fallback once accepted,
+ * so the guard has to recognise one however the plugin lets it be spelled.
+ */
+describe("requestedOrgRoles", () => {
+  it("reads a string, an array and a comma-separated list", () => {
+    expect(requestedOrgRoles("member")).toEqual(["member"]);
+    expect(requestedOrgRoles(["member", "admin"])).toEqual(["member", "admin"]);
+    expect(requestedOrgRoles("member, admin")).toEqual(["member", "admin"]);
+  });
+
+  it("finds admin hidden in any of those shapes", () => {
+    expect(invitesAboveMember("admin")).toBe(true);
+    expect(invitesAboveMember(["admin"])).toBe(true);
+    expect(invitesAboveMember("member,admin")).toBe(true);
+    expect(invitesAboveMember("owner")).toBe(true);
+  });
+
+  it("lets a plain member invitation through", () => {
+    expect(invitesAboveMember("member")).toBe(false);
+    expect(invitesAboveMember(["member"])).toBe(false);
+    expect(invitesAboveMember(undefined)).toBe(false);
+  });
+
+  it("never waves through a shape it does not understand", () => {
+    expect(invitesAboveMember({ role: "admin" })).toBe(true);
+    expect(invitesAboveMember([42])).toBe(true);
+  });
+});
+
 describe("invitationCapFor", () => {
   it("is never below the plugin's old 100", () => {
     expect(invitationCapFor("starter")).toBeGreaterThanOrEqual(100);
@@ -73,6 +105,18 @@ describe("invitation error messages", () => {
     const msg = invitationErrorMessage(apiError("INVITATION_LIMIT_REACHED"));
     expect(msg).toMatch(/waiting to be accepted/);
     expect(msg).not.toBe(GENERIC_INVITATION_ERROR);
+  });
+
+  it("explains the refusals the Team page's plain invite can now meet", () => {
+    for (const code of [
+      "USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION",
+      "YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE",
+    ]) {
+      expect(invitationErrorMessage(apiError(code))).not.toBe(GENERIC_INVITATION_ERROR);
+    }
+    expect(
+      invitationErrorMessage(apiError("FI_ROLE_NOT_ALLOWED", "Only someone who holds every permission.")),
+    ).toBe("Only someone who holds every permission.");
   });
 
   it("passes our own FI_ refusals through as written", () => {

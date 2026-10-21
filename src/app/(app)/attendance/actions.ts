@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceSession } from "@/db/schema";
+import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
@@ -64,6 +64,29 @@ export async function recordAttendance(
 
   if (!d.serviceId && !d.title) {
     return { ok: false, error: "Pick a service or name the event." };
+  }
+
+  /*
+   * The service must be one of THIS church's. `service_id` references
+   * `service.id` globally, so an id from elsewhere would be stored as given
+   * and the session would print another church's service name on this
+   * church's pages and exports. The realistic way in is not an attack: a form
+   * opened for one church and submitted after switching to another in a
+   * second tab.
+   */
+  if (d.serviceId) {
+    const [own] = await db
+      .select({ id: service.id })
+      .from(service)
+      .where(and(eq(service.id, d.serviceId), eq(service.churchId, church.id)))
+      .limit(1);
+    if (!own) {
+      return {
+        ok: false,
+        error:
+          "That service isn't one of this church's. Reload the page and pick it again — if you switched church in another tab, this form was still showing the other church's services.",
+      };
+    }
   }
 
   // A gender split always wins over the accompanying total; the total only

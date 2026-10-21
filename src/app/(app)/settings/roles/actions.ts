@@ -13,9 +13,12 @@ import {
   orgRoleAfterClearingRole,
 } from "@/lib/staff-access";
 import { deleteChurchRole, syncRoleHolders } from "@/lib/role-sync";
+import { beyondYourOwnMessage, permissionsBeyond } from "@/lib/staff-permissions";
 import { audit } from "@/lib/audit";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+/** `note`: what was left out, when only part of the request could be done. */
+export type GrantResult = { ok: true; note?: string } | { ok: false; error: string };
 
 const PERM_SET = new Set(ALL_PERMISSIONS);
 
@@ -30,12 +33,18 @@ const roleSchema = z.object({
     .transform((arr) => [...new Set(arr)].filter((p) => PERM_SET.has(p))),
 });
 
+/**
+ * The caller's own access comes back with the verdict, because "Manage team"
+ * is only half the question: nobody may give away a permission they do not
+ * hold themselves (permissionsBeyond, lib/staff-permissions.ts).
+ */
 async function guard() {
   const ctx = await requireChurch();
+  const access = await getAccess();
   if (!(await can("team.manage"))) {
-    return { ctx, error: "You don't have permission to manage roles." as const };
+    return { ctx, access, error: "You don't have permission to manage roles." as const };
   }
-  return { ctx, error: null };
+  return { ctx, access, error: null };
 }
 
 const SELF_LOCKOUT =
@@ -76,8 +85,11 @@ export async function createRole(input: {
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
-  const { ctx, error } = await guard();
+  const { ctx, access, error } = await guard();
   if (error) return { ok: false, error };
+
+  const beyond = permissionsBeyond(access, parsed.data.permissions);
+  if (beyond.length > 0) return { ok: false, error: beyondYourOwnMessage(beyond) };
 
   let created: { id: string } | undefined;
   try {
@@ -121,7 +133,7 @@ export async function updateRole(input: {
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
-  const { ctx, error } = await guard();
+  const { ctx, access, error } = await guard();
   if (error) return { ok: false, error };
 
   const [existing] = await db
@@ -136,6 +148,15 @@ export async function updateRole(input: {
   if (!existing) return { ok: false, error: "Role not found." };
   if (existing.isSystem)
     return { ok: false, error: "The Owner role can't be changed." };
+
+  // Only what this save ADDS has to be within the caller's own reach. A role
+  // may already hold things they lack; keeping or removing those is fine.
+  const had = new Set(existing.permissions ?? []);
+  const beyond = permissionsBeyond(
+    access,
+    parsed.data.permissions.filter((p) => !had.has(p)),
+  );
+  if (beyond.length > 0) return { ok: false, error: beyondYourOwnMessage(beyond) };
 
   const me = await callerSeat(ctx.church.id, ctx.user.id);
   if (
@@ -273,7 +294,7 @@ export async function assignRole(
   staffId: string,
   roleId: string | null,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard();
+  const { ctx, access, error } = await guard();
   if (error) return { ok: false, error };
 
   const [member] = await db
@@ -308,6 +329,11 @@ export async function assignRole(
       return { ok: false, error: "The Owner role can't be assigned." };
     permissions = r.permissions ?? [];
     roleName = r.name;
+    // Putting somebody on a role gives them all of it, so all of it has to be
+    // within the caller's reach. Otherwise any role an owner wrote could be
+    // handed to anyone, the caller's second account included.
+    const beyond = permissionsBeyond(access, permissions);
+    if (beyond.length > 0) return { ok: false, error: beyondYourOwnMessage(beyond) };
   }
 
   // Now that this also writes staff.role, someone could demote themselves out
@@ -383,11 +409,11 @@ export async function assignRole(
  * access silently would be wrong, so this is a deliberate, one-click action an
  * admin takes after reading what is new.
  */
-export async function grantNewPermissions(id: string): Promise<ActionResult> {
+export async function grantNewPermissions(id: string): Promise<GrantResult> {
   if (!z.string().uuid().safeParse(id).success)
     return { ok: false, error: "Invalid id" };
 
-  const { ctx, error } = await guard();
+  const { ctx, access, error } = await guard();
   if (error) return { ok: false, error };
 
   const [existing] = await db
@@ -403,10 +429,22 @@ export async function grantNewPermissions(id: string): Promise<ActionResult> {
   if (existing.isSystem)
     return { ok: false, error: "The Owner role already has everything." };
 
-  const missing = ALL_PERMISSIONS.filter(
+  const absent = ALL_PERMISSIONS.filter(
     (p) => !existing.permissions.includes(p),
   );
-  if (missing.length === 0) return { ok: true };
+  if (absent.length === 0) return { ok: true };
+
+  /*
+   * Only the ones the caller holds themselves. This button used to add every
+   * missing permission to any role, the caller's own included, which made it
+   * a one-click way to everything for anyone with "Manage team". The rest are
+   * named back to them, and stay for the owner to grant.
+   */
+  const outOfReach = permissionsBeyond(access, absent);
+  const missing = absent.filter((p) => !outOfReach.includes(p));
+  if (missing.length === 0)
+    return { ok: false, error: beyondYourOwnMessage(outOfReach) };
+  const note = outOfReach.length > 0 ? beyondYourOwnMessage(outOfReach) : undefined;
 
   // Widening may add "Manage team", which the holders' org role must carry
   // too or the plugin refuses the invites the Team page now offers them.
@@ -426,11 +464,11 @@ export async function grantNewPermissions(id: string): Promise<ActionResult> {
     targetType: "role",
     targetId: id,
     targetLabel: existing.name,
-    meta: { added: missing },
+    meta: { added: missing, leftForOwner: outOfReach },
     severity: "critical",
   });
 
   revalidatePath("/settings/roles");
   revalidatePath("/settings/team");
-  return { ok: true };
+  return { ok: true, note };
 }

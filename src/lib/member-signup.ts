@@ -14,6 +14,7 @@ import {
 import { normalizePhone, smsPages } from "@/lib/sms";
 import { isStorableDate, normalizeBirthday } from "@/lib/birthday";
 import { e164Phone, nationalNumber } from "@/lib/phone-intl";
+import { normalizeEmail } from "@/lib/email-address";
 import { countryProfile } from "@/lib/country-profile";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { siteUrl } from "@/lib/site";
@@ -202,8 +203,6 @@ export type CleanSignup = {
   children: CleanChild[];
 };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /**
  * The dial code a church's members write their numbers in.
  *
@@ -241,9 +240,15 @@ export function cleanSignupValues(
   const firstName = (raw.firstName || "").trim();
   if (!firstName) return { ok: false, error: "Please enter your first name." };
 
-  const email = (raw.email || "").trim();
-  if (email && !EMAIL_RE.test(email))
-    return { ok: false, error: "Please enter a valid email address." };
+  /*
+   * The mailer's rule, so what is stored is what can be sent to. The old
+   * regex took "name@gmail.com1"; every confirmation and broadcast to it was
+   * then refused at send time, and the member was never told.
+   */
+  const emailRaw = (raw.email || "").trim();
+  const email = emailRaw ? normalizeEmail(emailRaw) : null;
+  if (emailRaw && !email)
+    return { ok: false, error: "Please enter a valid email address — check it for a typo." };
   const phone = (raw.phone || "").trim();
   // E.164 against the church's own country, held to that country's length.
   const phoneNorm = phone ? e164Phone(phone, dial) : null;
@@ -311,8 +316,9 @@ export function cleanSignupValues(
       lastName: (raw.lastName || "").trim().slice(0, 80) || null,
       gender,
       phone: phone || null,
-      email: email || null,
-      emailNorm: email ? email.toLowerCase() : null,
+      email,
+      // Already lower-cased by normalizeEmail.
+      emailNorm: email,
       phoneNorm,
       dateOfBirth: signup.collectBirthday ? dob : null,
       weddingDate: signup.collectAnniversary && wedding ? wedding : null,

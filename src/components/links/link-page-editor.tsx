@@ -37,6 +37,7 @@ import {
   linkPageUrlForPrint,
   normalisePageSlug,
   pageSlugProblem,
+  tidyTypedPageSlug,
 } from "@/lib/link-page-shared";
 import { getTheme } from "@/lib/church-themes";
 import { cn } from "@/lib/utils";
@@ -293,16 +294,20 @@ export function LinkPageEditor({
                 id="lp-slug"
                 value={slug}
                 disabled={!canManage}
-                onChange={(e) => setSlug(normalisePageSlug(e.target.value))}
+                // A hyphen just typed is kept until the field is left, so
+                // "sunday-service" can be typed in order.
+                onChange={(e) => setSlug(tidyTypedPageSlug(e.target.value))}
                 onBlur={() => {
-                  if (slug === page.slug) return;
-                  const problem = pageSlugProblem(slug);
+                  const next = normalisePageSlug(slug);
+                  setSlug(next);
+                  if (next === page.slug) return;
+                  const problem = pageSlugProblem(next);
                   if (problem) {
                     toast.error(problem);
                     setSlug(page.slug);
                     return;
                   }
-                  save({ id: page.id, slug });
+                  save({ id: page.id, slug: next });
                 }}
                 className="font-mono"
               />

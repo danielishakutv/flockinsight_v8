@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
+import { hasFeature } from "@/lib/entitlements-server";
 import {
   ensureFirstTimerSignup,
   listFirstTimers,
@@ -35,7 +36,7 @@ export default async function FirstTimersPage() {
   await requireCan("followup.view");
   const canManage = await can("followup.manage");
 
-  const [people, memberOptions, signup] = await Promise.all([
+  const [people, memberOptions, signup, followUpOn] = await Promise.all([
     listFirstTimers(church.id),
     // The register, for "who invited them". Active members only: the person
     // who brought a visitor is nearly always a settled member, and offering
@@ -57,6 +58,9 @@ export default async function FirstTimersPage() {
           handle: church.handle ?? null,
         })
       : null,
+    // The public page refuses the link off-plan (see getWelcomeBySlug), so the
+    // card has to say so rather than call it live.
+    hasFeature("followUp"),
   ]);
 
   const rows: FirstTimerRow[] = people.map((p) => ({
@@ -96,6 +100,7 @@ export default async function FirstTimersPage() {
             url={welcomeUrl(signup.slug)}
             enabled={signup.enabled}
             churchName={church.name}
+            paused={!followUpOn}
           />
         )}
       </div>

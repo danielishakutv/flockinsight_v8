@@ -10,6 +10,7 @@ import {
   type FormField,
 } from "@/lib/forms-shared";
 import { churchForUser, getSurveyBySlug, hasAnswered } from "@/lib/surveys";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export type SubmitResult =
   | { ok: true }
@@ -29,6 +30,16 @@ export async function submitSurvey(
 ): Promise<SubmitResult> {
   // Quietly accept and discard: a bot told it failed simply tries again.
   if (honeypot.trim() !== "") return { ok: true };
+
+  /*
+   * Ten an hour per address per survey. An anonymous answer has no church to
+   * dedupe on, so without this one script could bury the results the platform
+   * makes product decisions from. Ten still leaves room for a church office on
+   * one wifi where several people answer.
+   */
+  if (!rateLimit(`survey:${await clientIp()}:${String(slug).slice(0, 80)}`, 10, 60 * 60_000).ok) {
+    return { ok: false, error: "Too many answers from this connection. Try again later." };
+  }
 
   const survey = await getSurveyBySlug(slug);
   if (!survey) return { ok: false, error: "That survey no longer exists." };

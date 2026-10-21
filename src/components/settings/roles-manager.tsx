@@ -65,6 +65,8 @@ export function RolesManager({ roles }: { roles: RoleRow[] }) {
         return;
       }
       toast.success(t("settings.newPermissionsGranted"));
+      // Some were beyond what this person may give, and are still missing.
+      if (res.note) toast.message(res.note);
       router.refresh();
     });
   }

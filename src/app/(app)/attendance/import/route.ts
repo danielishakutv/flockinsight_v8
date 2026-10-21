@@ -1,14 +1,19 @@
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { parseCsv } from "@/lib/csv";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
+import { parseCsv, unescapeCsvCell } from "@/lib/csv";
 import { normalizeDate } from "@/lib/members-data";
 import {
+  ATTENDANCE_BAND_FIELDS,
   headerToAttendanceField,
   normalizeCount,
+  oneOffSessionKey,
+  resolveImportedBands,
+  type AttendanceBandField,
   type AttendanceFieldKey,
 } from "@/lib/attendance-data";
 
@@ -26,6 +31,12 @@ export async function POST(request: Request) {
   const { church, user } = await requireChurch();
   if (!(await can("attendance.manage")))
     return json({ ok: false, error: "You don't have permission to import attendance." }, 403);
+
+  // "CSV import / export" is sold from Growth, exactly as the member import
+  // holds it. Recording attendance by hand is on every plan, so nothing a
+  // Starter church can already do is taken away.
+  const gate = await refuseWithoutFeature("dataExport");
+  if (gate) return json(gate, 403);
 
   let file: File | null = null;
   try {
@@ -77,6 +88,8 @@ export async function POST(request: Request) {
     female: number;
     teenMale: number;
     teenFemale: number;
+    /** Null when the file has no such column — see resolveImportedBands. */
+    bands: Record<AttendanceBandField, number | null>;
     childMale: number;
     childFemale: number;
     children: number;
@@ -86,7 +99,10 @@ export async function POST(request: Request) {
     newConvertMale: number;
     newConvertFemale: number;
     newConverts: number;
-    total: number;
+    /** Adults + teens + children from the file. */
+    base: number;
+    /** The Total column, which stands only when the file has no split. */
+    fileTotal: number;
     notes: string | null;
   };
 
@@ -98,7 +114,9 @@ export async function POST(request: Request) {
     const rowNo = idx + 2;
     const get = (key: AttendanceFieldKey): string => {
       const col = colMap.indexOf(key);
-      return col >= 0 ? (cells[col] ?? "") : "";
+      // Undo the formula guard the export puts on a title or a note, so a
+      // file we wrote comes back exactly as it went out.
+      return col >= 0 ? unescapeCsvCell(cells[col] ?? "") : "";
     };
 
     const date = normalizeDate(get("date"));
@@ -138,9 +156,12 @@ export async function POST(request: Request) {
       newConvertMale + newConvertFemale > 0
         ? newConvertMale + newConvertFemale
         : normalizeCount(get("newConverts"));
-    const breakdown = male + female + teenMale + teenFemale + children;
-    // Prefer the breakdown; fall back to a provided Total when there's none.
-    const total = breakdown > 0 ? breakdown : normalizeCount(get("total"));
+    const bands = Object.fromEntries(
+      ATTENDANCE_BAND_FIELDS.map((k) => [
+        k,
+        colMap.includes(k) ? normalizeCount(get(k)) : null,
+      ]),
+    ) as Record<AttendanceBandField, number | null>;
 
     parsed.push({
       serviceId,
@@ -150,6 +171,7 @@ export async function POST(request: Request) {
       female,
       teenMale,
       teenFemale,
+      bands,
       childMale,
       childFemale,
       children,
@@ -159,15 +181,91 @@ export async function POST(request: Request) {
       newConvertMale,
       newConvertFemale,
       newConverts,
-      total,
+      base: male + female + teenMale + teenFemale + children,
+      fileTotal: normalizeCount(get("total")),
       notes: get("notes").trim().slice(0, 1000) || null,
     });
   });
 
   let imported = 0;
+  let oneOffsUpdated = 0;
   try {
     await db.transaction(async (tx) => {
+      /*
+       * One import per church at a time, so two uploads of the same file
+       * cannot both read "no such event yet" below and both add it. Released
+       * when the transaction ends.
+       */
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`attendance-import:${church.id}`}))`,
+      );
+
+      /*
+       * What is already recorded across the file's dates, read once.
+       *
+       * Two things need it. A service row upserts on (service, date) as it
+       * always has, but a file without youth and senior columns must keep the
+       * figures already stored there (see resolveImportedBands). And a one-off
+       * event has no key to upsert on, so every row without a service used to
+       * be inserted — re-importing an export doubled every one-off, every
+       * meeting-recorded session and every session whose service had gone.
+       */
+      const dates = parsed.map((r) => r.date).sort();
+      const onFile = dates.length
+        ? await tx
+            .select({
+              id: attendanceSession.id,
+              serviceId: attendanceSession.serviceId,
+              title: attendanceSession.title,
+              date: attendanceSession.date,
+              youthMale: attendanceSession.youthMaleCount,
+              youthFemale: attendanceSession.youthFemaleCount,
+              seniorMale: attendanceSession.seniorMaleCount,
+              seniorFemale: attendanceSession.seniorFemaleCount,
+            })
+            .from(attendanceSession)
+            .where(
+              and(
+                eq(attendanceSession.churchId, church.id),
+                gte(attendanceSession.date, dates[0]),
+                lte(attendanceSession.date, dates[dates.length - 1]),
+              ),
+            )
+            .orderBy(asc(attendanceSession.createdAt))
+        : [];
+      type OnFile = (typeof onFile)[number];
+      const ownServices = new Set(services.map((s) => s.id));
+      const byService = new Map<string, OnFile>();
+      // A list per key, consumed as rows match: two events of the same name
+      // on one day are two sessions, and each row claims one of them.
+      const oneOffs = new Map<string, OnFile[]>();
+      for (const s of onFile) {
+        if (s.serviceId && ownServices.has(s.serviceId)) {
+          byService.set(`${s.serviceId}|${s.date}`, s);
+        } else {
+          const k = oneOffSessionKey(s.date, s.title);
+          oneOffs.set(k, [...(oneOffs.get(k) ?? []), s]);
+        }
+      }
+
       for (const r of parsed) {
+        const match = r.serviceId
+          ? byService.get(`${r.serviceId}|${r.date}`)
+          : oneOffs.get(oneOffSessionKey(r.date, r.title))?.shift();
+        const { bands, total } = resolveImportedBands({
+          base: r.base,
+          fileTotal: r.fileTotal,
+          bands: r.bands,
+          stored: match
+            ? {
+                youthMale: match.youthMale,
+                youthFemale: match.youthFemale,
+                seniorMale: match.seniorMale,
+                seniorFemale: match.seniorFemale,
+              }
+            : null,
+        });
+
         const values = {
           churchId: church.id,
           serviceId: r.serviceId,
@@ -177,6 +275,10 @@ export async function POST(request: Request) {
           femaleCount: r.female,
           teenMaleCount: r.teenMale,
           teenFemaleCount: r.teenFemale,
+          youthMaleCount: bands.youthMale,
+          youthFemaleCount: bands.youthFemale,
+          seniorMaleCount: bands.seniorMale,
+          seniorFemaleCount: bands.seniorFemale,
           childMaleCount: r.childMale,
           childFemaleCount: r.childFemale,
           childrenCount: r.children,
@@ -186,7 +288,7 @@ export async function POST(request: Request) {
           newConvertMaleCount: r.newConvertMale,
           newConvertFemaleCount: r.newConvertFemale,
           newConvertCount: r.newConverts,
-          totalCount: r.total,
+          totalCount: total,
           notes: r.notes,
           recordedBy: user.id,
           updatedAt: new Date(),
@@ -204,6 +306,18 @@ export async function POST(request: Request) {
               ],
               set: values,
             });
+        } else if (match) {
+          // The same event on the same day: corrected, not added twice.
+          await tx
+            .update(attendanceSession)
+            .set(values)
+            .where(
+              and(
+                eq(attendanceSession.id, match.id),
+                eq(attendanceSession.churchId, church.id),
+              ),
+            );
+          oneOffsUpdated++;
         } else {
           await tx.insert(attendanceSession).values(values);
         }
@@ -225,6 +339,11 @@ export async function POST(request: Request) {
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+  }
+  if (oneOffsUpdated > 0) {
+    errors.push(
+      `${oneOffsUpdated} one-off event${oneOffsUpdated === 1 ? " was" : "s were"} already recorded under the same name on the same day, so ${oneOffsUpdated === 1 ? "it was" : "they were"} updated rather than added again.`,
+    );
   }
   if (truncated) errors.push(`Only the first ${MAX_ROWS} rows were imported.`);
 

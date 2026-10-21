@@ -53,15 +53,21 @@ export type RunState = {
  */
 export type ClaimDecision = "insert" | "reclaim" | "abandon" | "leave";
 
+/**
+ * The first-timer sequence asks the same question of its own run rows, with
+ * its own attempt budget. It used to reclaim another sweep's fresh "pending"
+ * row, and so sent the same welcome twice.
+ */
 export function claimDecision(
   existing: RunState | undefined,
   now: Date,
   channel: "sms" | "email",
+  maxAttempts: number = CELEBRATION_MAX_ATTEMPTS,
 ): ClaimDecision {
   if (!existing) return "insert";
   // Delivered, or handed to the 8am–8pm queue, which owns it from there.
   if (existing.outcome === "sent" || existing.outcome === "queued") return "leave";
-  if (existing.attempts >= CELEBRATION_MAX_ATTEMPTS) return "leave";
+  if (existing.attempts >= maxAttempts) return "leave";
   const age = now.getTime() - new Date(existing.updatedAt).getTime();
   if (existing.outcome === "pending") {
     if (age < PENDING_STALE_MS) return "leave";
@@ -101,7 +107,14 @@ export function matchSmsOutcomes<J extends { phone: string }>(
     providerMessageId?: string | null;
   }[],
 ): {
-  settled: { job: J; ok: boolean; error: string | null; providerMessageId?: string | null }[];
+  settled: {
+    job: J;
+    ok: boolean;
+    /** As the gateway reported it, so a number never tried reads "skipped". */
+    status: "sent" | "failed" | "skipped";
+    error: string | null;
+    providerMessageId?: string | null;
+  }[];
   unreported: J[];
 } {
   const pending = new Map<string, J[]>();
@@ -109,6 +122,7 @@ export function matchSmsOutcomes<J extends { phone: string }>(
   const settled: {
     job: J;
     ok: boolean;
+    status: "sent" | "failed" | "skipped";
     error: string | null;
     providerMessageId?: string | null;
   }[] = [];
@@ -119,8 +133,8 @@ export function matchSmsOutcomes<J extends { phone: string }>(
       o.status === "sent"
         ? // The gateway's id travels with the verdict, so the history row can
           // be matched by the delivery report that follows.
-          { job, ok: true, error: null, providerMessageId: o.providerMessageId }
-        : { job, ok: false, error: o.error ?? `The number was ${o.status}.` },
+          { job, ok: true, status: o.status, error: null, providerMessageId: o.providerMessageId }
+        : { job, ok: false, status: o.status, error: o.error ?? `The number was ${o.status}.` },
     );
   }
   return { settled, unreported: [...pending.values()].flat() };
@@ -141,14 +155,44 @@ export const SMS_BATCH_REFUSED = "The whole SMS send was refused: ";
  * was, so a church whose sender ID was unapproved was sent to its wallet, and
  * one whose members' numbers were unusable was told to spend money on it.
  */
-export function smsRefusalAdvice(error: string): string {
+export function smsRefusalAdvice(error: string, feature = "celebrations"): string {
   if (/balance|insufficient/i.test(error))
-    return "Top up in Settings → Wallet, or turn SMS off for celebrations.";
+    return `Top up in Settings → Wallet, or turn SMS off for ${feature}.`;
   if (/sender id/i.test(error))
-    return "Your SMS sender ID has to be approved first: see Settings → SMS, or turn SMS off for celebrations.";
+    return `Your SMS sender ID has to be approved first: see Settings → SMS, or turn SMS off for ${feature}.`;
   if (/no valid phone/i.test(error))
     return "None of those members has a phone number we can text. Check the numbers on their member records.";
   if (/available in your country/i.test(error))
-    return "Turn SMS off for celebrations; email greetings still go.";
-  return "Check Settings → SMS, or turn SMS off for celebrations.";
+    return `Turn SMS off for ${feature}; email still goes.`;
+  return `Check Settings → SMS, or turn SMS off for ${feature}.`;
+}
+
+/**
+ * A batch the gateway accepted and then turned every number away from.
+ *
+ * `sendChurchSmsBatch` answers `ok: true` once it has called the gateway, even
+ * when nothing went: the platform's Termii float ran out, or every message was
+ * rejected. That reads as success unless somebody looks at the counts, so a
+ * congregation-wide reminder could fail with nothing logged. Unconfirmed
+ * messages may have gone, so a batch with any is not counted as refused.
+ */
+export function gatewayRefusedEveryNumber(r: {
+  sent: number;
+  failed: number;
+  unconfirmed: number;
+}): boolean {
+  return r.sent === 0 && r.unconfirmed === 0 && r.failed > 0;
+}
+
+/**
+ * Is this one of the refusals the church itself has to clear: an empty
+ * wallet, or a sender ID still awaiting approval?
+ *
+ * Matched on the wording `church-sms.ts` uses for its own refusals, which it
+ * makes before the gateway is called. A gateway error that happens to say
+ * "insufficient balance" is the platform's float, not the church's wallet,
+ * and telling the church to top up would send it to fix the wrong thing.
+ */
+export function churchCanClearSmsRefusal(error: string): boolean {
+  return /^Not enough SMS balance|sender ID isn't approved/i.test(error);
 }

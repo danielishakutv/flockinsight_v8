@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { church, firstTimerSignup, member } from "@/db/schema";
+import { churchRowHasFeature } from "@/lib/entitlements";
 import { churchDial, findExistingMember } from "@/lib/member-signup";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
@@ -151,6 +152,12 @@ export type PublicWelcomeData = {
  * Null for an unknown slug AND for a disabled one, deliberately — the same
  * answer either way, so the page cannot be used to discover which churches
  * exist and have simply turned theirs off.
+ *
+ * Null too when the church's plan does not include Follow-up. The link writes
+ * rows into the register, and without this a Starter church could switch it
+ * on and keep adding people past its member limit, and a church that
+ * downgraded kept a live public intake. The page and the submit action both
+ * read through here, so one check closes both.
  */
 export async function getWelcomeBySlug(
   slug: string,
@@ -168,13 +175,20 @@ export async function getWelcomeBySlug(
       name: church.name,
       logo: church.logo,
       theme: church.theme,
+      plan: church.plan,
+      slug: church.slug,
+      isDemo: church.isDemo,
     })
     .from(church)
     .where(eq(church.id, s.churchId))
     .limit(1);
   if (!c) return null;
+  if (!churchRowHasFeature(c, "followUp")) return null;
 
-  return { signup: s, church: c };
+  return {
+    signup: s,
+    church: { id: c.id, name: c.name, logo: c.logo, theme: c.theme },
+  };
 }
 
 /* ------------------------------------------------------------------ *

@@ -340,8 +340,22 @@ async function inACall(myPeerId: string, theirPeerId: string) {
   // Settle whichever half of the first negotiation this side owns, so the
   // connection starts the test where a real one would: stable.
   await vi.waitFor(() => expect(pc.signalingState).not.toBe("closed"));
-  if (pc.signalingState === "have-local-offer") await pc.fakeAnswerOurOffer();
+  const weOffered = pc.signalingState === "have-local-offer";
+  if (weOffered) await pc.fakeAnswerOurOffer();
   expect(pc.signalingState).toBe("stable");
+
+  /*
+   * And let that first offer actually leave before the log is cleared. It goes
+   * out with the next batch of signals, which may not have been sent yet;
+   * clearing the log first let it land inside the test's own window, where it
+   * read as a second offer and failed the test about one run in two.
+   */
+  if (weOffered) {
+    poke(engine);
+    await vi.waitFor(() =>
+      expect(signalsTo(theirPeerId).map((s) => s.type)).toContain("offer"),
+    );
+  }
 
   posted = [];
   return { engine, pc, rebuilt, theirPeerId };

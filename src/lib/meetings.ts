@@ -24,6 +24,7 @@ import {
   canRepeatMeetings,
   generateMeetingCode,
   generatePasscode,
+  insideBookedSlot,
   parseStage,
   type MeetingRole,
   type RosterEntry,
@@ -421,6 +422,14 @@ export type PeerIdentity = {
   role: MeetingRole;
   admitted: boolean;
   userId: string | null;
+  /** Only ever true when the caller asked for removed peers — see below. */
+  removed: boolean;
+  /**
+   * Set once this session has left: by /leave, by the meeting ending, or by
+   * the same device joining again in another tab. A session with this set is
+   * in nobody's roster, so routes that act in a running room refuse it.
+   */
+  leftAt: Date | null;
 };
 
 /**
@@ -429,11 +438,16 @@ export type PeerIdentity = {
  * A plain `===` on a secret leaks its prefix through timing. That is a thin
  * attack against a meeting room, but the fix is one function call and the
  * alternative is explaining why we did the careless thing.
+ *
+ * A removed peer is refused unless `includeRemoved` is set. Only /sync sets
+ * it, and only to answer "you were removed" instead of a bare 401 — every
+ * other route goes on treating a removed peer as nobody.
  */
 export async function authenticatePeer(
   meetingId: string,
   peerId: string,
   secret: string,
+  opts?: { includeRemoved?: boolean },
 ): Promise<PeerIdentity | null> {
   if (!peerId || !secret) return null;
   const [row] = await db
@@ -446,6 +460,7 @@ export async function authenticatePeer(
       role: meetingParticipant.role,
       admitted: meetingParticipant.admitted,
       removed: meetingParticipant.removed,
+      leftAt: meetingParticipant.leftAt,
       userId: meetingParticipant.userId,
       secret: meetingParticipant.secret,
     })
@@ -455,7 +470,8 @@ export async function authenticatePeer(
     )
     .limit(1);
 
-  if (!row || row.removed) return null;
+  if (!row) return null;
+  if (row.removed && !opts?.includeRemoved) return null;
 
   const a = Buffer.from(row.secret);
   const b = Buffer.from(secret);
@@ -470,6 +486,8 @@ export async function authenticatePeer(
     role: row.role,
     admitted: row.admitted,
     userId: row.userId,
+    removed: row.removed,
+    leftAt: row.leftAt,
   };
 }
 
@@ -983,6 +1001,30 @@ export async function rollSeriesForward(
   const seriesId = m.seriesId ?? m.id;
 
   /*
+   * Only the newest occurrence carries a series forward.
+   *
+   * Every older row still says "weekly" — the rule is copied forward, never
+   * cleared behind it, and the first row's rule is what lets its old link
+   * follow the series. So when a church stopped the series on the current
+   * occurrence, or it stopped itself after MAX_MISSED_RUNS, the cron's next
+   * sweep found an older row still saying "weekly", saw nothing pending and
+   * started the series again from there. Scoped to the church, like every
+   * other read of a series.
+   */
+  const [newest] = await db
+    .select({ occurrence: meeting.occurrence })
+    .from(meeting)
+    .where(
+      and(
+        eq(meeting.churchId, m.churchId),
+        or(eq(meeting.seriesId, seriesId), eq(meeting.id, seriesId)),
+      ),
+    )
+    .orderBy(desc(meeting.occurrence))
+    .limit(1);
+  if (newest && newest.occurrence > m.occurrence) return null;
+
+  /*
    * Somebody else already did it, or this occurrence has not finished. Checked
    * against the whole series rather than this row, because the next occurrence
    * is a different row and that is exactly the duplicate to avoid.
@@ -1396,11 +1438,12 @@ export async function listChurchRecordings(churchId: string, limit = 50) {
  * The everyday case is the last person closing their laptop lid: the meeting
  * stays "live" for ever, shows a green dot on the list, and counts towards the
  * church's live total. A meeting with no beating participant for five minutes
- * is over.
+ * is over — once its booked slot is over too (`insideBookedSlot`), so a host
+ * who checked their camera half an hour early has not ended the service.
  */
 export async function endAbandonedMeetings(): Promise<number> {
   const liveRooms = await db
-    .select({ id: meeting.id })
+    .select({ id: meeting.id, scheduledFor: meeting.scheduledFor, durationMin: meeting.durationMin })
     .from(meeting)
     .where(
       and(
@@ -1429,7 +1472,13 @@ export async function endAbandonedMeetings(): Promise<number> {
     .groupBy(meetingParticipant.meetingId);
 
   const busy = new Set(stillBeating.map((r) => r.meetingId));
-  const stale = liveRooms.filter((m) => !busy.has(m.id));
+  /*
+   * Left "live" rather than put back to "scheduled" while inside its slot:
+   * expireMissedMeetings only looks at rooms nobody ever started, so a
+   * scheduled room with a startedAt would never be closed by either sweep.
+   */
+  const now = Date.now();
+  const stale = liveRooms.filter((m) => !busy.has(m.id) && !insideBookedSlot(m, now));
   for (const m of stale) await endMeeting(m.id);
   return stale.length;
 }
@@ -1656,13 +1705,25 @@ export async function evaluateAdmission(opts: {
  * Host powers
  * ========================================================== */
 
-/** Let someone in from the lobby. */
+/**
+ * Let someone in from the lobby.
+ *
+ * Only somebody still waiting. A second "Let in" — two co-hosts, or a stale
+ * entry tapped again — finds nothing and says so, instead of resending the
+ * whole chat history to a person already inside.
+ */
 export async function admitParticipant(meetingId: string, participantId: string) {
   const [row] = await db
     .update(meetingParticipant)
     .set({ admitted: true, lastSeenAt: new Date() })
     .where(
-      and(eq(meetingParticipant.id, participantId), eq(meetingParticipant.meetingId, meetingId)),
+      and(
+        eq(meetingParticipant.id, participantId),
+        eq(meetingParticipant.meetingId, meetingId),
+        eq(meetingParticipant.admitted, false),
+        eq(meetingParticipant.removed, false),
+        isNull(meetingParticipant.leftAt),
+      ),
     )
     .returning({
       peerId: meetingParticipant.peerId,
@@ -1732,10 +1793,19 @@ export async function sendChatHistoryTo(
 /**
  * Remove someone, and keep them out.
  *
- * `removed` is what makes this stick: without it, the browser that was just
- * shown the door simply posts to /join again and walks back in.
+ * `removed` is what makes this stick: /join reads it (`removedEarlier`), so
+ * the browser that was just shown the door cannot post to /join again and
+ * walk back in.
+ *
+ * `waitingOnly` is the lobby's "No". It touches somebody only while they are
+ * still waiting, so "No" tapped on a stale entry for a person who has since
+ * been let in finds nothing, rather than throwing them out of the meeting.
  */
-export async function removeParticipant(meetingId: string, participantId: string) {
+export async function removeParticipant(
+  meetingId: string,
+  participantId: string,
+  opts?: { waitingOnly?: boolean },
+) {
   const [row] = await db
     .update(meetingParticipant)
     .set({
@@ -1748,7 +1818,12 @@ export async function removeParticipant(meetingId: string, participantId: string
       durationSec: sql`greatest(0, extract(epoch from (now() - ${meetingParticipant.joinedAt}))::int)`,
     })
     .where(
-      and(eq(meetingParticipant.id, participantId), eq(meetingParticipant.meetingId, meetingId)),
+      and(
+        eq(meetingParticipant.id, participantId),
+        eq(meetingParticipant.meetingId, meetingId),
+        opts?.waitingOnly ? eq(meetingParticipant.admitted, false) : undefined,
+        opts?.waitingOnly ? isNull(meetingParticipant.leftAt) : undefined,
+      ),
     )
     .returning({
       peerId: meetingParticipant.peerId,
@@ -1756,6 +1831,42 @@ export async function removeParticipant(meetingId: string, participantId: string
       userId: meetingParticipant.userId,
     });
   return row ?? null;
+}
+
+/**
+ * Was this person removed from this meeting, or refused at its door, before?
+ *
+ * Matched on the account when they are signed in and on the id the browser
+ * keeps for itself — the same two things that already mean "this is me
+ * again" elsewhere in this file. Never on a name or an IP: a family on one
+ * router shares an IP, and two Daniels is a real thing.
+ *
+ * A guest who clears their storage gets a new device id and is not caught.
+ * That is the honest limit of a room reached by a link; a passcode, the lobby
+ * or members-only is the stronger door.
+ */
+export async function removedEarlier(
+  meetingId: string,
+  who: { userId: string | null; deviceId: string | null },
+): Promise<boolean> {
+  const same = [
+    who.userId ? eq(meetingParticipant.userId, who.userId) : undefined,
+    who.deviceId ? eq(meetingParticipant.deviceId, who.deviceId) : undefined,
+  ].filter((c) => c !== undefined);
+  if (same.length === 0) return false;
+
+  const [row] = await db
+    .select({ id: meetingParticipant.id })
+    .from(meetingParticipant)
+    .where(
+      and(
+        eq(meetingParticipant.meetingId, meetingId),
+        eq(meetingParticipant.removed, true),
+        or(...same),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 /** Promote or demote. A meeting always keeps at least its original host. */

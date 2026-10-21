@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ALL_PERMISSIONS, MEMBER_DEFAULT_PERMISSIONS } from "./permissions-catalog";
-import { resolveStaffAccess } from "./staff-permissions";
+import {
+  beyondYourOwnMessage,
+  permissionsBeyond,
+  resolveStaffAccess,
+} from "./staff-permissions";
 import { betterAuthRoleFor, orgRoleAfterClearingRole } from "./staff-access";
 
 const basics = [...MEMBER_DEFAULT_PERMISSIONS].sort();
@@ -71,5 +75,41 @@ describe("betterAuthRoleFor", () => {
     expect(betterAuthRoleFor(["members.view", "team.manage"])).toBe("admin");
     expect(betterAuthRoleFor(["members.view"])).toBe("member");
     expect(betterAuthRoleFor([])).toBe("member");
+  });
+});
+
+describe("permissionsBeyond", () => {
+  // The volunteer secretary from the review: the register, and Manage team.
+  const secretary = resolveStaffAccess(
+    { role: "admin", roleId: "r1" },
+    { permissions: ["members.view", "team.manage"], isSystem: false },
+  );
+
+  it("refuses what the granter does not hold, so Manage team is not a key to everything", () => {
+    expect(permissionsBeyond(secretary, ["members.view", "finance.manage"])).toEqual([
+      "finance.manage",
+    ]);
+    expect(permissionsBeyond(secretary, ALL_PERMISSIONS).length).toBe(ALL_PERMISSIONS.length - 2);
+  });
+
+  it("lets them hand on what they do hold", () => {
+    expect(permissionsBeyond(secretary, ["members.view", "team.manage"])).toEqual([]);
+    expect(permissionsBeyond(secretary, [])).toEqual([]);
+  });
+
+  it("never limits the owner", () => {
+    const owner = resolveStaffAccess({ role: "owner", roleId: null }, null);
+    expect(permissionsBeyond(owner, ALL_PERMISSIONS)).toEqual([]);
+  });
+
+  it("names a key once however often it was asked for", () => {
+    expect(permissionsBeyond(secretary, ["wallet.x", "wallet.x"])).toEqual(["wallet.x"]);
+  });
+
+  it("names what was out of reach the way the roles page does", () => {
+    const msg = beyondYourOwnMessage(["finance.manage"]);
+    expect(msg).toContain("Finance (Manage)");
+    expect(msg).toMatch(/church owner/);
+    expect(beyondYourOwnMessage(ALL_PERMISSIONS.slice(0, 5))).toMatch(/and 2 more/);
   });
 });

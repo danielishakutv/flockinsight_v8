@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { organization } from "@/lib/auth-client";
 import { assignRole } from "@/app/(app)/settings/roles/actions";
 import { inviteMemberAsStaff } from "@/app/(app)/members/access-actions";
+import { invitationErrorMessage } from "@/lib/invitation-errors";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,12 +53,15 @@ export function TeamManager({
   roles,
   currentUserId,
   invitableMembers = [],
+  canInviteAdmin = false,
 }: {
   members: Member[];
   invites: Invite[];
   roles: Role[];
   currentUserId: string;
   invitableMembers?: { id: string; name: string; email: string | null }[];
+  /** Holds every permission, so may invite a plain admin (which is everything). */
+  canInviteAdmin?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -98,7 +102,11 @@ export function TeamManager({
         role: inviteRole as "member" | "admin",
       });
       if (error) {
-        toast.error(error.message || "Could not send invitation.");
+        // The same sentences the server-side invite gives: "Invitation limit
+        // reached" on its own says neither what the limit is nor what to do.
+        toast.error(
+          invitationErrorMessage({ body: { code: error.code, message: error.message } }),
+        );
         return;
       }
       toast.success(`Invitation created for ${email.trim()}`);
@@ -248,7 +256,9 @@ export function TeamManager({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="member">{t("settings.member")}</SelectItem>
-                    <SelectItem value="admin">{t("settings.admin")}</SelectItem>
+                    {canInviteAdmin && (
+                      <SelectItem value="admin">{t("settings.admin")}</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

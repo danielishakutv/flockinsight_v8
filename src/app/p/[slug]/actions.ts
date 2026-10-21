@@ -194,39 +194,35 @@ export async function recordMyPayment(
     (myName && roster.find((r) => nameKey(r.name) === myName)?.id) ||
     null;
 
+  /*
+   * Contact details typed here that the matched row does not hold, passed to
+   * the church in the audit line and the notification — never written.
+   */
+  const unsavedContact: string[] = [];
   if (contributorId) {
     /*
-     * Fill in a detail the roster was missing.
-     *
-     * A leader typed forty names with no phone numbers; the first person to use
-     * this form hands one over. Only ever filling a blank, never overwriting —
-     * what the church recorded wins over what a form says, and a stranger must
-     * not be able to repoint a member's contact details.
-     */
-    const found = roster.find((r) => r.id === contributorId);
-    const patch: { phone?: string; email?: string } = {};
-    if (found && !found.phone && d.phone) patch.phone = d.phone;
-    if (found && !found.email && d.email) patch.email = d.email;
-    /*
-     * `anonymous` is deliberately NOT applied here.
+     * An existing row is never written to from here: not its phone, not its
+     * email, not `anonymous`.
      *
      * Matching is on a phone number, an email address or a name, and none of
      * those is a secret — the names are printed on the page this form is on.
-     * So anybody could type a member's name, tick the box and either take that
-     * member's name off the public list or, worse, put it back on after they
-     * asked for it to come off. Hiding a name is a request the church grants,
-     * from the People tab, where whoever did it is recorded.
+     * Filling a blank phone or email used to look harmless, but it let anybody
+     * type a member's name with their own number and become that member's
+     * contact: shown on the People tab, used to suggest a register match, and
+     * copied into a new member by "Add to register". It is the same hazard the
+     * public first-timer link refuses (`allowPatchExisting: false`). Likewise
+     * anybody could tick "anonymous" on a member's name and take it off the
+     * public list, or put it back after they asked for it to come off.
      *
-     * A person new to the roster is a different case: they are asking about a
-     * row that does not exist yet, so there is nobody else's wishes to
-     * overwrite. That is the branch below.
+     * So what they typed goes to the church as information, and a person on
+     * the People tab applies it, where whoever did it is recorded. A person new
+     * to the roster is a different case: they are asking about a row that does
+     * not exist yet, so there is nobody else's record to overwrite. That is the
+     * branch below.
      */
-    if (Object.keys(patch).length > 0) {
-      await db
-        .update(contributionContributor)
-        .set(patch)
-        .where(eq(contributionContributor.id, contributorId));
-    }
+    const found = roster.find((r) => r.id === contributorId);
+    if (d.phone && phoneKey(found?.phone) !== myPhone) unsavedContact.push(d.phone);
+    if (d.email && emailKey(found?.email) !== myEmail) unsavedContact.push(d.email);
   } else {
     const [created] = await db
       .insert(contributionContributor)
@@ -308,13 +304,24 @@ export async function recordMyPayment(
     targetType: "contribution",
     targetId: pot.id,
     targetLabel: pot.title,
-    meta: { entryId: entry.id, method: d.method, hasProof: !!proofMediaId },
+    meta: {
+      entryId: entry.id,
+      method: d.method,
+      hasProof: !!proofMediaId,
+      ...(unsavedContact.length > 0
+        ? { submittedPhone: d.phone, submittedEmail: d.email }
+        : {}),
+    },
   });
 
   await notifyChurchManagers({
     churchId: pot.churchId,
     title: `${d.name} says they paid ${formatMoney(d.amount, c.currency)}`,
-    body: `Toward "${pot.title}"${d.reference ? `, reference ${d.reference}` : ""}. It needs confirming before it counts.`,
+    body: `Toward "${pot.title}"${d.reference ? `, reference ${d.reference}` : ""}. It needs confirming before it counts.${
+      unsavedContact.length > 0
+        ? ` They gave ${unsavedContact.join(" and ")}, which is not on their row and was not saved — add it from the People tab if it is theirs.`
+        : ""
+    }`,
     linkUrl: `/contributions/${pot.id}`,
   }).catch((e) => console.error("[contributions] self-report notify failed", e));
 

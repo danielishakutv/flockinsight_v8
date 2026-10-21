@@ -101,6 +101,29 @@ export async function POST(
     return fail("This meeting has already ended.", 409, { code: "ended" });
   }
 
+  /*
+   * A session that left, or that a newer tab on the same device replaced, is
+   * in nobody's roster and must not post chat under the person's name. Not
+   * applied once the room has ended: ending stamps everybody as gone, and the
+   * host's Stop on a recording still has to land.
+   */
+  if (peer.leftAt && m.status !== "ended" && m.status !== "cancelled") {
+    return fail(
+      "This meeting was opened again in another tab or on another device. Rejoin here to carry on.",
+      401,
+      { code: "replaced" },
+    );
+  }
+
+  /*
+   * Nothing from the lobby. A church turns the lobby on to keep strangers out,
+   * and a guest the host had not let in could still post chat to the whole
+   * room — stored, and replayed as history to everybody admitted later.
+   */
+  if (!peer.admitted) {
+    return fail("Wait for the host to let you in first.", 403, { code: "waiting" });
+  }
+
   await heartbeat(peer.id);
   const host = isHostRole(peer.role);
   const deny = () => fail("Only the host can do that.", 403);
@@ -344,7 +367,12 @@ export async function POST(
             console.error(`[meet/action] could not send chat history to ${row.peerId} in ${m.id}`, e);
           }
         }
-        await broadcast("control", { action: "admitted", peerId: row.peerId, name: row.name });
+        await broadcast("control", {
+          action: "admitted",
+          peerId: row.peerId,
+          name: row.name,
+          participantId: id,
+        });
         await log({
           action: "meetings.participant.admit",
           summary: `Let ${row.name} into "${m.title}"`,
@@ -352,9 +380,11 @@ export async function POST(
         });
         return json({ ok: true });
       }
-      const row = await removeParticipant(m.id, id);
+      // Lobby only: "No" on a stale entry must not throw out somebody who has
+      // since been let in.
+      const row = await removeParticipant(m.id, id, { waitingOnly: true });
       if (!row) return fail("They're no longer waiting.", 404);
-      await broadcast("control", { action: "denied", peerId: row.peerId });
+      await broadcast("control", { action: "denied", peerId: row.peerId, participantId: id });
       await log({
         action: "meetings.participant.deny",
         summary: `Refused ${row.name} entry to "${m.title}"`,

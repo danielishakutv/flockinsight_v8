@@ -347,7 +347,7 @@ export const CONTRIBUTION_GUIDES: Omit<Guide, "minutes">[] = [
           },
           {
             kind: "note",
-            text: "Only “Handed to the church” can be recorded in Finance, because it is the only one where the money actually reaches the church's books. It writes a single income row when it is fully approved.",
+            text: "Only “Handed to the church” can be recorded in Finance, because it is the only one where the money actually reaches the church's books. Once it is fully approved, somebody who manages Finance presses “Post into Finance” on it and picks the account, which writes a single income row. Where a collection needs only one approval, whoever records it can do that in the same step.",
           },
           {
             kind: "warning",

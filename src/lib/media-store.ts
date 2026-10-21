@@ -289,6 +289,83 @@ export async function writeChunkAt(
   }
 }
 
+/** A partial upload that had a byte within this long is one still in progress. */
+export const OPEN_UPLOAD_WINDOW_MS = 24 * 60 * 60_000;
+
+/**
+ * How long an untouched partial upload goes on counting against the church's
+ * storage. Not the fortnight the sweep waits: a church that gave up on two big
+ * uploads would otherwise be told it was out of space, by files it cannot see
+ * and cannot remove, for two weeks. Two days still bounds what one church can
+ * leave on the shared disk, and an upload that does resume is counted again by
+ * where it ends.
+ */
+export const PARTIAL_BYTES_WINDOW_MS = 48 * 60 * 60_000;
+
+export type PartialUploads = {
+  /** Bytes in this church's partial uploads, the excluded one aside. */
+  bytes: number;
+  /** How many of them received a byte within OPEN_UPLOAD_WINDOW_MS. */
+  open: number;
+};
+
+/**
+ * Pure: one church's partial uploads, from a listing of MEDIA_TMP.
+ *
+ * Every partial upload counts against the church's storage, not just the one
+ * being written. Each upload id used to be checked alone against the whole
+ * quota, and ids cost nothing, so one seat could open as many quota-sized temp
+ * files as it liked and fill the disk that every church and the database share.
+ */
+export function summarisePartialUploads(
+  entries: readonly { name: string; size: number; mtimeMs: number }[],
+  churchId: string,
+  excludeUploadId: string | null,
+  now: number = Date.now(),
+): PartialUploads {
+  const prefix = `${safeChurch(churchId)}--`;
+  const excluded = excludeUploadId ? path.basename(tmpPathFor(churchId, excludeUploadId)) : null;
+  let bytes = 0;
+  let open = 0;
+  for (const e of entries) {
+    if (!e.name.startsWith(prefix) || !e.name.endsWith(".part") || e.name === excluded) continue;
+    const idle = now - e.mtimeMs;
+    if (idle < PARTIAL_BYTES_WINDOW_MS) bytes += e.size;
+    if (idle < OPEN_UPLOAD_WINDOW_MS) open++;
+  }
+  return { bytes, open };
+}
+
+/** This church's partial uploads on disk, other than `excludeUploadId`. */
+export async function partialUploadsFor(
+  churchId: string,
+  excludeUploadId: string | null,
+): Promise<PartialUploads> {
+  const { readdir } = await import("node:fs/promises");
+  let names: string[];
+  try {
+    names = await readdir(MEDIA_TMP);
+  } catch (e) {
+    // No temp directory yet means no partial uploads. Anything else is a disk
+    // problem worth hearing about, and is not read as "nothing held".
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return { bytes: 0, open: 0 };
+    throw e;
+  }
+  const prefix = `${safeChurch(churchId)}--`;
+  const entries: { name: string; size: number; mtimeMs: number }[] = [];
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(".part")) continue;
+    try {
+      const st = await stat(path.join(MEDIA_TMP, name));
+      entries.push({ name, size: st.size, mtimeMs: st.mtimeMs });
+    } catch (e) {
+      // Finished or swept between the listing and the stat: it holds nothing.
+      if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e;
+    }
+  }
+  return summarisePartialUploads(entries, churchId, excludeUploadId);
+}
+
 /** Abandon a partial upload. Scoped to the church that owns it. */
 export async function discardUpload(
   churchId: string,

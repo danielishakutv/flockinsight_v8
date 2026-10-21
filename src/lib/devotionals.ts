@@ -223,6 +223,9 @@ function renderEmail(opts: {
 
 /* ----- Sending ----- */
 
+/** How many settled sends between writes of the running delivered count. */
+const PROGRESS_EVERY = 50;
+
 export type SendResult =
   | { ok: true; sent: number; recipients: number }
   | { ok: false; error: string };
@@ -271,6 +274,38 @@ export async function sendDevotional(devotionalId: string): Promise<SendResult> 
   }
 
   /*
+   * The audience is written BEFORE the first email, and the delivered count
+   * as it grows. Both used to be written once, after the last send settled,
+   * and a thousand emails at the mailer's pace take minutes. A deploy or a
+   * restart in that time left the devotional "sent" with 0 of 0 delivered:
+   * some members had it, the rest never would, and nothing said so. Now it
+   * reads "412 of 1,000 delivered", which says it was cut short.
+   */
+  await db
+    .update(devotional)
+    .set({ recipients: recipients.length, sentCount: 0 })
+    .where(eq(devotional.id, d.id));
+
+  let sent = 0;
+  let settled = 0;
+  // One progress write at a time, in order, each with the count as it stands
+  // when it runs, so a slow write can never put an older, smaller number back.
+  let progress: Promise<void> = Promise.resolve();
+  const saveProgress = () => {
+    progress = progress.then(async () => {
+      try {
+        await db
+          .update(devotional)
+          .set({ sentCount: sent })
+          .where(eq(devotional.id, d.id));
+      } catch (e) {
+        // Only the running count; the final write below still records it.
+        console.error(`[devotionals] could not record progress for ${d.id}:`, e);
+      }
+    });
+  };
+
+  /*
    * Every recipient gets an unsubscribe link and the List-Unsubscribe header,
    * not only those on the subscriber list. Members were sent these with no way
    * out at all, which bulk-mail rules (Gmail, Yahoo) do not allow and which
@@ -301,13 +336,20 @@ export async function sendDevotional(devotionalId: string): Promise<SendResult> 
           "List-Unsubscribe": `<${unsubUrl}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
-      });
+      })
+        .then((ok) => {
+          if (ok === true) sent++;
+          return ok;
+        })
+        .finally(() => {
+          settled++;
+          if (settled % PROGRESS_EVERY === 0) saveProgress();
+        });
     }),
   );
-  let sent = 0;
+  await progress;
   results.forEach((x, i) => {
-    if (x.status === "fulfilled" && x.value === true) sent++;
-    else if (x.status === "rejected")
+    if (x.status === "rejected")
       console.error(
         `[devotionals] send to ${recipients[i].email} for church ${d.churchId} threw:`,
         x.reason,

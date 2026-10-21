@@ -2,7 +2,13 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { staff, user, invitation, role, member } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { ensureDefaultRoles, requireCan } from "@/lib/permissions";
+import {
+  ALL_PERMISSIONS,
+  ensureDefaultRoles,
+  getAccess,
+  requireCan,
+} from "@/lib/permissions";
+import { permissionsBeyond } from "@/lib/staff-permissions";
 import { TeamManager } from "@/components/settings/team-manager";
 
 export const metadata = { title: "Team · Settings" };
@@ -73,6 +79,11 @@ export default async function TeamSettingsPage() {
     email: m.email?.trim() ? m.email : null,
   }));
 
+  // A plain "admin" invite grants everything, so it is only offered to
+  // somebody who holds everything. lib/org-plugin-guard.ts enforces it.
+  const canInviteAdmin =
+    permissionsBeyond(await getAccess(), ALL_PERMISSIONS).length === 0;
+
   return (
     <TeamManager
       members={members}
@@ -80,6 +91,7 @@ export default async function TeamSettingsPage() {
       roles={assignableRoles}
       currentUserId={me.id}
       invitableMembers={invitableMembers}
+      canInviteAdmin={canInviteAdmin}
     />
   );
 }

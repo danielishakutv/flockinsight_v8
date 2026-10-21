@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church as churchTable,
@@ -46,6 +46,8 @@ import {
 } from "@/lib/contributions-shared";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { notifyChurchManagers, notifyUser } from "@/lib/notifications";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
+import { canRecordIncomeInto } from "@/lib/finance-shared";
 import { formatMoney } from "@/lib/money";
 import { zMoney, zOptionalMoney } from "@/lib/money-zod";
 import { memberLimitStatus } from "@/lib/plan-limits";
@@ -1673,7 +1675,46 @@ const payoutSchema = z.object({
 
 export type PayoutInput = z.input<typeof payoutSchema>;
 
-export async function savePayout(input: PayoutInput): Promise<ActionResult> {
+/** Posting into Finance is a Finance write: the permission and the plan both. */
+async function financePostingRefusal(): Promise<{ ok: false; error: string } | null> {
+  if (!(await can("finance.manage")))
+    return fail("You don't have permission to post into Finance.");
+  return refuseWithoutFeature("finance");
+}
+
+/**
+ * The account a hand-over may be posted into, or why not.
+ *
+ * This church's, still open, and not a giving fund: a fund fills only through
+ * giving, so a hand-over typed into it would be money nobody gave, exactly as
+ * the Finance screen refuses it.
+ */
+async function handoverAccount(
+  churchId: string,
+  accountId: string,
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  const [acct] = await db
+    .select({
+      id: financeAccount.id,
+      name: financeAccount.name,
+      isActive: financeAccount.isActive,
+      givingCategoryId: financeAccount.givingCategoryId,
+    })
+    .from(financeAccount)
+    .where(and(eq(financeAccount.id, accountId), eq(financeAccount.churchId, churchId)))
+    .limit(1);
+  if (!acct) return fail("That account doesn't exist.");
+  if (!acct.isActive) return fail(`"${acct.name}" is closed. Pick an open account.`);
+  if (!canRecordIncomeInto(acct))
+    return fail(
+      `"${acct.name}" is a giving fund — income reaches it through giving, not by hand. Pick a different account.`,
+    );
+  return { ok: true, name: acct.name };
+}
+
+export async function savePayout(
+  input: PayoutInput,
+): Promise<ActionResult<{ id: string; warning?: string }>> {
   const parsed = payoutSchema.safeParse(input);
   if (!parsed.success)
     return fail(parsed.error.issues[0]?.message ?? "Please check the form.");
@@ -1684,24 +1725,33 @@ export async function savePayout(input: PayoutInput): Promise<ActionResult> {
   const pot = await loadPot(guard.church.id, d.contributionId);
   if (!pot) return fail("That collection no longer exists.");
 
-  if (d.financeAccountId && d.kind !== "handover")
-    return fail(
-      "Only money handed to the church goes into Finance — the rest never reaches the church's books.",
-    );
+  /*
+   * Posting into Finance is decided here only when recording IS the approval.
+   *
+   * The choice used to be handed to whichever later approval completed the
+   * payout, and nothing stored it — so the second approver's click posted into
+   * the account that sorted first, posted what the recorder had said not to,
+   * or (without finance permission) never posted at all. A payout that still
+   * needs other people's approval goes into Finance afterwards, by somebody
+   * with finance permission choosing the account: postPayoutToFinance.
+   */
   if (d.financeAccountId) {
-    const [acct] = await db
-      .select({ id: financeAccount.id })
-      .from(financeAccount)
-      .where(
-        and(
-          eq(financeAccount.id, d.financeAccountId),
-          eq(financeAccount.churchId, guard.church.id),
-        ),
-      )
-      .limit(1);
-    if (!acct) return fail("That account doesn't exist.");
-    if (!(await can("finance.manage")))
-      return fail("You don't have permission to post into Finance.");
+    if (d.kind !== "handover")
+      return fail(
+        "Only money handed to the church goes into Finance — the rest never reaches the church's books.",
+      );
+    if (d.id)
+      return fail(
+        "Save the changes without posting. Once it is fully approved, use \"Post into Finance\" on it.",
+      );
+    if (pot.payoutApprovalsRequired > 1)
+      return fail(
+        `This needs ${pot.payoutApprovalsRequired} approvals, so it can't go into Finance yet. Once it is fully approved, use "Post into Finance" on it.`,
+      );
+    const refusal = await financePostingRefusal();
+    if (refusal) return refusal;
+    const acct = await handoverAccount(guard.church.id, d.financeAccountId);
+    if (!acct.ok) return acct;
   }
 
   /*
@@ -1757,12 +1807,7 @@ export async function savePayout(input: PayoutInput): Promise<ActionResult> {
         .delete(contributionApproval)
         .where(eq(contributionApproval.payoutId, d.id));
     }
-    await recomputePayout(d.id, pot.payoutApprovalsRequired, {
-      financeAccountId: d.financeAccountId,
-      churchId: guard.church.id,
-      userId: guard.user.id,
-      potTitle: pot.title,
-    });
+    await recomputePayout(d.id, pot.payoutApprovalsRequired);
 
     await audit({
       churchId: guard.church.id,
@@ -1808,21 +1853,44 @@ export async function savePayout(input: PayoutInput): Promise<ActionResult> {
     actorName: guard.user.name || guard.user.email,
     note: "Recorded this payment out",
   });
-  const status = await recomputePayout(created.id, pot.payoutApprovalsRequired, {
-    financeAccountId: d.financeAccountId,
-    churchId: guard.church.id,
-    userId: guard.user.id,
-    potTitle: pot.title,
-  });
+  const status = await recomputePayout(created.id, pot.payoutApprovalsRequired);
+
+  /*
+   * After the payout is recorded, so a Finance failure never loses the record
+   * of money that has already left the pot. The person is told, and the
+   * hand-over keeps its "Post into Finance" button for another try.
+   */
+  let financeTransactionId: string | null = null;
+  let warning: string | undefined;
+  if (d.financeAccountId && status === "approved") {
+    try {
+      financeTransactionId = await postHandoverToFinance({
+        payoutId: created.id,
+        churchId: guard.church.id,
+        accountId: d.financeAccountId,
+        potTitle: pot.title,
+        userId: guard.user.id,
+      });
+      if (!financeTransactionId)
+        console.error(
+          `[contributions] payout ${created.id}: approved on recording, yet there was nothing to post`,
+        );
+    } catch (e) {
+      console.error(`[contributions] payout ${created.id}: could not post into Finance`, e);
+    }
+    if (!financeTransactionId)
+      warning =
+        "Recorded, but it could not be posted into Finance. Use \"Post into Finance\" on it to try again.";
+  }
 
   await audit({
     churchId: guard.church.id,
     action: "contributions.payout.create",
-    summary: `Recorded ${formatMoney(d.amount, guard.church.currency)} out of "${pot.title}"${status === "pending" ? ` — waiting for ${pot.payoutApprovalsRequired} approvals` : ""}`,
+    summary: `Recorded ${formatMoney(d.amount, guard.church.currency)} out of "${pot.title}"${status === "pending" ? ` — waiting for ${pot.payoutApprovalsRequired} approvals` : ""}${financeTransactionId ? " — posted into Finance" : ""}`,
     targetType: "contribution",
     targetId: pot.id,
     targetLabel: pot.title,
-    meta: { payoutId: created.id, kind: d.kind, status },
+    meta: { payoutId: created.id, kind: d.kind, status, financeTransactionId },
     severity: "notice",
   });
 
@@ -1838,15 +1906,22 @@ export async function savePayout(input: PayoutInput): Promise<ActionResult> {
 
   refresh(pot.id);
   refreshPublic(pot.slug);
-  return ok({ id: created.id });
+  return ok({ id: created.id, warning });
 }
 
+/**
+ * Approve or object to a payout.
+ *
+ * Never posts into Finance, even when it is the approval that completes the
+ * payout. It used to, with an account id the browser sent — picked as the
+ * first account in the list, and accepted with no finance permission, no plan
+ * check and no check that the account was this church's or could take income.
+ * An approved hand-over reaches the books through postPayoutToFinance.
+ */
 export async function voteOnPayout(opts: {
   payoutId: string;
   decision: "confirm" | "dispute";
   note?: string | null;
-  /** Where to post it in Finance, if this approval is the one that completes it. */
-  financeAccountId?: string | null;
 }): Promise<ActionResult<{ status: string }>> {
   const { church, user } = await requireChurch();
   const [row] = await db
@@ -1893,10 +1968,6 @@ export async function voteOnPayout(opts: {
     });
 
   const status = await recomputePayout(opts.payoutId, pot.payoutApprovalsRequired, {
-    financeAccountId: opts.financeAccountId ?? null,
-    churchId: church.id,
-    userId: user.id,
-    potTitle: pot.title,
     objectionNote: opts.decision === "dispute" ? note : undefined,
   });
 
@@ -1920,6 +1991,99 @@ export async function voteOnPayout(opts: {
   refresh(pot.id);
   refreshPublic(pot.slug);
   return ok({ id: opts.payoutId, status });
+}
+
+const postPayoutSchema = z.object({
+  payoutId: z.string().uuid("That payment out no longer exists."),
+  financeAccountId: z.string().uuid("Pick the account it goes into."),
+});
+
+/**
+ * Put an approved hand-over into the church's books, in the account chosen now.
+ *
+ * Its own step rather than a side effect of approving. Whoever gives the last
+ * approval may not manage Finance, and which account the money went into is a
+ * decision for somebody who does — so it is asked for on purpose, by that
+ * person, and checked here exactly as a Finance entry would be.
+ */
+export async function postPayoutToFinance(opts: {
+  payoutId: string;
+  financeAccountId: string;
+}): Promise<ActionResult> {
+  const parsed = postPayoutSchema.safeParse(opts);
+  if (!parsed.success)
+    return fail(parsed.error.issues[0]?.message ?? "Pick the account it goes into.");
+  const { payoutId, financeAccountId } = parsed.data;
+
+  const { church } = await requireChurch();
+  const [row] = await db
+    .select({
+      contributionId: contributionPayout.contributionId,
+      amount: contributionPayout.amount,
+      kind: contributionPayout.kind,
+      status: contributionPayout.status,
+      financeTransactionId: contributionPayout.financeTransactionId,
+    })
+    .from(contributionPayout)
+    .where(
+      and(
+        eq(contributionPayout.id, payoutId),
+        eq(contributionPayout.churchId, church.id),
+      ),
+    )
+    .limit(1);
+  if (!row) return fail("That payment out no longer exists.");
+
+  const guard = await guardPot(row.contributionId);
+  if (!guard) return fail("You can't change this collection.");
+  const pot = await loadPot(church.id, row.contributionId);
+  if (!pot) return fail("That collection no longer exists.");
+
+  const refusal = await financePostingRefusal();
+  if (refusal) return refusal;
+  if (row.kind !== "handover")
+    return fail(
+      "Only money handed to the church goes into Finance — the rest never reaches the church's books.",
+    );
+  if (row.status !== "approved")
+    return fail("This still needs its approvals. It can go into Finance once it is fully approved.");
+  if (row.financeTransactionId) return fail("This is already in Finance.");
+
+  const acct = await handoverAccount(church.id, financeAccountId);
+  if (!acct.ok) return acct;
+
+  let financeTransactionId: string | null;
+  try {
+    financeTransactionId = await postHandoverToFinance({
+      payoutId,
+      churchId: church.id,
+      accountId: financeAccountId,
+      potTitle: pot.title,
+      userId: guard.user.id,
+    });
+  } catch (e) {
+    console.error(`[contributions] payout ${payoutId}: could not post into Finance`, e);
+    return fail(
+      "It could not be posted into Finance just now, and nothing was written. Try again in a moment.",
+    );
+  }
+  // Somebody else posted it between our read and the lock.
+  if (!financeTransactionId)
+    return fail("This has just been posted into Finance by somebody else. Reload to see it.");
+
+  await audit({
+    churchId: church.id,
+    action: "contributions.payout.post_finance",
+    summary: `Posted a ${formatMoney(row.amount, church.currency)} hand-over from "${pot.title}" into Finance (${acct.name})`,
+    targetType: "contribution",
+    targetId: pot.id,
+    targetLabel: pot.title,
+    meta: { payoutId, financeTransactionId, accountId: financeAccountId },
+    severity: "notice",
+  });
+
+  refresh(pot.id);
+  return ok({ id: payoutId });
 }
 
 export async function deletePayout(id: string): Promise<ActionResult> {
@@ -2432,19 +2596,13 @@ async function recomputeEntry(
 }
 
 /**
- * The same for a payout — and, when the last approval lands, the one place
- * money crosses into the church's books.
+ * The same for a payout. It never posts into Finance — that is
+ * postHandoverToFinance, asked for on purpose by somebody who manages Finance.
  */
 async function recomputePayout(
   payoutId: string,
   required: number,
-  ctx: {
-    churchId: string;
-    userId: string;
-    potTitle: string;
-    financeAccountId?: string | null;
-    objectionNote?: string | null;
-  },
+  ctx: { objectionNote?: string | null } = {},
 ): Promise<PayoutStatusValue> {
   const votes = await db
     .select({ decision: contributionApproval.decision, n: sql<string>`count(*)` })
@@ -2469,36 +2627,14 @@ async function recomputePayout(
     required,
   });
 
-  let financeTransactionId = row.financeTransactionId;
-
-  // Post into Finance only on the transition into "approved", and only for a
-  // hand-over. Guarding on the transition is what stops a second approval
-  // writing a second income row for the same money.
-  if (
-    status === "approved" &&
-    row.status !== "approved" &&
-    row.kind === "handover" &&
-    ctx.financeAccountId &&
-    !financeTransactionId
-  ) {
-    financeTransactionId = await postHandoverToFinance({
-      churchId: ctx.churchId,
-      accountId: ctx.financeAccountId,
-      amount: row.amount,
-      date: row.paidOn,
-      party: row.payee,
-      reference: row.reference,
-      potTitle: ctx.potTitle,
-      userId: ctx.userId,
-    });
-  }
-
+  // financeTransactionId is deliberately not written here: it belongs to
+  // postHandoverToFinance, and writing back the value read above could erase
+  // a link that a posting made in between.
   await db
     .update(contributionPayout)
     .set({
       status,
       approvedAt: status === "approved" ? (row.approvedAt ?? new Date()) : null,
-      financeTransactionId,
       ...(ctx.objectionNote !== undefined
         ? { resolutionNote: ctx.objectionNote }
         : {}),
@@ -2518,14 +2654,20 @@ type PayoutStatusValue = "pending" | "approved" | "rejected";
  * and the hand-over is the single point where one becomes the other. The
  * category is created if it is missing, because a hand-over filed as
  * "Uncategorised" is money a treasurer cannot explain.
+ *
+ * Written as the claim it is. Two people posting the same hand-over at once
+ * would each find it unposted and each write an income row, and one
+ * transaction does not stop that under READ COMMITTED. So the payout row is
+ * locked on "approved, a hand-over, not yet posted", the same predicate is
+ * repeated in the UPDATE that links the ledger row, and its count is checked.
+ * The second caller waits, re-reads a row that is now posted, and writes
+ * nothing. Returns null when there was nothing left to post; the caller and
+ * the account have already been checked.
  */
 async function postHandoverToFinance(opts: {
+  payoutId: string;
   churchId: string;
   accountId: string;
-  amount: number;
-  date: string;
-  party: string | null;
-  reference: string | null;
   potTitle: string;
   userId: string;
 }): Promise<string | null> {
@@ -2567,24 +2709,61 @@ async function postHandoverToFinance(opts: {
     }
   }
 
-  const [txn] = await db
-    .insert(financeTransaction)
-    .values({
-      churchId: opts.churchId,
-      kind: "income",
-      amount: opts.amount,
-      date: opts.date,
-      accountId: opts.accountId,
-      categoryId,
-      party: opts.party,
-      reference: opts.reference,
-      note: `Handed over from the group collection "${opts.potTitle}"`,
-      recordedBy: opts.userId,
-    })
-    .returning({ id: financeTransaction.id });
+  const unposted = () =>
+    and(
+      eq(contributionPayout.id, opts.payoutId),
+      eq(contributionPayout.churchId, opts.churchId),
+      eq(contributionPayout.status, "approved"),
+      eq(contributionPayout.kind, "handover"),
+      isNull(contributionPayout.financeTransactionId),
+    );
 
-  revalidatePath("/finance");
-  return txn?.id ?? null;
+  const txnId = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        amount: contributionPayout.amount,
+        paidOn: contributionPayout.paidOn,
+        payee: contributionPayout.payee,
+        reference: contributionPayout.reference,
+      })
+      .from(contributionPayout)
+      .where(unposted())
+      .for("update")
+      .limit(1);
+    if (!row) return null;
+
+    const [txn] = await tx
+      .insert(financeTransaction)
+      .values({
+        churchId: opts.churchId,
+        kind: "income",
+        amount: row.amount,
+        date: row.paidOn,
+        accountId: opts.accountId,
+        categoryId,
+        party: row.payee,
+        reference: row.reference,
+        note: `Handed over from the group collection "${opts.potTitle}"`,
+        recordedBy: opts.userId,
+      })
+      .returning({ id: financeTransaction.id });
+    if (!txn) throw new Error(`no income row came back for payout ${opts.payoutId}`);
+
+    const linked = await tx
+      .update(contributionPayout)
+      .set({ financeTransactionId: txn.id })
+      .where(unposted())
+      .returning({ id: contributionPayout.id });
+    // Cannot happen while the lock is held. If it ever does, throwing rolls
+    // the income row back rather than leave money in the books that no
+    // hand-over points at.
+    if (linked.length !== 1)
+      throw new Error(`payout ${opts.payoutId} changed while it was being posted`);
+    return txn.id;
+  });
+
+  if (txnId) revalidatePath("/finance");
+  return txnId;
 }
 
 /**

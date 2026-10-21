@@ -1012,7 +1012,18 @@ export async function settleOnlinePayment(reference: string): Promise<SettleResu
         status: verified.status === "failed" ? "failed" : p.status,
         failReason: verified.message ?? null,
       })
-      .where(eq(onlinePayment.id, p.id));
+      // Only a row nobody has settled. A thanks page that asked while a
+      // transfer was still clearing can land after the webhook claimed the
+      // row; unguarded, it wrote the stale status back over the success, and
+      // nothing ever repaired it because every later call short-circuits on
+      // paidAt. The same predicate the claim below uses.
+      .where(
+        and(
+          eq(onlinePayment.id, p.id),
+          sql`${onlinePayment.status} <> 'success'`,
+          isNull(onlinePayment.givingId),
+        ),
+      );
     return {
       ok: true,
       status: verified.status,

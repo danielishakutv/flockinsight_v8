@@ -11,6 +11,7 @@ import {
   joinMeeting,
   listMessages,
   postSignals,
+  removedEarlier,
   roster,
   signalCursor,
   standingInChurch,
@@ -100,6 +101,34 @@ export async function POST(
   }
   clearRateLimit(`passcode:${m.id}:${ip ?? "unknown"}`);
 
+  // Bounded and shape-checked rather than trusted: it is written by the
+  // browser and ends up in a WHERE clause on every join.
+  const deviceId =
+    typeof body.deviceId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(body.deviceId)
+      ? body.deviceId
+      : null;
+
+  /*
+   * Somebody the host removed, or refused at the lobby, stays out.
+   *
+   * Nothing on this path used to read `removed`, so a removed troll reloaded
+   * and was back in seconds as a new participant, and a refused guest knocked
+   * again. Never applied to the people running the meeting, for the same
+   * reason access rules are not: a host locked out of their own room is a
+   * support ticket.
+   */
+  if (
+    verdict.role !== "host" &&
+    verdict.role !== "cohost" &&
+    (await removedEarlier(m.id, { userId, deviceId }))
+  ) {
+    return fail("The host removed you from this meeting, so you can't join it again.", 403, {
+      code: "removed",
+      title: m.title,
+      churchId: m.churchId,
+    });
+  }
+
   const displayName = cleanDisplayName(
     body.name || session?.user?.name,
     session?.user?.name || "Guest",
@@ -135,12 +164,7 @@ export async function POST(
     admitted: verdict.admitted,
     userId,
     memberId: standing.memberId,
-    // Bounded and shape-checked rather than trusted: it is written by the
-    // browser and ends up in a WHERE clause on every join.
-    deviceId:
-      typeof body.deviceId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(body.deviceId)
-        ? body.deviceId
-        : null,
+    deviceId,
     micOn,
     cameraOn,
     lowData,

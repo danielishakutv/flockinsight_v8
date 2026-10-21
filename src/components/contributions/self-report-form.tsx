@@ -74,6 +74,8 @@ export function SelfReportForm({
   const [note, setNote] = useState("");
   const [anonymous, setAnonymous] = useState(false);
   const [proof, setProof] = useState<ProofValue>(null);
+  // A receipt still uploading: the claim waits for it rather than going without.
+  const [uploading, setUploading] = useState(false);
   const [hp, setHp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<string | undefined>();
@@ -81,6 +83,7 @@ export function SelfReportForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (uploading) return;
     setError(null);
     setErrorField(undefined);
     const payload: SelfReportInput = {
@@ -300,6 +303,7 @@ export function SelfReportForm({
               onChange={setProof}
               slug={slug}
               disabled={pending}
+              onBusyChange={setUploading}
               labels={{
                 attach: t("contributions.attachProof"),
                 attached: t("contributions.proofAttached"),
@@ -333,10 +337,14 @@ export function SelfReportForm({
           </p>
         )}
 
-        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        <Button type="submit" size="lg" className="w-full" disabled={pending || uploading}>
           {pending ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden /> {t("contributions.selfSubmitting")}
+            </>
+          ) : uploading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden /> {t("contributions.uploading")}
             </>
           ) : (
             t("contributions.selfSubmit")

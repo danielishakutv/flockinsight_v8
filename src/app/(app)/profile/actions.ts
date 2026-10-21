@@ -13,6 +13,7 @@ import {
   startEmailChange,
   startPhoneChange,
 } from "@/lib/account-verification";
+import { DEMO_ACCOUNT_LOCKED, isSharedDemoUser } from "@/lib/demo-account";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type CodeResult =
@@ -29,6 +30,10 @@ export type CodeResult =
  * one, so a church's activity log shows "changed their own email" the way it
  * shows everything else. A platform operator with no church still gets a
  * platform-scoped row — the change is no less worth recording.
+ *
+ * Every change here is refused for the shared demo login (lib/demo-account.ts):
+ * its password is printed on the sign-in page, so one visitor changing it, or
+ * its email, locked every later prospect out of the demo.
  */
 
 const profileSchema = z.object({
@@ -45,6 +50,7 @@ export async function updateMyProfile(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { user: me } = await requireUser();
+  if (await isSharedDemoUser(me.id)) return { ok: false, error: DEMO_ACCOUNT_LOCKED };
   const [before] = await db
     .select({ name: user.name })
     .from(user)
@@ -89,6 +95,7 @@ export async function sendEmailChangeCode(
   currentPassword: string,
 ): Promise<CodeResult> {
   const { user: me } = await requireUser();
+  if (await isSharedDemoUser(me.id)) return { ok: false, error: DEMO_ACCOUNT_LOCKED };
 
   const ok = await verifyUserPassword(me.id, String(currentPassword || ""));
   // null = this account signs in some other way, so there is no password to
@@ -109,6 +116,7 @@ export async function sendEmailChangeCode(
 /** Send a code by SMS to a NEW phone number. */
 export async function sendPhoneChangeCode(phone: string): Promise<CodeResult> {
   const { user: me } = await requireUser();
+  if (await isSharedDemoUser(me.id)) return { ok: false, error: DEMO_ACCOUNT_LOCKED };
   const res = await startPhoneChange({
     userId: me.id,
     userName: me.name,
@@ -126,6 +134,7 @@ export async function confirmContactChange(
   { ok: true; field: "email" | "phone" } | { ok: false; error: string }
 > {
   const { user: me } = await requireUser();
+  if (await isSharedDemoUser(me.id)) return { ok: false, error: DEMO_ACCOUNT_LOCKED };
   const res = await confirmAccountChange({
     userId: me.id,
     otpId: String(otpId || ""),
@@ -175,6 +184,7 @@ export async function changeMyPassword(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
 
   const { user: me } = await requireUser();
+  if (await isSharedDemoUser(me.id)) return { ok: false, error: DEMO_ACCOUNT_LOCKED };
 
   const ok = await verifyUserPassword(me.id, parsed.data.current);
   if (ok === null)

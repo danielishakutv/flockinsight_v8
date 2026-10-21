@@ -1,13 +1,21 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getWelcomeBySlug, registerFirstTimer } from "@/lib/first-timer-intake";
-import { rateLimit } from "@/lib/meeting-api";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { notifyChurchManagers } from "@/lib/notifications";
 import type { FirstTimerIntake } from "@/lib/first-timer-shared";
 
 export type PublicResult = { ok: true; message: string } | { ok: false; error: string };
+
+/**
+ * A bound on the total through one church's link, whoever is sending and
+ * whatever address they claim. The per-address ceiling alone can be split
+ * across addresses; the same pair of buckets /join uses.
+ */
+const WELCOME_PER_CHURCH = { limit: 100, windowMs: 60 * 60_000 };
+const TOO_MANY =
+  "That is a lot of registrations from one place in a short time. Please try again shortly, or ask a member of the team to add you.";
 
 /**
  * A first-time worshipper filling in their own details.
@@ -33,12 +41,6 @@ export async function submitWelcome(
     return { ok: true, message: "Thank you — we are glad you came." };
   }
 
-  const h = await headers();
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-real-ip") ||
-    "unknown";
-
   /*
    * Twenty an hour per address.
    *
@@ -46,20 +48,44 @@ export async function submitWelcome(
    * address, and throttling a real Sunday morning would be a worse failure
    * than letting a nuisance through. It is a ceiling on automated abuse, not
    * a queue discipline.
+   *
+   * The address is clientIp()'s, which prefers cf-connecting-ip. This read the
+   * leftmost X-Forwarded-For, which is whatever the caller wrote there
+   * (Cloudflare appends to it rather than replacing it), so a fresh value per
+   * request was a fresh bucket and the ceiling never tripped.
    */
-  const gate = rateLimit(`welcome:${ip}`, 20, 60 * 60_000);
-  if (!gate.ok) {
-    return {
-      ok: false,
-      error:
-        "That is a lot of registrations from one place in a short time. Please try again shortly, or ask a member of the team to add you.",
-    };
-  }
+  // Sixty, like /join and the public forms: a Sunday of first-timers scanning
+  // the QR code on the church's own wifi all arrive from one address.
+  const gate = rateLimit(`welcome:${await clientIp()}`, 60, 60 * 60_000);
+  if (!gate.ok) return { ok: false, error: TOO_MANY };
 
   const data = await getWelcomeBySlug(slug);
   // Unknown slug and switched-off slug give the same answer, so this page
   // cannot be used to find out which churches exist.
   if (!data) return { ok: false, error: "This registration link is not available." };
+
+  if (
+    !rateLimit(
+      `welcome-church:${data.church.id}`,
+      WELCOME_PER_CHURCH.limit,
+      WELCOME_PER_CHURCH.windowMs,
+    ).ok
+  ) {
+    // At most hourly: from the door, a link being turned away looks like a
+    // link that is broken, and only the managers can act on it.
+    if (rateLimit(`welcome-notice:${data.church.id}`, 1, 60 * 60_000).ok) {
+      await notifyChurchManagers({
+        churchId: data.church.id,
+        title: "Your welcome link is being turned away",
+        body: `More than ${WELCOME_PER_CHURCH.limit} registrations arrived through your first-timer welcome link in the last hour, so further ones are being refused for now. If these are not your visitors, switch the link off or make a new one on the First-timers page.`,
+        linkUrl: "/first-timers",
+      }).catch((e: unknown) => {
+        // The refusal stands either way; a lost notice is logged, not thrown.
+        console.error("[welcome] could not tell managers about the flood", e);
+      });
+    }
+    return { ok: false, error: TOO_MANY };
+  }
 
   const res = await registerFirstTimer({
     churchId: data.church.id,

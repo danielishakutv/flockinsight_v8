@@ -3,7 +3,9 @@ import {
   CELEBRATION_MAX_ATTEMPTS,
   PENDING_STALE_MS,
   RETRY_AFTER_MS,
+  churchCanClearSmsRefusal,
   claimDecision,
+  gatewayRefusedEveryNumber,
   matchSmsOutcomes,
   smsRefusalAdvice,
 } from "@/lib/celebration-runs";
@@ -88,6 +90,34 @@ describe("claimDecision", () => {
     expect(attemptsAt).toEqual(["08:00", "09:00"]);
     expect(state.attempts).toBe(CELEBRATION_MAX_ATTEMPTS);
   });
+
+  /*
+   * The first-timer sequence uses the same rule with its own budget. It used
+   * to reclaim any row that was not sent or queued, so the 07:00 sweep from
+   * the reminders job took the hourly sweep's fresh "pending" rows and sent
+   * the same welcome again.
+   */
+  describe("with another job's attempt budget", () => {
+    it("leaves another sweep's fresh pending claim alone", () => {
+      expect(
+        claimDecision({ outcome: "pending", attempts: 1, updatedAt: ago(MIN) }, NOW, "email", 3),
+      ).toBe("leave");
+      expect(
+        claimDecision({ outcome: "pending", attempts: 1, updatedAt: ago(MIN) }, NOW, "sms", 3),
+      ).toBe("leave");
+    });
+
+    it("never texts a dead SMS claim again", () => {
+      const dead = { outcome: "pending", attempts: 2, updatedAt: ago(2 * PENDING_STALE_MS) };
+      expect(claimDecision(dead, NOW, "sms", 3)).toBe("abandon");
+    });
+
+    it("stops at the budget it is given, not the celebrations one", () => {
+      const failed = { outcome: "failed", attempts: 2, updatedAt: ago(2 * RETRY_AFTER_MS) };
+      expect(claimDecision(failed, NOW, "email", 3)).toBe("reclaim");
+      expect(claimDecision(failed, NOW, "email", 2)).toBe("leave");
+    });
+  });
 });
 
 describe("matchSmsOutcomes", () => {
@@ -130,6 +160,23 @@ describe("matchSmsOutcomes", () => {
     expect(settled[0].providerMessageId).toBe("3017607");
   });
 
+  it("keeps a number that was never tried apart from one that failed", () => {
+    const { settled } = matchSmsOutcomes(
+      [
+        { id: "a", phone: "abc" },
+        { id: "b", phone: "0802" },
+      ],
+      [
+        { phone: "abc", status: "skipped", error: "Not a usable phone number" },
+        { phone: "0802", status: "failed", error: "Rejected" },
+      ],
+    );
+    expect(settled.map((s) => [s.job.id, s.ok, s.status])).toEqual([
+      ["a", false, "skipped"],
+      ["b", false, "failed"],
+    ]);
+  });
+
   it("returns what the gateway never reported on", () => {
     const jobs = [
       { id: "a", phone: "0801" },
@@ -147,5 +194,57 @@ describe("smsRefusalAdvice", () => {
     expect(smsRefusalAdvice("Sender ID not approved")).toMatch(/sender ID/);
     expect(smsRefusalAdvice("No valid phone numbers")).toMatch(/phone number/);
     expect(smsRefusalAdvice("SMS is not available in your country")).toMatch(/Turn SMS off/);
+  });
+
+  it("names the feature it is advising about", () => {
+    expect(smsRefusalAdvice("Insufficient balance")).toMatch(/for celebrations\.$/);
+    expect(smsRefusalAdvice("Insufficient balance", "service reminders")).toMatch(
+      /for service reminders\.$/,
+    );
+  });
+});
+
+/*
+ * A service reminder batch the gateway refused outright came back `ok: true`
+ * with nothing sent, and nothing logged it or told anybody.
+ */
+describe("gatewayRefusedEveryNumber", () => {
+  it("is a batch where nothing went and something was refused", () => {
+    expect(gatewayRefusedEveryNumber({ sent: 0, failed: 40, unconfirmed: 0 })).toBe(true);
+  });
+
+  it("is not a batch where anything went", () => {
+    expect(gatewayRefusedEveryNumber({ sent: 1, failed: 39, unconfirmed: 0 })).toBe(false);
+  });
+
+  it("is not a batch where some may have gone", () => {
+    // Unconfirmed is charged and may have arrived; calling it refused would
+    // invite a second send.
+    expect(gatewayRefusedEveryNumber({ sent: 0, failed: 39, unconfirmed: 1 })).toBe(false);
+  });
+
+  it("is not an empty batch", () => {
+    expect(gatewayRefusedEveryNumber({ sent: 0, failed: 0, unconfirmed: 0 })).toBe(false);
+  });
+});
+
+describe("churchCanClearSmsRefusal", () => {
+  it("recognises the church's own wallet and sender ID refusals", () => {
+    // Worded as church-sms.ts words them.
+    expect(
+      churchCanClearSmsRefusal(
+        "Not enough SMS balance. This needs 12.00 but your balance is 3.00.",
+      ),
+    ).toBe(true);
+    expect(
+      churchCanClearSmsRefusal("Your SMS sender ID isn't approved yet. Apply in Settings → SMS."),
+    ).toBe(true);
+  });
+
+  it("does not blame the church for the gateway, or for one bad number", () => {
+    // The platform's float, not the church's wallet.
+    expect(churchCanClearSmsRefusal("Insufficient balance")).toBe(false);
+    expect(churchCanClearSmsRefusal("No valid phone number to send to.")).toBe(false);
+    expect(churchCanClearSmsRefusal("SMS isn't enabled on the platform yet.")).toBe(false);
   });
 });

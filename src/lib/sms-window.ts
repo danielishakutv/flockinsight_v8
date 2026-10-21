@@ -105,6 +105,17 @@ export function withinSmsWindow(at: Date, timeZone: string): boolean {
 }
 
 /**
+ * Has today's window already shut, so a message can only go tomorrow?
+ *
+ * Not the same as "outside the window": before 8am the window is still to
+ * come today. It matters for a message that is only true today — a birthday
+ * greeting queued at 9pm goes at 8am the next morning, a day late.
+ */
+export function smsWindowShutForToday(at: Date, timeZone: string): boolean {
+  return localHour(at, timeZone) >= SMS_WINDOW_END_HOUR;
+}
+
+/**
  * The UTC instant for a given wall-clock time in a zone.
  *
  * Two passes, because the offset to apply is the offset AT the answer, not at

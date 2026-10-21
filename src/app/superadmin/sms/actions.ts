@@ -20,6 +20,7 @@ import {
 } from "@/lib/termii-sender";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { formatMoney } from "@/lib/money";
+import { WALLET_CURRENCY } from "@/lib/wallet-currency";
 import { recordAudit } from "@/lib/audit";
 import { notifyChurchOfAdminAction } from "@/lib/admin-notify";
 import { reconcileSenderIdsWithNetwork, whoOwns } from "@/lib/sender-id-reconcile";
@@ -599,8 +600,10 @@ export async function adjustWallet(
   if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000)
     return { ok: false, error: "Enter a positive amount." };
 
+  // Only to know the church exists. Every figure below is wallet money, which
+  // is naira whatever the church's own currency (see wallet-currency.ts).
   const [c] = await db
-    .select({ currency: church.currency })
+    .select({ id: church.id })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
@@ -648,7 +651,7 @@ export async function adjustWallet(
     title: kind === "credit" ? "Your wallet was credited" : "Your wallet was adjusted",
     subject:
       kind === "credit"
-        ? `${formatMoney(amount, c.currency)} added to your FlockInsight wallet`
+        ? `${formatMoney(amount, WALLET_CURRENCY)} added to your FlockInsight wallet`
         : `A deduction from your FlockInsight wallet`,
     body:
       kind === "credit"
@@ -657,9 +660,9 @@ export async function adjustWallet(
     details: [
       {
         label: kind === "credit" ? "Amount added" : "Amount deducted",
-        value: formatMoney(amount, c.currency),
+        value: formatMoney(amount, WALLET_CURRENCY),
       },
-      { label: "New balance", value: formatMoney(newBalance, c.currency) },
+      { label: "New balance", value: formatMoney(newBalance, WALLET_CURRENCY) },
     ],
     note: note?.trim() ? note.trim().slice(0, 200) : null,
     linkUrl: "/settings/wallet",
@@ -669,7 +672,7 @@ export async function adjustWallet(
     actorUserId: admin.id,
     actorName: admin.name,
     action: kind === "credit" ? "credit_wallet" : "debit_wallet",
-    summary: `${kind === "credit" ? "Credited" : "Deducted"} ${formatMoney(amount, c.currency)} ${kind === "credit" ? "to" : "from"} a church's SMS wallet`,
+    summary: `${kind === "credit" ? "Credited" : "Deducted"} ${formatMoney(amount, WALLET_CURRENCY)} ${kind === "credit" ? "to" : "from"} a church's SMS wallet`,
     targetType: "church",
     targetId: churchId,
   });

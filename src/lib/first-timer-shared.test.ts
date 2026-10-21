@@ -45,6 +45,24 @@ describe("what it refuses", () => {
     const r = cleanIntake({ firstName: "Grace", email: "not-an-email" }, AT);
     expect(r.ok).toBe(false);
   });
+
+  /*
+   * The old regex took these, so they were stored and every welcome and
+   * invite to them was dropped by the mailer, with only a server log to say.
+   */
+  it("refuses what the mailer would refuse, and says to check it", () => {
+    for (const email of ["ephraim@gmail.com1", "grace@gmail..com", "grace@gmail.c"]) {
+      const r = cleanIntake({ firstName: "Grace", phone: "08138634369", email }, AT);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toMatch(/typo/);
+    }
+  });
+
+  it("repairs a trailing full stop rather than turning the visitor away", () => {
+    expect(ok({ firstName: "Grace", email: "Grace@Example.com." }).email).toBe(
+      "grace@example.com",
+    );
+  });
 });
 
 describe("the visit date", () => {

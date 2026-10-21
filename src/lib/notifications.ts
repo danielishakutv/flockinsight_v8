@@ -1,7 +1,8 @@
 import "server-only";
-import { and, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "@/db";
+import { escapeHtml } from "@/lib/html-escape";
 import {
   church,
   notification,
@@ -146,7 +147,11 @@ export async function notifyChurchManagers(opts: {
     const cta = opts.linkUrl
       ? { label: "Open FlockInsight", url: `${siteUrl()}${opts.linkUrl}` }
       : undefined;
-    const html = opts.emailHtml ?? emailLayout(opts.title, opts.body, cta);
+    // Title and body are plain text (they are also the push and in-app text),
+    // and they carry names other people typed: a service, a pot, a form
+    // response. emailLayout drops them in as raw HTML, so they are escaped.
+    const html =
+      opts.emailHtml ?? emailLayout(escapeHtml(opts.title), escapeHtml(opts.body), cta);
     const emails = [
       ...new Set(
         [...managers.map((r) => r.email), ...(opts.alsoEmail ?? [])]
@@ -164,6 +169,51 @@ export async function notifyChurchManagers(opts: {
       );
   } catch (e) {
     console.error("[notify] notifyChurchManagers failed", e);
+  }
+}
+
+/**
+ * Has an owner or admin of this church been sent a notification with exactly
+ * this title since `since`?
+ *
+ * For a cron that meets the same wall on every run (an empty wallet, a sender
+ * ID still pending) and should tell the managers once a week, not every
+ * morning. It reads the notifications themselves, which are the record of
+ * having told them.
+ *
+ * Put the church's name in the title. A notification carries no church id,
+ * so a person who manages two churches would otherwise count as told about
+ * both. A failed read answers false: telling twice beats not telling.
+ */
+export async function managersToldSince(opts: {
+  churchId: string;
+  title: string;
+  since: Date;
+}): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ id: notification.id })
+      .from(notification)
+      .innerJoin(
+        staff,
+        and(
+          eq(staff.userId, notification.targetUserId),
+          eq(staff.organizationId, opts.churchId),
+          inArray(staff.role, ["owner", "admin"]),
+        ),
+      )
+      .where(
+        and(
+          eq(notification.audience, "user"),
+          eq(notification.title, opts.title),
+          gte(notification.createdAt, opts.since),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  } catch (e) {
+    console.error(`[notify] could not check earlier notices for church ${opts.churchId}`, e);
+    return false;
   }
 }
 

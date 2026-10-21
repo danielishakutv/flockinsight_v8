@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { church } from "@/db/schema";
+import { church, financeTransfer } from "@/db/schema";
 import { resetChurch } from "@/lib/church-data";
 import { seedDemoData, undoDemoSeed } from "@/lib/demo-seed";
 import { getDemoChurch, pruneDemoSessions } from "@/lib/demo";
@@ -95,7 +95,14 @@ export async function GET(request: Request) {
      * members a visitor added, the attendance they recorded. Doing it the
      * other way round would leave the manifest pointing at rows that are
      * already gone, which is harmless but makes the logs lie.
+     *
+     * Finance transfers go before either, and all of them. The seed never
+     * records one, so every transfer here is a visitor's, and a transfer holds
+     * both its accounts with a RESTRICT key: a single transfer between two
+     * seeded accounts made undoDemoSeed's account delete fail, on that run and
+     * on every run after it. Neither undo nor resetChurch touches transfers.
      */
+    await db.delete(financeTransfer).where(eq(financeTransfer.churchId, row.id));
     const undone = await undoDemoSeed(row.id);
     await resetChurch(row.id);
     const seeded = await seedDemoData(row.id);

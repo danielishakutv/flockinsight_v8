@@ -13,9 +13,9 @@ import {
   waitForRoom,
 } from "@/lib/meetings";
 import {
+  CLIENT_SIGNAL_TYPES,
   mediaRights,
   parseStage,
-  SIGNAL_TYPES,
   type SignalType,
 } from "@/lib/meetings-shared";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
@@ -60,23 +60,19 @@ type Incoming = {
 
 type OutgoingSignal = { toPeer?: string | null; type: SignalType; payload: Record<string, unknown> };
 
-function parseSignals(raw: unknown): OutgoingSignal[] {
+function parseSignals(raw: unknown, allowReactions: boolean): OutgoingSignal[] {
   if (!Array.isArray(raw)) return [];
   const out: OutgoingSignal[] = [];
   for (const item of raw.slice(0, 60)) {
     if (!item || typeof item !== "object") continue;
     const s = item as Record<string, unknown>;
     const type = typeof s.type === "string" ? s.type : "";
-    // Only the peer-to-peer types may be posted by a client. Anything that
-    // changes the room — control, stage, roster — goes through /action, where
-    // the caller's role is checked.
-    if (!SIGNAL_TYPES.includes(type as SignalType)) continue;
-    if (
-      !["offer", "answer", "ice", "bye", "pause", "reaction", "renegotiate"].includes(
-        type,
-      )
-    )
-      continue;
+    // Only the peer-to-peer types may be posted by a client — see
+    // CLIENT_SIGNAL_TYPES for why `bye` is not one of them.
+    if (!CLIENT_SIGNAL_TYPES.includes(type as SignalType)) continue;
+    // The host turned reactions off; the button is hidden, and this is the
+    // half a crafted request cannot get round.
+    if (type === "reaction" && !allowReactions) continue;
     const payload =
       s.payload && typeof s.payload === "object"
         ? (s.payload as Record<string, unknown>)
@@ -162,9 +158,15 @@ export async function POST(
   const m = await getMeetingByCode(code);
   if (!m) return fail("That meeting has gone.", 404, { code: "not-found" });
 
-  const peer = await requirePeer(m.id, body);
+  // Removed peers are let through this one door, so they can be TOLD: refused
+  // here as well, they got a 401, which the room reads as "signed out" and
+  // answers with "Something went wrong" and a Rejoin button.
+  const peer = await requirePeer(m.id, body, { includeRemoved: true });
   if (!peer)
     return fail("You've been signed out of this meeting.", 401, { code: "stale-peer" });
+
+  if (peer.removed)
+    return json({ ok: true, removed: true, reason: "The host removed you from this meeting." });
 
   /*
    * An ended room answers once and says so.
@@ -187,16 +189,36 @@ export async function POST(
     });
   }
 
+  /*
+   * A session that has left — or that a newer tab on the same device replaced
+   * — is out of every roster, so nobody can see or hear it. Served anyway, it
+   * went on pulling and playing the whole room (double audio on that phone)
+   * and talking into a meeting that could not hear it, with nothing on its
+   * screen to say so. Refused, it ends the call and offers Rejoin.
+   */
+  if (peer.leftAt)
+    return fail(
+      "This meeting was opened again in another tab or on another device. Rejoin here to carry on.",
+      401,
+      { code: "replaced" },
+    );
+
   const cursor = Number.isFinite(Number(body?.cursor)) ? Number(body?.cursor) : 0;
   const wait = body?.wait === true;
   const state = parseState(body?.state, mediaRights(peer.role, m));
 
   await heartbeat(peer.id, state ?? undefined);
 
-  // A state change is announced by the server rather than the client, so every
-  // participant's roster is updated from one authority and cannot drift.
-  const outgoing = parseSignals(body?.signals);
-  if (state) {
+  /*
+   * A state change is announced by the server rather than the client, so every
+   * participant's roster is updated from one authority and cannot drift.
+   *
+   * Nothing is relayed for somebody still in the lobby. Their heartbeat is
+   * kept, so the host sees them knocking, but a stranger held at the door
+   * could otherwise float reactions over the room under their own name.
+   */
+  const outgoing = peer.admitted ? parseSignals(body?.signals, m.allowReactions) : [];
+  if (state && peer.admitted) {
     outgoing.push({
       toPeer: null,
       type: "state",

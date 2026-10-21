@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccount } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can, getAccess, requireCanAny } from "@/lib/permissions";
+import { hasFeature } from "@/lib/entitlements-server";
 import {
   canManageContribution,
   canManageManagers,
@@ -54,7 +55,11 @@ export default async function ContributionPage({
     canManage;
   if (!canRead) notFound();
 
-  const canPostToFinance = await can("finance.manage");
+  // Posting a hand-over is a Finance write, so it takes the plan as well as the
+  // permission — the same two checks the server makes. Otherwise the switch
+  // and the "Post into Finance" button are offered only to be refused.
+  const canPostToFinance =
+    (await can("finance.manage")) && (await hasFeature("finance"));
 
   /*
    * Changing who runs a collection is a narrower right than running it: the
@@ -81,6 +86,8 @@ export default async function ContributionPage({
   const [members, groups, accounts, staff, publicView] = await Promise.all([
     canManage ? memberOptions(church.id) : Promise.resolve([]),
     canManage ? groupOptions(church.id) : Promise.resolve([]),
+    // The accounts a hand-over can be posted into as income: open, and not a
+    // giving fund, which fills only through giving (the server refuses one).
     canPostToFinance
       ? db
           .select({ id: financeAccount.id, name: financeAccount.name })
@@ -89,6 +96,7 @@ export default async function ContributionPage({
             and(
               eq(financeAccount.churchId, church.id),
               eq(financeAccount.isActive, true),
+              isNull(financeAccount.givingCategoryId),
             ),
           )
           .orderBy(asc(financeAccount.name))

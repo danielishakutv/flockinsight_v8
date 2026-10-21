@@ -106,6 +106,16 @@ export async function setWelcomeLinkEnabled(
   const ctx = await requireManage();
   if (!ctx) return { ok: false, error: "You don't have permission to do that." };
 
+  /*
+   * Switching ON needs the plan that includes Follow-up, the same as
+   * First-timers → Add. Switching OFF never does: a church that downgraded
+   * with the link live must always be able to close it.
+   */
+  if (enabled) {
+    const gate = await refuseWithoutFeature("followUp");
+    if (gate) return { ok: false, error: gate.error };
+  }
+
   const signup = await ensureFirstTimerSignup({
     id: ctx.church.id,
     name: ctx.church.name,
@@ -141,6 +151,11 @@ export async function setWelcomeLinkEnabled(
 export async function regenerateWelcomeLink(): Promise<LinkResult> {
   const ctx = await requireManage();
   if (!ctx) return { ok: false, error: "You don't have permission to do that." };
+
+  // A write to a Follow-up feature. Switching the link off stays open to
+  // every plan; issuing a fresh one does not.
+  const gate = await refuseWithoutFeature("followUp");
+  if (gate) return { ok: false, error: gate.error };
 
   await ensureFirstTimerSignup({
     id: ctx.church.id,

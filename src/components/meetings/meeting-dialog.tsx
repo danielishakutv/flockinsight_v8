@@ -132,11 +132,23 @@ export function MeetingDialog({
   const router = useRouter();
   const editing = !!initial.id;
 
-  // Re-seed whenever the dialog is opened on a different meeting.
-  const [seed, setSeed] = useState(initial.id ?? "new");
-  if (open && seed !== (initial.id ?? "new")) {
-    setSeed(initial.id ?? "new");
-    setValues(initial);
+  /*
+   * Re-seed every time the dialog opens, from whatever it was opened with.
+   *
+   * It used to re-seed only when the meeting id changed, and every new meeting
+   * has the same id (none). So a second "New meeting" opened holding the last
+   * one's title, time, access and passcode, "Start one now" never showed
+   * "Quick meeting", and a cancelled edit was still there next time. Done
+   * during render rather than in an effect, so the first frame is already
+   * right; seeding only on open keeps the values steady while it animates shut.
+   */
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setValues(initial);
+      setAdvanced(false);
+    }
   }
 
   const set = <K extends keyof MeetingFormValues>(key: K, v: MeetingFormValues[K]) =>

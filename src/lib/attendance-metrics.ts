@@ -147,7 +147,15 @@ export async function getLastSession(
       serviceName: service.name,
     })
     .from(attendanceSession)
-    .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+    // Scoped to the session's church: a service id is global, so an id from
+    // elsewhere must never print another church's service name here.
+    .leftJoin(
+      service,
+      and(
+        eq(service.id, attendanceSession.serviceId),
+        eq(service.churchId, attendanceSession.churchId),
+      ),
+    )
     .where(eq(attendanceSession.churchId, churchId))
     .orderBy(desc(attendanceSession.date), desc(attendanceSession.createdAt))
     .limit(1);

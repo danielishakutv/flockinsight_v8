@@ -50,15 +50,19 @@ export async function clientContext(): Promise<{ ip: string | null; userAgent: s
  * Authenticate the peer behind a request. Every write to a room goes through
  * here, so this is the one place that decides whether a caller is who they
  * claim to be.
+ *
+ * A removed peer is refused unless `includeRemoved` is asked for — only /sync
+ * does, so it can tell them why the call is over.
  */
 export async function requirePeer(
   meetingId: string,
   body: { peer?: unknown; secret?: unknown } | null,
+  opts?: { includeRemoved?: boolean },
 ): Promise<PeerIdentity | null> {
   const peer = typeof body?.peer === "string" ? body.peer : "";
   const secret = typeof body?.secret === "string" ? body.secret : "";
   if (!peer || !secret) return null;
-  return authenticatePeer(meetingId, peer, secret);
+  return authenticatePeer(meetingId, peer, secret, opts);
 }
 
 /* ============================================================

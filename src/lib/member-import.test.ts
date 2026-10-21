@@ -203,3 +203,50 @@ describe("dates that do not exist", () => {
     expect(normalizeDate("0000-01-01")).toBeNull();
   });
 });
+
+describe("email addresses", () => {
+  /*
+   * The old regex took "com1" as a top-level domain, so the address was
+   * stored and every email to it was later refused by the mailer.
+   */
+  it("that no email could reach are left blank with a row number, and the row is kept", () => {
+    const p = plan([row({ "First name": "Ephraim", Email: "ephraim@gmail.com1", Phone: "08031234567" })]);
+    expect(p.rows).toHaveLength(1);
+    expect(p.rows[0].values.email).toBeNull();
+    expect(p.errors.join("\n")).toMatch(/Row 2: email "ephraim@gmail.com1" is not an address we can send to/);
+  });
+
+  it("are stored as the mailer will send to them", () => {
+    const p = plan([row({ "First name": "Ada", Email: "Ada@Example.com." })]);
+    expect(p.rows[0].values.email).toBe("ada@example.com");
+    expect(p.errors).toEqual([]);
+  });
+
+  it("still find a member stored before the stricter rule, in either form", () => {
+    const p = plan(
+      [
+        row({ "First name": "Ada", Email: "ada@example.com." }),
+        row({ "First name": "Bola", Email: "bola@gmail.com1" }),
+      ],
+      "234",
+      // As the route builds them: stored, trimmed and lower-cased.
+      { emails: ["ada@example.com.", "bola@gmail.com1"] },
+    );
+    expect(p.rows).toHaveLength(0);
+    expect(p.duplicates).toBe(2);
+  });
+
+  it("do not make a placeholder like \"nil\" anybody's address", () => {
+    // What a spreadsheet puts in an empty email column. Read as a duplicate
+    // key, every row after the first one saying "nil" was skipped.
+    const p = plan([
+      row({ "First name": "Ada", Email: "nil", Phone: "08031234567" }),
+      row({ "First name": "Bola", Email: "nil", Phone: "08031234568" }),
+      row({ "First name": "Chi", Email: "N/A", Phone: "08031234569" }),
+      row({ "First name": "Dayo", Email: "n/a", Phone: "08031234570" }),
+    ]);
+    expect(p.rows).toHaveLength(4);
+    expect(p.duplicates).toBe(0);
+    expect(p.rows.every((r) => r.values.email === null)).toBe(true);
+  });
+});

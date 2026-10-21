@@ -99,6 +99,31 @@ export async function createChurchAccount(input: {
   }
 
   /*
+   * Ten an hour from one address, and a ceiling on the whole platform.
+   *
+   * Each attempt creates a real account, a church on a fresh trial, staff and
+   * member rows, and can send a FlockInsight email to whatever address was
+   * typed. Better Auth's own limiter does not cover this: it runs in its HTTP
+   * router, and `auth.api.signUpEmail` below is a direct call. An honest
+   * pastor needs one attempt, two with a typo, and an agent signing up several
+   * churches from one office is still well inside ten. The platform ceiling is
+   * what stops a script that rotates addresses, and it says so in the log.
+   */
+  if (!rateLimit(`signup:${await clientIp()}`, 10, 60 * 60_000).ok) {
+    return {
+      ok: false,
+      error: "Too many sign-ups from this connection. Try again in an hour.",
+    };
+  }
+  if (!rateLimit("signup:all", 100, 60 * 60_000).ok) {
+    console.error("[signup] more than 100 church sign-ups in an hour; refusing until the hour is up");
+    return {
+      ok: false,
+      error: "We're getting an unusual number of sign-ups right now. Please try again in an hour.",
+    };
+  }
+
+  /*
    * The phone number and the referral code are both settled BEFORE anything is
    * created, because either one can be refused.
    *

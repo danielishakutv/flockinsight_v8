@@ -13,10 +13,13 @@ import { paidByPledge, cadenceLabel } from "@/lib/projects";
 import { outstandingOn } from "@/lib/pledge-status";
 import type { PledgeCadence } from "@/lib/projects-shared";
 import { sendChurchSms } from "@/lib/church-sms";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, plainTextEmailLayout } from "@/lib/mailer";
 import { smsPages } from "@/lib/sms";
 import { recordUsage } from "@/lib/usage";
 import { formatMoney } from "@/lib/money";
+import { inGoodStandingSql } from "@/lib/church-standing";
+import { managersToldSince, notifyChurchManagers } from "@/lib/notifications";
+import { churchCanClearSmsRefusal, smsRefusalAdvice } from "@/lib/celebration-runs";
 
 /* ============================================================
  * Pledge installment reminders — nudge members with an outstanding pledge once
@@ -29,6 +32,8 @@ export type PledgeReminderSummary = {
   reminders: number;
   emails: number;
   sms: number;
+  /** Messages that did not go. Each is logged with its church, pledge and reason. */
+  failed: number;
 };
 
 export type PledgeReminderConfig = {
@@ -107,7 +112,17 @@ function periodIndex(cadence: PledgeCadence, start: string, today: string): numb
   return -1; // one_time / custom — no scheduled reminder
 }
 
-export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
+/**
+ * The period is claimed before anything is sent, and pledge_reminder_run has
+ * nowhere to keep an outcome, so a reminder that fails waits for the next
+ * period. It is no longer silent, though: an email the provider refused and
+ * an SMS the church's wallet or sender ID refused both went into empty
+ * catches. Each failure is now logged, and a refusal only the church can
+ * clear tells its managers, at most once a week.
+ */
+export async function runPledgeReminders(
+  now: Date = new Date(),
+): Promise<PledgeReminderSummary> {
   const churches = await db
     .select({
       churchId: pledgeReminderSetting.churchId,
@@ -123,7 +138,13 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
     .from(pledgeReminderSetting)
     .innerJoin(church, eq(church.id, pledgeReminderSetting.churchId))
     .where(
-      and(eq(pledgeReminderSetting.enabled, true), eq(church.status, "active")),
+      and(
+        eq(pledgeReminderSetting.enabled, true),
+        eq(church.status, "active"),
+        // Not for a church behind the paywall, whose admins can no longer
+        // reach the setting that turns this off. See church-standing.ts.
+        inGoodStandingSql(now),
+      ),
     );
 
   const summary: PledgeReminderSummary = {
@@ -131,6 +152,7 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
     reminders: 0,
     emails: 0,
     sms: 0,
+    failed: 0,
   };
 
   for (const c of churches) {
@@ -171,6 +193,11 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
       c.churchId,
       rows.map((r) => r.id),
     );
+
+    // The first refusal this church's managers can clear themselves (an empty
+    // wallet, a sender ID awaiting approval), and how many texts it stopped.
+    let refusal: string | null = null;
+    let refused = 0;
 
     for (const r of rows) {
       const hasContact = (c.email && r.email) || (c.sms && r.phone);
@@ -214,17 +241,26 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
       if (c.email && r.email) {
         const subject = fill(c.emailSubject);
         const body = fill(c.emailBody);
+        let detail: string | null = null;
         try {
           const ok = await sendEmail({
             to: r.email,
             subject,
-            html: emailLayout(subject, body.replace(/\n/g, "<br>")),
+            html: plainTextEmailLayout(subject, body),
             text: body,
             fromName: c.name,
           });
           if (ok) sentEmail = 1;
-        } catch {
-          /* keep going */
+          else detail = "The mail server did not accept the message.";
+        } catch (e) {
+          // Recorded, never swallowed: this used to be an empty catch.
+          detail = e instanceof Error ? e.message : String(e);
+        }
+        if (detail) {
+          summary.failed++;
+          console.error(
+            `[pledge-reminders] email for pledge ${r.id} failed for church ${c.churchId}: ${detail}`,
+          );
         }
       }
       if (c.sms && r.phone) {
@@ -239,8 +275,27 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
           // Only a real send counts against the run. A queued one is recorded
           // in the queue, and counting it twice would overstate what went out.
           if (res.ok === true) sentSms = smsPages(fill(c.smsBody));
-        } catch {
-          /* keep going */
+          else if (res.ok === false && res.uncertain) {
+            // Kept charged and never resent: it may well have gone.
+            console.error(
+              `[pledge-reminders] SMS for pledge ${r.id} at church ${c.churchId} was not confirmed by the gateway, so it may have gone: ${res.error}`,
+            );
+          } else if (res.ok === false) {
+            summary.failed++;
+            console.error(
+              `[pledge-reminders] SMS for pledge ${r.id} not sent for church ${c.churchId}: ${res.error}`,
+            );
+            if (churchCanClearSmsRefusal(res.error)) {
+              refusal ??= res.error;
+              refused++;
+            }
+          }
+        } catch (e) {
+          summary.failed++;
+          console.error(
+            `[pledge-reminders] SMS for pledge ${r.id} threw for church ${c.churchId}; it may have gone`,
+            e,
+          );
         }
       }
 
@@ -254,7 +309,38 @@ export async function runPledgeReminders(): Promise<PledgeReminderSummary> {
       summary.emails += sentEmail;
       summary.sms += sentSms ? 1 : 0;
     }
+
+    if (refusal) await tellManagersOnceAWeek(c, now, refused, refusal);
   }
 
   return summary;
+}
+
+/**
+ * Tell the church's managers their pledge texts were refused, unless they were
+ * already told this week. A church that has decided not to top up hears about
+ * it weekly, not every morning.
+ */
+async function tellManagersOnceAWeek(
+  c: { churchId: string; name: string },
+  now: Date,
+  count: number,
+  reason: string,
+): Promise<void> {
+  const title = `${c.name}: pledge reminder texts were not sent`;
+  if (
+    await managersToldSince({
+      churchId: c.churchId,
+      title,
+      since: new Date(now.getTime() - 7 * 86_400_000),
+    })
+  )
+    return;
+  await notifyChurchManagers({
+    churchId: c.churchId,
+    title,
+    body: `${count} pledge reminder${count === 1 ? "" : "s"} could not be sent by SMS today: ${reason} ${smsRefusalAdvice(reason, "pledge reminders")} A reminder that did not go waits for that pledge's next period.`,
+    linkUrl: "/settings/giving",
+    email: true,
+  });
 }

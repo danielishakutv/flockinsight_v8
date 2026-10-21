@@ -932,6 +932,13 @@ export const en = {
     postToFinanceBlurb:
       "Writes one income row into the church's books once this is fully approved. Only for money handed to the church — the rest never reaches those books.",
     financeAccount: "Into which account",
+    postToFinanceLater:
+      "It can go into Finance once it is fully approved — use “Post into Finance” on it then.",
+    postIntoFinance: "Post into Finance",
+    postIntoFinanceHint:
+      "Writes one income row into the church's books for this hand-over, in the account you pick. Skip it if this money was already entered in Finance by hand.",
+    pickAccount: "Pick an account",
+    postedToFinance: "Posted into Finance",
     approve: "Approve",
     approved: "Approved",
     object: "Object",
@@ -1492,6 +1499,7 @@ export const en = {
     title: "Meetings",
     screenShareUnsupported: "This device can't share a screen — iPhones and iPads don't allow it from a web page. Put a Bible verse, a note or your slides on the screen instead: that works everywhere.",
     tapToPlay: "Tap to play",
+    tapToTurnOnSound: "Tap anywhere to turn the sound on — your browser is holding it until you do.",
     diagCameraOff: "your camera is off",
     diagTheySaveData: "they are in Data Saver",
     savingToLibrary: "Saving to your media library…",

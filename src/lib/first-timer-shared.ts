@@ -12,6 +12,7 @@
  */
 
 import { isRealCalendarDate, todayIso } from "@/lib/calendar-date";
+import { normalizeEmail } from "@/lib/email-address";
 
 export type FirstTimerIntake = {
   firstName: string;
@@ -48,13 +49,6 @@ export type CleanIntake = {
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/*
- * Deliberately loose. An address written on a welcome card is not an
- * authentication factor, and a church in Jalingo should not have a visitor
- * turned away because a regular expression disagreed about their email. It
- * only has to be shaped enough that a confirmation could be attempted.
- */
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Longest value any single field may carry, to bound what a stranger can post. */
 const LIMITS = {
@@ -95,10 +89,23 @@ export function cleanIntake(
   if (!firstName) return { ok: false, error: "A first name is needed." };
 
   const phone = trimmed(input.phone, LIMITS.phone);
-  const email = trimmed(input.email, LIMITS.email)?.toLowerCase() ?? null;
+  /*
+   * The mailer's own rule, not a looser one. An address on a welcome card is
+   * not an authentication factor, so the mechanical damage — a trailing full
+   * stop, a stray comma, capitals — is repaired rather than refused. But
+   * "name@gmail.com1" passed the old regex, was stored, and every welcome and
+   * invite to it was then dropped at send time with nothing but a server log
+   * line. Refused here, the visitor can fix the typo while they are standing
+   * at the desk.
+   */
+  const emailRaw = trimmed(input.email, LIMITS.email);
+  const email = emailRaw ? normalizeEmail(emailRaw) : null;
 
-  if (email && !EMAIL.test(email)) {
-    return { ok: false, error: "That email address does not look right." };
+  if (emailRaw && !email) {
+    return {
+      ok: false,
+      error: "That email address does not look right. Check it for a typo, or leave it blank.",
+    };
   }
 
   /*

@@ -71,11 +71,17 @@ function Secret({ label, value }: { label: string; value: string }) {
 export function LivestreamCredentials({
   rtmpUrl,
   rtmpKey,
+  canBroadcast = true,
   watchUrl,
   canSimulcast,
 }: {
   rtmpUrl: string | null;
   rtmpKey: string | null;
+  /**
+   * False for someone who may watch but not broadcast. They are never sent
+   * the key, and are told who has it rather than "not ready yet".
+   */
+  canBroadcast?: boolean;
   watchUrl: string;
   canSimulcast: boolean;
 }) {
@@ -126,7 +132,11 @@ export function LivestreamCredentials({
           including the hardware encoder in most media rooms.
         </p>
 
-        {rtmpUrl && rtmpKey ? (
+        {!canBroadcast ? (
+          <p className="text-muted-foreground mt-3 text-sm">
+            Ask someone who manages meetings for the server and stream key.
+          </p>
+        ) : rtmpUrl && rtmpKey ? (
           <div className="mt-3 space-y-3">
             <Secret label={t("livestreams.server")} value={rtmpUrl} />
             <Secret label={t("livestreams.streamKey")} value={rtmpKey} />

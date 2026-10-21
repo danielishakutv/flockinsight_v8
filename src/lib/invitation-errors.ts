@@ -17,6 +17,12 @@ const KNOWN: Record<string, string> = {
   YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION:
     "You don't have permission to manage the team.",
   INVALID_EMAIL: "That doesn't look like a valid email address.",
+  // The Team page's plain invite reads these too, now that it maps its errors
+  // here instead of showing the library's own words.
+  USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION:
+    "That email already has an invitation waiting. Use “Copy link” beside it under Pending invitations, or cancel it and invite them again.",
+  YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE:
+    "You can't invite someone with that level of access. Invite them as a member, then give them a role.",
 };
 
 export const GENERIC_INVITATION_ERROR =

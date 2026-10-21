@@ -85,3 +85,13 @@ export function toWallClockInput(at: Date, tz: string): string {
   const p = (n: number, len = 2) => String(n).padStart(len, "0");
   return `${p(w.year, 4)}-${p(w.month)}-${p(w.day)}T${p(w.hour)}:${p(w.minute)}`;
 }
+
+/**
+ * The calendar day an instant falls on in `tz`, as "YYYY-MM-DD" — for a date
+ * field, or for filing something under the day the church lived it.
+ * `toISOString().slice(0, 10)` is UTC's day, which puts a 7:30pm service in
+ * New York on the Thursday after it.
+ */
+export function toLocalDateInput(at: Date, tz: string): string {
+  return toWallClockInput(at, tz).slice(0, 10);
+}

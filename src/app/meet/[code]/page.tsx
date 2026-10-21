@@ -166,7 +166,12 @@ export default async function MeetPage({
         camera: !m.allowAttendeeCamera && !isHost,
       }}
       hostKey={hostKey}
-        signInHref={`/login?next=${encodeURIComponent(`/meet/${m.code}`)}`}
+        /*
+         * ?redirect=, the one parameter the login page reads (proxy.ts sends
+         * the same). It was ?next=, so people signed in and landed on the
+         * dashboard instead of the meeting they were trying to join.
+         */
+        signInHref={`/login?redirect=${encodeURIComponent(`/meet/${m.code}`)}`}
         manageHref={isHost ? `/meetings` : null}
       />
     </I18nProvider>

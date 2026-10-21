@@ -21,6 +21,7 @@ import {
   linkPageUrlForPrint,
   normalisePageSlug,
   pageSlugProblem,
+  tidyTypedPageSlug,
 } from "@/lib/link-page-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -259,7 +260,8 @@ function NewPageDialog({
                 value={slug}
                 placeholder="grace"
                 className="font-mono"
-                onChange={(e) => setSlug(normalisePageSlug(e.target.value))}
+                onChange={(e) => setSlug(tidyTypedPageSlug(e.target.value))}
+                onBlur={() => setSlug(normalisePageSlug(slug))}
               />
               <Button
                 type="button"
@@ -292,14 +294,15 @@ function NewPageDialog({
               startTransition(async () => {
                 // Only checked when something was typed: an empty one is
                 // suggested from the title on the server, deliberately.
-                if (slug) {
-                  const problem = pageSlugProblem(slug);
+                const tidy = normalisePageSlug(slug);
+                if (tidy) {
+                  const problem = pageSlugProblem(tidy);
                   if (problem) {
                     toast.error(problem);
                     return;
                   }
                 }
-                const res = await createLinkPage({ title, slug });
+                const res = await createLinkPage({ title, slug: tidy });
                 if (!res.ok) {
                   toast.error(res.error);
                   return;

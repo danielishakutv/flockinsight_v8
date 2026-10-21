@@ -18,7 +18,8 @@ import { gatewayError, type GatewayAdapter } from "./types";
  *  2. A CONTRACT CODE identifies the merchant agreement, and a payment raised
  *     without it is rejected. It is a credential as much as the keys are.
  *  3. THE REFERENCE IS CALLED paymentReference, and the one Monnify generates
- *     (transactionReference) is a different string. Verification uses OURS.
+ *     (transactionReference) is a different string. Verification uses OURS,
+ *     through the endpoint that looks a payment up by paymentReference.
  */
 const BASE = "https://api.monnify.com/api";
 const TIMEOUT_MS = 20_000;
@@ -143,9 +144,17 @@ export const monnifyAdapter: GatewayAdapter = {
     const auth = await login(creds.publicKey, creds.secret);
     if (!auth.ok) return auth;
 
+    /*
+     * Looked up by OUR reference, on the query endpoint that takes one.
+     *
+     * /v2/transactions/{ref} takes Monnify's own transactionReference, and
+     * asking it for our paymentReference answers "not found" — so every gift
+     * a giver had paid stayed pending for ever, while the webhook that asked
+     * was answered 200 and never sent again.
+     */
     const res = await call(
       auth.token,
-      `/v2/transactions/${encodeURIComponent(reference)}`,
+      `/v2/merchant/transactions/query?paymentReference=${encodeURIComponent(reference)}`,
     );
     if (!res.ok) return res;
     const raw = String(res.data.paymentStatus ?? "").toUpperCase();

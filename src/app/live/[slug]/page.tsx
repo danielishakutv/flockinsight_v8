@@ -102,12 +102,14 @@ export default async function WatchPage({
           <h1 className="text-xl font-bold">{s.title}</h1>
           <p className="max-w-sm text-sm text-balance text-slate-400">
             {decision === "sign-in"
-              ? `This stream is for ${s.churchName} members. Sign in with the account your church set up for you, then open this link again.`
+              ? `This stream is for ${s.churchName} members. Sign in with the account your church set up for you and you will come straight back here.`
               : `This stream is for ${s.churchName} members, and the account you are signed in with is not one of theirs.`}
           </p>
           {decision === "sign-in" && (
+            // ?redirect=, which the login page reads; ?next= was ignored and
+            // sent people to the dashboard after signing in.
             <a
-              href={`/login?next=${encodeURIComponent(`/live/${slug}`)}`}
+              href={`/login?redirect=${encodeURIComponent(`/live/${slug}`)}`}
               className="mt-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold"
             >
               Sign in

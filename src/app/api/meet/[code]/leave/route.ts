@@ -46,14 +46,26 @@ export async function POST(
   const peer = await requirePeer(m.id, body);
   if (!peer) return json({ ok: true });
 
-  await leaveMeeting(peer.id);
   // If the room was looking at them, it is now looking at nothing.
   await clearSpotlightFor(m.id, peer.peerId);
+
+  /*
+   * Already gone — a second beacon from the same tab, a tab a newer one on
+   * this device replaced, or a room that has ended. Saying goodbye again
+   * would post "Daniel left" into the chat while Daniel is still there in
+   * his other tab.
+   */
+  if (peer.leftAt) return json({ ok: true });
+
+  await leaveMeeting(peer.id);
   await postSignals(m.id, peer.peerId, [
     { toPeer: null, type: "bye", payload: { peerId: peer.peerId } },
   ]);
 
-  if (m.allowChat) {
+  // Only for somebody who was in. A guest who knocked and gave up never
+  // "joined" in the chat, and a stranger in the lobby must not be able to put
+  // whatever name they typed into the room's chat by knocking and leaving.
+  if (m.allowChat && peer.admitted) {
     await addMessage({
       meetingId: m.id,
       churchId: m.churchId,

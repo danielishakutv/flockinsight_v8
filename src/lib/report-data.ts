@@ -489,7 +489,15 @@ const BUILDERS: Record<string, Builder> = {
         createdAt: attendanceSession.createdAt,
       })
       .from(attendanceSession)
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+      // Scoped to the session's church: a service id is global, so an id from
+      // elsewhere must never print another church's service name here.
+      .leftJoin(
+        service,
+        and(
+          eq(service.id, attendanceSession.serviceId),
+          eq(service.churchId, attendanceSession.churchId),
+        ),
+      )
       .leftJoin(recorder, eq(recorder.id, attendanceSession.recordedBy))
       .where(
         and(
@@ -572,7 +580,15 @@ const BUILDERS: Record<string, Builder> = {
         attendanceSession,
         eq(attendanceSession.id, attendanceRecord.sessionId),
       )
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+      // Scoped to the session's church: a service id is global, so an id from
+      // elsewhere must never print another church's service name here.
+      .leftJoin(
+        service,
+        and(
+          eq(service.id, attendanceSession.serviceId),
+          eq(service.churchId, attendanceSession.churchId),
+        ),
+      )
       .leftJoin(member, eq(member.id, attendanceRecord.memberId))
       .where(
         and(

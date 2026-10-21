@@ -130,3 +130,44 @@ export function sermonNeedsLibraryPlan(
 export function defaultUploadCategory(canSermons: boolean): "sermon" | "file" {
   return canSermons ? "sermon" : "file";
 }
+
+/** Partial uploads one church may have in progress at once. */
+export const MAX_OPEN_UPLOADS = 5;
+
+/**
+ * May this chunk be written, counting everything else the church has half-sent?
+ *
+ * The temp files live on the disk every church and the database share, so a
+ * full one takes the whole box down. Two bounds, both per church:
+ *
+ *  - bytes: finished media, plus EVERY partial upload, plus where this one
+ *    ends, within the church's storage. Each upload id used to be checked on
+ *    its own, so a fresh id was a fresh quota and the number of ids was
+ *    unlimited.
+ *  - count: a new upload is refused while MAX_OPEN_UPLOADS others are still
+ *    receiving bytes. One-byte files cost an inode each and are swept only
+ *    after a fortnight. An upload nobody has touched for a day no longer counts
+ *    here, and its bytes stop counting after two (see PARTIAL_BYTES_WINDOW_MS),
+ *    so a closed tab cannot block the library or eat the church's storage.
+ */
+export function partialUploadVerdict(args: {
+  /** Bytes in the church's finished media. */
+  used: number;
+  limit: number;
+  /** Bytes in the church's OTHER partial uploads. */
+  otherPartialBytes: number;
+  /** How far this upload reaches once the chunk is written. */
+  endsAt: number;
+  /** This chunk starts a file the server does not hold yet. */
+  isNew: boolean;
+  /** Other partial uploads that received a byte recently. */
+  openUploads: number;
+}): { ok: true } | { ok: false; reason: "busy" | "full" } {
+  if (args.isNew && args.openUploads >= MAX_OPEN_UPLOADS) return { ok: false, reason: "busy" };
+  if (args.used + args.otherPartialBytes + args.endsAt > args.limit)
+    return { ok: false, reason: "full" };
+  return { ok: true };
+}
+
+/** The sentence for "busy", which retrying in a while does fix. */
+export const TOO_MANY_OPEN_UPLOADS = `This church already has ${MAX_OPEN_UPLOADS} uploads in progress. Let one finish, then try again. An upload that has received nothing for a day stops counting.`;

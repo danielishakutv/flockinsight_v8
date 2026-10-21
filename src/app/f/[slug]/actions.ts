@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, form, formResponse, member, staff, user } from "@/db/schema";
 import {
@@ -10,7 +10,11 @@ import {
   type FormField,
   type FieldValue,
 } from "@/lib/forms-shared";
-import { normalizePhone } from "@/lib/sms";
+import { e164Phone } from "@/lib/phone-intl";
+import { normalizeEmail } from "@/lib/email-address";
+import { churchDial, findExistingMember } from "@/lib/member-signup";
+import { memberLimitStatus } from "@/lib/plan-limits";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { notifyChurchManagers } from "@/lib/notifications";
 import { sendEmail, emailLayout, isEmailConfigured } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
@@ -20,6 +24,45 @@ import { escapeHtml } from "@/lib/html-escape";
 export type SubmitResult =
   | { ok: true; message: string }
   | { ok: false; error: string; errors?: Record<string, string> };
+
+/*
+ * Ceilings on a public form that can write members and email every admin.
+ *
+ * Its only guard was a honeypot, which a script passes by leaving the field
+ * empty, so one loop could fill the register with visitors (who then get the
+ * first-timer welcome texts, charged to the church's wallet) and flood every
+ * admin's inbox. The same shape as /join: per address, generous because a
+ * church foyer shares one wifi on a Sunday, and per form, a bound on the total
+ * whoever is sending (and whatever address they claim). In-memory and per
+ * worker, as everywhere else that uses lib/rate-limit.
+ */
+const FORM_PER_IP = { limit: 60, windowMs: 60 * 60_000 };
+const FORM_PER_FORM = { limit: 300, windowMs: 60 * 60_000 };
+/** Emails to the admins per form per hour; the in-app notice still goes. */
+const FORM_MAIL_PER_FORM = { limit: 30, windowMs: 60 * 60_000 };
+const TOO_MANY =
+  "That is a lot of responses in a short time. Please try again shortly.";
+
+/**
+ * Tell the church's managers, at most once an hour per reason, that responses
+ * are being turned away or are arriving without a member record. From the
+ * outside both look like the form quietly stopped working.
+ */
+async function tellManagersOnce(
+  churchId: string,
+  key: string,
+  title: string,
+  body: string,
+  linkUrl: string,
+): Promise<void> {
+  if (!rateLimit(`form-notice:${key}:${churchId}`, 1, 60 * 60_000).ok) return;
+  try {
+    await notifyChurchManagers({ churchId, title, body, linkUrl });
+  } catch (e) {
+    // The response is handled either way; a lost notice is logged, not thrown.
+    console.error("[forms] manager notice failed", e);
+  }
+}
 
 /**
  * Public form submission — no authentication. Validates against the form's
@@ -35,6 +78,9 @@ export async function submitForm(input: {
   if (input.hp && input.hp.trim() !== "")
     return { ok: true, message: "Thanks! Your response has been recorded." };
 
+  if (!rateLimit(`form:${await clientIp()}`, FORM_PER_IP.limit, FORM_PER_IP.windowMs).ok)
+    return { ok: false, error: TOO_MANY };
+
   const [f] = await db
     .select()
     .from(form)
@@ -42,6 +88,17 @@ export async function submitForm(input: {
     .limit(1);
   if (!f || f.status !== "open")
     return { ok: false, error: "This form isn't accepting responses." };
+
+  if (!rateLimit(`form-total:${f.id}`, FORM_PER_FORM.limit, FORM_PER_FORM.windowMs).ok) {
+    await tellManagersOnce(
+      f.churchId,
+      `flood:${f.id}`,
+      `Responses to "${f.title}" are being turned away`,
+      `More than ${FORM_PER_FORM.limit} responses arrived in the last hour, so further ones are being refused for now. If these are not your people, close the form or change its link.`,
+      `/forms/${f.id}`,
+    );
+    return { ok: false, error: TOO_MANY };
+  }
 
   const fields = (f.fields ?? []) as FormField[];
   const values = input.values ?? {};
@@ -133,35 +190,43 @@ async function matchOrCreateMember(
     firstName = parts[0] ?? "";
     lastName = parts.slice(1).join(" ");
   }
-  const email = get("email").toLowerCase();
+  // The mailer's rule, so what is stored is what can be sent to; an address
+  // it cannot rescue is treated as no address rather than kept malformed.
+  const email = normalizeEmail(get("email")) ?? "";
   const phoneRaw = get("phone");
-  const phoneNorm = phoneRaw ? normalizePhone(phoneRaw) : null;
+  /*
+   * Read in the CHURCH's dial code. This used normalizePhone, which only knows
+   * Nigerian numbers: a Ghanaian "024 123 4567" came back null, no match was
+   * tried, and the same person filling the form in each week was a new member
+   * each week (lib/first-timer-intake.ts fixed the same thing).
+   */
+  const dial = await churchDial(churchId);
+  const phone = phoneRaw ? e164Phone(phoneRaw, dial) : null;
 
   // Nothing to match/create on.
-  if (!email && !phoneNorm && !firstName) return null;
+  if (!email && !phone && !firstName) return null;
 
-  // Try to find an existing member by email or normalised phone.
-  if (email || phoneNorm) {
-    const last = phoneNorm ? phoneNorm.slice(-10) : null;
-    const [found] = await db
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.churchId, churchId),
-          or(
-            email ? sql`lower(${member.email}) = ${email}` : sql`false`,
-            last
-              ? and(
-                  isNotNull(member.phone),
-                  sql`right(regexp_replace(${member.phone}, '\\D', '', 'g'), 10) = ${last}`,
-                )
-              : sql`false`,
-          ),
-        ),
-      )
-      .limit(1);
+  // An existing member by email, or by phone on its national number.
+  if (email || phone) {
+    const found = await findExistingMember(churchId, email || null, phone, dial);
     if (found) return found.id;
+  }
+
+  /*
+   * The plan's member limit, which every other way of adding a member
+   * enforces. The response is still kept; it just arrives without a member
+   * record, and the managers are told why.
+   */
+  const cap = await memberLimitStatus(churchId);
+  if (cap.atLimit) {
+    await tellManagersOnce(
+      churchId,
+      "member-limit",
+      "Form responses aren't being added to Members",
+      `Your plan covers ${cap.limit} members and you have ${cap.used}, so people who fill in your forms are kept as responses but not added to Members. Upgrade to add them.`,
+      "/settings/billing",
+    );
+    return null;
   }
 
   // Create a new member (visitor by default).
@@ -172,7 +237,9 @@ async function matchOrCreateMember(
       firstName: firstName || "Form respondent",
       lastName: lastName || null,
       email: email || null,
-      phone: phoneRaw || null,
+      // E.164 when it parses, so later matching and texting read it the same
+      // way; otherwise what was typed, rather than nothing.
+      phone: phone ?? (phoneRaw || null),
       status: "visitor",
       inFollowUp: addToFollowUp,
       followUpStatus: addToFollowUp ? "new" : null,
@@ -204,7 +271,22 @@ async function notifyManagers(
     });
   }
 
-  if (f.notifyEmail && isEmailConfigured()) {
+  /*
+   * Every owner and admin is emailed per response, so the email is capped per
+   * form per hour. The in-app notice above and the responses page still show
+   * every one; the cap only stops a flood of submissions becoming a flood in
+   * everybody's inbox.
+   */
+  const wantsMail = f.notifyEmail && isEmailConfigured();
+  const mailAllowed =
+    wantsMail &&
+    rateLimit(`form-mail:${f.id}`, FORM_MAIL_PER_FORM.limit, FORM_MAIL_PER_FORM.windowMs).ok;
+  if (wantsMail && !mailAllowed && rateLimit(`form-mail-log:${f.id}`, 1, FORM_MAIL_PER_FORM.windowMs).ok)
+    console.warn(
+      `[forms] "${f.title}" (${f.id}) passed ${FORM_MAIL_PER_FORM.limit} response emails this hour; further ones are in-app only until the hour is up`,
+    );
+
+  if (mailAllowed) {
     const managers = await db
       .selectDistinct({ email: user.email, name: user.name })
       .from(staff)
@@ -225,7 +307,9 @@ async function notifyManagers(
     const rowsHtml = fields
       .map(
         (field) =>
-          `<tr><td style="padding:4px 12px 4px 0;color:#8a86a0;font-size:13px">${field.label}</td><td style="padding:4px 0;font-size:14px">${escapeHtml(displayValue(data[field.id] ?? null)) || "—"}</td></tr>`,
+          // The label is escaped like the answer: it is written by whoever
+          // can edit forms, and this email goes to every owner and admin.
+          `<tr><td style="padding:4px 12px 4px 0;color:#8a86a0;font-size:13px">${escapeHtml(field.label)}</td><td style="padding:4px 0;font-size:14px">${escapeHtml(displayValue(data[field.id] ?? null)) || "—"}</td></tr>`,
       )
       .join("");
     const html = emailLayout(
@@ -241,7 +325,12 @@ async function notifyManagers(
           subject: `New response: ${f.title}`,
           html,
           fromName: c?.name,
-        }).catch(() => false),
+        }).catch((e: unknown) => {
+          // One admin's failed email must not stop the others'; recorded so
+          // the missing one is explicable.
+          console.error(`[forms] response email to a manager of ${f.churchId} failed`, e);
+          return false;
+        }),
       ),
     );
   }

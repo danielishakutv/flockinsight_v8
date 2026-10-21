@@ -267,7 +267,8 @@ export function AttendanceExportMenu({
               />
               <p className="text-muted-foreground text-xs">
                 Rows whose name matches a service update that day&apos;s figure;
-                other names are added as one-off events.
+                other names are added as one-off events, unless that event is
+                already recorded on that day, which is updated instead.
               </p>
             </div>
           )}

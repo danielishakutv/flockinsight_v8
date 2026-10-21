@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { branchRequest, church, hqReportSetting } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
@@ -76,6 +76,18 @@ export async function inviteBranch(
     return {
       ok: false,
       error: "This church is already a branch, so it can't have branches of its own.",
+    };
+  // The other half of one level deep: a church with branches of its own
+  // would bring them in a level down, and the roll-up would leave them out.
+  const [targetsBranch] = await db
+    .select({ id: church.id })
+    .from(church)
+    .where(eq(church.parentChurchId, churchId))
+    .limit(1);
+  if (targetsBranch)
+    return {
+      ok: false,
+      error: `${target.name} has branches of its own, so it can't become a branch.`,
     };
 
   const [existing] = await db
@@ -175,16 +187,81 @@ export async function respondToBranchRequest(
     .limit(1);
   if (!req) return { ok: false, error: "That request is no longer open." };
 
-  await db
-    .update(branchRequest)
-    .set({ status: accept ? "accepted" : "declined", respondedAt: new Date() })
-    .where(eq(branchRequest.id, id));
+  /*
+   * Accepting is re-checked now, not trusted from when the invitation was
+   * sent. Invitations wait for days, and an older one can be answered after
+   * this church has joined another network, taken on branches of its own, or
+   * after the inviting church has itself become a branch. Unchecked, accepting
+   * silently moved a branch to a second headquarters (the first still listing
+   * it as accepted), or built the two-level tree the roll-up cannot see.
+   *
+   * Both churches are locked first — in id order, so two answers crossing
+   * each other cannot deadlock — and every rule is read under the lock. Inside
+   * a transaction alone, two invitations accepted at once would both read "no
+   * network yet" (see AGENTS.md: a transaction is not isolation). The UPDATEs
+   * then repeat their predicates and count what they changed.
+   */
+  try {
+    const refusal = await db.transaction(async (tx) => {
+      if (accept) {
+        const locked = await tx
+          .select({ id: church.id, parentChurchId: church.parentChurchId })
+          .from(church)
+          .where(inArray(church.id, [mine.id, req.parentChurchId]))
+          .orderBy(asc(church.id))
+          .for("update");
+        const me = locked.find((c) => c.id === mine.id);
+        const hq = locked.find((c) => c.id === req.parentChurchId);
+        if (!me || !hq) return "The church that invited you no longer exists.";
+        if (me.parentChurchId)
+          return "Your church already belongs to a network. Leave it first, then accept this invitation.";
+        if (hq.parentChurchId)
+          return "The church that invited you has since become a branch itself, so it can't take branches.";
+        const [ownBranch] = await tx
+          .select({ id: church.id })
+          .from(church)
+          .where(eq(church.parentChurchId, mine.id))
+          .limit(1);
+        if (ownBranch)
+          return "Your church has branches of its own, so it can't become a branch. Remove them first if this church should join the network.";
+      }
 
-  if (accept) {
-    await db
-      .update(church)
-      .set({ parentChurchId: req.parentChurchId })
-      .where(eq(church.id, mine.id));
+      const answered = await tx
+        .update(branchRequest)
+        .set({ status: accept ? "accepted" : "declined", respondedAt: new Date() })
+        .where(
+          and(
+            eq(branchRequest.id, id),
+            eq(branchRequest.childChurchId, mine.id),
+            eq(branchRequest.status, "pending"),
+          ),
+        )
+        .returning({ id: branchRequest.id });
+      if (answered.length !== 1) return "That request is no longer open.";
+
+      if (accept) {
+        const joined = await tx
+          .update(church)
+          .set({ parentChurchId: req.parentChurchId })
+          .where(and(eq(church.id, mine.id), isNull(church.parentChurchId)))
+          .returning({ id: church.id });
+        if (joined.length !== 1) {
+          // Throw, not return: the request row above must not stay accepted.
+          throw new BranchAcceptRaced(`accept ${id} moved ${joined.length} churches`);
+        }
+      }
+      return null;
+    });
+    if (refusal) return { ok: false, error: refusal };
+  } catch (err) {
+    if (err instanceof BranchAcceptRaced) {
+      console.warn(`[branches] accept rolled back: ${err.message}`);
+      return {
+        ok: false,
+        error: "Your church's network changed while you were answering. Reload the page and try again.",
+      };
+    }
+    throw err;
   }
 
   await audit({
@@ -202,6 +279,14 @@ export async function respondToBranchRequest(
   revalidatePath("/branches");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+/** A church's network moved under an accept. Named so the catch can tell. */
+class BranchAcceptRaced extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BranchAcceptRaced";
+  }
 }
 
 /** Withdraw an invitation that hasn't been answered. */

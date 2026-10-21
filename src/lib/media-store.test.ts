@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import {
   isLocallyStored,
   makeStorageKey,
   parseRange,
   resolveKey,
+  summarisePartialUploads,
   tmpPathFor,
   validUploadId,
   MEDIA_ROOT,
+  OPEN_UPLOAD_WINDOW_MS,
+  PARTIAL_BYTES_WINDOW_MS,
 } from "@/lib/media-store";
 import { planFor } from "@/lib/media-transcode";
 
@@ -218,5 +222,44 @@ describe("in-progress uploads are scoped to one church", () => {
   it("accepts an ordinary uuid and a reasonable custom id", () => {
     expect(validUploadId("3f6b1a2c-9d4e-4f8a-bc12-0a1b2c3d4e5f")).toBe(true);
     expect(validUploadId("recording-2026-10-03-abc")).toBe(true);
+  });
+});
+
+describe("one church's partial uploads, read from the temp directory", () => {
+  const now = Date.UTC(2026, 9, 21, 12);
+  const name = (church: string, id: string) => path.basename(tmpPathFor(church, id));
+  const entries = [
+    { name: name("church-a", "upload-one-1"), size: 100, mtimeMs: now - 60_000 },
+    { name: name("church-a", "upload-two-2"), size: 50, mtimeMs: now - 30 * 60 * 60_000 },
+    // Abandoned three days ago: on the disk until the sweep, but not held against the church.
+    { name: name("church-a", "upload-old-3"), size: 25, mtimeMs: now - 3 * OPEN_UPLOAD_WINDOW_MS },
+    { name: name("church-b", "upload-one-1"), size: 9_999, mtimeMs: now },
+    // A transcode's output and the recorder's directory live here too.
+    { name: "abc-1-transcode.mp4", size: 7_777, mtimeMs: now },
+    { name: "recordings", size: 4_096, mtimeMs: now },
+  ];
+
+  it("adds up only this church's .part files", () => {
+    expect(summarisePartialUploads(entries, "church-a", null, now)).toEqual({ bytes: 150, open: 1 });
+    expect(summarisePartialUploads(entries, "church-b", null, now)).toEqual({ bytes: 9_999, open: 1 });
+  });
+
+  it("leaves out the upload being written, which is counted by where it ends", () => {
+    expect(summarisePartialUploads(entries, "church-a", "upload-one-1", now)).toEqual({
+      bytes: 50,
+      open: 0,
+    });
+  });
+
+  it("stops counting an untouched upload as open after a day, but keeps its bytes", () => {
+    const s = summarisePartialUploads(entries, "church-a", "upload-one-1", now);
+    expect(s.open).toBe(0);
+    expect(s.bytes).toBe(50);
+  });
+
+  it("stops holding an abandoned upload against the church's storage after two days", () => {
+    const s = summarisePartialUploads(entries, "church-a", null, now);
+    expect(s.bytes, "the three-day-old file is left out").toBe(150);
+    expect(now - 3 * OPEN_UPLOAD_WINDOW_MS).toBeLessThan(now - PARTIAL_BYTES_WINDOW_MS);
   });
 });

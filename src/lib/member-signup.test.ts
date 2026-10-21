@@ -45,3 +45,20 @@ describe("cleanSignupValues: the phone", () => {
     expect(!r.ok && r.error).toMatch(/country code/);
   });
 });
+
+describe("cleanSignupValues: the email", () => {
+  const withEmail = (email: string) =>
+    cleanSignupValues({ firstName: "Ada", email }, signup, "234");
+
+  it("refuses an address every email to it would be refused at", () => {
+    // The old regex took "com1" as a top-level domain.
+    expect(withEmail("ada@gmail.com1").ok).toBe(false);
+    expect(withEmail("ada@gmail..com").ok).toBe(false);
+  });
+
+  it("stores the address the mailer will use, and matches on the same", () => {
+    const r = withEmail("  Ada@Example.com. ");
+    expect(r.ok && r.value.email).toBe("ada@example.com");
+    expect(r.ok && r.value.emailNorm).toBe("ada@example.com");
+  });
+});

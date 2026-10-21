@@ -17,8 +17,9 @@ import { auth } from "@/lib/auth";
 import { requireChurch } from "@/lib/session";
 import { teamLimitStatus } from "@/lib/entitlements-server";
 import { planName } from "@/lib/plans";
-import { can } from "@/lib/permissions";
+import { can, getAccess } from "@/lib/permissions";
 import { betterAuthRoleFor } from "@/lib/staff-access";
+import { beyondYourOwnMessage, permissionsBeyond } from "@/lib/staff-permissions";
 import { refuseIfDemo } from "@/lib/demo";
 import {
   invitationErrorMessage,
@@ -74,7 +75,12 @@ function fullName(firstName: string, lastName: string | null): string {
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
-/** Validate a church role and return its permissions. */
+/**
+ * Validate a church role and return its permissions.
+ *
+ * Inviting somebody onto a role gives them all of it, so the caller must hold
+ * all of it themselves, the same rule assignRole applies after they accept.
+ */
 async function loadRole(
   churchId: string,
   roleId: string,
@@ -86,7 +92,10 @@ async function loadRole(
     .limit(1);
   if (!r) return { error: "Role not found." };
   if (r.isSystem) return { error: "The Owner role can't be assigned." };
-  return { permissions: r.permissions ?? [] };
+  const permissions = r.permissions ?? [];
+  const beyond = permissionsBeyond(await getAccess(), permissions);
+  if (beyond.length > 0) return { error: beyondYourOwnMessage(beyond) };
+  return { permissions };
 }
 
 function revalidateAccess(memberId: string) {
@@ -223,21 +232,31 @@ export async function inviteMemberAsStaff(input: {
     )
     .limit(1);
 
-  // Keep the org role in step with the role we're about to attach, BEFORE the
-  // email goes out, so the re-sent invitation carries it.
+  // A live invitation is re-sent below and only then tied to the new role, so
+  // until that tie exists it reads as "member". Writing "admin" here first left
+  // a plain admin invitation (everything, once accepted) whenever the re-send
+  // failed or the invitation had no role attached yet. The role's own org role
+  // is written after staff_invite, as for a new invitation.
   if (live) {
     await db
       .update(invitation)
-      .set({ role: orgRole })
+      .set({ role: "member" })
       .where(eq(invitation.id, live.id));
   }
 
+  /*
+   * The plugin is always asked for "member". lib/org-plugin-guard.ts refuses
+   * an "admin" invitation from anyone who does not hold every permission,
+   * because a plain admin seat with no church role is the legacy full-access
+   * fallback. This invitation is not plain: once staff_invite ties it to the
+   * role checked above, the org role that role implies is written below.
+   */
   let invitationId: string;
   try {
     const created = await auth.api.createInvitation({
       body: {
         email,
-        role: orgRole,
+        role: "member",
         organizationId: ctx.church.id,
         resend: live ? true : undefined,
       },
@@ -262,6 +281,21 @@ export async function inviteMemberAsStaff(input: {
       target: staffInvite.invitationId,
       set: { memberId: m.id, roleId: input.roleId },
     });
+
+  // Now that the role is attached. Until this lands the invitation reads as
+  // "member" with that role, which grants the role and nothing more.
+  if (orgRole !== "member") {
+    await db
+      .update(invitation)
+      .set({ role: orgRole })
+      .where(
+        and(
+          eq(invitation.id, invitationId),
+          eq(invitation.organizationId, ctx.church.id),
+          eq(invitation.status, "pending"),
+        ),
+      );
+  }
 
   revalidateAccess(m.id);
   return { ok: true, invitationId };

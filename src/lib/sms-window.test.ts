@@ -5,6 +5,7 @@ import {
   minutesFromHHMM,
   nextSmsWindowStart,
   smsWindowNotice,
+  smsWindowShutForToday,
   withinSmsWindow,
 } from "./sms-window";
 
@@ -35,6 +36,34 @@ describe("withinSmsWindow", () => {
   it("falls back to Lagos for a timezone nobody recognises", () => {
     expect(localHour(new Date("2026-10-03T07:00:00Z"), "Mars/Olympus")).toBe(8);
     expect(withinSmsWindow(new Date("2026-10-03T07:00:00Z"), "")).toBe(true);
+  });
+});
+
+/*
+ * A birthday text queued after 8pm went at 8am the next day, saying "today"
+ * a day late. Before 8am is different: the window is still to come today, so
+ * queueing until 08:00 is right.
+ */
+describe("smsWindowShutForToday", () => {
+  it("is shut from 8pm local, and not before", () => {
+    // 18:59Z is 19:59 in Lagos; 19:00Z is 20:00.
+    expect(smsWindowShutForToday(new Date("2026-10-03T18:59:00Z"), LAGOS)).toBe(false);
+    expect(smsWindowShutForToday(new Date("2026-10-03T19:00:00Z"), LAGOS)).toBe(true);
+    expect(smsWindowShutForToday(new Date("2026-10-03T22:30:00Z"), LAGOS)).toBe(true);
+  });
+
+  it("is not shut before 8am, when today's window has yet to open", () => {
+    // 05:00Z is 06:00 in Lagos: outside the window, but it opens today.
+    const at = new Date("2026-10-03T05:00:00Z");
+    expect(withinSmsWindow(at, LAGOS)).toBe(false);
+    expect(smsWindowShutForToday(at, LAGOS)).toBe(false);
+  });
+
+  it("answers in the church's own zone", () => {
+    // 18:30Z is 19:30 in Lagos (still open) and 20:30 in Maputo (shut).
+    const at = new Date("2026-10-03T18:30:00Z");
+    expect(smsWindowShutForToday(at, LAGOS)).toBe(false);
+    expect(smsWindowShutForToday(at, MAPUTO)).toBe(true);
   });
 });
 

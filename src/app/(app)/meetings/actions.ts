@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   attendanceRecord,
@@ -11,10 +11,11 @@ import {
   meetingParticipant,
 } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { endOfLocalDay, parseWallClockInput } from "@/lib/wall-clock-input";
+import { endOfLocalDay, parseWallClockInput, toLocalDateInput } from "@/lib/wall-clock-input";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { isSfuConfigured } from "@/lib/sfu";
+import { escapeLike } from "@/lib/media-slide-kinds";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import {
   allocateMeetingCode,
@@ -386,10 +387,32 @@ export async function stopRepeating(id: string): Promise<ActionResult> {
   if (!m) return { ok: false, error: "We couldn't find that meeting." };
   if (m.repeat === "none") return { ok: false, error: "That meeting doesn't repeat." };
 
+  /*
+   * This occurrence, and the one coming up if this is an older card — "Stop
+   * repeating" on last week's meeting means the series, and the series is
+   * carried forward by its newest occurrence (see rollSeriesForward).
+   *
+   * Earlier finished occurrences keep their rule on purpose: the first one's
+   * is what lets the link in somebody's WhatsApp follow forward to the one
+   * still to come, and rollSeriesForward no longer lets an older row start the
+   * series again.
+   */
+  const seriesId = m.seriesId ?? m.id;
   await db
     .update(meeting)
     .set({ repeat: "none", repeatUntil: null })
-    .where(and(eq(meeting.id, id), eq(meeting.churchId, g.churchId)));
+    .where(
+      and(
+        eq(meeting.churchId, g.churchId),
+        or(
+          eq(meeting.id, id),
+          and(
+            or(eq(meeting.seriesId, seriesId), eq(meeting.id, seriesId)),
+            inArray(meeting.status, ["scheduled", "live"]),
+          ),
+        ),
+      ),
+    );
 
   await audit({
     churchId: g.churchId,
@@ -588,28 +611,102 @@ export async function recordAttendanceFromMeeting(id: string): Promise<ActionRes
     people.map((p) => p.memberId ?? p.userId ?? p.peerId),
   ).size;
 
+  // The church's own calendar day. UTC's put a 7:30pm Wednesday service in
+  // New York (00:30 UTC, in winter) on the Thursday.
   const when = m.startedAt ?? m.scheduledFor ?? new Date();
-  const date = when.toISOString().slice(0, 10);
+  const date = toLocalDateInput(when, g.timezone);
 
-  const [session] = await db
-    .insert(attendanceSession)
-    .values({
-      churchId: g.churchId,
-      serviceId: m.serviceId,
-      title: m.title,
-      date,
-      totalCount: distinctPeople,
-      notes: `Recorded from the online meeting "${m.title}".`,
-      recordedBy: g.userId,
-    })
-    .onConflictDoUpdate({
-      target: [attendanceSession.churchId, attendanceSession.serviceId, attendanceSession.date],
-      set: {
-        totalCount: sql`greatest(${attendanceSession.totalCount}, ${distinctPeople})`,
+  /*
+   * Which session this meeting already made, if any.
+   *
+   * The upsert below only works when the meeting is linked to a service. A
+   * meeting never is in practice, and Postgres treats NULLs in a unique index
+   * as distinct, so every later press inserted another session with the same
+   * headcount and marked every member present again — that Sunday counted
+   * double in every report. The note this path writes ends with the meeting's
+   * code, which is unique and never changes, so it is how the session is found
+   * again — by the code alone, so a title edited between presses still
+   * matches. The older wording, without the code, is matched too, so meetings
+   * recorded before this change are not doubled by the next press either —
+   * on its title and day, and on either day: those were filed under UTC's.
+   *
+   * Under a transaction-scoped lock on the meeting, because "find it, else
+   * insert" is two statements and READ COMMITTED lets two presses both find
+   * nothing (AGENTS.md). A hard guarantee would need a meeting id column on
+   * attendance_session, which is a schema change.
+   */
+  const notes = `Recorded from the online meeting "${m.title}" (${m.code}).`;
+  const madeByThisMeeting = or(
+    like(attendanceSession.notes, `%(${escapeLike(m.code)}).`),
+    and(
+      eq(attendanceSession.notes, `Recorded from the online meeting "${m.title}".`),
+      inArray(attendanceSession.date, [...new Set([date, when.toISOString().slice(0, 10)])]),
+    ),
+  );
+
+  const session = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`meeting-attendance:${m.id}`}))`);
+
+    if (m.serviceId) {
+      const [upserted] = await tx
+        .insert(attendanceSession)
+        .values({
+          churchId: g.churchId,
+          serviceId: m.serviceId,
+          title: m.title,
+          date,
+          totalCount: distinctPeople,
+          notes,
+          recordedBy: g.userId,
+        })
+        .onConflictDoUpdate({
+          target: [attendanceSession.churchId, attendanceSession.serviceId, attendanceSession.date],
+          set: {
+            totalCount: sql`greatest(${attendanceSession.totalCount}, ${distinctPeople})`,
+            title: m.title,
+          },
+        })
+        .returning({ id: attendanceSession.id });
+      return upserted;
+    }
+
+    const [existing] = await tx
+      .select({ id: attendanceSession.id })
+      .from(attendanceSession)
+      .where(
+        and(
+          eq(attendanceSession.churchId, g.churchId),
+          isNull(attendanceSession.serviceId),
+          madeByThisMeeting,
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await tx
+        .update(attendanceSession)
+        .set({
+          totalCount: sql`greatest(${attendanceSession.totalCount}, ${distinctPeople})`,
+          title: m.title,
+        })
+        .where(and(eq(attendanceSession.id, existing.id), eq(attendanceSession.churchId, g.churchId)));
+      return existing;
+    }
+
+    const [inserted] = await tx
+      .insert(attendanceSession)
+      .values({
+        churchId: g.churchId,
+        serviceId: null,
         title: m.title,
-      },
-    })
-    .returning({ id: attendanceSession.id });
+        date,
+        totalCount: distinctPeople,
+        notes,
+        recordedBy: g.userId,
+      })
+      .returning({ id: attendanceSession.id });
+    return inserted;
+  });
 
   if (memberIds.length > 0) {
     await db
@@ -662,6 +759,18 @@ export async function duplicateMeeting(id: string): Promise<ActionResult> {
   const m = await getMeeting(id, g.churchId);
   if (!m) return { ok: false, error: "We couldn't find that meeting." };
 
+  /*
+   * The same two rules saveMeeting applies to a new meeting. Without them
+   * every copy fell to the column default, "mesh" — a re-run of a 50-person
+   * prayer meeting had every phone uploading a stream per person, and could
+   * not be recorded — and a church that had moved to a smaller plan could
+   * re-run a room its plan no longer allows. Trimmed to the ceiling rather
+   * than refused: the point of this button is one tap.
+   */
+  const ceiling = meetingLimitFor(g.plan);
+  const maxParticipants =
+    ceiling === null ? m.maxParticipants : Math.min(m.maxParticipants, ceiling);
+
   const code = await allocateMeetingCode();
   const [row] = await db
     .insert(meeting)
@@ -676,7 +785,8 @@ export async function duplicateMeeting(id: string): Promise<ActionResult> {
       passcode: m.access === "passcode" ? generatePasscode() : null,
       hostKey: generateHostKey(),
       lobby: m.lobby,
-      maxParticipants: m.maxParticipants,
+      maxParticipants,
+      transport: chooseTransport({ maxParticipants, sfuAvailable: isSfuConfigured() }),
       muteOnEntry: m.muteOnEntry,
       cameraOffOnEntry: m.cameraOffOnEntry,
       allowChat: m.allowChat,
@@ -701,7 +811,13 @@ export async function duplicateMeeting(id: string): Promise<ActionResult> {
     targetType: "meeting",
     targetId: row.id,
     targetLabel: m.title,
-    meta: { copiedFrom: id, code: row.code },
+    meta: {
+      copiedFrom: id,
+      code: row.code,
+      ...(maxParticipants !== m.maxParticipants
+        ? { maxParticipants, trimmedFrom: m.maxParticipants }
+        : {}),
+    },
   });
 
   refresh(row.id);

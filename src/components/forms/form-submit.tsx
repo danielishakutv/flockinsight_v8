@@ -33,6 +33,7 @@ export function FormSubmit({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
   const [hp, setHp] = useState("");
 
   function set(id: string, v: FieldValue) {
@@ -42,19 +43,43 @@ export function FormSubmit({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Cleared first, so a refusal from the last attempt is not left standing
+    // over a new round of field errors as if it were the reason.
+    setFailure(null);
     const errs = validateSubmission(fields, values);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
     setSubmitting(true);
-    const res = await submitForm({ slug, values, hp });
-    setSubmitting(false);
-    if (res.ok) {
+    try {
+      const res = await submitForm({ slug, values, hp });
+      if (!res.ok) {
+        /*
+         * Named, never swallowed. A form closed while somebody was filling it
+         * in used to stop the spinner and show nothing, so they left thinking
+         * they had registered. The server checks against the form as it is
+         * now, so an error for a question added since this page loaded has no
+         * field here to sit under: say the form changed instead.
+         */
+        const changed =
+          !!res.errors &&
+          Object.keys(res.errors).some((id) => !fields.some((f) => f.id === id));
+        setFailure(
+          changed
+            ? "This form was changed while you were filling it in. Copy any long answers, reload the page to see the new questions, and submit again."
+            : res.error,
+        );
+        if (res.errors) setErrors(res.errors);
+        return;
+      }
       setDone(res.message);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      if (res.errors) setErrors(res.errors);
+    } catch (err) {
+      console.error("form submit: the response did not reach the server", err);
+      setFailure("That did not send. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -97,6 +122,12 @@ export function FormSubmit({
           )}
         </div>
       ))}
+
+      {failure && (
+        <p className="text-destructive text-sm font-medium" role="alert">
+          {failure}
+        </p>
+      )}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full sm:w-auto">
         {submitting && <Loader2 className="size-4 animate-spin" />}

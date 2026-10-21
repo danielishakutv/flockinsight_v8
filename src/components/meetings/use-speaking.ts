@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { closeAudioContext } from "@/lib/media-errors";
+import { closeAudioContext, GESTURE_EVENTS } from "@/lib/media-errors";
 
 /**
  * Who is talking.
@@ -62,6 +62,23 @@ export function useSpeaking(
     }
     const ctx = ctxRef.current;
     const nodes = nodesRef.current;
+
+    /*
+     * Made here, outside any tap, so Safari starts it suspended — and a
+     * suspended context reads silence from every analyser: no speaking rings,
+     * and the people talking were never the ones given video first. It may
+     * only be resumed from inside a gesture, so the next tap or key does it.
+     */
+    const resumeOnGesture = () => {
+      for (const type of GESTURE_EVENTS) document.removeEventListener(type, resumeOnGesture);
+      if (ctx.state !== "suspended") return;
+      ctx.resume().catch((e: unknown) => {
+        console.warn("speaking detector: could not resume the audio context", e);
+      });
+    };
+    if (ctx.state === "suspended") {
+      for (const type of GESTURE_EVENTS) document.addEventListener(type, resumeOnGesture);
+    }
 
     const wanted = new Map(
       streams
@@ -124,6 +141,7 @@ export function useSpeaking(
     return () => {
       cancelled = true;
       clearInterval(timer);
+      for (const type of GESTURE_EVENTS) document.removeEventListener(type, resumeOnGesture);
     };
   }, [key, streams]);
 

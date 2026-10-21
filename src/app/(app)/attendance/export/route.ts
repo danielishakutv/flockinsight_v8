@@ -1,16 +1,11 @@
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
+import { CSV_BOM, toCsv } from "@/lib/csv";
 import { getAttendanceRows } from "@/lib/attendance-export";
 import {
   ATTENDANCE_CSV_HEADERS,
   ATTENDANCE_CSV_SAMPLE,
 } from "@/lib/attendance-data";
-
-/** Quote a CSV cell only when it contains a comma, quote, or newline. */
-function csvCell(value: string | number | null): string {
-  const s = String(value ?? "");
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 // GET /attendance/export            → all recorded attendance as CSV
 // GET /attendance/export?template=1 → header row + one example row
@@ -40,6 +35,10 @@ export async function GET(request: Request) {
         r.female,
         r.teenMale,
         r.teenFemale,
+        r.youthMale,
+        r.youthFemale,
+        r.seniorMale,
+        r.seniorFemale,
         r.childMale,
         r.childFemale,
         r.children,
@@ -52,12 +51,15 @@ export async function GET(request: Request) {
         r.notes ?? "",
       ]);
 
-  const lines = [header, ...body];
-
-  const out = lines.map((line) => line.map(csvCell).join(",")).join("\r\n");
-  // Leading BOM (U+FEFF) so Excel opens UTF-8 correctly; CRLF line endings.
-  const BOM = String.fromCharCode(0xfeff);
-  const csv = BOM + out;
+  /*
+   * Through the shared `toCsv`, like every other export. This route used to
+   * quote cells itself and nothing more, so an event titled
+   * `=HYPERLINK(...)` — anyone who can record attendance can name one — became
+   * a live formula in the spreadsheet of whoever downloaded the file. `toCsv`
+   * puts an apostrophe before it; the import takes it off again.
+   * BOM so Excel opens UTF-8 correctly; CRLF line endings.
+   */
+  const csv = CSV_BOM + toCsv([header, ...body]);
 
   const stamp = new Date().toISOString().slice(0, 10);
   const filename = isTemplate

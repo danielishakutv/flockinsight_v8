@@ -1,11 +1,13 @@
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { giving, givingCategory, project } from "@/db/schema";
+import { giving, givingCategory, member, project } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { parseCsv } from "@/lib/csv";
+import { refuseWithoutFeature } from "@/lib/entitlements-server";
+import { parseCsv, unescapeCsvCell } from "@/lib/csv";
 import { backfillFund, fundAccountFor } from "@/lib/finance-giving-sync";
+import { countGifts, giftKey, splitAlreadyRecorded } from "@/lib/giving-import";
 import { normalizeDate } from "@/lib/members-data";
 import { decimalSeparatorFor } from "@/lib/money-input";
 import { localeForCountry } from "@/lib/country-profile";
@@ -33,6 +35,12 @@ export async function POST(request: Request) {
   const { church, user } = await requireChurch();
   if (!(await can("giving.manage")))
     return json({ ok: false, error: "You don't have permission to import giving." }, 403);
+
+  // "CSV import / export" is sold from Growth, exactly as the member import
+  // holds it. Recording gifts by hand is on every plan, so nothing a Starter
+  // church can already do is taken away.
+  const gate = await refuseWithoutFeature("dataExport");
+  if (gate) return json(gate, 403);
 
   let file: File | null = null;
   try {
@@ -67,7 +75,9 @@ export async function POST(request: Request) {
 
   const get = (cells: string[], key: GivingFieldKey): string => {
     const col = colMap.indexOf(key);
-    return col >= 0 ? (cells[col] ?? "") : "";
+    // Undo the export's formula guard, so a giver or note that went out as
+    // "'=..." comes back as written and still matches the gift on file.
+    return col >= 0 ? unescapeCsvCell(cells[col] ?? "") : "";
   };
 
   // Existing categories by lowercased name.
@@ -101,6 +111,7 @@ export async function POST(request: Request) {
 
   // First pass: validate rows + discover any new category names to create.
   type Parsed = {
+    rowNo: number;
     date: string;
     amount: number;
     categoryName: string;
@@ -146,6 +157,7 @@ export async function POST(request: Request) {
       newCatNames.push(categoryName.slice(0, 120));
     }
     parsed.push({
+      rowNo,
       date,
       amount,
       categoryName,
@@ -157,8 +169,19 @@ export async function POST(request: Request) {
   });
 
   let imported = 0;
+  let duplicates = 0;
   try {
     await db.transaction(async (tx) => {
+      /*
+       * One giving import per church at a time. Without it, two uploads of
+       * the same file — a double click, or a retry while the first is still
+       * saving — would both read the ledger below before either had written,
+       * and both add everything. Released when the transaction ends.
+       */
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`giving-import:${church.id}`}))`,
+      );
+
       // Create any new categories first, so rows can reference them.
       for (const name of newCatNames) {
         const [row] = await tx
@@ -170,12 +193,82 @@ export async function POST(request: Request) {
         createdCategories++;
       }
 
-      type NewGiving = typeof giving.$inferInsert;
-      const inserts: NewGiving[] = parsed.map((p) => ({
-        churchId: church.id,
-        categoryId: p.categoryName
+      const categoryIdOf = (p: Parsed) =>
+        p.categoryName
           ? (catByName.get(p.categoryName.toLowerCase()) ?? null)
-          : null,
+          : null;
+
+      /*
+       * What the ledger already holds across the file's dates, keyed the way
+       * the export writes a gift, so the same file a second time — or a file
+       * we exported, corrected and brought back — adds nothing already added.
+       * Counted, not just looked up: see lib/giving-import.ts for why two
+       * identical rows must both go in on a first import.
+       */
+      const dates = parsed.map((p) => p.date).sort();
+      const onFile = dates.length
+        ? await tx
+            .select({
+              date: giving.date,
+              amount: giving.amount,
+              giverName: giving.giverName,
+              memberFirst: member.firstName,
+              memberLast: member.lastName,
+              categoryId: giving.categoryId,
+              projectId: giving.projectId,
+              method: giving.method,
+              note: giving.note,
+            })
+            .from(giving)
+            .leftJoin(
+              member,
+              and(eq(member.id, giving.memberId), eq(member.churchId, giving.churchId)),
+            )
+            .where(
+              and(
+                eq(giving.churchId, church.id),
+                gte(giving.date, dates[0]),
+                lte(giving.date, dates[dates.length - 1]),
+              ),
+            )
+        : [];
+      const { add, already } = splitAlreadyRecorded(
+        parsed,
+        (p) =>
+          giftKey({
+            date: p.date,
+            amount: p.amount,
+            giver: p.giver,
+            categoryId: categoryIdOf(p),
+            projectId: p.projectId,
+            method: p.method,
+            note: p.note,
+          }),
+        countGifts(
+          onFile.map((g) => ({
+            date: g.date,
+            amount: g.amount,
+            // The name the export prints for a member's gift.
+            giver:
+              [g.memberFirst, g.memberLast].filter(Boolean).join(" ") ||
+              g.giverName,
+            categoryId: g.categoryId,
+            projectId: g.projectId,
+            method: g.method,
+            note: g.note,
+          })),
+        ),
+      );
+      duplicates = already.length;
+      for (const p of already) {
+        if (errors.length < 25)
+          errors.push(`Row ${p.rowNo}: already recorded — not added again`);
+      }
+
+      type NewGiving = typeof giving.$inferInsert;
+      const inserts: NewGiving[] = add.map((p) => ({
+        churchId: church.id,
+        categoryId: categoryIdOf(p),
         amount: p.amount,
         date: p.date,
         giverName: p.giver,
@@ -254,7 +347,18 @@ export async function POST(request: Request) {
       `Created ${createdCategories} new categor${createdCategories === 1 ? "y" : "ies"} from the file.`,
     );
   }
+  if (duplicates > 0) {
+    errors.push(
+      `${duplicates} gift${duplicates === 1 ? " matched one" : "s matched ones"} already recorded (same date, amount, giver, category, project, method and note), so ${duplicates === 1 ? "it was" : "they were"} not added again.`,
+    );
+  }
   if (truncated) errors.push(`Only the first ${MAX_ROWS} rows were imported.`);
 
-  return json({ ok: true, imported, skipped, errors });
+  return json({
+    ok: true,
+    imported,
+    skipped: skipped + duplicates,
+    duplicates,
+    errors,
+  });
 }

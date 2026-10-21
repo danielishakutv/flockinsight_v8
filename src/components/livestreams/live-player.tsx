@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Radio } from "lucide-react";
 import { useT } from "@/components/i18n-provider";
 import { playMedia } from "@/lib/media-errors";
+import {
+  DISCONNECTED_GRACE_MS,
+  liveOverlay,
+  reconnectDelayMs,
+  type LiveOverlay,
+} from "@/lib/live-reconnect";
 
 /**
  * The player on the public watch page.
@@ -62,6 +68,24 @@ function EmbeddedPlayer({ src }: { src: string }) {
   );
 }
 
+const OVERLAY_TITLE: Record<Exclude<LiveOverlay, "none">, string> = {
+  "not-started": "Not started yet",
+  connecting: "Connecting…",
+  reconnecting: "Reconnecting…",
+  unreachable: "Can't reach the stream",
+  refused: "Can't start the video",
+};
+
+/** "not-started" names the start time instead, when there is one. */
+const OVERLAY_DETAIL: Record<Exclude<LiveOverlay, "none">, string> = {
+  "not-started": "Leave this page open. It starts on its own when the church goes live.",
+  connecting: "Finding the broadcast.",
+  reconnecting: "The picture dropped. It comes back on its own — there is no need to reload.",
+  unreachable:
+    "Check your connection. This page keeps trying on its own; if it keeps happening, the broadcast may have ended.",
+  refused: "This browser would not start the video. Reload the page to try again.",
+};
+
 function WebRtcPlayer({
   whepUrl,
   hlsUrl,
@@ -75,7 +99,12 @@ function WebRtcPlayer({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Consecutive attempts that ended without a picture; back to 0 when one plays.
+  const [failures, setFailures] = useState(0);
+  // A picture played on this page and was then lost.
+  const [dropped, setDropped] = useState(false);
+  // The stream arrived but the browser would not start playing it.
+  const [refused, setRefused] = useState(false);
   /*
    * Muted to begin with, and that is not a choice either: a browser will not
    * autoplay sound, and a player that silently refuses to start is the failure
@@ -87,73 +116,170 @@ function WebRtcPlayer({
   useEffect(() => {
     const el = ref.current;
     if (!el || !whepUrl) return;
+    const url = whepUrl;
 
     let pc: RTCPeerConnection | null = null;
     let cancelled = false;
+    let failed = 0;
+    let showing = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+    let waitingForVisible = false;
 
-    void (async () => {
+    const teardown = () => {
+      if (graceTimer) clearTimeout(graceTimer);
+      graceTimer = null;
+      const old = pc;
+      pc = null;
+      if (!old) return;
+      old.ontrack = null;
+      old.onconnectionstatechange = null;
+      old.close(); // a no-op on a connection that is already closed
+    };
+
+    /*
+     * Start again after a pause, for ever while the page is open: an attempt
+     * that failed, or a connection that worked and was lost. Not while the tab
+     * is hidden — a phone in a pocket should not be dialling every 30s — but
+     * the moment it is looked at again.
+     */
+    const retry = (why: string, err?: unknown) => {
+      if (cancelled) return;
+      teardown();
+      if (showing) {
+        showing = false;
+        setDropped(true);
+      }
+      setPlaying(false);
+      failed += 1;
+      setFailures(failed);
+      console.warn(`livestream player: ${why}; trying again (attempt ${failed + 1})`, err ?? "");
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        if (document.visibilityState === "visible") void connect();
+        else waitingForVisible = true;
+      }, reconnectDelayMs(failed));
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || !waitingForVisible) return;
+      waitingForVisible = false;
+      void connect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    const connect = async (): Promise<void> => {
+      if (cancelled) return;
+      const conn = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
+        bundlePolicy: "max-bundle",
+      });
+      pc = conn;
+      // Only the connection this attempt made may act; an older one is gone.
+      const current = () => !cancelled && pc === conn;
+
+      // Receive only. A viewer publishes nothing, ever.
+      conn.addTransceiver("video", { direction: "recvonly" });
+      conn.addTransceiver("audio", { direction: "recvonly" });
+
+      const remote = new MediaStream();
+      conn.ontrack = (e) => {
+        remote.addTrack(e.track);
+        if (el.srcObject !== remote) el.srcObject = remote;
+        void el.play().then(
+          () => {
+            if (!current()) return;
+            showing = true;
+            failed = 0;
+            setFailures(0);
+            setRefused(false);
+            setPlaying(true);
+          },
+          (err: unknown) => {
+            if (!current()) return;
+            // A newer play() replaced this one — routine on a reconnect.
+            if (err instanceof DOMException && err.name === "AbortError") return;
+            console.error("livestream player: the browser would not start playback", err);
+            setRefused(true);
+          },
+        );
+      };
+
+      /*
+       * The drop the old player could not see. "failed" is final; a
+       * "disconnected" that lasts is treated the same, because on a phone it
+       * can sit there indefinitely with the last frame frozen on screen.
+       */
+      conn.onconnectionstatechange = () => {
+        if (!current()) return;
+        const state = conn.connectionState;
+        if (state === "failed") {
+          retry("the connection failed");
+        } else if (state === "disconnected") {
+          if (graceTimer) return;
+          graceTimer = setTimeout(() => {
+            graceTimer = null;
+            if (current() && conn.connectionState === "disconnected")
+              retry("the connection stayed disconnected");
+          }, DISCONNECTED_GRACE_MS);
+        } else if (graceTimer) {
+          clearTimeout(graceTimer);
+          graceTimer = null;
+        }
+      };
+
       try {
-        pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
-          bundlePolicy: "max-bundle",
-        });
-
-        // Receive only. A viewer publishes nothing, ever.
-        pc.addTransceiver("video", { direction: "recvonly" });
-        pc.addTransceiver("audio", { direction: "recvonly" });
-
-        const remote = new MediaStream();
-        pc.ontrack = (e) => {
-          remote.addTrack(e.track);
-          if (el.srcObject !== remote) el.srcObject = remote;
-          void el.play().then(
-            () => setPlaying(true),
-            () => setFailed(true),
-          );
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+        const offer = await conn.createOffer();
+        await conn.setLocalDescription(offer);
 
         // WHEP takes one description, so the candidates have to be in it.
         await new Promise<void>((resolve) => {
-          if (pc!.iceGatheringState === "complete") return resolve();
+          if (conn.iceGatheringState === "complete") return resolve();
           const check = () => {
-            if (pc!.iceGatheringState === "complete") {
-              pc!.removeEventListener("icegatheringstatechange", check);
+            if (conn.iceGatheringState === "complete") {
+              conn.removeEventListener("icegatheringstatechange", check);
               resolve();
             }
           };
-          pc!.addEventListener("icegatheringstatechange", check);
+          conn.addEventListener("icegatheringstatechange", check);
           setTimeout(resolve, 2500);
         });
+        if (!current()) return;
 
-        const res = await fetch(whepUrl, {
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
-          body: pc.localDescription?.sdp ?? "",
+          body: conn.localDescription?.sdp ?? "",
         });
         if (!res.ok) throw new Error(`WHEP ${res.status}`);
 
         const answer = await res.text();
-        if (cancelled) return;
-        await pc.setRemoteDescription({ type: "answer", sdp: answer });
-      } catch {
-        if (!cancelled) setFailed(true);
+        if (!current()) return;
+        await conn.setRemoteDescription({ type: "answer", sdp: answer });
+      } catch (err) {
+        if (current()) retry("could not reach the stream", err);
       }
-    })();
+    };
+
+    void connect();
 
     return () => {
       cancelled = true;
-      try {
-        pc?.close();
-      } catch {
-        /* already closed */
-      }
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener("visibilitychange", onVisible);
+      teardown();
     };
   }, [whepUrl]);
 
-  const notStarted = status !== "live" && !playing;
+  const overlay = liveOverlay({
+    playing,
+    live: status === "live",
+    dropped,
+    failures,
+    refused,
+  });
+  const notStarted = overlay === "not-started";
+  const cannotPlay = overlay === "unreachable" || overlay === "refused";
 
   return (
     <div className="space-y-3">
@@ -172,7 +298,7 @@ function WebRtcPlayer({
           different situations — the point is that somebody who cannot see
           their service knows whether to wait, refresh, or come back later.
         */}
-        {!playing && (
+        {overlay !== "none" && (
           <div className="absolute inset-0 grid place-items-center bg-slate-950/80 px-6 text-center">
             <div>
               <Radio
@@ -180,23 +306,13 @@ function WebRtcPlayer({
                   notStarted ? "mx-auto size-8 text-slate-500" : "mx-auto size-8 animate-pulse text-rose-400"
                 }
               />
-              <p className="mt-3 font-semibold">
-                {failed
-                  ? "Can't reach the stream"
-                  : notStarted
-                    ? "Not started yet"
-                    : "Connecting…"}
-              </p>
+              <p className="mt-3 font-semibold">{OVERLAY_TITLE[overlay]}</p>
               <p className="mx-auto mt-1 max-w-sm text-sm text-balance text-slate-400">
-                {failed
-                  ? "Check your connection and reload the page. If it keeps happening, the broadcast may have ended."
-                  : notStarted
-                    ? scheduledFor
-                      ? `Due to begin ${new Date(scheduledFor).toLocaleString()}. Leave this page open — it starts on its own.`
-                      : "Leave this page open. It starts on its own when the church goes live."
-                    : "Finding the broadcast."}
+                {notStarted && scheduledFor
+                  ? `Due to begin ${new Date(scheduledFor).toLocaleString()}. Leave this page open — it starts on its own.`
+                  : OVERLAY_DETAIL[overlay]}
               </p>
-              {hlsUrl && failed && (
+              {hlsUrl && cannotPlay && (
                 <a
                   href={hlsUrl}
                   className="mt-3 inline-block text-xs text-indigo-400 underline"

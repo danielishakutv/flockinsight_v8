@@ -89,7 +89,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import { BetaBadge } from "@/components/beta-badge";
 import type { TFunction } from "@/lib/i18n/translate";
-import { playMedia } from "@/lib/media-errors";
+import { playWhenAllowed } from "@/lib/media-errors";
 
 type Phase = "join" | "lobby" | "live" | "ended";
 type Panel = "chat" | "people" | "share" | null;
@@ -224,6 +224,22 @@ export function MeetingRoom(props: {
   const panelRef = useRef<Panel>(null);
   const [unread, setUnread] = useState(0);
   const [handRaised, setHandRaised] = useState(false);
+  /**
+   * Peers whose voice the browser is holding until this person taps.
+   *
+   * Kept per peer because a phone can refuse each audio element separately,
+   * and the banner has to stay up until every one of them is playing.
+   */
+  const [soundHeld, setSoundHeld] = useState<ReadonlySet<string>>(() => new Set());
+  const reportSoundHeld = useCallback((peerId: string, held: boolean) => {
+    setSoundHeld((prev) => {
+      if (prev.has(peerId) === held) return prev;
+      const next = new Set(prev);
+      if (held) next.add(peerId);
+      else next.delete(peerId);
+      return next;
+    });
+  }, []);
   /** What I chose to look at. Mine alone, and only while nothing is spotlit. */
   const [pinned, setPinned] = useState<string | null>(null);
   /**
@@ -338,7 +354,6 @@ export function MeetingRoom(props: {
    * background uploader has drained it.
    */
   const [unsaved, setUnsaved] = useState<VaultEntry[]>([]);
-  const [waiting, setWaiting] = useState<{ participantId: string; name: string }[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
   /**
@@ -367,6 +382,52 @@ export function MeetingRoom(props: {
   const me = session?.me;
   const meeting = session?.meeting;
   const canHost = isHostRole(me?.role ?? "attendee");
+
+  /*
+   * Someone in the lobby finds out they are in the moment the roster names
+   * them as admitted. Derived rather than pushed into state from an effect —
+   * the roster IS the answer, and copying it into a second variable only
+   * creates a window where the two disagree.
+   *
+   * Up here, above every effect that belongs to a live call, and those effects
+   * read `view` rather than `phase`: `phase` stays "lobby" for the whole call
+   * for anybody let in from the lobby, and gated on it they never got the
+   * back-gesture trap (Android Back closed the tab and took them out), the
+   * clock, rotation, the shortcuts or the join chimes.
+   */
+  const admittedNow =
+    !!me && roster.some((r) => r.peerId === me.peerId && r.admitted);
+  const view: Phase = phase === "lobby" && admittedNow ? "live" : phase;
+
+  /**
+   * Lobby entries this host has just answered, hidden until the roster says so.
+   *
+   * The server never echoes a host's own broadcast back to them, so after "Let
+   * in" the entry would otherwise sit there until the next poll — up to the
+   * whole long-poll hold — inviting a second tap. Participant ids are new on
+   * every join, so this never needs clearing: somebody who knocks again is a
+   * new row with a new id.
+   */
+  const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
+
+  /*
+   * Who is waiting to be let in, read off the roster on every poll.
+   *
+   * It used to be built from `knock` signals, and a knock is sent once, when
+   * the guest arrives — so a host who opened the room after the congregation
+   * had started knocking, or who reloaded, started reading after those knocks
+   * and saw an empty lobby while everybody waited at the door for ever. The
+   * roster carries every waiting row, every time.
+   */
+  const waiting = useMemo(
+    () =>
+      canHost
+        ? roster
+            .filter((r) => !r.admitted && !answered.has(r.id))
+            .map((r) => ({ participantId: r.id, name: r.name }))
+        : [],
+    [roster, canHost, answered],
+  );
 
   /* ============================================================
    * Room events that arrive before anything else is set up
@@ -469,21 +530,19 @@ export function MeetingRoom(props: {
     addFloater(emoji, t("meetings.you"));
   }
 
-  /** Lobby traffic: who is knocking, and who has been dealt with. */
+  /**
+   * Room-wide host actions this screen has to follow.
+   *
+   * Not the lobby: who is waiting is read off the roster (see `waiting`), so
+   * knock, admitted and denied need nothing here.
+   *
+   * "Lower all hands" clears every hand on the server, but my own hand button
+   * is local state — left raised, the next tap sent "lowered", the hand never
+   * went up and the host never saw it.
+   */
   function handleControl(payload: Record<string, unknown>) {
     const action = String(payload.action ?? "");
-    if (action === "knock" && typeof payload.participantId === "string") {
-      const participantId = payload.participantId;
-      const name = String(payload.name ?? "Someone");
-      setWaiting((w) =>
-        w.some((x) => x.participantId === participantId)
-          ? w
-          : [...w, { participantId, name }],
-      );
-    }
-    if (action === "admitted" || action === "denied") {
-      setWaiting((w) => w.filter((x) => x.participantId !== payload.participantId));
-    }
+    if (action === "lower-hands") setHandRaised(false);
   }
 
   /* ============================================================
@@ -759,7 +818,7 @@ export function MeetingRoom(props: {
   const myPeerId = session?.me?.peerId ?? null;
 
   useEffect(() => {
-    if (phase !== "live") {
+    if (view !== "live") {
       // Re-seeded on the way back in, so a rejoin does not announce the room.
       seenPeers.current = null;
       return;
@@ -782,7 +841,7 @@ export function MeetingRoom(props: {
     // room gained somebody, which is the more useful of the two to hear.
     if (arrived) playArrivalChime();
     else if (left) playDepartureChime();
-  }, [roster, phase, myPeerId, sounds]);
+  }, [roster, view, myPeerId, sounds]);
 
   // The context holds an audio device open, which on a phone is the difference
   // between a call ending and the earpiece staying taken.
@@ -797,12 +856,12 @@ export function MeetingRoom(props: {
    * already reloaded. This survives that reload. It costs one timer.
    */
   useEffect(() => {
-    if (phase !== "live") return;
+    if (view !== "live") return;
     return watchStalls(() => ({
       connections: null,
       elements: document.querySelectorAll("video, audio").length,
     }));
-  }, [phase]);
+  }, [view]);
 
   /* ============================================================
    * Timers
@@ -813,7 +872,7 @@ export function MeetingRoom(props: {
   }, [recording]);
 
   useEffect(() => {
-    if (phase !== "live") return;
+    if (view !== "live") return;
     const t = setInterval(() => {
       if (startedAt) setElapsed(Math.round((Date.now() - startedAt) / 1000));
       const rec = recordingRef.current;
@@ -822,7 +881,7 @@ export function MeetingRoom(props: {
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, startedAt]);
+  }, [view, startedAt]);
 
   /* ============================================================
    * Leaving
@@ -878,7 +937,7 @@ export function MeetingRoom(props: {
    * it cannot be worded, and on a phone it usually does not appear at all.
    */
   useEffect(() => {
-    if (phase !== "live") return;
+    if (view !== "live") return;
 
     window.history.pushState({ meeting: true }, "");
 
@@ -895,7 +954,7 @@ export function MeetingRoom(props: {
 
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [phase]);
+  }, [view]);
 
   useEffect(() => {
     panelRef.current = panel;
@@ -910,12 +969,12 @@ export function MeetingRoom(props: {
    * room just sees the picture change shape.
    */
   useEffect(() => {
-    if (phase !== "live") return;
+    if (view !== "live") return;
     const onRotate = () => void clientRef.current?.handleRotation();
     const mql = window.matchMedia("(orientation: portrait)");
     mql.addEventListener("change", onRotate);
     return () => mql.removeEventListener("change", onRotate);
-  }, [phase]);
+  }, [view]);
 
   useEffect(() => {
     if (panel !== "people") return;
@@ -929,18 +988,8 @@ export function MeetingRoom(props: {
   }, [panel]);
 
   /* ============================================================
-   * Derived view state
+   * Derived view state (`view` itself is worked out near the top)
    * ========================================================== */
-
-  /*
-   * Someone in the lobby finds out they are in the moment the roster names
-   * them as admitted. Derived rather than pushed into state from an effect —
-   * the roster IS the answer, and copying it into a second variable only
-   * creates a window where the two disagree.
-   */
-  const admittedNow =
-    !!me && roster.some((r) => r.peerId === me.peerId && r.admitted);
-  const view: Phase = phase === "lobby" && admittedNow ? "live" : phase;
 
   const others = useMemo(
     () => roster.filter((r) => r.peerId !== me?.peerId && r.admitted),
@@ -1105,7 +1154,7 @@ export function MeetingRoom(props: {
    * chat puts it away — nobody wants to learn two keys for one panel.
    */
   useEffect(() => {
-    if (phase !== "live") return;
+    if (view !== "live") return;
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       // Never steal a key from someone typing a message.
@@ -1160,7 +1209,7 @@ export function MeetingRoom(props: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
-    phase,
+    view,
     toggleMic,
     toggleCamera,
     toggleScreenShare,
@@ -1205,6 +1254,24 @@ export function MeetingRoom(props: {
     },
     [applyRoomState],
   );
+
+  /** "Let in" or "No", and the entry goes at once rather than on the next poll. */
+  const answerKnock = useCallback(
+    async (action: "admit" | "deny", participantId: string) => {
+      const res = await runAction(action, { participantId });
+      if (res?.ok) setAnswered((prev) => new Set(prev).add(participantId));
+    },
+    [runAction],
+  );
+
+  /*
+   * The host's own hand too: the "lower-hands" broadcast reaches everybody
+   * else, but the server never echoes a peer's own signal back to it.
+   */
+  const lowerAllHands = useCallback(async () => {
+    const res = await runAction("lower-hands");
+    if (res?.ok) setHandRaised(false);
+  }, [runAction]);
 
   /**
    * Say something, and see that you said it.
@@ -1499,7 +1566,7 @@ export function MeetingRoom(props: {
       {/* Audio sinks: kept out of the tiles so a voice keeps playing even when
           the person's tile is scrolled away or their camera is off. */}
       {[...media.values()].map((m) => (
-        <AudioSink key={m.peerId} stream={m.stream} />
+        <AudioSink key={m.peerId} peerId={m.peerId} stream={m.stream} onHeld={reportSoundHeld} />
       ))}
 
       {/*
@@ -1561,6 +1628,21 @@ export function MeetingRoom(props: {
           t={t}
         />
       </header>
+
+      {/*
+        The browser is holding the sound until a tap. Any tap or key anywhere
+        on the page starts it (see playWhenAllowed), so this only has to say
+        so — without it, the room looked fine and simply made no sound.
+      */}
+      {soundHeld.size > 0 && (
+        <p
+          role="status"
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-400/20 bg-amber-500/15 px-3 py-2 text-center text-xs font-semibold text-amber-200"
+        >
+          <VolumeX className="size-4 shrink-0" />
+          {t("meetings.tapToTurnOnSound")}
+        </p>
+      )}
 
       {/* Body */}
       <div className="flex min-h-0 flex-1">
@@ -1965,17 +2047,19 @@ export function MeetingRoom(props: {
     if (panel === "people")
       return (
         <PeoplePanel
-          roster={roster}
+          // Only people actually in the room. Somebody still waiting is listed
+          // above, with a Let in button; under "In the meeting" they had none.
+          roster={roster.filter((r) => r.admitted)}
           waiting={waiting}
           myPeerId={me?.peerId ?? ""}
           canHost={canHost}
           onMute={(participantId) => void runAction("mute", { participantId })}
           onRemove={(participantId) => void runAction("remove", { participantId })}
           onPromote={(participantId, role) => void runAction("promote", { participantId, role })}
-          onAdmit={(participantId) => void runAction("admit", { participantId })}
-          onDeny={(participantId) => void runAction("deny", { participantId })}
+          onAdmit={(participantId) => void answerKnock("admit", participantId)}
+          onDeny={(participantId) => void answerKnock("deny", participantId)}
           onMuteAll={() => void runAction("mute")}
-          onLowerHands={() => void runAction("lower-hands")}
+          onLowerHands={() => void lowerAllHands()}
           diagnostics={diagnostics}
           // Read when the panel opens rather than watched: it changes only
           // when this device has just had a very bad second, and re-rendering
@@ -2012,7 +2096,9 @@ export function MeetingRoom(props: {
  * passes through unchanged so a new reason still says something true.
  */
 function endedMessage(reason: string, t: TFunction): string {
-  if (reason.includes("removed you")) return t("meetings.youWereRemoved");
+  // "You were removed" is what the engine says when /sync answers `removed`.
+  if (reason.includes("removed you") || reason.includes("were removed"))
+    return t("meetings.youWereRemoved");
   if (reason.includes("host ended")) return t("meetings.hostEnded");
   if (reason.includes("has ended")) return t("meetings.meetingEnded");
   if (reason.includes("left the meeting")) return t("meetings.youLeft");
@@ -2024,14 +2110,32 @@ function endedMessage(reason: string, t: TFunction): string {
  * Small pieces
  * ========================================================== */
 
-function AudioSink({ stream }: { stream: MediaStream }) {
+/**
+ * One peer's voice. Held by the browser until a tap, when it has to be — and
+ * the room is told, so it can say "tap to turn the sound on" instead of
+ * leaving a listener watching a silent preacher.
+ */
+function AudioSink({
+  peerId,
+  stream,
+  onHeld,
+}: {
+  peerId: string;
+  stream: MediaStream;
+  onHeld: (peerId: string, held: boolean) => void;
+}) {
   const ref = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (el.srcObject !== stream) el.srcObject = stream;
-    playMedia(el, "meeting audio");
-  }, [stream]);
+    const stop = playWhenAllowed(el, "meeting audio", (held) => onHeld(peerId, held));
+    return () => {
+      stop();
+      // A voice that has gone is not one the room is waiting to hear.
+      onHeld(peerId, false);
+    };
+  }, [peerId, stream, onHeld]);
   return <audio ref={ref} autoPlay playsInline className="hidden" />;
 }
 

@@ -3,11 +3,13 @@ import { and, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { church, member, firstTimerSetting, firstTimerRun } from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, plainTextEmailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { fillTemplate } from "@/lib/service-reminders";
 import { ensureSignup, signupUrl } from "@/lib/member-signup";
 import { localMinutesOfDay, minutesFromHHMM } from "@/lib/sms-window";
+import { inGoodStandingSql } from "@/lib/church-standing";
+import { SMS_INTERRUPTED_DETAIL, claimDecision } from "@/lib/celebration-runs";
 
 export type FirstTimerSummary = {
   churchesChecked: number;
@@ -105,7 +107,15 @@ export async function runFirstTimers(
     })
     .from(firstTimerSetting)
     .innerJoin(church, eq(church.id, firstTimerSetting.churchId))
-    .where(and(eq(firstTimerSetting.enabled, true), eq(church.status, "active")));
+    .where(
+      and(
+        eq(firstTimerSetting.enabled, true),
+        eq(church.status, "active"),
+        // Not for a church behind the paywall, whose admins can no longer
+        // reach the setting that turns this off. See church-standing.ts.
+        inGoodStandingSql(now),
+      ),
+    );
 
   const summary: FirstTimerSummary = {
     churchesChecked: churches.length,
@@ -179,6 +189,7 @@ export async function runFirstTimers(
         channel: firstTimerRun.channel,
         outcome: firstTimerRun.outcome,
         attempts: firstTimerRun.attempts,
+        updatedAt: firstTimerRun.updatedAt,
       })
       .from(firstTimerRun)
       .where(
@@ -256,6 +267,7 @@ export async function runFirstTimers(
             stage: s.stage,
             channel,
             existing: byKey.get(`${m.id}|${s.stage}|${channel}`),
+            now,
           });
           if (!runId) continue;
 
@@ -291,7 +303,7 @@ export async function runFirstTimers(
         ok = await sendEmail({
           to: job.email,
           subject: job.subject,
-          html: emailLayout(job.subject, job.body.replace(/\n/g, "<br>")),
+          html: plainTextEmailLayout(job.subject, job.body),
           text: job.body,
           fromName: c.name,
         });
@@ -439,18 +451,55 @@ export function visitAnchor(
  * Take ownership of one member/stage/channel for this sweep, or decline.
  *
  * Returns the run row's id when this sweep may send, and null when it may not
- * — already sent, already handed to the queue, or attempted as often as it is
- * going to be. The write is conditional on the state that was read, so two
- * sweeps running at once cannot both claim the same message.
+ * — already sent, already handed to the queue, attempted as often as it is
+ * going to be, or being sent right now by another sweep. The write is
+ * conditional on the state that was read, outcome AND attempts, so two sweeps
+ * running at once cannot both claim the same message.
+ *
+ * That last part used to be untrue. Any row not sent or queued was reclaimed,
+ * including a fresh "pending" one another sweep was still sending, and the
+ * WHERE matched it, so the visitor got the welcome twice. The same rule as
+ * celebrations now decides (claimDecision): a young "pending" row is left
+ * alone, and a dead SMS claim, which may already have gone and been charged,
+ * is settled as failed rather than texted again.
  */
 async function claimRun(opts: {
   churchId: string;
   memberId: string;
   stage: Stage;
   channel: Channel;
-  existing?: { id: string; outcome: string; attempts: number };
+  existing?: { id: string; outcome: string; attempts: number; updatedAt: Date };
+  now: Date;
 }): Promise<string | null> {
   const { churchId, memberId, stage, channel, existing } = opts;
+
+  const decision = claimDecision(existing, opts.now, channel, MAX_ATTEMPTS);
+  if (decision === "leave") return null;
+
+  if (decision === "abandon" && existing) {
+    // Settled on the state it was read in: if another sweep settled it first,
+    // this changes nothing. Either way nothing is sent.
+    const done = await db
+      .update(firstTimerRun)
+      .set({
+        outcome: "failed",
+        attempts: MAX_ATTEMPTS,
+        detail: SMS_INTERRUPTED_DETAIL,
+      })
+      .where(
+        and(
+          eq(firstTimerRun.id, existing.id),
+          eq(firstTimerRun.outcome, "pending"),
+          eq(firstTimerRun.attempts, existing.attempts),
+        ),
+      )
+      .returning({ id: firstTimerRun.id });
+    if (done.length > 0)
+      console.warn(
+        `[first-timers] ${stage} SMS ${existing.id} for church ${churchId} was claimed by a sweep that never finished; recorded as failed, not resent.`,
+      );
+    return null;
+  }
 
   if (!existing) {
     const [row] = await db
@@ -469,10 +518,9 @@ async function claimRun(opts: {
     return row?.id ?? null;
   }
 
-  // Done, or somebody else's responsibility now.
-  if (existing.outcome === "sent" || existing.outcome === "queued") return null;
-  if (existing.attempts >= MAX_ATTEMPTS) return null;
-
+  // A failure an hour old, or a dead email claim: try again. Attempts are in
+  // the WHERE too, so a row that failed, was retried and failed again since
+  // it was read is not claimed on the strength of the older read.
   const [row] = await db
     .update(firstTimerRun)
     .set({ outcome: "pending", attempts: existing.attempts + 1, detail: null })
@@ -480,6 +528,7 @@ async function claimRun(opts: {
       and(
         eq(firstTimerRun.id, existing.id),
         eq(firstTimerRun.outcome, existing.outcome),
+        eq(firstTimerRun.attempts, existing.attempts),
       ),
     )
     .returning({ id: firstTimerRun.id });

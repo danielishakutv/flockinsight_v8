@@ -34,10 +34,17 @@ export function WelcomeLinkCard({
   url,
   enabled,
   churchName,
+  paused = false,
 }: {
   url: string;
   enabled: boolean;
   churchName: string;
+  /**
+   * The plan does not include Follow-up, so the public page refuses the link
+   * whatever the switch says. Said here, or "The link is live" would sit
+   * beside a link that leads nowhere.
+   */
+  paused?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -125,12 +132,16 @@ export function WelcomeLinkCard({
         <div className="flex items-start justify-between gap-4 rounded-xl border px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold">
-              {enabled ? "The link is live" : "The link is off"}
+              {enabled && paused
+                ? "The link is paused"
+                : enabled
+                  ? "The link is live"
+                  : "The link is off"}
             </p>
             <p className="text-muted-foreground text-xs">
-              Put the code on a welcome card and a first-timer fills in their
-              own details. They arrive as a visitor, in follow-up, exactly as if
-              your team had written them down.
+              {enabled && paused
+                ? "Follow-up is not on your plan, so the link leads nowhere for now. Switch it off, or upgrade to open it again."
+                : "Put the code on a welcome card and a first-timer fills in their own details. They arrive as a visitor, in follow-up, exactly as if your team had written them down."}
             </p>
           </div>
           <Switch
@@ -141,7 +152,7 @@ export function WelcomeLinkCard({
           />
         </div>
 
-        {enabled && (
+        {enabled && !paused && (
           <>
             <div className="flex gap-2">
               <Input readOnly value={url} className="font-mono text-xs" />

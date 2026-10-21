@@ -494,7 +494,10 @@ export async function voidPayment(
   let commissionError: string | null = null;
   if (v.wasSuccess) {
     try {
-      await reversePartnerCommission(v.id);
+      // It reports failure in its answer rather than by throwing, so the
+      // answer is what has to be read; the catch is for anything else.
+      const rev = await reversePartnerCommission(v.id);
+      if (!rev.ok) commissionError = rev.error;
     } catch (e) {
       console.error(`[finance] void ${v.id}: could not reverse the Partner commission`, e);
       commissionError = e instanceof Error ? e.message : String(e);

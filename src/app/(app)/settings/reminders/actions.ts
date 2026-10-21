@@ -9,7 +9,7 @@ import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, plainTextEmailLayout } from "@/lib/mailer";
 import { fillTemplate } from "@/lib/service-reminders";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -99,7 +99,7 @@ export async function sendTestReminder(
     const ok = await sendEmail({
       to: user.email,
       subject: `[Test] ${subject}`,
-      html: emailLayout(subject, body.replace(/\n/g, "<br>")),
+      html: plainTextEmailLayout(subject, body),
       text: body,
       fromName: church.name,
     });

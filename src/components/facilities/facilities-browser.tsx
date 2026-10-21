@@ -112,6 +112,17 @@ export function FacilitiesBrowser({
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<"calendar" | "places" | "bookings">("calendar");
   const [booking, setBooking] = useState<{ day?: string; facilityId?: string } | null>(null);
+  /*
+   * A new key for the booking form on every open, so each booking starts
+   * fresh. Keyed on the day and facility alone, the Book button and the
+   * shortcut both gave the same key as a closed dialog, so the next booking
+   * opened holding the last one's title, requester and notes.
+   */
+  const [bookSeq, setBookSeq] = useState(0);
+  const openBooking = (preset: { day?: string; facilityId?: string }) => {
+    setBookSeq((n) => n + 1);
+    setBooking(preset);
+  };
 
   /*
    * `n b` from anywhere, and the palette's "Book a facility".
@@ -122,7 +133,7 @@ export function FacilitiesBrowser({
    */
   useOpenOnShortcut(() => {
     setTab("calendar");
-    setBooking({});
+    openBooking({});
   });
   const [editing, setEditing] = useState<FacilityCard | null | "new">(null);
   const [closing, setClosing] = useState<FacilityCard | null>(null);
@@ -187,7 +198,7 @@ export function FacilitiesBrowser({
 
         <div className="ml-auto flex flex-wrap gap-2">
           {bookable.length > 0 && (
-            <Button size="sm" onClick={() => setBooking({})}>
+            <Button size="sm" onClick={() => openBooking({})}>
               <Plus className="size-4" /> Book
             </Button>
           )}
@@ -241,7 +252,7 @@ export function FacilitiesBrowser({
       {tab === "calendar" && (
         <FacilityCalendar
           entries={calendar}
-          onPick={bookable.length > 0 ? (day) => setBooking({ day }) : undefined}
+          onPick={bookable.length > 0 ? (day) => openBooking({ day }) : undefined}
         />
       )}
 
@@ -289,7 +300,7 @@ export function FacilitiesBrowser({
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     {f.isActive && f.isBookable && (
-                      <Button size="sm" variant="outline" onClick={() => setBooking({ facilityId: f.id })}>
+                      <Button size="sm" variant="outline" onClick={() => openBooking({ facilityId: f.id })}>
                         Book
                       </Button>
                     )}
@@ -420,7 +431,7 @@ export function FacilitiesBrowser({
       )}
 
       <BookDialog
-        key={`${booking?.day ?? ""}-${booking?.facilityId ?? ""}`}
+        key={bookSeq}
         facilities={bookable}
         members={members}
         currency={currency}

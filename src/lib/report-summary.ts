@@ -229,7 +229,15 @@ export async function getSummaryInsights(
         best: sql<number>`coalesce(max(${attendanceSession.totalCount}), 0)`,
       })
       .from(attendanceSession)
-      .leftJoin(service, eq(service.id, attendanceSession.serviceId))
+      // Scoped to the session's church: a service id is global, so an id from
+      // elsewhere must never print another church's service name here.
+      .leftJoin(
+        service,
+        and(
+          eq(service.id, attendanceSession.serviceId),
+          eq(service.churchId, attendanceSession.churchId),
+        ),
+      )
       .where(sessionWhere)
       .groupBy(sql`coalesce(${service.name}, ${attendanceSession.title})`)
       .orderBy(desc(count())),

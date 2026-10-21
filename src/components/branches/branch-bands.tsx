@@ -255,7 +255,7 @@ export function BranchBands({ bands }: { bands: Band[] }) {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="size-8"
+                    className="sm:size-8"
                     aria-label={`Rename ${b.name}`}
                     onClick={() => {
                       setEditing(b);
@@ -268,7 +268,7 @@ export function BranchBands({ bands }: { bands: Band[] }) {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="text-destructive size-8"
+                    className="text-destructive sm:size-8"
                     aria-label={`Delete ${b.name}`}
                     onClick={() => setRemoving(b)}
                   >

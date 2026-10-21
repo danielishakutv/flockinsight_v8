@@ -1,4 +1,5 @@
-import { requireUser } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { getIsSuperAdmin, getMustChangePassword, requireUser } from "@/lib/session";
 import { Logo } from "@/components/brand";
 import { SetPasswordForm } from "@/components/auth/set-password-form";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,6 +8,10 @@ export const metadata = { title: "Set a new password" };
 
 export default async function SetPasswordPage() {
   await requireUser();
+  // Only for a forced change (see setNewPassword). Anyone else changes their
+  // password from Profile, where the current one is asked for.
+  if (!(await getMustChangePassword()))
+    redirect((await getIsSuperAdmin()) ? "/superadmin" : "/dashboard");
   return (
     <>
       <div className="grid min-h-dvh place-items-center px-4">

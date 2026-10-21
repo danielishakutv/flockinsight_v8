@@ -152,12 +152,22 @@ export function FinanceClient({
   const [open, setOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
+  /*
+   * The account a record of this kind starts in. Income skips giving funds:
+   * the list hides them for income and the server refuses them, so the first
+   * account by name being a fund used to leave a blank field that failed on
+   * save, naming an account the treasurer never picked.
+   */
+  function defaultAccountFor(kind: FinanceKind): string {
+    return (kind === "income" ? accounts.find(canRecordIncomeInto) : accounts[0])?.id ?? NONE;
+  }
+
   function emptyForm(kind: FinanceKind = "expense"): FormState {
     return {
       kind,
       amount: "",
       date: today,
-      accountId: accounts[0]?.id ?? NONE,
+      accountId: defaultAccountFor(kind),
       categoryId: NONE,
       party: "",
       reference: "",
@@ -567,13 +577,26 @@ export function FinanceClient({
 
           <div className="space-y-4">
             {/* Switching kind clears the category: an expense filed under an
-                income line would corrupt every breakdown. */}
+                income line would corrupt every breakdown. Switching to income
+                also moves off a giving fund, which income cannot go into. */}
             <div className="grid grid-cols-2 gap-2">
               {(["income", "expense"] as FinanceKind[]).map((k) => (
                 <button
                   key={k}
                   type="button"
-                  onClick={() => set({ kind: k, categoryId: NONE })}
+                  onClick={() =>
+                    set({
+                      kind: k,
+                      categoryId: NONE,
+                      ...(k === "income" &&
+                      form.accountId !== NONE &&
+                      !accounts.some(
+                        (a) => a.id === form.accountId && canRecordIncomeInto(a),
+                      )
+                        ? { accountId: defaultAccountFor("income") }
+                        : {}),
+                    })
+                  }
                   className={cn(
                     "rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors",
                     form.kind === k

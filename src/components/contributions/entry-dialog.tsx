@@ -150,6 +150,8 @@ function EntryForm({
   const [reference, setReference] = useState(editing?.reference ?? "");
   const [note, setNote] = useState(editing?.note ?? "");
   const [proof, setProof] = useState<ProofValue>(null);
+  // A receipt still uploading: saving waits for it rather than going without.
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /**
@@ -355,6 +357,7 @@ function EntryForm({
                 onChange={setProof}
                 potId={potId}
                 disabled={pending}
+                onBusyChange={setUploading}
                 labels={{
                   attach: t("contributions.attachProof"),
                   attached: t("contributions.proofAttached"),
@@ -375,9 +378,13 @@ function EntryForm({
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
           Cancel
         </Button>
-        <Button onClick={submit} disabled={pending || !canSubmit}>
-          {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
-          {editing ? "Save changes" : t("contributions.recordPayment")}
+        <Button onClick={submit} disabled={pending || uploading || !canSubmit}>
+          {(pending || uploading) && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {uploading
+            ? t("contributions.uploading")
+            : editing
+              ? "Save changes"
+              : t("contributions.recordPayment")}
         </Button>
       </DialogFooter>
     </>

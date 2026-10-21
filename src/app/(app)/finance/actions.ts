@@ -17,6 +17,9 @@ import { can } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { formatMoney } from "@/lib/money";
 import { parseMoneyInput } from "@/lib/money-input";
+// Shared because drizzle keeps the driver's 23505 on `.cause`; the local copy
+// read only the top level and never matched.
+import { isUniqueViolation } from "@/lib/pg-errors";
 import {
   backfillFund,
   fundAccountFor,
@@ -785,16 +788,6 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
     console.error("deleteTransaction failed", e);
     return { ok: false, error: "Could not delete the record." };
   }
-}
-
-/** Postgres reports a duplicate key as 23505; anything else is a real failure. */
-function isUniqueViolation(e: unknown): boolean {
-  return (
-    typeof e === "object" &&
-    e !== null &&
-    "code" in e &&
-    (e as { code?: string }).code === "23505"
-  );
 }
 
 /* ============================================================

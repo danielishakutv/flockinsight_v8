@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { and, eq, isNull } from "drizzle-orm";
 import { sendEmail, emailLayout } from "./mailer";
 import { db } from "@/db";
@@ -17,6 +17,11 @@ import {
   refuseNeverPath,
 } from "@/lib/org-plugin-guard";
 import { repointSessionsLeaving } from "@/lib/session-pointer";
+import {
+  DEMO_ACCOUNT_LOCKED,
+  isDemoLockedAuthPath,
+  isSharedDemoUser,
+} from "@/lib/demo-account";
 import {
   user,
   session,
@@ -92,6 +97,21 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      /*
+       * The shared demo login's password is printed on the sign-in page, which
+       * is all /change-password asks for. See lib/demo-account.ts.
+       */
+      if (isDemoLockedAuthPath(ctx.path)) {
+        const data = await getSessionFromCtx(ctx);
+        if (data?.user && (await isSharedDemoUser(data.user.id))) {
+          throw APIError.from("FORBIDDEN", {
+            code: "FI_DEMO_ACCOUNT",
+            message: DEMO_ACCOUNT_LOCKED,
+          });
+        }
+        return;
+      }
+
       const policy = orgEndpointPolicy(ctx.path);
       if (!policy) return;
       if (policy === "never") refuseNeverPath();
@@ -114,6 +134,7 @@ export const auth = betterAuth({
         churchId,
         resend: body?.resend === true,
         email: typeof body?.email === "string" ? body.email : null,
+        role: body?.role,
       });
     }),
   },

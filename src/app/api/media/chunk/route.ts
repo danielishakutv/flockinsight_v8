@@ -11,7 +11,12 @@ import {
   MEDIA_KINDS,
   type MediaKind,
 } from "@/lib/media";
-import { LIBRARY_FORBIDDEN, recordingUploadVerdict } from "@/lib/media-upload-rules";
+import {
+  LIBRARY_FORBIDDEN,
+  TOO_MANY_OPEN_UPLOADS,
+  partialUploadVerdict,
+  recordingUploadVerdict,
+} from "@/lib/media-upload-rules";
 import {
   MEDIA_TMP,
   chunkPlacement,
@@ -23,6 +28,7 @@ import {
   localMimeEssence,
   looksLikeAudioOrVideo,
   makeStorageKey,
+  partialUploadsFor,
   readHead,
   resolveKey,
   tmpPathFor,
@@ -95,7 +101,10 @@ function kindOf(raw: unknown): MediaKind {
 /**
  * Whose upload this is and where it goes — or the JSON refusal that says why
  * not. `kind` is only known on start and finish; `checkKind` says whether the
- * permission to upload that kind should be asked here.
+ * permission to upload that kind should be asked here. The steps that do not
+ * name a kind (status, append, abandon) still need the right to upload
+ * SOMETHING: they used to need only a seat, so any staff login could write
+ * temp files to the shared disk.
  */
 async function resolveTarget(opts: {
   recordingId: string | null;
@@ -141,8 +150,25 @@ async function resolveTarget(opts: {
   if (!r.ok) return refusalResponse(r);
   if (r.church.status === "suspended")
     return json({ ok: false, code: "suspended", error: "This church's account is paused." }, 403);
-  if (opts.checkKind && !(await canUploadKind(opts.kind)))
-    return json({ ok: false, code: "forbidden", error: LIBRARY_FORBIDDEN }, 403);
+  /*
+   * The demo is one login with a published password, and its uploads would sit
+   * on the disk every church shares. A superadmin acting as it may still test.
+   * Meeting recordings never reach here: they are routed above, by recording.
+   */
+  if (r.church.isDemo && !r.impersonating)
+    return json(
+      {
+        ok: false,
+        code: "forbidden",
+        error:
+          "Uploading video and audio is switched off in the demo. Start your own church to build a media library.",
+      },
+      403,
+    );
+  const allowed = opts.checkKind
+    ? await canUploadKind(opts.kind)
+    : (await Promise.all(MEDIA_KINDS.map(canUploadKind))).some(Boolean);
+  if (!allowed) return json({ ok: false, code: "forbidden", error: LIBRARY_FORBIDDEN }, 403);
   return {
     churchId: r.church.id,
     storageExtraBytes: r.church.storageExtraBytes,
@@ -150,6 +176,21 @@ async function resolveTarget(opts: {
     recordingId: null,
     alreadySaved: false,
   };
+}
+
+/**
+ * "Not enough storage", naming half-sent uploads when they are part of why.
+ * The library's free space does not show them, so without this the sentence
+ * would contradict the page it appears on.
+ */
+function notEnoughStorage(free: number, partialBytes: number, fileBytes: number | null): string {
+  const left = formatBytes(Math.max(0, free - partialBytes));
+  const head = fileBytes
+    ? `Not enough storage — this file is ${formatBytes(fileBytes)} and you have ${left} free.`
+    : `Not enough storage — you have ${left} free.`;
+  return partialBytes > 0
+    ? `${head} ${formatBytes(partialBytes)} more is held by uploads that have not finished; one that was abandoned is cleared within two weeks.`
+    : head;
 }
 
 /** Raised inside the finish transaction when the recording row would not close. */
@@ -213,14 +254,6 @@ export async function POST(request: Request) {
 
     const bytes = Math.max(0, Math.round(Number(body.bytes ?? 0)) || 0);
     const info = await getStorageInfo(target.churchId, target.storageExtraBytes);
-    if (bytes > 0 && info.used + bytes > info.limit)
-      return json(
-        {
-          ok: false,
-          error: `Not enough storage — this file is ${formatBytes(bytes)} and you have ${formatBytes(info.free)} free. Free up space or upgrade your storage.`,
-        },
-        413,
-      );
 
     await ensureDirs();
     /*
@@ -231,6 +264,30 @@ export async function POST(request: Request) {
     const asked = String(body.uploadId ?? "").trim();
     const uploadId = validUploadId(asked) ? asked : randomUUID();
     const received = await heldBytes(tmpPathFor(target.churchId, uploadId));
+
+    /*
+     * Told now rather than at the first chunk: the same verdict `append`
+     * enforces, with the church's other half-sent uploads counted.
+     */
+    const others = await partialUploadsFor(target.churchId, uploadId);
+    const room = partialUploadVerdict({
+      used: info.used,
+      limit: info.limit,
+      otherPartialBytes: others.bytes,
+      endsAt: bytes,
+      isNew: received === 0,
+      openUploads: others.open,
+    });
+    if (!room.ok && room.reason === "busy")
+      return json({ ok: false, code: "busy", error: TOO_MANY_OPEN_UPLOADS }, 429);
+    if (!room.ok && bytes > 0)
+      return json(
+        {
+          ok: false,
+          error: `${notEnoughStorage(info.free, others.bytes, bytes)} Free up space or upgrade your storage.`,
+        },
+        413,
+      );
 
     if (target.recordingId) {
       const { touchRecording } = await import("@/lib/meetings");
@@ -327,15 +384,28 @@ export async function POST(request: Request) {
      * The size declared up front is the browser's word for it. Without this, a
      * client could announce 1 MB and then send a hundred — and the first anyone
      * would know is a full disk, which takes down every site on the box, not
-     * just this one.
+     * just this one. The church's other partial uploads count too, and a new
+     * file waits while too many are open: an upload id is the caller's choice,
+     * so `start` alone can never be the gate (partialUploadVerdict).
      */
     const info = await getStorageInfo(target.churchId, target.storageExtraBytes);
-    if (info.used + place.endsAt > info.limit) {
+    const others = await partialUploadsFor(target.churchId, uploadId);
+    const room = partialUploadVerdict({
+      used: info.used,
+      limit: info.limit,
+      otherPartialBytes: others.bytes,
+      endsAt: place.endsAt,
+      isNew: held === 0,
+      openUploads: others.open,
+    });
+    if (!room.ok && room.reason === "busy")
+      return json({ ok: false, code: "busy", error: TOO_MANY_OPEN_UPLOADS }, 429);
+    if (!room.ok) {
       await discardUpload(target.churchId, uploadId);
       return json(
         {
           ok: false,
-          error: `Not enough storage — you have ${formatBytes(info.free)} free. Nothing was saved.`,
+          error: `${notEnoughStorage(info.free, others.bytes, null)} Nothing was saved.`,
         },
         413,
       );

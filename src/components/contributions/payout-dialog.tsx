@@ -143,11 +143,26 @@ function PayoutForm({
   const [method, setMethod] = useState<string | null>(editing?.method ?? "cash");
   const [reference, setReference] = useState(editing?.reference ?? "");
   const [proof, setProof] = useState<ProofValue>(null);
-  const [post, setPost] = useState(!!editing?.financeTransactionId);
+  // A receipt still uploading: saving waits for it rather than going without.
+  const [uploading, setUploading] = useState(false);
+  const [post, setPost] = useState(false);
   const [accountId, setAccountId] = useState<string | null>(
     financeAccounts[0]?.id ?? null,
   );
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Only when recording it is the last approval it needs. Anything still
+   * waiting for other people goes into Finance after it is approved, from the
+   * payout itself — a choice made here used to be dropped, or handed to the
+   * last approver's click and posted into whichever account sorted first.
+   */
+  const canPostNow =
+    kind === "handover" &&
+    canPostToFinance &&
+    financeAccounts.length > 0 &&
+    !editing &&
+    approvalsRequired <= 1;
 
   function submit() {
     setError(null);
@@ -162,7 +177,7 @@ function PayoutForm({
       method,
       reference,
       proofMediaId: proof?.mediaId ?? null,
-      financeAccountId: kind === "handover" && post ? accountId : null,
+      financeAccountId: canPostNow && post ? accountId : null,
     };
     start(async () => {
       const res = await savePayout(payload);
@@ -170,7 +185,8 @@ function PayoutForm({
         setError(res.error);
         return;
       }
-      toast.success(t("contributions.saved"));
+      if (res.warning) toast.warning(res.warning);
+      else toast.success(t("contributions.saved"));
       onOpenChange(false);
       router.refresh();
     });
@@ -301,6 +317,7 @@ function PayoutForm({
               onChange={setProof}
               potId={potId}
               disabled={pending}
+              onBusyChange={setUploading}
               labels={{
                 attach: t("contributions.attachProof"),
                 attached: t("contributions.proofAttached"),
@@ -315,7 +332,15 @@ function PayoutForm({
             books. Everything else stays in the group's hands and would be
             income the church never received.
           */}
-          {kind === "handover" && canPostToFinance && financeAccounts.length > 0 && (
+          {kind === "handover" &&
+            canPostToFinance &&
+            financeAccounts.length > 0 &&
+            !canPostNow && (
+            <p className="text-muted-foreground text-xs">
+              {t("contributions.postToFinanceLater")}
+            </p>
+          )}
+          {canPostNow && (
             <div className="bg-muted/40 space-y-3 rounded-xl border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -376,9 +401,13 @@ function PayoutForm({
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
           Cancel
         </Button>
-        <Button onClick={submit} disabled={pending || amount.trim() === ""}>
-          {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
-          {editing ? "Save changes" : t("contributions.recordPayout")}
+        <Button onClick={submit} disabled={pending || uploading || amount.trim() === ""}>
+          {(pending || uploading) && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          {uploading
+            ? t("contributions.uploading")
+            : editing
+              ? "Save changes"
+              : t("contributions.recordPayout")}
         </Button>
       </DialogFooter>
     </>

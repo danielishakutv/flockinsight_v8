@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -187,6 +187,10 @@ export function MembersList({
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [impact, setImpact] = useState<DeleteImpact | null>(null);
   const [loadingImpact, setLoadingImpact] = useState(false);
+  // Why the figures could not be fetched, said instead of an empty space.
+  const [impactError, setImpactError] = useState<string | null>(null);
+  // Only the latest check may answer: an earlier one can land after it.
+  const impactRequest = useRef(0);
   const [typed, setTyped] = useState("");
   const [downloading, setDownloading] = useState(false);
 
@@ -246,13 +250,36 @@ export function MembersList({
   function openBulkDelete() {
     if (selected.size === 0) return;
     setTyped("");
-    setImpact(null);
     setConfirmBulk(true);
+    checkImpact();
+  }
+
+  function checkImpact() {
+    setImpact(null);
+    setImpactError(null);
     setLoadingImpact(true);
+    const request = ++impactRequest.current;
     void (async () => {
-      const res = await previewMemberDeletion([...selected]);
-      setLoadingImpact(false);
-      if (res.ok) setImpact(res.impact);
+      /*
+       * Every outcome ends the spinner and says something. A rejected call
+       * used to leave "Checking what this affects…" spinning with Delete
+       * disabled for good, and a refusal left an empty space where the
+       * figures belong, with nothing to say why.
+       */
+      try {
+        const res = await previewMemberDeletion([...selected]);
+        if (request !== impactRequest.current) return;
+        if (res.ok) setImpact(res.impact);
+        else setImpactError(res.error);
+      } catch (e) {
+        if (request !== impactRequest.current) return;
+        console.error("members: could not check what a bulk delete affects", e);
+        setImpactError(
+          "Couldn't check what this affects. Check your connection and try again.",
+        );
+      } finally {
+        if (request === impactRequest.current) setLoadingImpact(false);
+      }
     })();
   }
 
@@ -675,6 +702,16 @@ export function MembersList({
                   </p>
                 </div>
               )}
+            </div>
+          ) : impactError ? (
+            <div
+              className="border-destructive/30 bg-destructive/5 flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-sm"
+              role="alert"
+            >
+              <p className="text-destructive font-medium">{impactError}</p>
+              <Button size="sm" variant="outline" onClick={checkImpact}>
+                Try again
+              </Button>
             </div>
           ) : null}
 

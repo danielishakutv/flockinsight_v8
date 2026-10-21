@@ -4,6 +4,7 @@ import { role, staff } from "@/db/schema";
 import {
   ALL_PERMISSIONS,
   MEMBER_DEFAULT_PERMISSIONS,
+  permissionLabel,
   type PermissionKey,
 } from "@/lib/permissions-catalog";
 
@@ -161,4 +162,34 @@ export async function loadStaffAccess(
 /** Owner always; otherwise the permission itself. */
 export function accessHas(a: StaffAccess, perm: PermissionKey): boolean {
   return a.isOwner || a.perms.has(perm);
+}
+
+/**
+ * The permissions in `wanted` that this person does not hold themselves:
+ * what granting them would hand out beyond their own reach. Always empty for
+ * the owner, and for a superadmin acting as the church (getAccess() reads
+ * them as the owner).
+ *
+ * Every way of giving access away asks this first: writing a role, widening
+ * one, putting somebody on one, inviting somebody into one. "Manage team" used
+ * to be enough on its own, so a secretary limited to the register could save
+ * her own role with every box ticked and walk into the finances, the wallet
+ * and the payment gateway. Taking permissions away is never limited by this.
+ */
+export function permissionsBeyond(
+  a: StaffAccess,
+  wanted: Iterable<string>,
+): PermissionKey[] {
+  if (a.isOwner) return [];
+  return [...new Set(wanted)].filter((p) => !a.perms.has(p));
+}
+
+/** The refusal for `permissionsBeyond`, naming what was out of reach. */
+export function beyondYourOwnMessage(beyond: readonly string[]): string {
+  const names = beyond.map(permissionLabel);
+  const shown =
+    names.length > 3
+      ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`
+      : names.join(", ");
+  return `You can only give permissions you hold yourself, and you don't hold ${shown}. Ask the church owner to grant ${beyond.length === 1 ? "it" : "them"}.`;
 }

@@ -123,7 +123,7 @@ export function words(key: string): string {
  * asked — how many went? — and a zero is an answer, not noise: it is the
  * difference between "nobody had a birthday" and "the job never looked".
  * Top-level values first, then one level of nesting with its parent's name
- * in front, so a reminders run reads "… · first timers welcome 0".
+ * in front, so a reminders run reads "… · 0 pledges reminders".
  */
 export function describeMeta(
   meta: CronMeta | null | undefined,

@@ -3,7 +3,8 @@ import { APIError } from "better-auth/api";
 import { db } from "@/db";
 import { church, invitation, platformRole, staff, user } from "@/db/schema";
 import { teamLimitFor } from "@/lib/entitlements";
-import { accessHas, loadStaffAccess } from "@/lib/staff-permissions";
+import { ALL_PERMISSIONS } from "@/lib/permissions-catalog";
+import { accessHas, loadStaffAccess, permissionsBeyond } from "@/lib/staff-permissions";
 
 /**
  * The app's permission model, applied to Better Auth's organization plugin.
@@ -182,7 +183,28 @@ export type TeamCallInput = {
   resend?: boolean;
   /** invite-member's `email`, to check a resend really is one. */
   email?: string | null;
+  /** invite-member's `role`, exactly as it arrived. */
+  role?: unknown;
 };
+
+/**
+ * The org roles an invite-member call asks for, however it spells them. The
+ * plugin takes a string, an array, or a comma-separated list, so all three are
+ * read. Anything that is not a string is kept as something that is not
+ * "member", so a shape this does not understand is never waved through.
+ */
+export function requestedOrgRoles(raw: unknown): string[] {
+  const parts: unknown[] = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+  return parts
+    .flatMap((r) => (typeof r === "string" ? r.split(",") : [String(r)]))
+    .map((r) => r.trim())
+    .filter(Boolean);
+}
+
+/** Does this invitation ask for more than a plain member seat? */
+export function invitesAboveMember(raw: unknown): boolean {
+  return requestedOrgRoles(raw).some((r) => r !== "member");
+}
 
 /**
  * Is there a live invitation to this address in this church — the one thing
@@ -238,6 +260,25 @@ export async function guardTeamCall(input: TeamCallInput): Promise<void> {
     const access = await loadStaffAccess(userId, churchId);
     if (!accessHas(access, "team.manage")) {
       refuse("FI_NOT_ALLOWED", "You don't have permission to manage the team.");
+    }
+    /*
+     * A plain "admin" invitation is an invitation to EVERYTHING: it carries no
+     * church role, and an admin seat with no role is the legacy full-access
+     * fallback (lib/staff-permissions.ts). So only somebody who already holds
+     * every permission may send one. Without this, a secretary limited to the
+     * register invited a second address of her own as admin and accepted it.
+     * Invitations onto a church role go through inviteMemberAsStaff, which
+     * checks the role against the caller and asks the plugin for "member".
+     */
+    if (
+      path === "/organization/invite-member" &&
+      invitesAboveMember(input.role) &&
+      permissionsBeyond(access, ALL_PERMISSIONS).length > 0
+    ) {
+      refuse(
+        "FI_ROLE_NOT_ALLOWED",
+        "Only someone who holds every permission, such as the church owner, can invite a full admin. Invite them as a member, then give them a role on the Team page.",
+      );
     }
     await healCallerOrgRole(userId, churchId);
   }

@@ -24,6 +24,12 @@ import {
 } from "@/lib/country-profile";
 import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/geo";
 import { internationalPhone } from "@/lib/phone-intl";
+/*
+ * Shared, and it looks under drizzle's wrapper. The local copy read `.code`
+ * off the top, which is never set, so the slug retry below never ran: a second
+ * church whose name made a slug already taken lost its new owner and failed.
+ */
+import { isUniqueViolation } from "@/lib/pg-errors";
 
 import { requirePlatform } from "@/lib/platform-access";
 /**
@@ -89,10 +95,6 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-}
-
-function isUniqueViolation(e: unknown): boolean {
-  return (e as { code?: string })?.code === "23505";
 }
 
 export async function adminOnboardChurch(

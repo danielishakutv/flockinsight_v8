@@ -8,8 +8,9 @@ import { requireChurch } from "@/lib/session";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, plainTextEmailLayout } from "@/lib/mailer";
 import { fillTemplate } from "@/lib/service-reminders";
+import { SMS_WINDOW_END_HOUR, minutesFromHHMM } from "@/lib/sms-window";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -46,6 +47,18 @@ export async function saveCelebrations(
     ...parsed.data,
     sms: parsed.data.sms && smsAvailableForCountry(church.country),
   };
+  /*
+   * Networks deliver SMS from 8am to 8pm where the church is. A greeting
+   * handed over after 8pm waits for the morning, so "celebrates you today"
+   * would arrive the day after. The cron now refuses to text it that late, so
+   * an evening send time with SMS on would text nobody. Not asked of a church
+   * switching greetings off, which must always be able to save.
+   */
+  if (d.enabled && d.sms && minutesFromHHMM(d.sendTime) >= SMS_WINDOW_END_HOUR * 60)
+    return {
+      ok: false,
+      error: `Texts can only be delivered between 8am and 8pm, so an SMS greeting can't go at ${d.sendTime}. Choose a send time before 20:00 (18:00 or earlier leaves room for a retry the same day), or turn SMS off.`,
+    };
 
   await db
     .insert(celebrationSetting)
@@ -88,7 +101,7 @@ export async function sendTestCelebration(
     const ok = await sendEmail({
       to: user.email,
       subject,
-      html: emailLayout(fillTemplate(d.birthdayEmailSubject, vars), body.replace(/\n/g, "<br>")),
+      html: plainTextEmailLayout(fillTemplate(d.birthdayEmailSubject, vars), body),
       text: body,
       fromName: church.name,
     });

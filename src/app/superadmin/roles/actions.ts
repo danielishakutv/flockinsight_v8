@@ -12,6 +12,7 @@ import {
   revokePlatformResidue,
 } from "@/lib/platform-access";
 import { recordAudit } from "@/lib/audit";
+import { isUniqueViolation } from "@/lib/pg-errors";
 import { ALL_PLATFORM_PERMISSIONS } from "@/lib/platform-permissions";
 import {
   grantRefusal,
@@ -101,7 +102,8 @@ export async function saveRole(
       });
     }
   } catch (e) {
-    if ((e as { code?: string })?.code === "23505")
+    // Drizzle keeps the driver's 23505 on `.cause`; see pg-errors.
+    if (isUniqueViolation(e))
       return { ok: false, error: "A role with that name already exists." };
     console.error("saveRole failed", e);
     return { ok: false, error: "Could not save the role." };

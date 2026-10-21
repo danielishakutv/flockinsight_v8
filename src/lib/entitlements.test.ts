@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  churchRowHasFeature,
   featuresFor,
   FEATURES,
   minPlanFor,
@@ -165,5 +166,27 @@ describe("the map and the price list agree", () => {
       );
       expect(mine.length, `${p.name} includes something of its own`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("a church read by id, for a public link", () => {
+  it("answers to that church's own plan", () => {
+    // The public first-timer link writes into the register, and follow-up is
+    // Growth. A Starter church, or one that has downgraded, must not keep it.
+    const starter = { plan: "starter", slug: "grace", isDemo: false };
+    expect(churchRowHasFeature(starter, "followUp")).toBe(false);
+    expect(churchRowHasFeature({ ...starter, plan: "growth" }, "followUp")).toBe(true);
+  });
+
+  it("gives an unknown plan the smallest allowance", () => {
+    expect(churchRowHasFeature({ plan: null, slug: "grace", isDemo: null }, "followUp")).toBe(
+      false,
+    );
+  });
+
+  it("shows the demonstration church everything, as activePlan does", () => {
+    expect(
+      churchRowHasFeature({ plan: "starter", slug: "demo", isDemo: true }, "followUp"),
+    ).toBe(true);
   });
 });

@@ -29,8 +29,27 @@ export default async function LivestreamPage({
   await requireCan("meetings.view");
   const canManage = await can("meetings.manage");
 
+  /*
+   * Named columns, so the browser-publish secret (whipUrl) is never read here,
+   * and the RTMP pair below goes to the page only for someone who may
+   * broadcast. Anyone holding the stream key can push their own video into the
+   * church's live slot and out to its YouTube and Facebook, and a value handed
+   * to a client component is in the page payload whether or not it is drawn.
+   */
   const [s] = await db
-    .select()
+    .select({
+      id: livestream.id,
+      title: livestream.title,
+      description: livestream.description,
+      slug: livestream.slug,
+      status: livestream.status,
+      source: livestream.source,
+      externalUrl: livestream.externalUrl,
+      inputUid: livestream.inputUid,
+      visibility: livestream.visibility,
+      rtmpUrl: livestream.rtmpUrl,
+      rtmpKey: livestream.rtmpKey,
+    })
     .from(livestream)
     .where(and(eq(livestream.id, id), eq(livestream.churchId, church.id)))
     .limit(1);
@@ -145,8 +164,9 @@ export default async function LivestreamPage({
               </CardHeader>
               <CardContent>
                 <LivestreamCredentials
-                  rtmpUrl={s.rtmpUrl}
-                  rtmpKey={s.rtmpKey}
+                  rtmpUrl={canManage ? s.rtmpUrl : null}
+                  rtmpKey={canManage ? s.rtmpKey : null}
+                  canBroadcast={canManage}
                   watchUrl={watchUrl}
                   canSimulcast={outputs.length > 0}
                 />

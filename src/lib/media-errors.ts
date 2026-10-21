@@ -16,10 +16,11 @@
  *                    and self-correcting — the newer call is the one that
  *                    matters. Ignored on purpose.
  *   NotAllowedError  the browser will not autoplay before the viewer has
- *                    interacted with the page. Expected, and it resolves itself
- *                    on their first click, but it is reported because it is the
- *                    difference between "the stream is broken" and "this
- *                    browser is waiting for a tap".
+ *                    interacted with the page. Expected, and reported because
+ *                    it is the difference between "the stream is broken" and
+ *                    "this browser is waiting for a tap". It does NOT resolve
+ *                    itself: the element stays paused until something calls
+ *                    play() again from inside a gesture — `playWhenAllowed`.
  *   anything else    a real failure — an undecodable stream, an unsupported
  *                    codec, a src that went away. Always reported.
  */
@@ -58,6 +59,80 @@ export function playMedia(
     }
     console.error(`${where}: playback failed`, e);
   });
+}
+
+type GestureTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
+
+/**
+ * The events a browser treats as the viewer giving permission to start sound.
+ *
+ * Not `pointerdown`: for a finger, the spec makes the lift the gesture
+ * (`pointerup`, `touchend`), and WebKit is strict about it. A key press counts
+ * everywhere, which is what a keyboard user has.
+ */
+export const GESTURE_EVENTS = ["pointerup", "touchend", "keydown"] as const;
+
+/**
+ * Play `el`, and if the browser holds it for a gesture, play it again on the
+ * viewer's next tap or key press — saying so through `onHeld` meanwhile.
+ *
+ * For sound, which `playMedia` alone cannot rescue. "It resolves itself on
+ * their first click" is true of nothing: an element whose play() was refused
+ * stays paused for ever, and on an iPhone that is not capturing (a listener
+ * who joined muted with the camera off) every voice in the meeting is refused
+ * exactly like that. They saw the preacher and heard nothing, and nothing on
+ * the screen said why.
+ *
+ * `onHeld(true)` while it waits, `onHeld(false)` once it plays. Returns the
+ * cleanup, which stops listening. `gestures` is the document in a browser and
+ * anything with the same two methods in a test.
+ */
+export function playWhenAllowed(
+  el: HTMLMediaElement,
+  where: string,
+  onHeld: (held: boolean) => void,
+  gestures: GestureTarget = document,
+): () => void {
+  let done = false;
+
+  const stopListening = () => {
+    for (const type of GESTURE_EVENTS) gestures.removeEventListener(type, attempt);
+  };
+
+  function attempt() {
+    if (done) return;
+    el.play().then(
+      () => {
+        if (done) return;
+        stopListening();
+        onHeld(false);
+      },
+      (e: unknown) => {
+        if (done) return;
+        const name = nameOf(e);
+        if (name === SUPERSEDED) return;
+        if (name === NEEDS_GESTURE) {
+          onHeld(true);
+          /*
+           * Called again from inside the next tap or key press, which every
+           * browser accepts as permission. Left listening until one works:
+           * a touch fires two of these, and a refusal arriving after the
+           * first must not leave nobody listening for the second. Adding a
+           * listener that is already there is a no-op.
+           */
+          for (const type of GESTURE_EVENTS) gestures.addEventListener(type, attempt);
+          return;
+        }
+        console.error(`${where}: playback failed`, e);
+      },
+    );
+  }
+
+  attempt();
+  return () => {
+    done = true;
+    stopListening();
+  };
 }
 
 /**

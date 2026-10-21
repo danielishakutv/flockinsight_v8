@@ -10,12 +10,14 @@ import {
 } from "@/db/schema";
 import { sendChurchSmsBatch } from "@/lib/church-sms";
 import { recordRecipients, tally, type RecipientOutcome } from "@/lib/comm-recipients";
-import { sendEmail, emailLayout } from "@/lib/mailer";
+import { sendEmail, plainTextEmailLayout } from "@/lib/mailer";
 import { recordUsage } from "@/lib/usage";
 import { fillTemplate } from "@/lib/service-reminders";
-import { notifyChurchManagers } from "@/lib/notifications";
+import { managersToldSince, notifyChurchManagers } from "@/lib/notifications";
 import { isValidTimeZone } from "@/lib/country-profile";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
+import { smsWindowShutForToday } from "@/lib/sms-window";
+import { inGoodStandingSql } from "@/lib/church-standing";
 import { customAnniversaryOn } from "@/lib/celebration-sql";
 import {
   celebrationKeysFor,
@@ -77,7 +79,7 @@ type Job = {
   body: string;
 };
 
-async function loadChurches() {
+async function loadChurches(now: Date) {
   return db
     .select({
       churchId: celebrationSetting.churchId,
@@ -97,7 +99,13 @@ async function loadChurches() {
     .from(celebrationSetting)
     .innerJoin(church, eq(church.id, celebrationSetting.churchId))
     .where(
-      and(eq(celebrationSetting.enabled, true), eq(church.status, "active")),
+      and(
+        eq(celebrationSetting.enabled, true),
+        eq(church.status, "active"),
+        // Not for a church behind the paywall, whose admins can no longer
+        // reach the setting that turns this off. See church-standing.ts.
+        inGoodStandingSql(now),
+      ),
     );
 }
 
@@ -132,7 +140,7 @@ type ChurchRow = Awaited<ReturnType<typeof loadChurches>>[number];
 export async function runCelebrations(
   now: Date = new Date(),
 ): Promise<CelebrationSummary> {
-  const churches = await loadChurches();
+  const churches = await loadChurches(now);
 
   const summary: CelebrationSummary = {
     churchesChecked: churches.length,
@@ -343,7 +351,7 @@ async function runChurch(
       ok = await sendEmail({
         to: job.email,
         subject: job.subject,
-        html: emailLayout(job.subject, job.body.replace(/\n/g, "<br>")),
+        html: plainTextEmailLayout(job.subject, job.body),
         text: job.body,
         fromName: c.name,
       });
@@ -396,6 +404,28 @@ async function runChurch(
         error,
       })),
     });
+
+  /*
+   * After 8pm the batch would be queued for 8am tomorrow, so "celebrates you
+   * today" arrived a day late, and was charged. An evening send time did it,
+   * and so did a retry that slipped past 8pm. Those texts are now settled as
+   * failed, for good, with the reason; the emails above still went. Before
+   * 8am is different, because 08:00 is still today, so that is left to the
+   * queue. Read off the clock rather than `now`, since the emails can take
+   * minutes.
+   */
+  if (smsWindowShutForToday(new Date(), tz)) {
+    const detail =
+      "Texts can't be delivered after 8pm, so this greeting was not sent by SMS. Choose a send time between 08:00 and 18:00 in Settings → Celebrations.";
+    summary.failed += smsJobs.length;
+    for (const j of smsJobs) await finishRun(j.runId, "failed", detail, { final: true });
+    console.warn(
+      `[celebrations] ${smsJobs.length} SMS greeting(s) for church ${c.churchId} not sent: it is past 8pm there, so they would have arrived tomorrow`,
+    );
+    await smsHistory("failed", detail);
+    await tellManagersTooLateOnceAWeek(c, now, smsJobs.length);
+    return;
+  }
 
   let res: Awaited<ReturnType<typeof sendChurchSmsBatch>>;
   try {
@@ -691,6 +721,36 @@ async function tellManagersOnceAWeek(
     churchId,
     title: "Birthday & anniversary texts were not sent",
     body: `${count} greeting${count === 1 ? "" : "s"} could not be sent by SMS today: ${reason} They will be tried again within the send window. ${smsRefusalAdvice(reason)}`,
+    linkUrl: "/settings/celebrations",
+    email: true,
+  });
+}
+
+/**
+ * Tell the managers their birthday texts were dropped for being after 8pm,
+ * unless they were already told this week. A send time saved before the
+ * settings page refused evening times still stands, and only they can change
+ * it. Until they do no greeting goes by SMS at all, which a History row alone
+ * would not make anybody notice.
+ */
+async function tellManagersTooLateOnceAWeek(
+  c: ChurchRow,
+  now: Date,
+  count: number,
+): Promise<void> {
+  const title = `${c.name}: birthday & anniversary texts were not sent after 8pm`;
+  if (
+    await managersToldSince({
+      churchId: c.churchId,
+      title,
+      since: new Date(now.getTime() - 7 * DAY_MS),
+    })
+  )
+    return;
+  await notifyChurchManagers({
+    churchId: c.churchId,
+    title,
+    body: `${count} greeting${count === 1 ? "" : "s"} could not be sent by SMS today: networks only deliver texts between 8am and 8pm, and it was past 8pm where your church is. The emails still went. Choose a send time between 08:00 and 18:00 in Settings → Celebrations, or turn SMS off for celebrations.`,
     linkUrl: "/settings/celebrations",
     email: true,
   });
