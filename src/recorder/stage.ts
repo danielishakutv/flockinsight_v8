@@ -34,6 +34,8 @@ export type StageChoice =
       sessionId: string;
       participantId: string;
       peerId: string;
+      /** Whose track it is, for the name card shown until their first real frame. */
+      name: string;
       caption: string;
     }
   | { kind: "slide"; key: string; url: string; caption: string }
@@ -60,6 +62,7 @@ function camera(p: StagePerson): StageChoice {
     sessionId: p.sfuSessionId as string,
     participantId: p.participantId,
     peerId: p.peerId,
+    name: p.name,
     caption: p.name,
   };
 }
@@ -75,6 +78,7 @@ export function chooseStage(input: StageInput): StageChoice {
       sessionId: sharer.sfuSessionId as string,
       participantId: sharer.participantId,
       peerId: sharer.peerId,
+      name: sharer.name,
       caption: `${sharer.name} is sharing their screen`,
     };
   }

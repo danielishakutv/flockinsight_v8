@@ -282,8 +282,12 @@ if [ -n "${SKIP_PM2:-}" ]; then
   exit 0
 fi
 
+# The web app only. The recording service is a separate process with a
+# recording possibly in flight, and reloading it here used to cut seconds out
+# of any service being recorded during a deploy; it is handled below, after
+# the new build has proved itself.
 log "Reloading PM2 (rolling, one worker at a time)"
-pm2 startOrReload "$SHARED/ecosystem.config.cjs" --update-env
+pm2 startOrReload "$SHARED/ecosystem.config.cjs" --only "$PM2_APP" --update-env
 pm2 save --force >/dev/null
 
 # --------------------------------------------------------------- verify
@@ -303,7 +307,7 @@ if [ "${live:-0}" -lt 5 ]; then
   if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
     ln -sfn "$PREVIOUS" "$CURRENT.staging"
     mv -Tf "$CURRENT.staging" "$CURRENT"
-    pm2 startOrReload "$SHARED/ecosystem.config.cjs" --update-env
+    pm2 startOrReload "$SHARED/ecosystem.config.cjs" --only "$PM2_APP" --update-env
     note "rolled back to $(basename "$PREVIOUS")"
   else
     note "no previous release to roll back to — check: pm2 logs $PM2_APP"
@@ -311,14 +315,27 @@ if [ "${live:-0}" -lt 5 ]; then
   die "$SHORT did not come up on port $PORT"
 fi
 
-# The recording service comes up alongside. Its health is reported rather
-# than failed on: a release with a broken recorder still serves every page,
-# and the app falls back to recording in the browser while it is down. But
-# it is said loudly, because a quiet failure here is a Sunday service
-# recorded nowhere.
+# The recording service. Its health is reported rather than failed on: a
+# release with a broken recorder still serves every page, and Record says the
+# service is unavailable while it is down. But it is said loudly, because a
+# quiet failure here is a Sunday service recorded nowhere.
 # `|| true`: with pipefail, a grep that finds nothing would end the deploy.
 RECORDER_PORT="$( { grep -E '^[[:space:]]*RECORDER_PORT[[:space:]]*=' "$SHARED/.env" 2>/dev/null || true; } | head -1 | tr -dc '0-9')"
 RECORDER_PORT="${RECORDER_PORT:-3007}"
+
+# Restarted onto the new release only when it is recording nothing. A
+# recording in flight keeps the process it started on (its release directory
+# is kept), and the new code is picked up by the next deploy or by a
+# `pm2 reload flockinsight-recorder` once the service is idle.
+recorder_live="$(curl -fsS --max-time 3 "http://127.0.0.1:$RECORDER_PORT/health" 2>/dev/null | grep -o '"live":[0-9]*' | head -1 | tr -dc '0-9' || true)"
+if [ -z "$recorder_live" ] || [ "$recorder_live" = "0" ]; then
+  log "Reloading the recording service (idle)"
+  pm2 startOrReload "$SHARED/ecosystem.config.cjs" --only flockinsight-recorder --update-env
+  pm2 save --force >/dev/null
+else
+  printf '\n\033[1;33mNOTE: the recording service is recording %s meeting(s) right now, so it was left on the previous release. Reload it when they finish: pm2 reload flockinsight-recorder --update-env\033[0m\n' "$recorder_live" >&2
+fi
+
 recorder_ok=""
 for _ in $(seq 1 30); do
   if curl -fsS --max-time 3 "http://127.0.0.1:$RECORDER_PORT/health" 2>/dev/null | grep -q '"ok":true'; then

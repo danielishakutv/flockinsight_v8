@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   church,
@@ -10,6 +10,7 @@ import {
 import { parseStage } from "@/lib/meetings-shared";
 import { LiveRecording, type RecordingRow, type RoomView } from "./capture";
 import type { RecorderConfig } from "./config";
+import { STALLED_RECORDER_MESSAGE } from "./health";
 import type { IngestTarget } from "./tokens";
 import type { IngestRouter, IngestSink } from "./ws-server";
 
@@ -36,6 +37,15 @@ const HEARTBEAT_MS = 10_000;
 export const RECORDER_ALIVE_KEY = "recorder_alive_at";
 /** Anyone seen within this long is "in the room" as far as a capture is concerned. */
 const PRESENCE_GRACE_MS = 90_000;
+/** The app's "look at your rows" channel: Record, Stop, the meeting ending. */
+const RECORDER_CHANNEL = "flockinsight_recorder";
+/**
+ * The app's room channel: every write in a live room (somebody publishing,
+ * unmuting, joining, a new publisher session) NOTIFYs it with the meeting id.
+ */
+const MEETING_CHANNEL = "flockinsight_meeting";
+/** A burst of room notifications becomes one pass, at most this long after the first. */
+const ROOM_WAKE_MS = 250;
 
 export class Supervisor implements IngestRouter {
   readonly live = new Map<string, LiveRecording>();
@@ -43,7 +53,11 @@ export class Supervisor implements IngestRouter {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private listener: import("pg").Client | null = null;
+  /** When the armed timer fires, so a later wake never pushes an earlier pass back. */
+  private dueAt = Infinity;
   private ticking = false;
+  /** A wake arrived mid-pass: run another as soon as this one ends. */
+  private wakeAgain = false;
   private stopping = false;
   private lastTickError: string | null = null;
 
@@ -75,10 +89,19 @@ export class Supervisor implements IngestRouter {
     await this.heartbeat();
     this.heartbeatTimer = setInterval(() => void this.heartbeat(), HEARTBEAT_MS);
     this.arm(0);
+    // Catches and logs its own failures; the loop does not wait on it.
+    void this.recoverStalled();
   }
 
   async stop(): Promise<void> {
     this.stopping = true;
+    /*
+     * Synchronously, before anything is awaited. The stop signal can reach
+     * ffmpeg too (PM2 signals the process tree), and an ffmpeg exit seen by a
+     * capture that does not yet know it is stopping was counted as a crash and
+     * answered with a fresh segment, in the middle of shutting down.
+     */
+    for (const r of this.live.values()) r.markStopping();
     if (this.timer) clearTimeout(this.timer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     // Let the tick in progress finish, then put every capture down cleanly.
@@ -86,21 +109,34 @@ export class Supervisor implements IngestRouter {
     await Promise.all([...this.live.values()].map((r) => r.abandon()));
     try {
       await this.listener?.end();
-    } catch {
-      /* closing */
+    } catch (e) {
+      this.log(`closing the LISTEN connection: ${String((e as Error).message ?? e)}`);
     }
   }
 
-  /** Something changed: look now rather than on the next pass. */
-  wake(): void {
+  /** Something changed: look now (or within `ms`) rather than on the next pass. */
+  wake(ms = 0): void {
     if (this.stopping) return;
-    this.arm(0);
+    this.arm(ms);
   }
 
   private arm(ms: number): void {
     if (this.stopping) return;
+    const at = Date.now() + ms;
+    if (this.timer && this.dueAt <= at) return; // a pass is already due sooner
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.tick(), ms);
+    this.dueAt = at;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.dueAt = Infinity;
+      void this.tick();
+    }, ms);
+  }
+
+  /** Whether a room notification is about a meeting being recorded right now. */
+  private recordingMeeting(meetingId: string): boolean {
+    for (const r of this.live.values()) if (r.meetingId === meetingId && !r.finishing) return true;
+    return false;
   }
 
   private async listen(): Promise<void> {
@@ -113,9 +149,22 @@ export class Supervisor implements IngestRouter {
         // Try again later; the poll is the safety net meanwhile.
         setTimeout(() => void this.listen(), 15_000).unref();
       });
-      client.on("notification", () => this.wake());
+      client.on("notification", (msg) => {
+        if (msg.channel === MEETING_CHANNEL) {
+          /*
+           * A new speaker or a rebuilt publisher used to wait for the next
+           * two-second poll, and the first seconds of what they said went with
+           * it. Only rooms being recorded matter, and a burst of notifications
+           * (they come in flurries) becomes one pass.
+           */
+          if (msg.payload && this.recordingMeeting(msg.payload)) this.wake(ROOM_WAKE_MS);
+          return;
+        }
+        this.wake();
+      });
       await client.connect();
-      await client.query("LISTEN flockinsight_recorder");
+      await client.query(`LISTEN ${RECORDER_CHANNEL}`);
+      await client.query(`LISTEN ${MEETING_CHANNEL}`);
       this.listener = client;
     } catch (e) {
       this.log(`LISTEN unavailable (${String((e as Error).message ?? e)}); polling only`);
@@ -123,7 +172,12 @@ export class Supervisor implements IngestRouter {
   }
 
   private async tick(): Promise<void> {
-    if (this.ticking || this.stopping) return;
+    if (this.stopping) return;
+    if (this.ticking) {
+      // Dropping this wake would leave the change it announced until the next poll.
+      this.wakeAgain = true;
+      return;
+    }
     this.ticking = true;
     try {
       await this.pass();
@@ -133,8 +187,21 @@ export class Supervisor implements IngestRouter {
       this.log(`tick failed: ${this.lastTickError}`);
     } finally {
       this.ticking = false;
-      this.arm(this.config.pollMs);
+      const again = this.wakeAgain;
+      this.wakeAgain = false;
+      this.arm(again ? 0 : this.config.pollMs);
     }
+  }
+
+  private adopt(row: RecordingRow): LiveRecording {
+    const rec = new LiveRecording({ row, config: this.config, log: this.log, onSettled: (r) => this.forget(r) });
+    this.live.set(row.id, rec);
+    return rec;
+  }
+
+  /** Let go of a capture whose finish has settled, however it finished. */
+  private forget(rec: LiveRecording): void {
+    if (this.live.get(rec.id) === rec) this.live.delete(rec.id);
   }
 
   private async pass(): Promise<void> {
@@ -160,6 +227,14 @@ export class Supervisor implements IngestRouter {
 
     const seen = new Set<string>();
     for (const raw of rows) {
+      /*
+       * stop() marks every capture it can see as stopping and then waits for
+       * this pass. Carrying on adopted rows after that: a fresh segment opened
+       * (up to fifteen seconds for a video one to connect), adapters asked for
+       * and finishes begun, all inside the forty seconds the shutdown has. The
+       * next process picks these rows up.
+       */
+      if (this.stopping) return;
       seen.add(raw.id);
       const row: RecordingRow = { ...raw, mode: raw.mode === "video" ? "video" : "audio" };
       let rec = this.live.get(row.id);
@@ -169,8 +244,7 @@ export class Supervisor implements IngestRouter {
       const over = room.status === "ended" || room.status === "cancelled";
 
       if (!rec) {
-        rec = new LiveRecording({ row, config: this.config, log: this.log });
-        this.live.set(row.id, rec);
+        rec = this.adopt(row);
         /*
          * A row that was already told to stop before we came back — Stop was
          * pressed while the service was down, or a finish was cut short —
@@ -185,7 +259,20 @@ export class Supervisor implements IngestRouter {
         } catch (e) {
           const why = String((e as Error).message ?? e);
           this.log(`[${row.id.slice(0, 8)}] could not start: ${why}`);
-          this.live.delete(row.id);
+          /*
+           * A resumed recording already has segments from before the restart,
+           * and they are the recording up to that point. File them, with the
+           * reason beside them, rather than marking the whole thing failed.
+           */
+          if (await rec.hasSegments()) {
+            this.finishAndForget(
+              rec,
+              "start-failed",
+              `The recording service restarted during this recording and could not carry on (${why.slice(0, 200)}); this is what it captured before that.`,
+            );
+            continue;
+          }
+          this.forget(rec);
           await db
             .update(meetingRecording)
             .set({ status: "failed", error: `The recording could not start: ${why}`.slice(0, 300), lastActivityAt: new Date() })
@@ -228,11 +315,70 @@ export class Supervisor implements IngestRouter {
     }
   }
 
-  private finishAndForget(rec: LiveRecording, reason: Parameters<LiveRecording["finish"]>[0]): void {
+  private finishAndForget(rec: LiveRecording, reason: Parameters<LiveRecording["finish"]>[0], note?: string): void {
     void rec
-      .finish(reason)
+      .finish(reason, note)
       .catch((e) => this.log(`[${rec.id.slice(0, 8)}] finish threw: ${String((e as Error).message ?? e)}`))
-      .finally(() => this.live.delete(rec.id));
+      .finally(() => this.forget(rec));
+  }
+
+  /**
+   * Rows the app's stalled sweep gave up on while this service was away
+   * (fifteen minutes without a heartbeat) whose segments are still on disk.
+   * The sweep's words promise that what was captured is kept; this keeps the
+   * promise by filing it, at start-up. One at a time and in the background:
+   * assembling is the heaviest thing this process does, on a box that also
+   * serves every church's website. A row that cannot be recovered gets our
+   * reason in place of the sweep's (see markFailed), so it is not tried again.
+   */
+  private async recoverStalled(): Promise<void> {
+    let rows: (Omit<RecordingRow, "mode"> & { mode: string })[];
+    try {
+      rows = await db
+        .select({
+          id: meetingRecording.id,
+          meetingId: meetingRecording.meetingId,
+          churchId: meetingRecording.churchId,
+          mode: meetingRecording.mode,
+          title: meetingRecording.title,
+          createdBy: meetingRecording.createdBy,
+          startedAt: meetingRecording.startedAt,
+          stoppedAt: meetingRecording.stoppedAt,
+          status: meetingRecording.status,
+        })
+        .from(meetingRecording)
+        .where(
+          and(
+            eq(meetingRecording.source, "server"),
+            eq(meetingRecording.status, "failed"),
+            eq(meetingRecording.error, STALLED_RECORDER_MESSAGE),
+          ),
+        )
+        .orderBy(desc(meetingRecording.createdAt))
+        .limit(100);
+    } catch (e) {
+      this.log(`could not look for recordings the stalled sweep gave up on: ${String((e as Error).message ?? e)}`);
+      return;
+    }
+    for (const raw of rows) {
+      if (this.stopping) return;
+      if (this.live.has(raw.id)) continue;
+      const row: RecordingRow = { ...raw, mode: raw.mode === "video" ? "video" : "audio" };
+      const rec = new LiveRecording({ row, config: this.config, log: this.log, onSettled: (r) => this.forget(r) });
+      if (!(await rec.hasSegments())) continue;
+      this.log(`[${row.id.slice(0, 8)}] marked stalled while this service was away; filing the segments it left`);
+      this.live.set(row.id, rec);
+      try {
+        await rec.finish(
+          "recovered",
+          "The recording service stopped responding during this recording; this is what it captured before that.",
+        );
+      } catch (e) {
+        this.log(`[${row.id.slice(0, 8)}] recovery threw: ${String((e as Error).message ?? e)}`);
+      } finally {
+        this.forget(rec);
+      }
+    }
   }
 
   private async loadRoom(meetingId: string): Promise<RoomView> {
@@ -283,6 +429,9 @@ export class Supervisor implements IngestRouter {
   }
 
   private async heartbeat(): Promise<void> {
+    // Each capture's counts, so a restart can tell "nothing was captured" from
+    // "not counted by this process". Each saves and logs on its own.
+    await Promise.all([...this.live.values()].map((r) => r.saveStats()));
     try {
       const ids = [...this.live.keys()];
       if (ids.length > 0) {

@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { WebSocket } from "ws";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -7,7 +7,10 @@ import { auditLog, media, meetingRecording, meetingSignal } from "@/db/schema";
 import {
   closeWebSocketAdapters,
   createWebSocketAdapters,
+  isSfuConfigured,
+  SfuError,
   type AdapterRequest,
+  type AdapterResult,
 } from "@/lib/sfu";
 import { commitUpload, makeStorageKey } from "@/lib/media-store";
 import type { Stage } from "@/lib/meetings-shared";
@@ -22,6 +25,19 @@ import {
   VIDEO_FPS,
   type SegmentHandle,
 } from "./ffmpeg";
+import { isRealFrame, pickFrame } from "./frames";
+import {
+  captureVerdict,
+  deadAdapterReason,
+  deadWindowMs,
+  describeLink,
+  emptyCounts,
+  formatClock,
+  mergeCounts,
+  parseSavedStats,
+  type AdapterLinkState,
+  type CaptureCounts,
+} from "./health";
 import { AudioMixer, FRAME_MS, toPcmBytes } from "./mixer";
 import type { MediaPacket } from "./protobuf";
 import {
@@ -52,7 +68,9 @@ import type { IngestSink } from "./ws-server";
  * and joins them all at the end. The media server retries our endpoint for
  * fifteen seconds while we are away and the new process asks for fresh
  * adapters regardless, so a restart costs the seconds it takes, not the
- * recording.
+ * recording. A stream that dies while we are up — the media server gives up
+ * on an endpoint after those fifteen seconds and never says so — is noticed
+ * from its own silence and asked for again (see health.ts).
  *
  * WHAT IT NEVER DOES. It never deletes. A failed recording leaves its
  * segments where an operator can find them, and says in the row why it
@@ -86,29 +104,84 @@ type Adapter = {
   participantId: string;
   sessionId: string;
   trackName: string;
+  /** In the endpoint path. A socket or packet carrying any other is refused. */
   nonce: string;
+  /**
+   * The media server may hold an adapter aimed at this nonce — it granted one,
+   * or a create's answer was lost — so the next create must not reuse it.
+   */
+  nonceInUse: boolean;
   adapterId: string | null;
   attempts: number;
   nextTryAt: number;
+  /** When the media server granted `adapterId`. */
+  createdAt: number;
+  /** When the last socket went, while none has replaced it. */
+  lostAt: number | null;
+  /** When the current socket connected. */
+  attachedAt: number;
   lastPacketAt: number;
+  /** Since when the roster has said this microphone is on; null while muted. */
+  micOnSince: number | null;
+  /** Replacements in a row that delivered nothing; widens the dead window (deadWindowMs). */
+  deadStreak: number;
   lastError: string | null;
+  /** At most one: see attach(). */
   sockets: Set<WebSocket>;
 };
 
-export type FinishReason = "stopped" | "meeting-ended" | "room-empty" | "resumed-after-stop";
+type Wanted = Pick<Adapter, "key" | "kind" | "participantId" | "sessionId" | "trackName">;
+
+export type FinishReason =
+  | "stopped"
+  | "meeting-ended"
+  | "room-empty"
+  | "resumed-after-stop"
+  | "start-failed"
+  | "recovered";
 
 export type FinishOutcome =
   | { status: "ready"; mediaId: string; bytes: number; durationSec: number }
   | { status: "failed"; reason: string };
 
-/** How long a muted microphone's adapter is kept before it is handed back. */
-const QUIET_MIC_MS = 60_000;
-/** Backoff for an adapter the media server would not give us. */
-const RETRY_STEPS_MS = [3000, 6000, 12000, 20000, 30000];
+/**
+ * Backoff for an adapter the media server would not give us. Short at first,
+ * because the usual refusal is a track asked for a moment before it was
+ * published, and every second of it is a second of somebody's voice.
+ */
+const RETRY_STEPS_MS = [1000, 2000, 4000, 8000, 15_000];
 /** ffmpeg deaths inside a minute before the recording is given up on. */
 const MAX_SEGMENT_CRASHES = 3;
+/** Past this much unread on either pipe, ffmpeg is behind and a tick is dropped. */
+const MAX_PIPE_BACKLOG = 8 * 1024 * 1024;
 
 const adapterKey = (participantId: string, kind: IngestKind) => `${participantId}:${kind}`;
+const errorText = (e: unknown) => String((e as Error)?.message ?? e);
+
+/**
+ * Whether a failed create may still have been carried out. A refusal with a
+ * status the media server chose (4xx) or a per-track error created nothing; a
+ * timeout or a 5xx might have, and an SFU that is not configured never sent
+ * the request at all.
+ */
+function mayHaveReachedMediaServer(e: unknown): boolean {
+  if (!(e instanceof SfuError)) return true;
+  if (!isSfuConfigured()) return false;
+  return e.status >= 500;
+}
+
+function linkState(a: Adapter): AdapterLinkState {
+  return {
+    kind: a.kind,
+    adapterId: a.adapterId,
+    sockets: a.sockets.size,
+    createdAt: a.createdAt,
+    lostAt: a.lostAt,
+    attachedAt: a.attachedAt,
+    lastPacketAt: a.lastPacketAt,
+    micOnSince: a.micOnSince,
+  };
+}
 
 export class LiveRecording implements IngestSink {
   readonly id: string;
@@ -128,6 +201,8 @@ export class LiveRecording implements IngestSink {
   private meetingTitle = "";
   private readonly config: RecorderConfig;
   private readonly log: (line: string) => void;
+  /** Told when a finish (or an early failure) has settled, so the supervisor lets go of this capture. */
+  private readonly onSettled?: (rec: LiveRecording) => void;
 
   private readonly mixer = new AudioMixer();
   private readonly adapters = new Map<string, Adapter>();
@@ -144,19 +219,45 @@ export class LiveRecording implements IngestSink {
   private stageCurrent: StageChoice | null = null;
   private stageCurrentKey: string | null = null;
   private videoAdapterKey: string | null = null;
+  /** The still for what is on stage: a card, a slide, or a track's name card. */
   private latestJpeg: Buffer | null = null;
+  /** Which frameCache entry `latestJpeg` should be, so a late render lands only where it belongs. */
+  private stillKey: string | null = null;
+  /** The last REAL frame from the track on stage, and when it arrived. */
+  private cameraJpeg: Buffer | null = null;
+  private cameraFrameAt = 0;
   private placeholder: Buffer | null = null;
   private readonly frameCache = new Map<string, Buffer>();
   private readonly framePending = new Set<string>();
+  private frameSeq = 0;
   private readonly captionFile: string;
   private readonly watermarkFile: string;
 
-  readonly stats = { audioPackets: 0, videoPackets: 0, audioBytes: 0, attaches: 0 };
+  /**
+   * What this recording has captured, across restarts: `stats.json` in the
+   * work directory carries the counts from one process to the next.
+   */
+  readonly stats: CaptureCounts = emptyCounts();
+  private readonly statsFile: string;
+  private statsLoading: Promise<void> | null = null;
+  private statsLoaded = false;
+  /** Whether the counts cover every segment on disk. See parseSavedStats. */
+  private countsComplete = false;
+  /**
+   * Set once the segment is closed and nothing more can be counted. Until
+   * then a save says "incomplete": a process that dies after a heartbeat save
+   * has captured up to ten seconds the file never counted, and a verdict on
+   * those counts could fail a recording whose only sound was in that gap.
+   */
+  private captureEnded = false;
+  private statsWrites = 0;
+  private retired = false;
 
   constructor(opts: {
     row: RecordingRow;
     config: RecorderConfig;
     log: (line: string) => void;
+    onSettled?: (rec: LiveRecording) => void;
   }) {
     this.id = opts.row.id;
     this.meetingId = opts.row.meetingId;
@@ -166,9 +267,11 @@ export class LiveRecording implements IngestSink {
     this.createdBy = opts.row.createdBy;
     this.config = opts.config;
     this.log = (line) => opts.log(`[${this.id.slice(0, 8)}] ${line}`);
+    this.onSettled = opts.onSettled;
     this.dir = path.join(opts.config.workDir, this.id);
     this.captionFile = path.join(this.dir, "caption.txt");
     this.watermarkFile = path.join(this.dir, "watermark.txt");
+    this.statsFile = path.join(this.dir, "stats.json");
   }
 
   /* ============================================================
@@ -184,6 +287,7 @@ export class LiveRecording implements IngestSink {
     const existing = await this.segmentFiles();
     this.segmentIndex = existing.length;
     if (existing.length > 0) this.log(`resuming after ${existing.length} earlier segment(s)`);
+    await this.loadStats(existing.length);
 
     await writeFile(this.captionFile, "");
     await writeFile(
@@ -224,6 +328,76 @@ export class LiveRecording implements IngestSink {
       .map((n) => path.join(this.dir, n));
   }
 
+  /** Segments with something in them: an ffmpeg that died before its first fragment leaves a stub. */
+  private async usableSegments(): Promise<string[]> {
+    const out: string[] = [];
+    for (const f of await this.segmentFiles()) {
+      try {
+        if ((await stat(f)).size > 1024) out.push(f);
+      } catch (e) {
+        this.log(`segment ${path.basename(f)} could not be read: ${errorText(e)}`);
+      }
+    }
+    return out;
+  }
+
+  /** Whether there is anything on disk worth filing — for a capture that cannot carry on. */
+  async hasSegments(): Promise<boolean> {
+    return (await this.usableSegments()).length > 0;
+  }
+
+  /**
+   * Take up the counts an earlier process saved. Once only; `earlierSegments`
+   * is how many segments were already on disk before this process captured
+   * anything, because with none our own counts are the whole story and with
+   * some but no saved counts they are not.
+   */
+  private loadStats(earlierSegments: number): Promise<void> {
+    this.statsLoading ??= this.readStats(earlierSegments);
+    return this.statsLoading;
+  }
+
+  private async readStats(earlierSegments: number): Promise<void> {
+    // `statsLoaded` is set only once the read is done: a heartbeat saving in
+    // the meantime would otherwise replace the file with zeros before we read it.
+    let text: string;
+    try {
+      text = await readFile(this.statsFile, "utf8");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.log(`could not read the saved capture counts: ${errorText(e)}`);
+      }
+      this.countsComplete = earlierSegments === 0;
+      this.statsLoaded = true;
+      return;
+    }
+    const saved = parseSavedStats(text);
+    if (saved) {
+      Object.assign(this.stats, mergeCounts(saved.counts, this.stats));
+      this.countsComplete = saved.complete;
+    } else {
+      this.log("the saved capture counts are unreadable; judging this recording on its file alone");
+      this.countsComplete = false;
+    }
+    this.statsLoaded = true;
+  }
+
+  /** Written on every heartbeat and when capture stops, so a restart knows what came before it. */
+  async saveStats(): Promise<void> {
+    if (!this.statsLoaded || this.retired) return;
+    // Written aside and renamed into place, so a crash mid-write leaves the
+    // previous counts rather than half a file. A name of its own per write,
+    // because a heartbeat and a finish can save at the same moment.
+    this.statsWrites += 1;
+    const tmp = `${this.statsFile}.${this.statsWrites}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify({ complete: this.countsComplete && this.captureEnded, counts: this.stats }));
+      await rename(tmp, this.statsFile);
+    } catch (e) {
+      this.log(`could not save the capture counts: ${errorText(e)}`);
+    }
+  }
+
   private async openSegment(): Promise<void> {
     this.segmentIndex += 1;
     const file = path.join(this.dir, `seg-${String(this.segmentIndex).padStart(3, "0")}.${this.segmentExt()}`);
@@ -253,12 +427,12 @@ export class LiveRecording implements IngestSink {
       this.log(`ffmpeg stopped mid-recording: ${why}`);
       if (this.segmentCrashes.length >= MAX_SEGMENT_CRASHES) {
         this.segment = null;
-        void this.failNow(`The encoder kept stopping: ${why}`);
+        this.failNow(`The encoder kept stopping: ${why}`);
         return;
       }
       void this.openSegment().catch((e) => {
         this.log(`could not start a new segment: ${String(e)}`);
-        void this.failNow(`The encoder could not be restarted: ${String((e as Error).message ?? e)}`);
+        this.failNow(`The encoder could not be restarted: ${errorText(e)}`);
       });
     });
   }
@@ -270,43 +444,65 @@ export class LiveRecording implements IngestSink {
   private tick(): void {
     const segment = this.segment;
     if (!segment || this.stopped) return;
-    const elapsed = Date.now() - this.clock.startedAt;
+    const now = Date.now();
+    const elapsed = now - this.clock.startedAt;
 
     const dueAudio = Math.floor(elapsed / FRAME_MS) - this.clock.audioFrames;
-    if (dueAudio > 0) {
-      const pcm = toPcmBytes(this.mixer.pull(dueAudio));
-      this.clock.audioFrames += dueAudio;
-      this.write(segment.audio, pcm);
+    const dueVideo = segment.video ? Math.floor(elapsed / (1000 / VIDEO_FPS)) - this.clock.videoFrames : 0;
+    if (dueAudio <= 0 && dueVideo <= 0) return;
+
+    // The mixer is pulled whatever happens below, so every voice's queue
+    // stays in step with the clock even through a dropped tick.
+    const pcm = dueAudio > 0 ? toPcmBytes(this.mixer.pull(dueAudio)) : null;
+    if (dueAudio > 0) this.clock.audioFrames += dueAudio;
+    if (dueVideo > 0) this.clock.videoFrames += dueVideo;
+
+    /*
+     * ffmpeg consumes in real time, so the pipes are normally empty. If one is
+     * not — a starved box, a stalled encoder — the backlog must not pile up in
+     * memory for ever. Past eight megabytes on EITHER pipe the whole tick is
+     * dropped from BOTH and counted: the file loses a moment, rather than the
+     * sound and the picture drifting apart for the rest of the recording, which
+     * is what dropping from one pipe and not the other did.
+     */
+    const behind =
+      segment.audio.writableLength > MAX_PIPE_BACKLOG ||
+      (segment.video !== null && segment.video.writableLength > MAX_PIPE_BACKLOG);
+    if (behind) {
+      this.droppedWrites += 1;
+      if (this.droppedWrites % 250 === 1) this.log(`encoder is behind; dropped ${this.droppedWrites} tick(s)`);
+      return;
     }
 
-    if (segment.video) {
-      const dueVideo = Math.floor(elapsed / (1000 / VIDEO_FPS)) - this.clock.videoFrames;
-      if (dueVideo > 0) {
-        const frame = this.latestJpeg ?? this.placeholder;
-        this.clock.videoFrames += dueVideo;
-        if (frame) {
-          for (let i = 0; i < dueVideo; i++) this.write(segment.video, frame);
-        }
+    if (pcm) this.write(segment.audio, pcm);
+    if (segment.video && dueVideo > 0) {
+      const stage = this.stageCurrent;
+      const frame = pickFrame({
+        onTrack: stage?.kind === "track",
+        camera: this.cameraJpeg,
+        cameraAt: this.cameraFrameAt,
+        still: this.latestJpeg ?? this.placeholder,
+        now,
+        /*
+         * A shared screen's last real frame is held for as long as the share
+         * is on stage. A still screen sends few frames or none (a source that
+         * does not change produces nothing), so the camera rule put the
+         * sharer's name card over the slides they were showing. Its end is
+         * the stage changing, which clears the frame anyway.
+         */
+        freshMs: stage?.kind === "track" && stage.trackName === "screen" ? Infinity : undefined,
+      });
+      if (frame) {
+        for (let i = 0; i < dueVideo; i++) this.write(segment.video, frame);
       }
     }
   }
 
-  private write(stream: NodeJS.WritableStream & { writableLength?: number }, bytes: Uint8Array): void {
-    /*
-     * ffmpeg consumes in real time, so the pipe is normally empty. If it is
-     * not — a starved box, a stalled encoder — the mix must not pile up in
-     * memory for ever. Past eight megabytes the frame is dropped and counted;
-     * the file loses a moment rather than the process losing the box.
-     */
-    if ((stream.writableLength ?? 0) > 8 * 1024 * 1024) {
-      this.droppedWrites += 1;
-      if (this.droppedWrites % 250 === 1) this.log(`encoder is behind; dropped ${this.droppedWrites} write(s)`);
-      return;
-    }
+  private write(stream: NodeJS.WritableStream, bytes: Uint8Array): void {
     try {
       stream.write(bytes);
     } catch (e) {
-      this.log(`write failed: ${String((e as Error).message ?? e)}`);
+      this.log(`write failed: ${errorText(e)}`);
     }
   }
 
@@ -314,31 +510,65 @@ export class LiveRecording implements IngestSink {
    * Frames in
    * ========================================================== */
 
+  /**
+   * The adapter this target is for, only if its nonce is the current one. An
+   * older adapter for the same voice — a create that timed out here but that
+   * the media server carried out, or one still retrying after a restart —
+   * signs a valid path, so the nonce is what tells it apart. Taking its frames
+   * too would feed the same voice twice: interleaved PCM, a half-speed stutter.
+   */
+  private current(target: IngestTarget): Adapter | null {
+    const a = this.adapters.get(adapterKey(target.participantId, target.kind));
+    return a && a.nonce === target.nonce ? a : null;
+  }
+
   expects(target: IngestTarget): boolean {
-    return !this.stopped && this.adapters.has(adapterKey(target.participantId, target.kind));
+    return !this.stopped && this.current(target) !== null;
   }
 
   attach(target: IngestTarget, ws: WebSocket): void {
-    const a = this.adapters.get(adapterKey(target.participantId, target.kind));
-    if (!a) {
-      ws.close();
+    const a = this.current(target);
+    if (!a || this.stopped) {
+      // Handed back, or replaced by a newer adapter, since the upgrade began.
+      this.closeSocket(ws, false);
       return;
     }
+    /*
+     * One socket per adapter. A second on the same path is the media server
+     * reconnecting while we still hold the old, half-dead one; both at once
+     * would feed the same voice twice. Terminated rather than closed, so not
+     * one more message is read from it.
+     */
+    const replacing = a.sockets.size;
+    for (const old of a.sockets) this.closeSocket(old, true);
+    a.sockets.clear();
     a.sockets.add(ws);
-    this.stats.attaches += 1;
-    this.log(`${target.kind} stream connected for ${target.participantId.slice(0, 8)} (${a.sockets.size} socket(s))`);
+    a.attachedAt = Date.now();
+    a.lostAt = null;
+    if (a.kind === "mic") this.stats.micAttaches += 1;
+    else this.stats.videoAttaches += 1;
+    this.log(
+      `${target.kind} stream connected for ${target.participantId.slice(0, 8)}` +
+        (replacing ? ` (replacing ${replacing} older socket(s))` : ""),
+    );
   }
 
   detach(target: IngestTarget, ws: WebSocket): void {
-    const a = this.adapters.get(adapterKey(target.participantId, target.kind));
-    a?.sockets.delete(ws);
+    const a = this.current(target);
+    // A socket we already let go of (replaced, handed back) says nothing about the current one.
+    if (!a || !a.sockets.delete(ws)) return;
+    if (a.sockets.size === 0) {
+      a.lostAt = Date.now();
+      this.log(`${target.kind} stream for ${target.participantId.slice(0, 8)} disconnected`);
+    }
   }
 
   packet(target: IngestTarget, packet: MediaPacket): void {
-    const key = adapterKey(target.participantId, target.kind);
-    const a = this.adapters.get(key);
+    const a = this.current(target);
     if (!a) return;
-    a.lastPacketAt = Date.now();
+    const now = Date.now();
+    a.lastPacketAt = now;
+    a.deadStreak = 0; // this link delivers
     if (target.kind === "mic") {
       this.stats.audioPackets += 1;
       this.stats.audioBytes += packet.payload.length;
@@ -346,9 +576,25 @@ export class LiveRecording implements IngestSink {
       return;
     }
     this.stats.videoPackets += 1;
-    if (key === this.videoAdapterKey && packet.payload.length > 0) {
-      // Copied: the socket's buffer is reused for the next message.
-      this.latestJpeg = Buffer.from(packet.payload);
+    if (a.key !== this.videoAdapterKey || packet.payload.length === 0) return;
+    // An OFF camera or screen sends a tiny black placeholder to keep its
+    // publication alive. It is counted and never shown (see frames.ts).
+    if (!isRealFrame(packet.payload)) {
+      this.stats.placeholderFrames += 1;
+      return;
+    }
+    this.stats.videoFrames += 1;
+    // Copied: the socket's buffer is reused for the next message.
+    this.cameraJpeg = Buffer.from(packet.payload);
+    this.cameraFrameAt = now;
+  }
+
+  private closeSocket(ws: WebSocket, hard: boolean): void {
+    try {
+      if (hard) ws.terminate();
+      else ws.close();
+    } catch (e) {
+      this.log(`could not close an ingest socket: ${errorText(e)}`);
     }
   }
 
@@ -361,18 +607,25 @@ export class LiveRecording implements IngestSink {
     this.churchName = room.churchName || this.churchName;
     this.meetingTitle = room.title || this.meetingTitle;
     const now = Date.now();
+    const people = new Map(room.people.map((p) => [p.participantId, p]));
 
-    const wanted = new Map<string, Omit<Adapter, "nonce" | "adapterId" | "attempts" | "nextTryAt" | "lastPacketAt" | "lastError" | "sockets">>();
+    const wanted = new Map<string, Wanted>();
 
-    // Every voice: anyone publishing whose microphone is on, plus anyone
-    // whose microphone we are still hearing from (a mute is a quiet track,
-    // not a track to hand back and ask for again a minute later).
+    /*
+     * Every voice: anyone publishing whose microphone is on, and anyone whose
+     * microphone we already have on the session they are still on. A mute is
+     * a quiet track now — the client keeps sending silence — so it is kept for
+     * as long as the person is here, rather than handed back after a minute and
+     * asked for again on unmute, which lost the first seconds of every long
+     * mute. A microphone that truly stopped is caught by the dead-adapter check
+     * below, not by a timer.
+     */
     for (const p of room.people) {
       if (!p.sfuSessionId) continue;
       const key = adapterKey(p.participantId, "mic");
       const have = this.adapters.get(key);
-      const recentlyHeard = !!have && now - have.lastPacketAt < QUIET_MIC_MS;
-      if (!p.micOn && !recentlyHeard && !(have && have.adapterId === null)) continue;
+      const sameSession = !!have && have.sessionId === p.sfuSessionId;
+      if (!p.micOn && !sameSession) continue;
       wanted.set(key, {
         key,
         kind: "mic",
@@ -391,56 +644,123 @@ export class LiveRecording implements IngestSink {
         meetingTitle: this.meetingTitle,
         churchName: this.churchName,
       });
+      const videoKind: IngestKind | null =
+        choice.kind === "track" ? (choice.trackName === "screen" ? "screen" : "cam") : null;
+      const videoKey = choice.kind === "track" && videoKind ? adapterKey(choice.participantId, videoKind) : null;
+      if (videoKey !== this.videoAdapterKey) {
+        // Before anything is awaited: a frame from the previous track landing
+        // while the caption is rewritten must not be shown under the new name.
+        this.videoAdapterKey = videoKey;
+        this.cameraJpeg = null;
+        this.cameraFrameAt = 0;
+      }
       await this.showStage(choice);
-      if (choice.kind === "track") {
-        const kind: IngestKind = choice.trackName === "screen" ? "screen" : "cam";
-        const key = adapterKey(choice.participantId, kind);
-        wanted.set(key, {
-          key,
-          kind,
+      if (choice.kind === "track" && videoKey && videoKind) {
+        wanted.set(videoKey, {
+          key: videoKey,
+          kind: videoKind,
           participantId: choice.participantId,
           sessionId: choice.sessionId,
           trackName: choice.trackName,
         });
-        this.videoAdapterKey = key;
-      } else {
-        this.videoAdapterKey = null;
       }
+      if (this.stopped) return;
     }
 
-    // Hand back what is no longer wanted, or belongs to a session that has
-    // been replaced (a rejoin is a new participant row, so this is rare).
+    /*
+     * Hand back what is no longer wanted, or belongs to a session that has been
+     * replaced — a publisher rebuilt on a new session mid-meeting. A voice whose
+     * session changed keeps its place in the mix: its replacement below reuses
+     * the mixer source. That is why the source is removed here, only for a
+     * voice nobody wants, and not when the old adapter is closed — which now
+     * happens after the replacement exists, and would otherwise take the new
+     * adapter's source with it.
+     */
     const toClose: Adapter[] = [];
     for (const [key, a] of this.adapters) {
       const want = wanted.get(key);
-      if (!want || want.sessionId !== a.sessionId) {
-        toClose.push(a);
-        this.adapters.delete(key);
-      }
+      if (want && want.sessionId === a.sessionId) continue;
+      toClose.push(a);
+      this.adapters.delete(key);
+      if (a.kind === "mic" && !want) this.mixer.removeSource(a.participantId);
     }
-    await this.closeAdapters(toClose);
 
-    // And ask for what is missing.
-    const toCreate: Adapter[] = [];
+    // Everything wanted gets an entry; a new one has no adapter yet.
     for (const [key, want] of wanted) {
-      let a = this.adapters.get(key);
-      if (!a) {
-        a = {
-          ...want,
-          nonce: newNonce(),
-          adapterId: null,
-          attempts: 0,
-          nextTryAt: 0,
-          lastPacketAt: 0,
-          lastError: null,
-          sockets: new Set(),
-        };
-        this.adapters.set(key, a);
-        if (want.kind === "mic") this.mixer.addSource(want.participantId);
-      }
-      if (a.adapterId === null && now >= a.nextTryAt) toCreate.push(a);
+      if (this.adapters.has(key)) continue;
+      this.adapters.set(key, {
+        ...want,
+        nonce: newNonce(),
+        nonceInUse: false,
+        adapterId: null,
+        attempts: 0,
+        nextTryAt: 0,
+        createdAt: 0,
+        lostAt: null,
+        attachedAt: 0,
+        lastPacketAt: 0,
+        micOnSince: null,
+        deadStreak: 0,
+        lastError: null,
+        sockets: new Set(),
+      });
+      if (want.kind === "mic") this.mixer.addSource(want.participantId);
     }
+
+    // A dead adapter is asked for again in this same pass.
+    for (const a of this.adapters.values()) {
+      if (a.kind === "mic") {
+        a.micOnSince = people.get(a.participantId)?.micOn ? (a.micOnSince ?? now) : null;
+      }
+      const why = deadAdapterReason(linkState(a), now, deadWindowMs(a.deadStreak));
+      if (why) this.replaceDead(a, why, now);
+    }
+
+    /*
+     * Ask for what is missing — and only then let go of what it replaces, without
+     * waiting on it. Closing first put a network round trip between a voice's
+     * old session going and its new one arriving. A socket still attached with
+     * no adapter id is a create whose answer we lost but the media server
+     * carried out: the voice is flowing, so it is not asked for twice.
+     */
+    const toCreate = [...this.adapters.values()].filter(
+      (a) => a.adapterId === null && a.sockets.size === 0 && now >= a.nextTryAt,
+    );
     await this.createAdapters(toCreate);
+    // closeAdapters logs its own failures; nothing is left to handle here.
+    void this.closeAdapters(toClose);
+  }
+
+  /** Give up on an adapter that is not delivering, and set it up to be asked for afresh. */
+  private replaceDead(a: Adapter, why: string, now: number): void {
+    this.stats.adapterResets += 1;
+    a.deadStreak += 1;
+    const ago = (t: number) => (t ? `${Math.round((now - t) / 1000)}s ago` : "never");
+    this.log(
+      `${a.kind} adapter ${a.adapterId?.slice(0, 8) ?? "(no id)"} for ${a.participantId.slice(0, 8)} is dead: ${why} ` +
+        `[sockets ${a.sockets.size}, granted ${ago(a.createdAt)}, connected ${ago(a.attachedAt)}, ` +
+        `lost ${a.lostAt ? ago(a.lostAt) : "no"}, last packet ${ago(a.lastPacketAt)}]; asking again ` +
+        `(dead streak ${a.deadStreak}, next judged after ${deadWindowMs(a.deadStreak) / 1000}s)`,
+    );
+    for (const ws of a.sockets) this.closeSocket(ws, true);
+    a.sockets.clear();
+    const old = a.adapterId;
+    if (old) {
+      // Not awaited: the replacement must not wait on the media server
+      // confirming the old one is gone.
+      closeWebSocketAdapters([old]).catch((e) =>
+        this.log(`could not close dead adapter ${old.slice(0, 8)}: ${errorText(e)}`),
+      );
+    }
+    a.adapterId = null;
+    a.nonce = newNonce();
+    a.nonceInUse = false;
+    a.attempts = 0;
+    a.nextTryAt = 0;
+    a.createdAt = 0;
+    a.lostAt = null;
+    a.attachedAt = 0;
+    a.lastError = null;
   }
 
   private endpointFor(a: Adapter): string {
@@ -456,35 +776,100 @@ export class LiveRecording implements IngestSink {
   }
 
   private async createAdapters(list: Adapter[]): Promise<void> {
-    for (let i = 0; i < list.length; i += 4) {
-      const batch = list.slice(i, i + 4);
-      const request: AdapterRequest[] = batch.map((a) => ({
-        location: "remote",
-        sessionId: a.sessionId,
-        trackName: a.trackName,
-        endpoint: this.endpointFor(a),
-        outputCodec: a.kind === "mic" ? "pcm" : "jpeg",
-      }));
-      let results: { adapterId?: string; errorCode?: string; errorDescription?: string }[];
-      try {
-        results = (await createWebSocketAdapters(request)).tracks;
-      } catch (e) {
-        const why = String((e as Error).message ?? e);
-        for (const a of batch) this.backOff(a, why);
-        continue;
+    // Microphones first, and never in one request with a picture: a refusal or
+    // a slow answer about a camera must not hold up, or back off, a voice.
+    const mics = list.filter((a) => a.kind === "mic");
+    const pictures = list.filter((a) => a.kind !== "mic");
+    for (const group of [mics, pictures]) {
+      for (let i = 0; i < group.length; i += 4) {
+        if (this.stopped) return;
+        await this.createBatch(group.slice(i, i + 4));
       }
-      batch.forEach((a, n) => {
-        const r = results[n];
-        if (!r || !r.adapterId) {
-          this.backOff(a, r?.errorDescription ?? r?.errorCode ?? "no adapter id in the answer");
-          return;
-        }
-        a.adapterId = r.adapterId;
-        a.attempts = 0;
-        a.lastError = null;
-        this.log(`${a.kind} adapter ${r.adapterId.slice(0, 8)} for ${a.participantId.slice(0, 8)}`);
-      });
     }
+  }
+
+  private async createBatch(batch: Adapter[]): Promise<void> {
+    // A nonce the media server may already be using is never offered again,
+    // so a duplicate adapter can only ever connect with a path we refuse.
+    for (const a of batch) {
+      if (a.nonceInUse) a.nonce = newNonce();
+      a.nonceInUse = false;
+      if (a.kind === "mic") this.stats.micRequested += 1;
+    }
+    const byEndpoint = new Map(batch.map((a) => [this.endpointFor(a), a]));
+    const request: AdapterRequest[] = [...byEndpoint].map(([endpoint, a]) => ({
+      location: "remote",
+      sessionId: a.sessionId,
+      trackName: a.trackName,
+      endpoint,
+      outputCodec: a.kind === "mic" ? "pcm" : "jpeg",
+    }));
+
+    let results: AdapterResult[];
+    try {
+      results = (await createWebSocketAdapters(request)).tracks;
+    } catch (e) {
+      const why = errorText(e);
+      const unknown = mayHaveReachedMediaServer(e);
+      for (const a of batch) {
+        a.nonceInUse = unknown;
+        this.refused(a, why);
+      }
+      return;
+    }
+
+    /*
+     * Matched by endpoint, which carries the nonce and so names exactly one
+     * adapter; by session and track if the answer leaves the endpoint out; by
+     * position only if it carries neither.
+     */
+    const answered = new Set<Adapter>();
+    results.forEach((r, n) => {
+      const a =
+        (r.endpoint ? byEndpoint.get(r.endpoint) : undefined) ??
+        batch.find((x) => !answered.has(x) && !!r.sessionId && x.sessionId === r.sessionId && x.trackName === r.trackName) ??
+        (!r.endpoint && !r.sessionId ? batch[n] : undefined);
+      if (!a || answered.has(a)) {
+        this.log(`the media server answered for a track we did not ask for (${r.trackName ?? "?"}); ignored`);
+        if (r.adapterId) this.closeOrphan(r.adapterId);
+        return;
+      }
+      answered.add(a);
+      if (!r.adapterId) {
+        a.nonceInUse = false; // a per-track refusal created nothing
+        this.refused(a, r.errorDescription ?? r.errorCode ?? "no adapter id in the answer");
+        return;
+      }
+      if (this.stopped || this.adapters.get(a.key) !== a) {
+        // Handed back while we waited for the answer.
+        this.closeOrphan(r.adapterId);
+        return;
+      }
+      a.adapterId = r.adapterId;
+      a.nonceInUse = true;
+      a.createdAt = Date.now();
+      a.attempts = 0;
+      a.lastError = null;
+      if (a.kind === "mic") this.stats.micGranted += 1;
+      else this.stats.videoGranted += 1;
+      this.log(`${a.kind} adapter ${r.adapterId.slice(0, 8)} for ${a.participantId.slice(0, 8)}`);
+    });
+    for (const a of batch) {
+      if (answered.has(a)) continue;
+      a.nonceInUse = true; // no word either way: it may exist
+      this.refused(a, "no answer for this track");
+    }
+  }
+
+  private closeOrphan(adapterId: string): void {
+    closeWebSocketAdapters([adapterId]).catch((e) =>
+      this.log(`could not close unwanted adapter ${adapterId.slice(0, 8)}: ${errorText(e)}`),
+    );
+  }
+
+  private refused(a: Adapter, why: string): void {
+    if (a.kind === "mic") this.stats.lastRefusal = why.slice(0, 200);
+    this.backOff(a, why);
   }
 
   private backOff(a: Adapter, why: string): void {
@@ -499,15 +884,8 @@ export class LiveRecording implements IngestSink {
 
   private async closeAdapters(list: Adapter[]): Promise<void> {
     for (const a of list) {
-      for (const ws of a.sockets) {
-        try {
-          ws.close();
-        } catch {
-          /* closing */
-        }
-      }
+      for (const ws of a.sockets) this.closeSocket(ws, false);
       a.sockets.clear();
-      if (a.kind === "mic") this.mixer.removeSource(a.participantId);
     }
     const ids = list.map((a) => a.adapterId).filter((x): x is string => !!x);
     for (let i = 0; i < ids.length; i += 4) {
@@ -516,7 +894,7 @@ export class LiveRecording implements IngestSink {
       } catch (e) {
         // Best effort: the media server closes an adapter whose endpoint has
         // gone within fifteen seconds anyway.
-        this.log(`could not close ${ids.slice(i, i + 4).length} adapter(s): ${String((e as Error).message ?? e)}`);
+        this.log(`could not close ${ids.slice(i, i + 4).length} adapter(s): ${errorText(e)}`);
       }
     }
   }
@@ -532,46 +910,68 @@ export class LiveRecording implements IngestSink {
     this.stageCurrentKey = key;
     this.log(`showing ${key.slice(0, 60)}`);
 
+    // The picture is decided before the caption is awaited, so no tick in
+    // between can pair the new caption with the old picture.
+    if (choice.kind === "track") {
+      /*
+       * Never the previous picture under a new name. Until a real frame of
+       * this track arrives (and whenever none has for a few seconds — see
+       * tick), the person's name card is shown instead.
+       */
+      this.cameraJpeg = null;
+      this.cameraFrameAt = 0;
+      const name = choice.name;
+      this.showStill(
+        `name:${choice.participantId}:${name}`,
+        (file) => renderCard({ title: name, body: this.churchName, footnote: "" }, file, this.config.fonts),
+        true,
+      );
+    } else if (choice.kind === "empty") {
+      this.stillKey = null;
+      this.latestJpeg = this.placeholder;
+    } else if (choice.kind === "card") {
+      const spec = { title: choice.title, body: choice.body, footnote: choice.footnote };
+      this.showStill(key, (file) => renderCard(spec, file, this.config.fonts), false);
+    } else {
+      const url = choice.url;
+      this.showStill(key, (file) => renderSlide(url, file), false);
+    }
+
     try {
       await writeFile(this.captionFile, stageCaption(choice));
     } catch (e) {
-      this.log(`caption write failed: ${String((e as Error).message ?? e)}`);
+      this.log(`caption write failed: ${errorText(e)}`);
     }
+  }
 
-    if (choice.kind === "track") {
-      // Keep the last picture until the first frame of the new one lands.
-      return;
-    }
-    if (choice.kind === "empty") {
-      this.latestJpeg = this.placeholder;
-      return;
-    }
-
+  /**
+   * Show a rendered still — from the cache, or once it has been rendered. A
+   * verse or slide keeps the previous still on screen while it renders; a name
+   * card does not (`blankWhileRendering`), because the previous one may be
+   * somebody else's name.
+   */
+  private showStill(key: string, render: (file: string) => Promise<void>, blankWhileRendering: boolean): void {
+    this.stillKey = key;
     const cached = this.frameCache.get(key);
     if (cached) {
       this.latestJpeg = cached;
       return;
     }
+    if (blankWhileRendering) this.latestJpeg = this.placeholder;
     if (this.framePending.has(key)) return;
     this.framePending.add(key);
-    const file = path.join(this.dir, `frame-${this.frameCache.size + this.framePending.size}.jpg`);
-    const render =
-      choice.kind === "card"
-        ? renderCard(
-            { title: choice.title, body: choice.body, footnote: choice.footnote },
-            file,
-            this.config.fonts,
-          )
-        : renderSlide(choice.url, file);
-    void render
+    // A counter, not the cache's size: two renders in flight must not share a file.
+    this.frameSeq += 1;
+    const file = path.join(this.dir, `frame-${this.frameSeq}.jpg`);
+    void render(file)
       .then(() => readJpeg(file))
       .then((jpeg) => {
         this.frameCache.set(key, jpeg);
-        if (this.stageCurrentKey === key) this.latestJpeg = jpeg;
+        if (this.stillKey === key) this.latestJpeg = jpeg;
       })
       .catch((e) => {
-        this.log(`could not render ${key.slice(0, 40)}: ${String((e as Error).message ?? e)}`);
-        if (this.stageCurrentKey === key) this.latestJpeg = this.placeholder;
+        this.log(`could not render ${key.slice(0, 40)}: ${errorText(e)}`);
+        if (this.stillKey === key) this.latestJpeg = this.placeholder;
       })
       .finally(() => this.framePending.delete(key));
   }
@@ -580,34 +980,71 @@ export class LiveRecording implements IngestSink {
    * Finishing
    * ========================================================== */
 
-  /** Stop capturing. Idempotent; the first caller's reason wins. */
-  finish(reason: FinishReason): Promise<FinishOutcome> {
-    this.finishing ??= this.finishOnce(reason);
+  /**
+   * Stop capturing. Idempotent; the first caller's reason wins. `note` is said
+   * beside the filed recording — why it is shorter than the meeting, say.
+   */
+  finish(reason: FinishReason, note?: string): Promise<FinishOutcome> {
+    this.finishing ??= this.settle(this.finishOnce(reason, note ?? null));
     return this.finishing;
   }
 
-  private async finishOnce(reason: FinishReason): Promise<FinishOutcome> {
-    this.log(`finishing (${reason})`);
+  private settle(p: Promise<FinishOutcome>): Promise<FinishOutcome> {
+    return p.finally(() => this.onSettled?.(this));
+  }
+
+  /**
+   * The process is going down. Called synchronously before anything is
+   * awaited: from here an ffmpeg exit is expected rather than a crash to answer
+   * with a fresh segment, and nothing more is written or accepted.
+   */
+  markStopping(): void {
     this.stopped = true;
     if (this.ticker) clearInterval(this.ticker);
     this.ticker = null;
+  }
 
-    await db
-      .update(meetingRecording)
-      .set({ status: "processing", stoppedAt: sql`coalesce(${meetingRecording.stoppedAt}, now())`, lastActivityAt: new Date(), recorderHeartbeatAt: new Date() })
-      .where(and(eq(meetingRecording.id, this.id), eq(meetingRecording.status, "recording")));
-
-    await this.closeAdapters([...this.adapters.values()]);
+  /** Put the capture down: segment ended alongside the adapters, never a round trip after. */
+  private async putDown(): Promise<void> {
+    this.markStopping();
+    const adapters = [...this.adapters.values()];
     this.adapters.clear();
-    await this.endSegment();
+    // In parallel, not in turn: the file should end when the recording did,
+    // not after the media server has confirmed every adapter closed.
+    await Promise.all([this.endSegment(), this.closeAdapters(adapters)]);
+    this.captureEnded = true;
+    await this.saveStats();
+  }
+
+  /** Stop was pressed, or something like it: tell the room "being saved". Best effort. */
+  private async markProcessing(): Promise<void> {
+    try {
+      await db
+        .update(meetingRecording)
+        .set({ status: "processing", stoppedAt: sql`coalesce(${meetingRecording.stoppedAt}, now())`, lastActivityAt: new Date(), recorderHeartbeatAt: new Date() })
+        .where(and(eq(meetingRecording.id, this.id), eq(meetingRecording.status, "recording")));
+    } catch (e) {
+      // The capture is put down regardless. Adapters left streaming and an
+      // ffmpeg left running for want of one row update are worse than a row
+      // that says "recording" a little longer.
+      this.log(`could not mark the row as being saved: ${errorText(e)}`);
+    }
+  }
+
+  private async finishOnce(reason: FinishReason, note: string | null): Promise<FinishOutcome> {
+    this.log(`finishing (${reason})`);
+    this.markStopping();
+    await this.markProcessing();
+    await this.putDown();
 
     try {
-      const outcome = await this.assembleAndFile();
+      const outcome = await this.assembleAndFile(note ? () => note : undefined);
       this.log(`ready: ${outcome.bytes} bytes, ${outcome.durationSec}s`);
       await this.retireDir();
       return outcome;
     } catch (e) {
-      const reason = String((e as Error).message ?? e).slice(0, 300);
+      // Room for the media server's own words in an empty-capture verdict.
+      const reason = errorText(e).slice(0, 500);
       this.log(`failed: ${reason}`);
       await this.markFailed(reason);
       return { status: "failed", reason };
@@ -632,15 +1069,32 @@ export class LiveRecording implements IngestSink {
     }
   }
 
-  private async assembleAndFile(): Promise<FinishOutcome & { status: "ready" }> {
-    const segments: string[] = [];
-    for (const f of await this.segmentFiles()) {
-      try {
-        if ((await stat(f)).size > 1024) segments.push(f);
-      } catch {
-        /* vanished */
-      }
+  /**
+   * Join the segments and file them. Throws — and files nothing — when there
+   * is nothing to file. `extraNote` is given the file's length and says why
+   * the recording is what it is, beside it in the row.
+   */
+  private async assembleAndFile(
+    extraNote?: (durationSec: number) => string,
+  ): Promise<FinishOutcome & { status: "ready" }> {
+    // A finish with no capture of its own (resumed after a stop, recovered)
+    // takes up what the earlier processes counted; every segment is theirs.
+    const allSegments = await this.segmentFiles();
+    await this.loadStats(allSegments.length);
+
+    /*
+     * The encode is fed silence and the held picture on the wall clock whatever
+     * arrives, so a recording that heard nobody is still a file of the right
+     * length. Only the counts can tell — and only when they cover the whole
+     * recording; without that, the file is judged on its own as before.
+     */
+    const verdict = this.countsComplete ? captureVerdict(this.stats) : null;
+    if (verdict?.kind === "fail") {
+      this.log(`not filing: ${verdict.reason} [${JSON.stringify(this.stats)}]`);
+      throw new Error(verdict.reason);
     }
+
+    const segments = await this.usableSegments();
     if (segments.length === 0) {
       throw new Error(
         "Nothing was captured. The recording service was not receiving the meeting's audio — check that the media server can reach it.",
@@ -655,6 +1109,12 @@ export class LiveRecording implements IngestSink {
     if (durationSec < 1 && size < 50_000) {
       throw new Error("The recording came out empty — no audio reached the recording service.");
     }
+
+    // Filed, but with a line beside it saying what is (or is not) in it.
+    const notes = [verdict?.kind === "note" ? verdict.note : null, extraNote?.(durationSec) ?? null].filter(
+      (n): n is string => !!n,
+    );
+    const note = notes.length > 0 ? notes.join(" ").slice(0, 500) : null;
 
     const mime = this.mode === "video" ? "video/mp4" : "audio/mp4";
     const key = makeStorageKey(this.churchId, ext);
@@ -689,7 +1149,7 @@ export class LiveRecording implements IngestSink {
           url: `/media/${m.id}`,
           bytes: size,
           durationSec,
-          error: null,
+          error: note,
           lastActivityAt: new Date(),
           recorderHeartbeatAt: new Date(),
         })
@@ -703,7 +1163,7 @@ export class LiveRecording implements IngestSink {
       `Saved a ${this.mode} recording of "${this.meetingTitle || this.title}" to the media library`,
       "meetings.recording.update",
       "notice",
-      { mode: this.mode, bytes: size, durationSec, mediaId: row.id, source: "server" },
+      { mode: this.mode, bytes: size, durationSec, mediaId: row.id, source: "server", note, counts: this.stats },
     );
     return { status: "ready", mediaId: row.id, bytes: size, durationSec };
   }
@@ -713,32 +1173,51 @@ export class LiveRecording implements IngestSink {
       await db
         .update(meetingRecording)
         .set({ status: "failed", error: reason, lastActivityAt: new Date(), recorderHeartbeatAt: new Date() })
-        .where(and(eq(meetingRecording.id, this.id), inArray(meetingRecording.status, ["recording", "processing"])));
+        // "failed" too: a row the stalled sweep marked, that we then could not
+        // recover, gets our reason in place of the sweep's guess — which also
+        // stops the next start-up trying it again.
+        .where(and(eq(meetingRecording.id, this.id), inArray(meetingRecording.status, ["recording", "processing", "failed"])));
       await this.announce({ state: "failed", recordingId: this.id, reason });
       await this.audit(
         `A ${this.mode} recording of "${this.meetingTitle || this.title}" did not save — ${reason}`,
         "meetings.recording.failed",
         "warning",
-        { mode: this.mode, reason, source: "server" },
+        { mode: this.mode, reason, source: "server", counts: this.stats },
       );
     } catch (e) {
-      this.log(`could not record the failure: ${String((e as Error).message ?? e)}`);
+      this.log(`could not record the failure: ${errorText(e)}`);
     }
   }
 
   /** Something went badly wrong mid-capture: stop, keep what exists, say why. */
-  private async failNow(reason: string): Promise<void> {
+  private failNow(reason: string): void {
     if (this.finishing) return;
-    this.finishing = (async () => {
-      this.stopped = true;
-      if (this.ticker) clearInterval(this.ticker);
-      this.ticker = null;
-      await this.closeAdapters([...this.adapters.values()]);
-      this.adapters.clear();
-      await this.endSegment();
-      await this.markFailed(reason);
-      return { status: "failed" as const, reason };
-    })();
+    this.finishing = this.settle(this.failOnce(reason));
+  }
+
+  private async failOnce(reason: string): Promise<FinishOutcome> {
+    this.log(`stopping early: ${reason}`);
+    this.markStopping();
+    await this.markProcessing();
+    await this.putDown();
+    /*
+     * Everything up to the failure is on disk and playable, so it is filed as
+     * a partial recording with the reason beside it. Only a recording with
+     * nothing in it is marked failed — marking the whole service failed threw
+     * away an hour of sermon for an encoder that died in the last minute.
+     */
+    try {
+      const outcome = await this.assembleAndFile((d) => `Stopped early at ${formatClock(d)}: ${reason}`);
+      this.log(`filed what was captured before that: ${outcome.bytes} bytes, ${outcome.durationSec}s`);
+      await this.retireDir();
+      return outcome;
+    } catch (e) {
+      const why = errorText(e);
+      this.log(`nothing could be filed: ${why}`);
+      const full = `${reason} Nothing could be saved: ${why}`.slice(0, 500);
+      await this.markFailed(full);
+      return { status: "failed", reason: full };
+    }
   }
 
   /**
@@ -751,12 +1230,7 @@ export class LiveRecording implements IngestSink {
       return;
     }
     this.log("process stopping; closing this segment to be resumed");
-    this.stopped = true;
-    if (this.ticker) clearInterval(this.ticker);
-    this.ticker = null;
-    await this.closeAdapters([...this.adapters.values()]);
-    this.adapters.clear();
-    await this.endSegment();
+    await this.putDown();
   }
 
   private async retireDir(): Promise<void> {
@@ -764,6 +1238,7 @@ export class LiveRecording implements IngestSink {
     // The temp sweep removes `*.done` directories after that.
     try {
       await rename(this.dir, `${this.dir}.done`);
+      this.retired = true;
     } catch (e) {
       this.log(`could not retire the work directory: ${String((e as Error).message ?? e)}`);
     }
@@ -815,6 +1290,7 @@ export class LiveRecording implements IngestSink {
 
   /** For /health. */
   describe(): Record<string, unknown> {
+    const now = Date.now();
     return {
       id: this.id,
       meetingId: this.meetingId,
@@ -823,9 +1299,17 @@ export class LiveRecording implements IngestSink {
       adapters: [...this.adapters.values()].map((a) => ({
         kind: a.kind,
         participant: a.participantId.slice(0, 8),
-        adapter: a.adapterId ? "up" : `waiting (${a.lastError ?? "not asked yet"})`,
+        // Granted is not the same as delivering: "link" says whether the
+        // media server's stream is actually connected to us.
+        adapter: a.adapterId
+          ? "up"
+          : a.sockets.size > 0
+            ? "streaming (its id was never answered)"
+            : `waiting (${a.lastError ?? "not asked yet"})`,
+        link: describeLink(linkState(a), now),
+        deadStreak: a.deadStreak,
         sockets: a.sockets.size,
-        heardAgoMs: a.lastPacketAt ? Date.now() - a.lastPacketAt : null,
+        heardAgoMs: a.lastPacketAt ? now - a.lastPacketAt : null,
         depthMs: a.kind === "mic" ? Math.round(this.mixer.depthMs(a.participantId)) : null,
         framesMixed: a.kind === "mic" ? this.mixer.framesMixed(a.participantId) : null,
         // The signed ingest path, for the local smoke test ONLY. It is a
@@ -834,9 +1318,11 @@ export class LiveRecording implements IngestSink {
         ...(process.env.RECORDER_DEBUG_TOKENS === "1" ? { endpoint: this.endpointFor(a) } : {}),
       })),
       stage: this.stageCurrentKey,
+      cameraFrameAgoMs: this.cameraFrameAt ? now - this.cameraFrameAt : null,
       stats: this.stats,
+      countsComplete: this.countsComplete,
       droppedWrites: this.droppedWrites,
-      elapsedSec: this.clock.startedAt ? Math.round((Date.now() - this.clock.startedAt) / 1000) : 0,
+      elapsedSec: this.clock.startedAt ? Math.round((now - this.clock.startedAt) / 1000) : 0,
     };
   }
 }

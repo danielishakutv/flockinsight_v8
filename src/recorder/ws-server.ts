@@ -72,9 +72,10 @@ export function startIngestServer(opts: {
     }
     const sink = opts.router.expects(target);
     if (!sink) {
-      // A valid token for a capture that has since closed: the adapter is on
-      // its way out and will be closed by the API shortly. Say no politely.
-      opts.log(`ingest refused: nothing expects ${target.kind} for ${target.participantId.slice(0, 8)} in ${target.recordingId.slice(0, 8)}`);
+      // A valid token for a capture that has since closed, or for an adapter
+      // that has been replaced (its nonce is no longer the current one): it is
+      // on its way out. Say no politely.
+      opts.log(`ingest refused: nothing expects ${target.kind} for ${target.participantId.slice(0, 8)} in ${target.recordingId.slice(0, 8)} (closed, or an older adapter's path)`);
       socket.write("HTTP/1.1 410 Gone\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
