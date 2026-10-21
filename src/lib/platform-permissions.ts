@@ -84,12 +84,19 @@ export const PLATFORM_MODULES: PlatformModule[] = [
         label: "Handle support",
         description: "Read and reply to support requests.",
       },
+      {
+        key: "platform.assistant.review",
+        label: "Review the help assistant",
+        description:
+          "Read assistant transcripts, work the queue of unanswered questions, and approve the canned answers every church's assistant uses.",
+      },
     ],
     pages: [
       { label: "Churches", href: "/superadmin/churches", perm: "platform.churches.view", icon: "Building2" },
       { label: "Denominations", href: "/superadmin/denominations", perm: "platform.churches.view", icon: "Church" },
       { label: "Users", href: "/superadmin/users", perm: "platform.users.view", icon: "Users" },
       { label: "Support", href: "/superadmin/support", perm: "platform.support.manage", icon: "LifeBuoy" },
+      { label: "Assistant", href: "/superadmin/assistant", perm: "platform.assistant.review", icon: "Bot" },
     ],
   },
   {
@@ -173,6 +180,26 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     pages: [
       { label: "Blog", href: "/superadmin/blog", perm: "platform.content.manage", icon: "Newspaper" },
       { label: "Banners", href: "/superadmin/banners", perm: "platform.content.manage", icon: "ImageIcon" },
+    ],
+  },
+  {
+    key: "ai",
+    label: "AI",
+    description: "What the AI features cost, what was sent to the model, and the switch that stops them.",
+    perms: [
+      {
+        key: "platform.ai.view",
+        label: "See AI spend and payloads",
+        description: "Monthly spend, every call, and the exact figures each one sent.",
+      },
+      {
+        key: "platform.ai.manage",
+        label: "Control AI",
+        description: "The kill switch, the monthly ceilings and pausing a single AI feature.",
+      },
+    ],
+    pages: [
+      { label: "AI", href: "/superadmin/ai", perm: "platform.ai.view", icon: "Sparkles" },
     ],
   },
   {
@@ -278,6 +305,7 @@ export const ROLE_PRESETS: {
       "platform.churches.view",
       "platform.users.view",
       "platform.support.manage",
+      "platform.assistant.review",
     ],
   },
   {
@@ -289,6 +317,8 @@ export const ROLE_PRESETS: {
       "platform.finance.view",
       "platform.finance.manage",
       "platform.pricing.manage",
+      // AI spend is money.
+      "platform.ai.view",
     ],
   },
   {

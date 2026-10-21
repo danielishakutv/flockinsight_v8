@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { and, eq } from "drizzle-orm";
+import { Award, CalendarDays, ChevronRight } from "lucide-react";
+import { db } from "@/db";
+import { staff } from "@/db/schema";
+import { ranksForUsers } from "@/lib/certification";
+import { Button } from "@/components/ui/button";
 import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { listCohorts, listCourses, trainingOverview } from "@/lib/training";
@@ -32,11 +37,18 @@ export default async function TrainingPage() {
   await requireCan("training.view");
   const canManage = await can("training.manage");
 
-  const [overview, courses, cohorts] = await Promise.all([
+  const [overview, courses, cohorts, team] = await Promise.all([
     trainingOverview(church.id),
     listCourses(church.id),
     listCohorts(church.id),
+    // The team, not acting-as seats (temp), for the FlockInsight course card.
+    db
+      .select({ userId: staff.userId })
+      .from(staff)
+      .where(and(eq(staff.organizationId, church.id), eq(staff.temp, false))),
   ]);
+  const teamIds = [...new Set(team.map((s) => s.userId))];
+  const certified = (await ranksForUsers(teamIds)).size;
 
   const rows: CourseListRow[] = courses.map((c) => ({
     id: c.id,
@@ -78,6 +90,28 @@ export default async function TrainingPage() {
           <Stat label={t("training.enrolments")} value={overview.enrolled} />
           <Stat label={t("training.completions")} value={overview.completed} />
           <Stat label={t("training.membersCertified")} value={overview.certified} />
+        </CardContent>
+      </Card>
+
+      {/*
+       * The FlockInsight course: platform-wide and per person, so it is not
+       * one of this church's courses. Shown here because "who on the team
+       * knows the system" is a training question.
+       */}
+      <Card className="mb-5">
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <Award className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">{t("course.title")}</p>
+            <p className="text-muted-foreground text-sm">
+              {t("course.teamCertified", { certified, team: teamIds.length })}
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/help/course">{t("course.takeTheCourse")}</Link>
+          </Button>
         </CardContent>
       </Card>
 

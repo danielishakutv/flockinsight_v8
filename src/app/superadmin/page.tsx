@@ -40,6 +40,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { requirePlatform } from "@/lib/platform-access";
+import { getPlatformSummaryView } from "@/lib/ai/summaries";
+import { PlatformAiSummary } from "@/components/superadmin/platform-ai-summary";
 export const metadata = { title: "Overview · Admin" };
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,10 @@ export default async function SuperadminOverviewPage() {
 
       <Suspense fallback={<StatGridSkeleton />}>
         <KeyNumbers />
+      </Suspense>
+
+      <Suspense fallback={<ListCardSkeleton rows={3} />}>
+        <PlatformAi />
       </Suspense>
 
       <Suspense fallback={<ListCardSkeleton rows={4} />}>
@@ -363,4 +369,10 @@ async function RecentMoney() {
       </CardContent>
     </Card>
   );
+}
+
+/** The daily plain-language briefing, written from platform aggregates only. */
+async function PlatformAi() {
+  const view = await getPlatformSummaryView();
+  return <PlatformAiSummary view={view} />;
 }

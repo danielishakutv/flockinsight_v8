@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Clock, Search } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, Search } from "lucide-react";
 import { sectionBlocks, type Guide } from "@/lib/help-guides";
 import { helpIcon } from "@/components/help/icons";
 import { useT } from "@/components/i18n-provider";
@@ -10,12 +10,19 @@ import { useT } from "@/components/i18n-provider";
 export function HelpBrowser({
   guides,
   categories,
+  passed,
 }: {
   guides: Guide[];
   categories: { key: string; title: string }[];
+  /**
+   * Slugs of the course modules this person has passed. Only slugs cross to
+   * the client; the progress rows themselves stay on the server.
+   */
+  passed?: string[];
 }) {
   const t = useT();
   const [q, setQ] = useState("");
+  const passedSet = useMemo(() => new Set(passed ?? []), [passed]);
 
   /**
    * Everything in a guide, flattened once into one searchable string.
@@ -117,6 +124,13 @@ export function HelpBrowser({
                       <div className="min-w-0 flex-1">
                         <p className="group-hover:text-primary font-bold leading-tight">
                           {g.title}
+                          {passedSet.has(g.slug) && (
+                            <CheckCircle2
+                              role="img"
+                              aria-label={t("course.modulePassed")}
+                              className="ml-1.5 inline size-4 align-[-2px] text-emerald-600 dark:text-emerald-400"
+                            />
+                          )}
                         </p>
                         <p className="text-muted-foreground mt-0.5 line-clamp-2 text-sm">
                           {g.summary}

@@ -140,6 +140,9 @@ export function CommandPalette({
           return perms.includes("finance.view");
         case "giving":
           return perms.includes("giving.view");
+        case "owner":
+          // Owner-only pages; an owner already returned true above.
+          return false;
       }
     };
 

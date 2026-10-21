@@ -52,12 +52,15 @@ describe("what each plan includes", () => {
     expect(planIncludes("starter", "giving")).toBe(true);
     expect(planIncludes("starter", "contributions")).toBe(true);
     expect(planIncludes("starter", "events")).toBe(true);
+    expect(planIncludes("starter", "assistant")).toBe(true);
 
     expect(planIncludes("starter", "meetings")).toBe(false);
     expect(planIncludes("starter", "training")).toBe(false);
     expect(planIncludes("starter", "finance")).toBe(false);
     expect(planIncludes("starter", "sms")).toBe(false);
     expect(planIncludes("starter", "branches")).toBe(false);
+    expect(planIncludes("starter", "pastoralBooking")).toBe(false);
+    expect(planIncludes("starter", "aiSummaries")).toBe(false);
   });
 
   it("gives Growth the meetings tier but not the Pro one", () => {
@@ -67,6 +70,8 @@ describe("what each plan includes", () => {
     expect(planIncludes("growth", "devotionals")).toBe(true);
     expect(planIncludes("growth", "livestreams")).toBe(true);
     expect(planIncludes("growth", "analytics")).toBe(true);
+    expect(planIncludes("growth", "pastoralBooking")).toBe(true);
+    expect(planIncludes("growth", "aiSummaries")).toBe(true);
 
     // The paid upgrades inside meetings, which is the whole reason they are
     // separate keys rather than part of "meetings".

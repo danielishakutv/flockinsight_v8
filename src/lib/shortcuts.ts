@@ -169,6 +169,16 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keywords: ["booking", "hall", "room", "bus", "venue", "hire"],
   },
   {
+    id: "go-appointments",
+    keys: ["g", "p"],
+    labelKey: "nav.appointments",
+    group: "go",
+    href: "/appointments",
+    perm: "pastoral.view",
+    feature: "pastoralBooking",
+    keywords: ["pastor", "counselling", "appointment", "home visit", "prayer", "diary", "book a pastor"],
+  },
+  {
     id: "go-training",
     keys: ["g", "t"],
     labelKey: "nav.training",

@@ -44,6 +44,14 @@ const PRIVATE = [
   // church's open registration form in front of strangers who were never
   // there, which is the one thing a public write endpoint must not collect.
   "/welcome/",
+  "/appointments",
+  // A pastor's booking page writes into a diary; /appointment/ is somebody's
+  // private manage link.
+  "/book/",
+  "/appointment/",
+  // A certificate check names a person. It is for whoever holds the paper,
+  // not for search results.
+  "/cert/",
 ];
 
 /**

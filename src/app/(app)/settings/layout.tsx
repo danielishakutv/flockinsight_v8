@@ -32,6 +32,7 @@ export default async function SettingsLayout({
           canTeam={canTeam}
           canFinance={canFinance}
           canGiving={canGiving}
+          isOwner={access.isOwner}
         />
         <div className="mt-6 min-w-0 lg:mt-0">{children}</div>
       </div>

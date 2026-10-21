@@ -10,6 +10,8 @@ import {
 } from "@/lib/permissions";
 import { permissionsBeyond } from "@/lib/staff-permissions";
 import { TeamManager } from "@/components/settings/team-manager";
+import { ranksForUsers } from "@/lib/certification";
+import type { CertRank } from "@/lib/certification-shared";
 
 export const metadata = { title: "Team · Settings" };
 
@@ -84,6 +86,13 @@ export default async function TeamSettingsPage() {
   const canInviteAdmin =
     permissionsBeyond(await getAccess(), ALL_PERMISSIONS).length === 0;
 
+  // The FlockInsight course rank beside each name: only the rank crosses to
+  // the client, for people who are staff of this church.
+  const rankMap = await ranksForUsers(members.map((m) => m.userId));
+  const ranks: Record<string, CertRank> = Object.fromEntries(
+    [...rankMap].map(([userId, r]) => [userId, r.rank]),
+  );
+
   return (
     <TeamManager
       members={members}
@@ -92,6 +101,7 @@ export default async function TeamSettingsPage() {
       currentUserId={me.id}
       invitableMembers={invitableMembers}
       canInviteAdmin={canInviteAdmin}
+      ranks={ranks}
     />
   );
 }

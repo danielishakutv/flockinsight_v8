@@ -3,12 +3,14 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   member,
+  platformCertificate,
   trainingCohort,
   trainingCourse,
   trainingEnrollment,
   trainingInstructor,
 } from "@/db/schema";
 import { badgeLabelFor, type EarnedBadge } from "@/lib/training-shared";
+import { highestRank, rankBadge, type CertRank } from "@/lib/certification-shared";
 
 export type CourseRow = typeof trainingCourse.$inferSelect;
 export type CohortRow = typeof trainingCohort.$inferSelect;
@@ -324,6 +326,42 @@ export async function badgesForMembers(
       completedAt: r.completedAt,
     });
     out.set(r.memberId, list);
+  }
+
+  /*
+   * The FlockInsight course rank, for members who have a login. A JOIN, so
+   * drizzle qualifies every column (the raw-sql qualifier trap is about
+   * subqueries), and filtered to THIS church's members: the certificate is
+   * per person, but the member row it is shown against is the church's.
+   * Appended after the church's own badges, at level -1, so a church's own
+   * course still leads.
+   */
+  const certRows = await db
+    .select({
+      memberId: member.id,
+      rank: platformCertificate.rank,
+      issuedAt: platformCertificate.issuedAt,
+    })
+    .from(member)
+    .innerJoin(platformCertificate, eq(platformCertificate.userId, member.userId))
+    .where(
+      and(
+        eq(member.churchId, churchId),
+        inArray(member.id, memberIds),
+        isNull(platformCertificate.revokedAt),
+      ),
+    );
+  const best = new Map<string, { rank: CertRank; issuedAt: Date }>();
+  for (const r of certRows) {
+    const current = best.get(r.memberId);
+    if (!current || highestRank([current.rank, r.rank]) === r.rank) {
+      best.set(r.memberId, { rank: r.rank, issuedAt: r.issuedAt });
+    }
+  }
+  for (const [memberId, c] of best) {
+    const list = out.get(memberId) ?? [];
+    list.push(rankBadge(c.rank, c.issuedAt.toISOString().slice(0, 10)));
+    out.set(memberId, list);
   }
   return out;
 }

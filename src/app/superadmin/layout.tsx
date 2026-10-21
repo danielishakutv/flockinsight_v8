@@ -14,6 +14,9 @@ import {
   CommandPalette,
   CommandPaletteHint,
 } from "@/components/superadmin/command-palette";
+import { AssistantProvider } from "@/components/assistant/assistant-provider";
+import { AssistantButton } from "@/components/assistant/assistant-button";
+import { en } from "@/lib/i18n/dictionaries/en";
 
 export const metadata = { title: "Platform Admin" };
 
@@ -35,7 +38,13 @@ export default async function SuperadminLayout({
   const access = await platformAccess();
   const perms = [...(access?.perms ?? [])];
 
+  /*
+   * The help assistant, under the platform scope and budget. This shell has
+   * no I18nProvider on purpose, so the English assistant strings are passed
+   * in: only that one plain object crosses to the client.
+   */
   return (
+    <AssistantProvider scope="platform" available strings={en.assistant}>
     <div data-admin className="min-h-dvh">
       <header className="bg-background/85 sticky top-0 z-30 border-b backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-6">
@@ -55,6 +64,7 @@ export default async function SuperadminLayout({
 
           <div className="flex shrink-0 items-center gap-1.5">
             <CommandPaletteHint />
+            <AssistantButton />
             <ThemeToggle />
             {/* Not in the sidebar: that is built from the permission
                 catalogue, and everybody has a profile regardless of what
@@ -85,5 +95,6 @@ export default async function SuperadminLayout({
 
       <CommandPalette />
     </div>
+    </AssistantProvider>
   );
 }

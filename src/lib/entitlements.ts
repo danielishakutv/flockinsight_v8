@@ -70,16 +70,19 @@ export type FeatureKey =
   | "email"
   | "photoStudio"
   | "qrCodes"
+  | "assistant"
   // --- Growth ---
   | "meetings"
   | "livestreams"
   | "training"
   | "projects"
   | "followUp"
+  | "pastoralBooking"
   | "forms"
   | "devotionals"
   | "reminders"
   | "analytics"
+  | "aiSummaries"
   | "activityLog"
   | "dataExport"
   | "onlineGiving"
@@ -191,6 +194,18 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     blurb:
       "Make a QR code for anything \u2014 your giving page, a form, your WiFi, a programme \u2014 with your logo in the middle and your own colours, checked to be sure it will actually scan.",
   },
+  /*
+   * On Starter because it answers questions about the product itself:
+   * charging for it would only move the same questions into support tickets.
+   * The real gate is the church's AI OPT-IN, which runAi enforces. This key
+   * exists so the price list, the upgrade machinery and the action all name
+   * the same thing.
+   */
+  assistant: {
+    plan: "starter",
+    label: "Help assistant",
+    blurb: "Ask how to do anything in FlockInsight and get the steps from our guides.",
+  },
 
   /* ---------------------------------------------------- Growth */
   /*
@@ -260,6 +275,19 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     label: "Follow-up",
     blurb: "First-timer follow-up and visitor care.",
   },
+  /*
+   * Growth, beside follow-up, because it is the same promise: somebody is
+   * looked after. Texts to the booker are gated separately on `sms` (Pro)
+   * inside lib/pastoral-notify.ts. sendChurchSms does NOT check the plan, so
+   * the check has to be made there or a Growth church with an approved
+   * sender would be texting.
+   */
+  pastoralBooking: {
+    plan: "growth",
+    label: "Pastor appointments",
+    blurb:
+      "Let people book time with a pastor online (counselling, a home visit, prayer) inside the hours each pastor sets, with a confirmation, a reminder and a link to move or cancel it.",
+  },
   forms: {
     plan: "growth",
     label: "Forms",
@@ -280,6 +308,18 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     plan: "growth",
     label: "Analytics",
     blurb: "Analytics and growth trends across everything you record.",
+  },
+  /*
+   * The same tier as `analytics`, so a church never gets a summary of numbers
+   * its plan cannot chart. The real gate is the owner's opt-in, which runAi
+   * enforces; at one summary per church per day the cost is no reason to keep
+   * it for Pro.
+   */
+  aiSummaries: {
+    plan: "growth",
+    label: "Plain-language summaries",
+    blurb:
+      "A short read of how your church is doing, written by AI from counts and percentages only. No names ever leave.",
   },
   activityLog: {
     plan: "growth",

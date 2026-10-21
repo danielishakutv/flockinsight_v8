@@ -222,6 +222,7 @@ const MODULES_THAT_NEED_A_LINK = [
   "/contributions",
   "/follow-up",
   "/first-timers",
+  "/appointments",
   "/facilities",
   "/training",
   "/meetings",

@@ -618,7 +618,7 @@ export const FORBIDDEN_CLAIMS: { phrase: string; why: string }[] = [
   },
   {
     phrase: "AI-powered",
-    why: "We do not ship a model-backed feature on the marketing pages. Claiming it to catch a search trend is the kind of thing that gets the rest of the page discounted.",
+    why: "A buzzword, not a benefit. Where a feature does use a model, say what it does and that its answers can be wrong — the help assistant's price-list line is the pattern. Claiming it to catch a search trend gets the rest of the page discounted.",
   },
   {
     phrase: "free forever",

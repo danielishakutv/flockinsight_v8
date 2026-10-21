@@ -32,6 +32,8 @@ import { TranslationPrompt } from "@/components/app/translation-prompt";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/components/i18n-provider";
+import { AssistantProvider } from "@/components/assistant/assistant-provider";
+import { churchRowHasFeature } from "@/lib/entitlements";
 import { getI18n } from "@/lib/i18n/server";
 import { RAIL_COOKIE, railFromCookie } from "@/lib/nav-rail";
 
@@ -110,9 +112,18 @@ export default async function AppLayout({
   }
   const showTrialBanner =
     standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
+  /*
+   * The help assistant is never offered on the demo church: strangers share
+   * it, it resets every two hours, and a panel that only ever says "turned
+   * off" is the wrong first impression for a prospect.
+   */
+  const assistantAvailable =
+    !church.isDemo && churchRowHasFeature(church, "assistant");
 
   return (
     <I18nProvider locale={locale} dict={dict} timeZone={church.timezone}>
+    {/* The church actions decide who pays: acting-as files under the platform. */}
+    <AssistantProvider scope="church" available={assistantAvailable}>
     <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
       {/*
         The status bar band. viewportFit is "cover", so the app is drawn behind
@@ -229,6 +240,7 @@ export default async function AppLayout({
         role={access.isOwner ? "owner" : "member"}
       />
     </div>
+    </AssistantProvider>
     </I18nProvider>
   );
 }

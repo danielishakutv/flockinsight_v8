@@ -184,8 +184,8 @@ export function RemindersForm({
           )}
           {f.sms && smsApproved && (
             <p className="text-muted-foreground text-xs">
-              SMS wallet balance: <b>{smsBalance.toFixed(2)}</b>. Reminders pause
-              if the balance runs out.
+              SMS wallet balance: <b>{smsBalance.toFixed(2)}</b>.{" "}
+              {t("settings.reminderSmsRetryNote")}
             </p>
           )}
         </CardContent>

@@ -10,6 +10,7 @@ import {
   Handshake,
   Laptop,
   LogOut,
+  MessageCircleQuestionMark,
   Moon,
   Settings,
   Shield,
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 import { signOut } from "@/lib/auth-client";
 import { chooseChurch } from "@/app/select-church/actions";
 import { useT } from "@/components/i18n-provider";
+import { useAssistant } from "@/components/assistant/assistant-provider";
 import { HINT_KEY, navKeyHints } from "@/lib/nav-hints";
 import { useIsMac } from "@/lib/use-is-mac";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -72,6 +74,7 @@ export function UserMenu({
   activeChurchId?: string | null;
 }) {
   const t = useT();
+  const assistant = useAssistant();
   /* The keys to print, worked out for this machine once. */
   const isMac = useIsMac();
   const hints = useMemo(() => navKeyHints(isMac), [isMac]);
@@ -153,6 +156,18 @@ export function UserMenu({
             {t("nav.notifications")}
           </Link>
         </DropdownMenuItem>
+        {/*
+          The help assistant, for phones: the mobile top bar has no room for a
+          fifth control. Opened on the next frame, because a modal Dialog
+          opened in the same tick the dropdown closes leaves Radix's
+          pointer-events: none on <body> and the page stops taking taps.
+        */}
+        {assistant?.available && (
+          <DropdownMenuItem onSelect={() => requestAnimationFrame(assistant.open)}>
+            <MessageCircleQuestionMark />
+            {t("assistant.askAQuestion")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings />

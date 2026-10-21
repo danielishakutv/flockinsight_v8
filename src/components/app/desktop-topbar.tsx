@@ -6,6 +6,7 @@ import { LanguageMenu } from "@/components/app/language-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { LiveNotificationBell } from "@/components/notifications/live-notification-bell";
 import { Button } from "@/components/ui/button";
+import { AssistantButton } from "@/components/assistant/assistant-button";
 
 /** Desktop-only top bar: live date/time and the search box on the left, bell +
  *  theme + the primary "Record attendance" action on the right. */
@@ -24,6 +25,8 @@ export function DesktopTopbar({
         <PaletteHint />
       </div>
       <div className="flex items-center gap-1.5">
+        {/* Renders nothing where the assistant is not available (the demo church). */}
+        <AssistantButton />
         <LiveNotificationBell initial={unread} />
         <LanguageMenu />
         <ThemeToggle />

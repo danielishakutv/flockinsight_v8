@@ -58,6 +58,9 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
       "storage",
       "trial-reminders",
       "branch-reports",
+      "usage-days",
+      "blog-drafts",
+      "assistant-retention",
     ] as const) {
       expect(CRON_JOBS[job].intervalMinutes).toBe(1440);
     }
@@ -90,7 +93,7 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
    * still retried hourly rather than at the next sweep.
    */
   it("sweeps birthdays and service reminders every five minutes", () => {
-    for (const job of ["celebrations", "service-reminders"] as const) {
+    for (const job of ["celebrations", "service-reminders", "pastoral-reminders"] as const) {
       expect(CRON_JOBS[job].intervalMinutes).toBe(5);
       expect(CRON_JOBS[job].cron).toBe("*/5 * * * *");
     }
@@ -104,6 +107,14 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
 
   it("checks the float every half hour", () => {
     expect(CRON_JOBS["platform-health"].intervalMinutes).toBe(30);
+  });
+
+  it("drafts the blog from a daily tick, because the week is claimed in the job", () => {
+    // parseFive refuses a day-of-week expression; the ISO-week claim on
+    // blog_draft_run is what makes this weekly. See blog-drafts.ts.
+    expect(CRON_JOBS["blog-drafts"].intervalMinutes).toBe(1440);
+    expect(CRON_JOBS["blog-drafts"].cron).toBe("0 5 * * *");
+    expect(CRON_JOBS["assistant-retention"].intervalMinutes).toBe(1440);
   });
 });
 

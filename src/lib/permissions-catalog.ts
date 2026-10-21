@@ -106,6 +106,21 @@ export const PERMISSION_CATALOG: PermModule[] = [
       { key: "followup.manage", label: "Manage" },
     ],
   },
+  /*
+   * Not in MEMBER_DEFAULT_PERMISSIONS: a diary holds who asked to see a pastor
+   * and when. Owners and the locked system role pick it up live from
+   * ALL_PERMISSIONS; a church-written role gets it when somebody edits it.
+   */
+  {
+    key: "pastoral",
+    label: "Pastoral appointments",
+    description:
+      "Pastors' diaries: booking time with a pastor, their working hours and days away, and the public booking page.",
+    perms: [
+      { key: "pastoral.view", label: "View & book" },
+      { key: "pastoral.manage", label: "Manage every diary & the booking page" },
+    ],
+  },
   {
     key: "communication",
     label: "Communication",

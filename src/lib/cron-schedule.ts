@@ -74,6 +74,48 @@ export const CRON_JOBS = {
     intervalMinutes: 1440,
     cron: "0 7 * * *",
   },
+  /*
+   * Who actually used FlockInsight yesterday, kept for good.
+   *
+   * The certification ranks count weeks of real use. The raw evidence,
+   * analytics_event, is pruned at 180 days by the reminders job (07:00), so a
+   * year cannot be read from it. This job rolls each day into user_active_day
+   * long before the prune can reach it, then issues any Master or Expert rank
+   * that a Professional active yesterday has just crossed. After midnight UTC
+   * so "yesterday" is complete; its own minute so it never starts together
+   * with storage billing at 00:20. Sends nothing, so no SMS window applies.
+   */
+  "usage-days": {
+    label: "Active days & certification ranks",
+    intervalMinutes: 1440,
+    cron: "40 0 * * *",
+  },
+  /*
+   * The weekly blog draft, run DAILY on purpose. parseFive refuses a
+   * day-of-week field, so the week is enforced inside the job, which claims
+   * the ISO week on blog_draft_run's partial unique index. The first tick of
+   * a week drafts. A failed draft is retried on the next two ticks. Every
+   * other tick is one INSERT that conflicts and does nothing. With no
+   * ANTHROPIC_API_KEY it writes nothing and reports "skipped". 05:00 UTC
+   * means the draft is waiting when Lagos opens the admin on Monday.
+   */
+  "blog-drafts": {
+    label: "Weekly blog draft",
+    intervalMinutes: 1440,
+    cron: "0 5 * * *",
+  },
+  /*
+   * Help-assistant transcripts past the retention window (180 days after the
+   * last message). This is a promise made to churches in the assistant's
+   * privacy line, so it is scheduled here rather than left to a future
+   * tidy-up. Deletes in batches. An approved canned answer keeps its own copy
+   * of the question.
+   */
+  "assistant-retention": {
+    label: "Assistant transcript retention",
+    intervalMinutes: 1440,
+    cron: "40 3 * * *",
+  },
 
   /*
    * EVERY FIVE MINUTES, NOT HOURLY, because a church types the send time.
@@ -115,6 +157,20 @@ export const CRON_JOBS = {
     label: "First-timer follow-up",
     intervalMinutes: 60,
     cron: "0 * * * *",
+  },
+
+  /*
+   * Every five minutes, because remind_at is a minute worked out from
+   * somebody's appointment and already moved inside the 8am-8pm SMS window.
+   * An hourly sweep would send a 19:00 reminder at 19:59, and a minute later
+   * the text could not go at all. Each reminder is claimed before it is sent
+   * (conditional UPDATE of reminder_sent_at, returning), so running often is
+   * safe, and a pass with nothing due is one indexed query.
+   */
+  "pastoral-reminders": {
+    label: "Pastor appointment reminders",
+    intervalMinutes: 5,
+    cron: "*/5 * * * *",
   },
 
   /*

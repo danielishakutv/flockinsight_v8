@@ -66,9 +66,16 @@ export const PLANS: Plan[] = [
       "Group contributions — one shareable link showing every naira a department has collected",
       "Photo studio — put your logo on a whole service's photographs at once, add the date, shrink them for WhatsApp and download the lot as a zip. Works on a phone, with no upload and no waiting",
       "QR codes — for your giving page, a form, your WiFi, a programme. Your logo in the middle, your own colours, and a check that tells you whether it will really scan before you print four hundred of them",
+      // A price-list claim: ship it only with ANTHROPIC_API_KEY set on the
+      // server and the AI kill switch off. Advertising a feature nobody can
+      // turn on is the overstatement FORBIDDEN_CLAIMS exists to prevent.
+      "Help assistant — ask in your own words how to do something in FlockInsight and get the steps from our guides. Answers are written by an AI model and show the guide they came from. Off until you turn it on",
       "Your own public church page, with events people can register for",
       "Birthday & anniversary greetings by email",
       "Earn wallet credit for every church you refer",
+      // Starter has one admin account, so this must not promise "everyone on
+      // your team"; the higher plans inherit it through "Everything in Starter".
+      "The FlockInsight course: a short quiz with every guide. Pass them all and you are a certified FlockInsight Professional, with a PDF certificate anyone can check online. Master and Expert follow as you really use it",
       "1 admin account",
     ],
   },
@@ -89,12 +96,14 @@ export const PLANS: Plan[] = [
       "Building projects & pledge tracking",
       "Group contributions with receipts, two-signature checks and a record of where the money went",
       "First-timer follow-up & visitor care",
+      "Pastor appointments: people book counselling, a home visit or prayer with a pastor from your own booking page, inside the hours each pastor sets. A confirmation and a reminder by email (and by text on Pro), and a link to move or cancel it",
       "Short links — flockinsight.com/l/give on a poster or read from the front, and you can change where it goes afterwards without reprinting anything. With a count of how many followed it and whether they scanned or typed it",
       "Link pages — one address that holds all the others, like flockinsight.com/hub/yourchurch. Choose a style, add your own giving pages, forms, livestream and events from a list, or any other link, and change what is on it without touching your bio again",
       "Forms with a shareable link & QR code, and answers matched to the member who sent them",
       "Devotionals & newsletters your members can subscribe to",
       "Automatic service reminders by email",
       "Analytics & growth trends",
+      "Plain-language summaries: a short read of your attendance, growth, giving trend and first-timers, written by AI from counts and percentages only. Off until you turn it on, and no names, phone numbers or notes ever leave FlockInsight",
       "Livestream from YouTube or Facebook onto your own watch page",
       "Give a member a staff login with exactly the access you choose",
       "Activity log — who changed what, across every module",

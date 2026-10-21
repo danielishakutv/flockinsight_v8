@@ -2,15 +2,24 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { blogPost } from "@/db/schema";
+import { blogDraftRun, blogPost } from "@/db/schema";
 
 import { uniqueBlogSlug, excerptFromBody } from "@/lib/blog";
 import { deliverBroadcast } from "@/lib/broadcasts";
 import { recordAudit } from "@/lib/audit";
 
 import { requirePlatform } from "@/lib/platform-access";
+import { draftFlags, publishRefusal } from "@/lib/blog-draft-checks";
+import { BLOG_TOPICS, findTopic } from "@/lib/seo/blog-topics";
+import {
+  STALE_RUN_MINUTES,
+  blogDraftingReady,
+  executeDraftRun,
+  startManualRun,
+} from "@/lib/blog-drafts";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const emptyToNull = (v: unknown) =>
@@ -28,6 +37,9 @@ const schema = z.object({
   seoTitle: z.preprocess(emptyToNull, z.string().trim().max(200).nullable()),
   seoDescription: z.preprocess(emptyToNull, z.string().trim().max(400).nullable()),
   status: z.enum(["draft", "published"]),
+  // Sent by the editor's publish dialog for an AI draft ("I've read this post
+  // in full and checked every claim"). The server enforces the rule too.
+  confirmReviewed: z.boolean().optional(),
 });
 
 export type BlogPostInput = z.input<typeof schema>;
@@ -55,18 +67,40 @@ export async function createPost(): Promise<
 }
 
 export async function savePost(input: BlogPostInput): Promise<ActionResult> {
-  await requirePlatform("platform.content.manage");
+  const admin = await requirePlatform("platform.content.manage");
   const parsed = schema.safeParse(input);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
   const d = parsed.data;
 
   const [current] = await db
-    .select({ publishedAt: blogPost.publishedAt })
+    .select({
+      publishedAt: blogPost.publishedAt,
+      source: blogPost.source,
+      reviewedAt: blogPost.reviewedAt,
+      topicKey: blogPost.topicKey,
+    })
     .from(blogPost)
     .where(eq(blogPost.id, d.id))
     .limit(1);
   if (!current) return { ok: false, error: "Post not found." };
+
+  /*
+   * An AI draft is never published unread, and never with a forbidden claim
+   * in it. Human posts are unchanged. The editor asks for the same
+   * confirmation; this is the rule, the dialog is only the reminder.
+   */
+  const firstAiPublish =
+    d.status === "published" && current.source === "ai" && !current.reviewedAt;
+  if (d.status === "published") {
+    const refusal = publishRefusal({
+      source: current.source,
+      reviewedAt: current.reviewedAt,
+      confirmReviewed: d.confirmReviewed,
+      flags: draftFlags({ title: d.title, body: d.body }, findTopic(current.topicKey)),
+    });
+    if (refusal) return { ok: false, error: refusal };
+  }
 
   const slug = await uniqueBlogSlug(d.slug || d.title, d.id);
   // Stamp publishedAt the first time a post goes live.
@@ -89,8 +123,21 @@ export async function savePost(input: BlogPostInput): Promise<ActionResult> {
       seoDescription: d.seoDescription,
       status: d.status,
       publishedAt,
+      ...(firstAiPublish ? { reviewedBy: admin.id, reviewedAt: new Date() } : {}),
     })
     .where(eq(blogPost.id, d.id));
+
+  if (firstAiPublish) {
+    await recordAudit({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: "platform.blog.publish",
+      summary: `Read and published the AI-drafted post "${d.title}"`,
+      targetType: "blog_post",
+      targetId: d.id,
+      targetLabel: d.title,
+    });
+  }
 
   revalidatePath("/superadmin/blog");
   revalidatePath(`/superadmin/blog/${d.id}`);
@@ -108,11 +155,19 @@ export async function setPostStatus(
     return { ok: false, error: "Invalid id" };
 
   const [current] = await db
-    .select({ publishedAt: blogPost.publishedAt })
+    .select({
+      publishedAt: blogPost.publishedAt,
+      source: blogPost.source,
+      reviewedAt: blogPost.reviewedAt,
+    })
     .from(blogPost)
     .where(eq(blogPost.id, id))
     .limit(1);
   if (!current) return { ok: false, error: "Post not found." };
+  // One click from the list must never publish an AI draft nobody has read.
+  if (status === "published" && current.source === "ai" && !current.reviewedAt) {
+    return { ok: false, error: "Open this draft in the editor and read it before publishing." };
+  }
 
   await db
     .update(blogPost)
@@ -208,4 +263,82 @@ export async function announcePost(
   revalidatePath("/superadmin/blog");
   revalidatePath(`/superadmin/blog/${post.id}`);
   return { ok: true, pushSent, emailSent, inApp: d.inApp, email: d.email };
+}
+
+/* ============================================================
+ * AI drafts: "Draft one now"
+ * ========================================================== */
+
+export type DraftNowResult = { ok: true; runId: string } | { ok: false; error: string };
+
+/**
+ * Starts a draft and returns at once with the run id; the dialog polls
+ * getDraftRun. A Sonnet draft takes tens of seconds and sometimes minutes,
+ * and a server action held open that long through Cloudflare comes back as a
+ * 524 while the draft lands anyway. So the work happens in after(), and the
+ * run row is the record of how it went.
+ */
+export async function draftPostNow(input: { topicKey?: string | null }): Promise<DraftNowResult> {
+  const admin = await requirePlatform("platform.content.manage");
+  const topicKey = (input.topicKey ?? "").trim() || null;
+  if (topicKey && !BLOG_TOPICS.some((t) => t.key === topicKey)) {
+    return { ok: false, error: "That topic is no longer in the keyword map. Pick another." };
+  }
+  const ready = await blogDraftingReady();
+  if (!ready.ready) return { ok: false, error: ready.message };
+
+  const run = await startManualRun({ userId: admin.id, topicKey });
+  if (!run.ok) return run;
+
+  const runId = run.runId;
+  after(() =>
+    executeDraftRun(runId, { topicKey, userId: admin.id, userName: admin.name })
+      .then(() => undefined)
+      .catch((e) => {
+        // executeDraftRun has already written the cause to the run row, which
+        // the dialog shows; this line keeps the stack for the logs.
+        console.error("[blog-drafts] manual run", runId, e);
+      }),
+  );
+  revalidatePath("/superadmin/blog");
+  return { ok: true, runId };
+}
+
+export type DraftRunView = {
+  status: "running" | "drafted" | "failed" | "skipped" | "interrupted";
+  postId: string | null;
+  error: string | null;
+  startedAt: string;
+};
+
+export async function getDraftRun(input: {
+  runId: string;
+}): Promise<{ ok: true; run: DraftRunView } | { ok: false; error: string }> {
+  await requirePlatform("platform.content.manage");
+  if (!z.string().uuid().safeParse(input.runId).success) {
+    return { ok: false, error: "That draft run does not exist." };
+  }
+  const [row] = await db
+    .select({
+      status: blogDraftRun.status,
+      postId: blogDraftRun.postId,
+      error: blogDraftRun.error,
+      startedAt: blogDraftRun.startedAt,
+    })
+    .from(blogDraftRun)
+    .where(eq(blogDraftRun.id, input.runId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That draft run does not exist." };
+  const stale =
+    row.status === "running" &&
+    Date.now() - row.startedAt.getTime() > STALE_RUN_MINUTES * 60_000;
+  return {
+    ok: true,
+    run: {
+      status: stale ? "interrupted" : (row.status as DraftRunView["status"]),
+      postId: row.postId,
+      error: row.error,
+      startedAt: row.startedAt.toISOString(),
+    },
+  };
 }

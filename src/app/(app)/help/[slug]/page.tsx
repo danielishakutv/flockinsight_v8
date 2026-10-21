@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -20,6 +21,8 @@ import {
 } from "@/lib/help-guides";
 import { HELP_ICONS } from "@/components/help/icons";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { GuideCourseSection } from "@/components/help/guide-course-section";
 import { getT } from "@/lib/i18n/server";
 
 export function generateStaticParams() {
@@ -253,7 +256,8 @@ export default async function GuidePage({
       </div>
 
       {g.faq && g.faq.length > 0 && (
-        <section className="mt-10">
+        // id="faq" is where the course's "Re-read: Common questions" link lands.
+        <section id="faq" className="mt-10 scroll-mt-20">
           <h2 className="mb-3 text-lg font-bold tracking-tight">
             Common questions
           </h2>
@@ -331,6 +335,16 @@ export default async function GuidePage({
           </div>
         </div>
       )}
+
+      {/*
+       * The guide is a module of the FlockInsight course. Streamed, so the
+       * guide itself never waits on the person's progress being read.
+       */}
+      <section id="course" className="mt-10 scroll-mt-20">
+        <Suspense fallback={<Skeleton className="h-40 rounded-2xl" />}>
+          <GuideCourseSection slug={g.slug} />
+        </Suspense>
+      </section>
 
       <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-5">
         <div>

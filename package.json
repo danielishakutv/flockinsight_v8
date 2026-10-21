@@ -1,6 +1,6 @@
 {
   "name": "flockinsight",
-  "version": "0.79.0",
+  "version": "0.80.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,6 +17,7 @@
     "test:db": "vitest run --config vitest.db.config.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.137.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

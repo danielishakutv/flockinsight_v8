@@ -8,6 +8,7 @@ import {
   Banknote,
   BarChart3,
   Bell,
+  Bot,
   Building2,
   ChevronDown,
   Church,
@@ -28,6 +29,7 @@ import {
   Rocket,
   ScrollText,
   ShieldCheck,
+  Sparkles,
   Tag,
   Telescope,
   Users,
@@ -52,6 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
   HeartPulse,
   Handshake,
   BarChart3,
+  Bot,
   ClipboardList,
   Telescope,
   Building2,
@@ -70,6 +73,7 @@ const ICONS: Record<string, LucideIcon> = {
   ShieldCheck,
   ScrollText,
   Database,
+  Sparkles,
 };
 
 type Item = { label: string; href: string; icon: LucideIcon };

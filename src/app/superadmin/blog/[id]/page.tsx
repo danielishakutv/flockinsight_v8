@@ -6,6 +6,7 @@ import { blogPost } from "@/db/schema";
 
 import { siteUrl } from "@/lib/site";
 import { BlogEditor } from "@/components/superadmin/blog-editor";
+import { findTopic } from "@/lib/seo/blog-topics";
 
 import { requirePlatform } from "@/lib/platform-access";
 export const metadata = { title: "Edit post · Admin" };
@@ -27,10 +28,26 @@ export default async function BlogEditorPage({
     .where(eq(blogPost.id, id))
     .limit(1);
   if (!post) notFound();
+  const topic = findTopic(post.topicKey);
 
   return (
     <BlogEditor
       baseUrl={siteUrl()}
+      review={
+        post.source === "ai"
+          ? {
+              aiDraftedAt: post.aiDraftedAt ? post.aiDraftedAt.toISOString() : null,
+              reviewedAt: post.reviewedAt ? post.reviewedAt.toISOString() : null,
+              topic: topic
+                ? {
+                    question: topic.question,
+                    primary: topic.primary,
+                    canonicalPath: topic.canonicalPath,
+                  }
+                : null,
+            }
+          : null
+      }
       post={{
         id: post.id,
         title: post.title,

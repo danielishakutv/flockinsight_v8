@@ -1607,9 +1607,57 @@ export const pledgeReminderRun = pgTable(
     periodKey: text().notNull(),
     sentEmail: integer().notNull().default(0),
     sentSms: integer().notNull().default(0),
+    /*
+     * PER CHANNEL, because this one row covers both. Before 0.80 the row was
+     * claimed before sending and had nowhere to keep an outcome, so a text
+     * refused for an empty wallet waited a whole period. A retry has to know
+     * that the SMS failed while the email went, or it would send the email
+     * twice. The retry code only ever touches the sms_* columns.
+     *
+     * null means a row from before 0.80, or a channel this reminder never
+     * used. null is never retried, so no backfill is needed.
+     */
+    /** "pending" | "sent" | "queued" | "failed" | "skipped" */
+    smsOutcome: text(),
+    /** Why, in words the church is shown. Also says whether it will be tried again. */
+    smsDetail: text(),
+    /** Tries so far. Set to the maximum when a failure is final. See reminder-retry.ts. */
+    smsAttempts: integer().notNull().default(0),
+    /** "pending" | "sent" | "failed" | "skipped". Recorded only; email is never retried. */
+    emailOutcome: text(),
+    emailDetail: text(),
+    emailAttempts: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /**
+     * The SMS clock: the last SMS claim or settle. Retry spacing is measured
+     * from this. On this table the email is sent and settled before the SMS
+     * is claimed, so no email write ever lands after an SMS one.
+     */
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  (t) => [uniqueIndex("pledge_reminder_run_unique").on(t.pledgeId, t.periodKey)],
+  (t) => [
+    uniqueIndex("pledge_reminder_run_unique").on(t.pledgeId, t.periodKey),
+    // The retry sweep runs every five minutes and asks only for failed texts,
+    // plus pending ones that may belong to a dead process. Partial, so the
+    // index stays tiny.
+    index("pledge_reminder_run_sms_retry_idx")
+      .on(t.updatedAt)
+      .where(sql`sms_outcome in ('failed', 'pending')`),
+    check(
+      "pledge_reminder_run_sms_outcome_chk",
+      sql`${t.smsOutcome} is null or ${t.smsOutcome} in ('pending','sent','queued','failed','skipped')`,
+    ),
+    check(
+      "pledge_reminder_run_email_outcome_chk",
+      sql`${t.emailOutcome} is null or ${t.emailOutcome} in ('pending','sent','failed','skipped')`,
+    ),
+    // The attempt budget, held by the database too: if a code path ever skips
+    // the claim predicate, it fails loudly instead of sending a fourth text.
+    check("pledge_reminder_run_sms_attempts_chk", sql`${t.smsAttempts} between 0 and 3`),
+  ],
 );
 
 /* ============================================================
@@ -2346,10 +2394,44 @@ export const reminderRun = pgTable(
     serviceDate: date().notNull(),
     sentSms: integer().notNull().default(0),
     sentEmail: integer().notNull().default(0),
+    /*
+     * PER CHANNEL, for the same reasons as on pledge_reminder_run: one row
+     * covers both channels, and the SMS retry must never send the email again.
+     * null = a row from before 0.80, or a channel not used. Never retried.
+     */
+    /** "pending" | "sent" | "queued" | "failed" | "skipped" */
+    smsOutcome: text(),
+    smsDetail: text(),
+    smsAttempts: integer().notNull().default(0),
+    /** "pending" | "sent" | "failed" | "skipped". Recorded only; email is never retried. */
+    emailOutcome: text(),
+    emailDetail: text(),
+    emailAttempts: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /**
+     * The SMS clock: the last SMS claim or settle. Retry spacing is measured
+     * from this. Here the texts go before the emails, so the email settle
+     * writes `updatedAt: sql\`updated_at\`` to keep it, so a long email run
+     * does not push the next SMS attempt back.
+     */
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  // One reminder per service occurrence — makes a re-run a no-op.
-  (t) => [uniqueIndex("reminder_run_unique").on(t.serviceId, t.serviceDate)],
+  (t) => [
+    // One reminder per service occurrence — makes a re-run a no-op.
+    uniqueIndex("reminder_run_unique").on(t.serviceId, t.serviceDate),
+    check(
+      "reminder_run_sms_outcome_chk",
+      sql`${t.smsOutcome} is null or ${t.smsOutcome} in ('pending','sent','queued','failed','skipped')`,
+    ),
+    check(
+      "reminder_run_email_outcome_chk",
+      sql`${t.emailOutcome} is null or ${t.emailOutcome} in ('pending','sent','failed','skipped')`,
+    ),
+    check("reminder_run_sms_attempts_chk", sql`${t.smsAttempts} between 0 and 3`),
+  ],
 );
 
 /* ============================================================
@@ -2998,6 +3080,18 @@ export const blogPost = pgTable(
     publishedAt: timestamp({ withTimezone: true }),
     // When the post was last announced ("push to all"). Null = never announced.
     announcedAt: timestamp({ withTimezone: true }),
+    /**
+     * "human" | "ai". An "ai" post was inserted by the weekly drafter. It
+     * cannot be published until someone has opened it in the editor and
+     * ticked "I've checked it" (see publishRefusal in lib/blog-draft-checks.ts).
+     */
+    source: text().notNull().default("human"),
+    /** The keyword-map term the draft was written for (its `primary`). */
+    topicKey: text(),
+    aiDraftedAt: timestamp({ withTimezone: true }),
+    /** Who confirmed they had read an AI draft and published it, and when. */
+    reviewedBy: text().references(() => user.id, { onDelete: "set null" }),
+    reviewedAt: timestamp({ withTimezone: true }),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true })
@@ -3008,6 +3102,8 @@ export const blogPost = pgTable(
   (t) => [
     index("blog_status_idx").on(t.status, t.publishedAt),
     index("blog_slug_idx").on(t.slug),
+    index("blog_source_status_idx").on(t.source, t.status),
+    check("blog_post_source_chk", sql`${t.source} in ('human','ai')`),
   ],
 );
 
@@ -6104,3 +6200,1008 @@ export type Facility = typeof facility.$inferSelect;
 export type NewFacility = typeof facility.$inferInsert;
 export type FacilityBooking = typeof facilityBooking.$inferSelect;
 export type FacilityClosure = typeof facilityClosure.$inferSelect;
+
+/* ============================================================
+ * FlockInsight domain — pastoral appointments
+ *
+ * A member books time with a pastor: counselling, a home visit, prayer.
+ *
+ * Built on the facilities module's shapes on purpose, so that "is Pastor Ade
+ * free on Tuesday at 10?" is answered by the same rules as "is the hall free
+ * on Saturday?" (findClashes/overlaps in lib/facility-shared, a row lock, and
+ * an exclusion constraint as the floor):
+ *
+ *   `pastor_profile`        — a staff login who can be booked, plus their slot
+ *                             length, buffer, notice and booking horizon. A
+ *                             pastor is a USER (staff), never a member row.
+ *   `pastor_hours`          — weekly working windows, as local minutes in the
+ *                             church's own timezone.
+ *   `pastor_closure`        — days away. The `facility_closure` shape without
+ *                             the cost, and it blocks booking the same way.
+ *   `pastoral_booking_type` — what somebody can book. `pastor_booking_type`
+ *                             says who offers what.
+ *   `pastoral_appointment`  — the booking. Same member/requester pair as
+ *                             `facility_booking`, because a booking has to
+ *                             outlive the person leaving the register.
+ *   `pastoral_booking_page` — the public /book/<slug> link. Same pattern as
+ *                             `first_timer_signup`: one row per church, and
+ *                             created DISABLED.
+ *
+ * THE ONE INVARIANT: two appointments that hold a slot (pending or confirmed)
+ * never overlap for one pastor, buffer included. Checked under a row lock in
+ * lib/pastoral.ts AND enforced by the `pastoral_appointment_no_overlap`
+ * exclusion constraint in migration 0106. Unlike a facility request, a pending
+ * appointment DOES hold its slot: the booker was shown that time as free and
+ * told so, and offering it to the next person would turn "awaiting
+ * confirmation" into "double-booked".
+ * ========================================================== */
+
+export const pastoralAppointmentStatusEnum = pgEnum("pastoral_appointment_status", [
+  "pending", // waiting on the pastor — HOLDS the slot
+  "confirmed", // holds the slot; the reminder goes out
+  "declined", // turned down, with a reason said to the booker
+  "cancelled", // by the booker (manage link) or by staff
+]);
+
+/** Where it happens. "home" requires an address. */
+export const pastoralLocationEnum = pgEnum("pastoral_location", [
+  "church",
+  "home",
+  "phone",
+  "online",
+]);
+
+/** Who may use the public booking page. */
+export const pastoralBookingVisibilityEnum = pgEnum("pastoral_booking_visibility", [
+  "public", // anybody with the link
+  "members", // only somebody on the register, proven by a one-time code
+]);
+
+/** Which door the booking came through, for the audit trail and the list. */
+export const pastoralBookingSourceEnum = pgEnum("pastoral_booking_source", [
+  "public",
+  "members",
+  "staff",
+]);
+
+export const pastorClosureKindEnum = pgEnum("pastor_closure_kind", [
+  "leave",
+  "travel",
+  "conference",
+  "sick",
+  "other",
+]);
+
+export const pastoralBookingPage = pgTable(
+  "pastoral_booking_page",
+  {
+    churchId: text()
+      .primaryKey()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** Public link half-name: /book/<slug>. Globally unique, like /welcome. */
+    slug: text().notNull().unique(),
+    /*
+     * OFF by default, like the welcome link. A public page that writes into a
+     * pastor's diary is not something to switch on for everybody and hope
+     * they notice.
+     */
+    enabled: boolean().notNull().default(false),
+    visibility: pastoralBookingVisibilityEnum().notNull().default("public"),
+    title: text().notNull().default("Book time with a pastor"),
+    intro: text()
+      .notNull()
+      .default(
+        "Choose what you would like to talk about and a time that suits you. You will get a confirmation straight away.",
+      ),
+    /** Confirmation, reminder and change notices to the booker by email. */
+    emailBooker: boolean().notNull().default(true),
+    /*
+     * Texts to the booker. OFF by default and opt-in, like the sign-up
+     * confirmation SMS: every text is charged to the church's wallet, and on
+     * the public page the number was typed by a stranger. Only acts when the
+     * church also has the `sms` feature (Pro), is in an SMS country and has
+     * an approved sender.
+     */
+    smsBooker: boolean().notNull().default(false),
+    /** Email the pastor (with a calendar file) as well as notifying in-app. */
+    notifyPastorByEmail: boolean().notNull().default(true),
+    /** How long before the appointment the reminder aims for. */
+    reminderLeadMinutes: integer().notNull().default(1440),
+    /** The manage link stops moving or cancelling this many hours before. */
+    changeCutoffHours: integer().notNull().default(2),
+    /** Upcoming appointments one phone or email may hold at this church. */
+    maxUpcomingPerContact: integer().notNull().default(2),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("pastoral_booking_page_lead_chk", sql`${t.reminderLeadMinutes} between 60 and 4320`),
+    check("pastoral_booking_page_cutoff_chk", sql`${t.changeCutoffHours} between 0 and 168`),
+    check("pastoral_booking_page_max_chk", sql`${t.maxUpcomingPerContact} between 1 and 10`),
+  ],
+);
+
+export const pastorProfile = pgTable(
+  "pastor_profile",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** The staff login. Must be a non-temp `staff` row of this church. */
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** What the booking page calls them — "Pastor Ade Okafor". */
+    displayName: text().notNull(),
+    /** "Senior Pastor", "Youth Pastor", "Counsellor". */
+    title: text(),
+    /** Off takes them off the booking page without losing their history. */
+    isBookable: boolean().notNull().default(true),
+    /** The grid times are offered on, and the default appointment length. */
+    slotMinutes: integer().notNull().default(30),
+    /** Minutes kept free after each appointment (travel, notes, prayer). */
+    bufferMinutes: integer().notNull().default(0),
+    /** Nobody may book closer than this to now. */
+    minNoticeHours: integer().notNull().default(12),
+    /** Nobody may book further ahead than this. */
+    maxAdvanceDays: integer().notNull().default(30),
+    sortOrder: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("pastor_profile_church_user_idx").on(t.churchId, t.userId),
+    index("pastor_profile_church_idx").on(t.churchId),
+    check("pastor_profile_slot_chk", sql`${t.slotMinutes} between 10 and 240`),
+    check("pastor_profile_buffer_chk", sql`${t.bufferMinutes} between 0 and 240`),
+    check("pastor_profile_notice_chk", sql`${t.minNoticeHours} between 0 and 720`),
+    check("pastor_profile_advance_chk", sql`${t.maxAdvanceDays} between 1 and 365`),
+  ],
+);
+
+/*
+ * Weekly windows, as LOCAL minutes in the church's timezone, never UTC. A
+ * pastor who works 9 to 1 works 9 to 1 on the wall clock in Lagos or Maputo,
+ * including either side of a daylight-saving change. Several rows per day are
+ * allowed (morning and afternoon); overlaps are refused in
+ * lib/pastoral-shared before they are written.
+ */
+export const pastorHours = pgTable(
+  "pastor_hours",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    pastorId: uuid()
+      .notNull()
+      .references(() => pastorProfile.id, { onDelete: "cascade" }),
+    /** 0 = Sunday … 6 = Saturday, as JS counts, read in the church's zone. */
+    weekday: integer().notNull(),
+    /** Minutes after local midnight. 540 = 09:00. */
+    startMinute: integer().notNull(),
+    endMinute: integer().notNull(),
+  },
+  (t) => [
+    index("pastor_hours_pastor_idx").on(t.pastorId, t.weekday),
+    check("pastor_hours_weekday_chk", sql`${t.weekday} between 0 and 6`),
+    check(
+      "pastor_hours_range_chk",
+      sql`${t.startMinute} >= 0 and ${t.endMinute} <= 1440 and ${t.startMinute} < ${t.endMinute}`,
+    ),
+  ],
+);
+
+/** Days away. The facility_closure shape, without the cost. */
+export const pastorClosure = pgTable(
+  "pastor_closure",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    pastorId: uuid()
+      .notNull()
+      .references(() => pastorProfile.id, { onDelete: "cascade" }),
+    kind: pastorClosureKindEnum().notNull().default("leave"),
+    /** Shown to staff only. The public page just shows no times that day. */
+    reason: text().notNull(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("pastor_closure_church_idx").on(t.churchId),
+    index("pastor_closure_pastor_time_idx").on(t.pastorId, t.startsAt),
+    check("pastor_closure_range_chk", sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+export const pastoralBookingType = pgTable(
+  "pastoral_booking_type",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /** "Counselling", "Home visit", "Prayer". Appears in texts and emails. */
+    name: text().notNull(),
+    description: text(),
+    /** Null means one of the pastor's own slots. */
+    durationMinutes: integer(),
+    location: pastoralLocationEnum().notNull().default("church"),
+    /**
+     * On: a booking arrives as `pending` (still holding the slot) and the
+     * pastor confirms it. Off: confirmed the moment it is made.
+     */
+    requiresApproval: boolean().notNull().default(false),
+    /** Retired rather than deleted: old appointments still name it. */
+    isActive: boolean().notNull().default(true),
+    sortOrder: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("pastoral_booking_type_church_idx").on(t.churchId, t.isActive),
+    uniqueIndex("pastoral_booking_type_name_idx").on(t.churchId, t.name),
+    check(
+      "pastoral_booking_type_duration_chk",
+      sql`${t.durationMinutes} is null or ${t.durationMinutes} between 10 and 480`,
+    ),
+  ],
+);
+
+/** Which pastor offers which type. Explicit: no row, not offered. */
+export const pastorBookingType = pgTable(
+  "pastor_booking_type",
+  {
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    pastorId: uuid()
+      .notNull()
+      .references(() => pastorProfile.id, { onDelete: "cascade" }),
+    typeId: uuid()
+      .notNull()
+      .references(() => pastoralBookingType.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.pastorId, t.typeId] }),
+    index("pastor_booking_type_type_idx").on(t.typeId),
+  ],
+);
+
+/*
+ * Also carries `pastoral_appointment_no_overlap`, an EXCLUDE USING gist
+ * constraint (btree_gist) refusing two rows with status pending or confirmed
+ * whose [starts_at, holds_until) ranges overlap for one pastor. Drizzle cannot
+ * declare an exclusion constraint, so it lives only in migration 0106, as
+ * facility_booking_no_overlap lives only in 0103. It is the database half of
+ * the booking claim (lockPastorForBooking is the other half), and
+ * `isBookingOverlapViolation` reads its 23P01. Do not drop it.
+ *
+ * `holds_until` is ends_at plus the pastor's buffer at the time of booking.
+ * Storing it lets the database enforce the buffer as well as the appointment:
+ * the trailing buffer of whichever appointment comes first sits between the
+ * two, so padding one side keeps the gap in both orders.
+ */
+export const pastoralAppointment = pgTable(
+  "pastoral_appointment",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    churchId: text()
+      .notNull()
+      .references(() => church.id, { onDelete: "cascade" }),
+    /*
+     * Set null rather than cascade, with the name kept alongside. A pastor's
+     * login being removed must not erase the record of who they saw.
+     */
+    pastorId: uuid().references(() => pastorProfile.id, { onDelete: "set null" }),
+    pastorName: text().notNull(),
+    typeId: uuid().references(() => pastoralBookingType.id, { onDelete: "set null" }),
+    typeName: text().notNull(),
+    location: pastoralLocationEnum().notNull().default("church"),
+    /** Required for a home visit. */
+    address: text(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    holdsUntil: timestamp({ withTimezone: true }).notNull(),
+    status: pastoralAppointmentStatusEnum().notNull().default("pending"),
+    source: pastoralBookingSourceEnum().notNull().default("staff"),
+    /*
+     * Who booked. A member is linked; anybody else is written down, the same
+     * member/requester pair facility_booking uses. On the public page the link
+     * is a read-only match on phone or email and `identityVerified` stays
+     * false. Neither is a secret, so the sheet says "matched, not verified".
+     * The members-only page sets it true after a one-time code.
+     */
+    memberId: uuid().references((): AnyPgColumn => member.id, { onDelete: "set null" }),
+    identityVerified: boolean().notNull().default(false),
+    bookerName: text().notNull(),
+    /** E.164 (e164Phone with the church's dial code), so the per-contact limit compares like with like. */
+    bookerPhone: text(),
+    /** Lower-cased. */
+    bookerEmail: text(),
+    /**
+     * The language the booker used on the page, so the confirmation and the
+     * reminder arrive in it. Null (staff bookings): the church's language.
+     */
+    locale: text(),
+    /**
+     * What they would like to talk about. Confidential: only the pastor
+     * concerned and pastoral.manage ever see it, and it never goes into the
+     * audit log, a notification, an SMS, an email or a calendar file.
+     */
+    topic: text(),
+    /** Said to the booker on decline or a staff cancellation. */
+    decisionNote: text(),
+    decidedBy: text().references(() => user.id, { onDelete: "set null" }),
+    decidedAt: timestamp({ withTimezone: true }),
+    /** "booker" | "staff". */
+    cancelledBy: text(),
+    cancelledAt: timestamp({ withTimezone: true }),
+    /**
+     * SHA-256 (hex) of the manage-link token. The token itself is never
+     * stored. Replaced on every reschedule, so an old link stops working.
+     */
+    manageTokenHash: text().unique(),
+    /** When the reminder is due, already moved into the SMS window. Null: none. */
+    remindAt: timestamp({ withTimezone: true }),
+    reminderSentAt: timestamp({ withTimezone: true }),
+    /**
+     * What happened to each message, e.g. "email:sent sms:queued@<iso>". Read
+     * by describeDelivery(), so a confirmation that did not arrive shows on
+     * the appointment instead of failing silently.
+     */
+    confirmationOutcome: text(),
+    reminderOutcome: text(),
+    /** The previous start, on the latest move. */
+    rescheduledFrom: timestamp({ withTimezone: true }),
+    rescheduleCount: integer().notNull().default(0),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("pastoral_appointment_church_idx").on(t.churchId),
+    // The diary reads one pastor over a window; the queue reads by status.
+    index("pastoral_appointment_pastor_time_idx").on(t.pastorId, t.startsAt),
+    index("pastoral_appointment_church_status_idx").on(t.churchId, t.status),
+    // The per-contact limit on the public page.
+    index("pastoral_appointment_phone_idx").on(t.churchId, t.bookerPhone),
+    index("pastoral_appointment_email_idx").on(t.churchId, t.bookerEmail),
+    // The reminder sweep reads only what is still owed a reminder.
+    index("pastoral_appointment_remind_idx")
+      .on(t.remindAt)
+      .where(sql`${t.status} = 'confirmed' and ${t.reminderSentAt} is null`),
+    check(
+      "pastoral_appointment_range_chk",
+      sql`${t.endsAt} > ${t.startsAt} and ${t.holdsUntil} >= ${t.endsAt}`,
+    ),
+    check(
+      "pastoral_appointment_cancelled_by_chk",
+      sql`${t.cancelledBy} is null or ${t.cancelledBy} in ('booker', 'staff')`,
+    ),
+  ],
+);
+
+export type PastorProfile = typeof pastorProfile.$inferSelect;
+export type PastorHours = typeof pastorHours.$inferSelect;
+export type PastorClosure = typeof pastorClosure.$inferSelect;
+export type PastoralBookingType = typeof pastoralBookingType.$inferSelect;
+export type PastoralAppointment = typeof pastoralAppointment.$inferSelect;
+export type PastoralBookingPage = typeof pastoralBookingPage.$inferSelect;
+
+/* `pastoral_appointment_no_overlap` (EXCLUDE USING gist) is hand-written at the
+ * end of src/db/migrations/0106_roadmap_features.sql — drizzle cannot declare it. */
+
+/* ============================================================
+ * The FlockInsight course: the in-app guide, taken as a course.
+ *
+ * PER USER, PLATFORM-WIDE. Not per church, and deliberately NOT rows in the
+ * training_* tables above. Those belong to a church and point at `member`: a
+ * congregation member enrolled by the church and marked complete by the
+ * church. This is the opposite on every axis. It is about a LOGIN, the person
+ * earns it themselves, and it follows them to every church they serve, so a
+ * pastor who is staff at two branches is certified once. Storing it in
+ * training_course would mean a copy of the course in every church, editable by
+ * that church's admin, with "completed" settable by hand: a certificate that
+ * anyone with training.manage could award.
+ *
+ * What IS shared with the training module is the surface: the same badge chip
+ * beside names (TrainingBadge), and the rank arriving through
+ * badgesForMembers like any other badge.
+ *
+ * Tenancy: there is no church_id to filter on, because nothing here belongs
+ * to a church. Every read and write is keyed on the signed-in user's own id,
+ * the way /profile is. The only place another person's rows are read is the
+ * rank chip beside a name, and it reads only the rank, and only for people who
+ * are staff of the asking church or linked members of it.
+ * ========================================================== */
+
+export const certificationRankEnum = pgEnum("certification_rank", [
+  "professional",
+  "master",
+  "expert",
+]);
+
+/**
+ * One guide module for one person: marked complete, then passed.
+ *
+ * `completedAt` means "I have read it", and it is what opens the quiz.
+ * `passedAt` is set by the first passing attempt and never cleared, so a
+ * practice retake that goes badly cannot take a module away.
+ */
+export const guideProgress = pgTable(
+  "guide_progress",
+  {
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** A slug from lib/help-guides. Not a foreign key: guides live in code. */
+    guideSlug: text().notNull(),
+    completedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    passedAt: timestamp({ withTimezone: true }),
+    /** Best result so far, as a percentage. Null until the first attempt. */
+    bestScore: integer(),
+    attempts: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.guideSlug] }),
+    check(
+      "guide_progress_score_chk",
+      sql`${t.bestScore} is null or ${t.bestScore} between 0 and 100`,
+    ),
+  ],
+);
+
+/**
+ * Every quiz attempt: the evidence behind a certificate, and the durable
+ * counter the retake limit reads (an in-memory limiter is per PM2 worker and
+ * forgets on every deploy).
+ *
+ * `quizVersion` is a hash of the questions as they stood at the time. An
+ * answer sheet is a list of option indexes, and without the version it could
+ * not be read against the quiz it actually answered once the guide changes.
+ */
+export const guideQuizAttempt = pgTable(
+  "guide_quiz_attempt",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    guideSlug: text().notNull(),
+    quizVersion: text().notNull(),
+    correct: integer().notNull(),
+    total: integer().notNull(),
+    passed: boolean().notNull(),
+    /** The authored option index chosen for each question, in authored order. */
+    answers: jsonb().$type<number[]>().notNull(),
+    /** The church they were signed in to. Context only. */
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Serves both "this person's attempts at this module" and the
+    // attempts-in-the-last-15-minutes count behind the retake limit.
+    index("guide_quiz_attempt_user_idx").on(t.userId, t.guideSlug, t.createdAt),
+    check(
+      "guide_quiz_attempt_score_chk",
+      sql`${t.total} > 0 and ${t.correct} between 0 and ${t.total}`,
+    ),
+  ],
+);
+
+/**
+ * A day on which a person really used FlockInsight, kept for good.
+ *
+ * The Master and Expert ranks count weeks of real use. The raw evidence
+ * (analytics_event) is pruned at 180 days by the reminders job, so a year of
+ * use cannot be read from it, and account age would certify dormancy. The
+ * usage-days cron rolls each UTC day into one row here before the prune can
+ * reach it. See lib/active-days-sql.ts for exactly what counts.
+ */
+export const userActiveDay = pgTable(
+  "user_active_day",
+  {
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The calendar day, in UTC. String mode, "YYYY-MM-DD". */
+    day: date().notNull(),
+    pageviews: integer().notNull().default(0),
+    actions: integer().notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.day] }),
+    check("user_active_day_nonzero_chk", sql`${t.pageviews} + ${t.actions} > 0`),
+  ],
+);
+
+/**
+ * A certificate that has been issued. One per person per rank, for ever.
+ *
+ * The unique (user, rank) index IS the rule that a rank is issued once. Issuing
+ * is an INSERT ... ON CONFLICT (user_id, rank) DO NOTHING RETURNING, so two
+ * requests that both decide somebody has just become a Master produce one row,
+ * not two (AGENTS.md "one transaction is not isolation", applied at the
+ * constraint). A revoked row keeps its slot, so a withdrawn rank is not
+ * silently re-issued by the next quiz or cron run.
+ *
+ * `holderName` and `modulesAtIssue` are snapshots. A certificate is a dated
+ * document, so neither a later rename nor a guide added to the course rewrites
+ * one that was already printed.
+ */
+export const platformCertificate = pgTable(
+  "platform_certificate",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    rank: certificationRankEnum().notNull(),
+    /** "FI-7KQ4-M9XD". Printed on the PDF; /cert/<code> looks it up. */
+    code: text().notNull(),
+    holderName: text().notNull(),
+    activeWeeksAtIssue: integer().notNull(),
+    /** The guide slugs that made up the course on the day it was issued. */
+    modulesAtIssue: jsonb().$type<string[]>().notNull(),
+    issuedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Set only by a platform operator. The verification page says so. */
+    revokedAt: timestamp({ withTimezone: true }),
+    revokedReason: text(),
+  },
+  (t) => [
+    uniqueIndex("platform_certificate_user_rank_idx").on(t.userId, t.rank),
+    uniqueIndex("platform_certificate_code_idx").on(t.code),
+  ],
+);
+
+/* ============================================================
+ * AI platform
+ *
+ * Every model call FlockInsight makes is written here BEFORE it is sent, with
+ * the exact request body, so what left the server can always be produced
+ * afterwards. The same row is the cost ledger: it is reserved against the
+ * month's budget before the call and settled with the measured cost after.
+ *
+ * Text columns with $type unions rather than pgEnums, like
+ * media_upload_ticket.status: a new status or feature is then a code change,
+ * not an ALTER TYPE that cannot run inside a transaction.
+ * ========================================================== */
+
+export type AiFeature = "analytics" | "chat" | "blog";
+export type AiCallStatus =
+  | "reserved" // written, budget held, request in flight
+  | "ok" // end_turn / stop_sequence
+  | "refused" // stop_reason "refusal"
+  | "truncated" // stop_reason "max_tokens" / "model_context_window_exceeded"
+  | "error" // the provider or the network failed
+  | "abandoned"; // never settled (process died); charged at its reservation
+
+export const aiCall = pgTable(
+  "ai_call",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /*
+     * No foreign key, on purpose. Like payment.church_id since 0103, the record
+     * of what was sent to a model on a church's behalf has to outlive the
+     * church: a cascade would erase the evidence that has to be produced if
+     * anyone ever asks what left the server. Null = a platform call
+     * (superadmin summary, blog drafting).
+     */
+    churchId: text(),
+    feature: text().$type<AiFeature>().notNull(),
+    /** The fixed prompt this call used, e.g. "analytics-church@1". */
+    promptId: text().notNull(),
+    /** Which allow-list schema produced the payload, e.g. "church-facts@1". Null for free-text features. */
+    payloadSchema: text(),
+    /** The model we asked for. */
+    model: text().notNull(),
+    /** response.model. Differs from `model` when a server-side fallback answered. */
+    servedModel: text(),
+    status: text().$type<AiCallStatus>().notNull().default("reserved"),
+    actorUserId: text().references(() => user.id, { onDelete: "set null" }),
+    /** 'YYYY-MM' in UTC: the ai_budget_month rows this call was reserved against. */
+    budgetMonth: text().notNull(),
+    /*
+     * Money in nano-dollars (1e-9 USD) as integers. Haiku 5.5 input costs 100
+     * nano-dollars per token, and micro-dollars would need fractions. $20 is
+     * 2e10, well inside Number.MAX_SAFE_INTEGER.
+     */
+    reservedNano: bigint({ mode: "number" }).notNull(),
+    costNano: bigint({ mode: "number" }),
+    inputTokens: integer(),
+    outputTokens: integer(),
+    cacheWriteTokens: integer(),
+    cacheReadTokens: integer(),
+    /*
+     * The exact request, as JSON: { body, betas? }. body is byte-for-byte the
+     * Messages API body; betas are the header values (beta calls only). It
+     * never holds the key.
+     */
+    requestJson: text().notNull(),
+    requestSha256: text().notNull(),
+    responseText: text(),
+    stopReason: text(),
+    refusalCategory: text(),
+    /** response._request_id, for a support ticket with Anthropic. */
+    providerRequestId: text(),
+    error: text(),
+    durationMs: integer(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index("ai_call_church_idx").on(t.churchId, t.createdAt),
+    index("ai_call_created_idx").on(t.createdAt),
+    // Spend by feature and top churches this month both filter on budget_month.
+    index("ai_call_month_idx").on(t.budgetMonth, t.churchId),
+    // The sweep for calls that never settled reads only these.
+    index("ai_call_open_idx")
+      .on(t.createdAt)
+      .where(sql`${t.status} = 'reserved'`),
+    check(
+      "ai_call_money_nonneg",
+      sql`${t.reservedNano} >= 0 and (${t.costNano} is null or ${t.costNano} >= 0)`,
+    ),
+  ],
+);
+
+/*
+ * One row per budget per month: subject 'platform', or a church id. This is
+ * the single contested row that every reservation locks (SELECT ... FOR
+ * UPDATE). The ceiling is repeated as a predicate in the UPDATE that adds the
+ * reservation, and the returning() count is checked (lib/ai/budget.ts). The
+ * unique index guarantees there is exactly one row to contest.
+ * The ceiling itself is NOT a check constraint, deliberately: settling a call
+ * must never fail. If a measured cost ran past its reservation and a
+ * constraint refused the write, the call would vanish from the ledger.
+ */
+export const aiBudgetMonth = pgTable(
+  "ai_budget_month",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    month: text().notNull(), // 'YYYY-MM', UTC
+    subject: text().notNull(), // 'platform' or a church id
+    spentNano: bigint({ mode: "number" }).notNull().default(0),
+    reservedNano: bigint({ mode: "number" }).notNull().default(0),
+    calls: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("ai_budget_month_subject_idx").on(t.month, t.subject),
+    check(
+      "ai_budget_month_nonneg",
+      sql`${t.spentNano} >= 0 and ${t.reservedNano} >= 0`,
+    ),
+  ],
+);
+
+/*
+ * A church's consent. No row means OFF. Every church is opt-in, and only the
+ * church's own owner can turn it on: it is a decision to send figures out,
+ * however aggregated, and it belongs to whoever answers for the church. Not
+ * copied by the church backup/restore, on purpose: a restored copy has to be
+ * consented afresh, like reminder_setting.enabled.
+ */
+export const aiChurchSetting = pgTable("ai_church_setting", {
+  churchId: text()
+    .primaryKey()
+    .references(() => church.id, { onDelete: "cascade" }),
+  enabled: boolean().notNull().default(false),
+  changedByUserId: text().references(() => user.id, { onDelete: "set null" }),
+  enabledAt: timestamp({ withTimezone: true }),
+  disabledAt: timestamp({ withTimezone: true }),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/*
+ * Generated summaries, at most one per subject per local day. The unique index
+ * IS the rule, not a convenience: it is what stops two staff pressing the
+ * button at once from paying for two summaries. The row is inserted as
+ * 'pending' to claim the day before any model is called.
+ */
+export const aiSummary = pgTable(
+  "ai_summary",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** A church id, or 'platform' for the superadmin summary. */
+    subject: text().notNull(),
+    // Cascades: a summary is derived. The ai_call row it came from survives.
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
+    /** The church's local calendar day (churchToday). Africa/Lagos for the platform. */
+    day: date().notNull(),
+    status: text()
+      .$type<"pending" | "ready" | "failed" | "skipped">()
+      .notNull()
+      .default("pending"),
+    attempts: integer().notNull().default(1),
+    locale: text().notNull().default("en"),
+    payloadSha256: text(),
+    text: text(),
+    /** runAi's reason on failure, or 'thin_data' when skipped. */
+    reason: text(),
+    callId: uuid().references(() => aiCall.id, { onDelete: "set null" }),
+    /** Set when today's figures matched an earlier summary's exactly and its text was reused. */
+    reusedFromId: uuid().references((): AnyPgColumn => aiSummary.id, {
+      onDelete: "set null",
+    }),
+    requestedByUserId: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex("ai_summary_subject_day_idx").on(t.subject, t.day)],
+);
+
+/* ============================================================
+ * Help assistant: questions staff ask about USING FlockInsight.
+ *
+ * Every exchange is kept, along with the answer given and whether it helped.
+ * That record is how the reviewed pipeline finds the questions the guides do
+ * not answer. The assistant never sees church records: it is grounded on
+ * lib/help/** plus the canned answers a human has approved.
+ *
+ * WHAT IS STORED IS WHAT WAS SENT. A user row holds the SCRUBBED question
+ * (emails, phone numbers, long digit runs, street addresses, and names found
+ * on this church's own register replaced with placeholders), never the
+ * original. A reviewer reading the queue sees exactly what the model saw, and
+ * a name a secretary typed is never kept. `redactions` holds the count, so
+ * the UI can say "we removed 2 details".
+ *
+ * scope "platform" covers two cases: a superadmin asking from /superadmin, or
+ * a superadmin asking while acting as a church. Either way church_id is null,
+ * the question is charged to the platform budget only, and no opt-in applies.
+ * The check makes "a church row with no church" impossible.
+ *
+ * Kept for ASSISTANT_RETENTION_DAYS (180) after the last message. The
+ * assistant-retention cron then deletes the conversation, and its messages
+ * cascade. An approved canned answer keeps its own copy of the question, so
+ * an expiring transcript never takes the answer with it.
+ * ========================================================== */
+export const assistantConversation = pgTable(
+  "assistant_conversation",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** "church" | "platform". */
+    scope: text().notNull().default("church"),
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** The interface language at the time. The answer is written in it. */
+    locale: text().notNull().default("en"),
+    /** User and assistant rows together. A conversation stops at 30. */
+    messageCount: integer().notNull().default(0),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastMessageAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("assistant_conversation_church_idx").on(t.churchId, t.lastMessageAt),
+    index("assistant_conversation_user_idx").on(t.userId, t.lastMessageAt),
+    // The retention sweep reads this, and only this.
+    index("assistant_conversation_last_idx").on(t.lastMessageAt),
+    check(
+      "assistant_conversation_scope_chk",
+      sql`${t.scope} in ('church','platform') and ((${t.scope} = 'church') = (${t.churchId} is not null))`,
+    ),
+  ],
+);
+
+/**
+ * The grounding set the reviewed pipeline grows: a question and an answer
+ * that a HUMAN approved. Only "approved" rows ever reach a prompt. "draft"
+ * rows are still being worked on in /superadmin/assistant. "retired" rows
+ * were withdrawn and are kept for the record.
+ *
+ * Platform-wide on purpose: an approved answer is product help and is shown
+ * to every church. That is why it has no church_id, why the editor re-runs
+ * the scrubber on save, and why the editor tells the reviewer to write for
+ * anyone.
+ *
+ * `guideSlug` names the guide where the answer should end up as a permanent
+ * FAQ entry in lib/help/*.ts. Help articles stay in code review: the page
+ * offers a "copy as a guide FAQ entry" snippet rather than writing to the
+ * guides.
+ */
+export const assistantAnswer = pgTable(
+  "assistant_answer",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    question: text().notNull(),
+    answer: text().notNull(),
+    keywords: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    guideSlug: text(),
+    /** "draft" | "approved" | "retired". */
+    status: text().notNull().default("draft"),
+    /** True when the first version came from the model, before any human edit. */
+    draftedByAi: boolean().notNull().default(false),
+    sourceMessageId: uuid().references((): AnyPgColumn => assistantMessage.id, {
+      onDelete: "set null",
+    }),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    approvedBy: text().references(() => user.id, { onDelete: "set null" }),
+    approvedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("assistant_answer_status_idx").on(t.status, t.updatedAt),
+    check(
+      "assistant_answer_status_chk",
+      sql`${t.status} in ('draft','approved','retired')`,
+    ),
+  ],
+);
+
+export const assistantMessage = pgTable(
+  "assistant_message",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    conversationId: uuid()
+      .notNull()
+      .references(() => assistantConversation.id, { onDelete: "cascade" }),
+    // Copied from the conversation, so every church read filters on
+    // church_id directly and the daily cap counts without a join.
+    churchId: text().references(() => church.id, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** "user" | "assistant". */
+    role: text().notNull(),
+    /** User rows are scrubbed (see the note above). Assistant rows hold the answer as shown. */
+    content: text().notNull(),
+    /** How many things the scrubber replaced. User rows only; 0 otherwise. */
+    redactions: integer().notNull().default(0),
+    /**
+     * Assistant rows only:
+     *   "answered"      the guides covered it
+     *   "not_in_guides" the model said SOURCES: none
+     *   "refused"       stop_reason "refusal"
+     *   "truncated"     stop_reason "max_tokens"; the partial text is never shown or kept
+     *   "failed"        the API errored after the readiness checks passed
+     */
+    answerKind: text(),
+    /** "guide:<slug>" and "answer:<uuid>" the answer cited, checked against what exists. */
+    sources: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** The person's verdict. Null until they tap. Assistant rows only. */
+    helpful: boolean(),
+    feedbackAt: timestamp({ withTimezone: true }),
+    /**
+     * The reviewed pipeline's queue, kept on the ANSWER row:
+     *   "none"      nothing to review
+     *   "open"      unhelpful, not in the guides, ungrounded, refused, cut off or failed
+     *   "dismissed" a reviewer decided there was nothing to learn
+     *   "resolved"  an approved canned answer now covers it
+     */
+    reviewStatus: text().notNull().default("none"),
+    resolvedAnswerId: uuid().references((): AnyPgColumn => assistantAnswer.id, {
+      onDelete: "set null",
+    }),
+    inputTokens: integer(),
+    outputTokens: integer(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("assistant_message_conversation_idx").on(t.conversationId, t.createdAt),
+    // The per-person daily cap: "user rows by this person in the last 24h".
+    index("assistant_message_user_idx").on(t.userId, t.createdAt),
+    index("assistant_message_church_idx").on(t.churchId, t.createdAt),
+    // The queue is a handful of rows in a large table. A partial index keeps it one seek.
+    index("assistant_message_review_idx")
+      .on(t.createdAt)
+      .where(sql`${t.reviewStatus} = 'open'`),
+    check("assistant_message_role_chk", sql`${t.role} in ('user','assistant')`),
+    check(
+      "assistant_message_kind_chk",
+      sql`((${t.role} = 'assistant') = (${t.answerKind} is not null)) and (${t.answerKind} is null or ${t.answerKind} in ('answered','not_in_guides','refused','truncated','failed'))`,
+    ),
+    check(
+      "assistant_message_feedback_chk",
+      sql`${t.helpful} is null or ${t.role} = 'assistant'`,
+    ),
+    check(
+      "assistant_message_review_chk",
+      sql`${t.reviewStatus} in ('none','open','dismissed','resolved')`,
+    ),
+  ],
+);
+
+/* ============================================================
+ * Weekly blog drafts: one row per attempt to draft a post.
+ *
+ * The in-app scheduler cannot express "weekly": cron-schedule.ts parseFive
+ * throws "only daily-or-shorter schedules are supported" for any day-of-week
+ * field. So blog-drafts runs DAILY and the WEEK is enforced here: the partial
+ * unique index allows only one scheduled row per ISO week ("2026-W43").
+ *
+ * The job CLAIMS its week with
+ *   INSERT ... ON CONFLICT (week) WHERE trigger = 'schedule' DO UPDATE ...
+ *   WHERE <failed and attempts < 3, or running and stale>
+ * and checks the RETURNING count. Postgres locks the conflicting row and only
+ * one statement's WHERE can match, so two ticks, or a tick plus a manual curl,
+ * cannot both draft. (AGENTS.md: a transaction alone is not isolation. Here
+ * the constraint IS the lock, and the repeated predicate plus returning() are
+ * the other two parts.)
+ *
+ * Manual "Draft one now" rows use trigger "manual" and fall outside the unique
+ * index, so a superadmin can always ask for an extra one.
+ *
+ * A topic counts as used once a row has status "drafted" for it. That holds
+ * even when the post is later deleted, so a rejected topic is not drafted
+ * again every Monday. A superadmin can still pick it by hand.
+ * ========================================================== */
+export const blogDraftRun = pgTable(
+  "blog_draft_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** ISO week, "2026-W43". */
+    week: text().notNull(),
+    /** "schedule" | "manual". */
+    trigger: text().notNull().default("schedule"),
+    /** The keyword map's `primary` for the topic. Null until one is picked. */
+    topicKey: text(),
+    /** "running" | "drafted" | "failed" | "skipped". */
+    status: text().notNull().default("running"),
+    attempts: integer().notNull().default(1),
+    postId: uuid().references(() => blogPost.id, { onDelete: "set null" }),
+    model: text(),
+    inputTokens: integer(),
+    outputTokens: integer(),
+    /** The cause and the action, in words. Shown on /superadmin/blog. */
+    error: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("blog_draft_run_week_schedule_unique")
+      .on(t.week)
+      .where(sql`${t.trigger} = 'schedule'`),
+    index("blog_draft_run_topic_idx").on(t.topicKey, t.status),
+    index("blog_draft_run_started_idx").on(t.startedAt),
+    check("blog_draft_run_trigger_chk", sql`${t.trigger} in ('schedule','manual')`),
+    check(
+      "blog_draft_run_status_chk",
+      sql`${t.status} in ('running','drafted','failed','skipped')`,
+    ),
+  ],
+);
+
+export type AssistantConversation = typeof assistantConversation.$inferSelect;
+export type AssistantMessage = typeof assistantMessage.$inferSelect;
+export type AssistantAnswer = typeof assistantAnswer.$inferSelect;
+export type BlogDraftRun = typeof blogDraftRun.$inferSelect;

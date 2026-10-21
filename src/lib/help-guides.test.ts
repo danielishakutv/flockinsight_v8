@@ -114,6 +114,12 @@ describe("the guide catalogue", () => {
     }
   });
 
+  it("never uses a slug that a static /help route would shadow", () => {
+    // /help/course and /help/support are real pages, and a static segment
+    // wins over [slug], so a guide with either slug could never be opened.
+    for (const g of GUIDES) expect(["course", "support"]).not.toContain(g.slug);
+  });
+
   it("computes reading time from the content rather than claiming one", () => {
     for (const g of GUIDES) expect(g.minutes).toBeGreaterThanOrEqual(1);
     // A long guide must not read as a one-minute skim.
@@ -210,9 +216,9 @@ describe("the keyboard shortcuts guide", () => {
     expect(text).toContain("Mac");
   });
 
-  it("explains the three letters that are not first letters", () => {
+  it("explains the letters that are not first letters", () => {
     const text = JSON.stringify(guide).toLowerCase();
-    for (const word of ["bookings", "visitors", "g-r-oups"]) {
+    for (const word of ["bookings", "visitors", "g-r-oups", "pastor"]) {
       expect(text, `the guide should say where the letter came from: ${word}`).toContain(
         word,
       );

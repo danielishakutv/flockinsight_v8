@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, MessageCircle } from "lucide-react";
+import { ArrowRight, Award, BookOpen, MessageCircle } from "lucide-react";
 import { GUIDES, GUIDE_CATEGORIES } from "@/lib/help-guides";
 import { HelpBrowser } from "@/components/help/help-browser";
+import { getT } from "@/lib/i18n/server";
+import { CourseProgressLine, passedGuideSlugs } from "@/components/help/course-progress-line";
+import { AssistantHelpCard } from "@/components/assistant/assistant-help-card";
 
 export const metadata = { title: "Help & Support" };
 
-export default function HelpPage() {
+export default async function HelpPage() {
+  const [t, passed] = await Promise.all([getT(), passedGuideSlugs()]);
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 lg:px-8">
       <div className="mb-6">
@@ -18,7 +22,11 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* Quick actions */}
+      {/*
+       * Quick actions. Four cards (support, start here, the course, the help
+       * assistant) sit two by two from sm up, which reads better than four
+       * narrow columns of wrapped text; on phones they stack.
+       */}
       <div className="mb-8 grid gap-3 sm:grid-cols-2">
         <Link
           href="/help/support"
@@ -50,9 +58,28 @@ export default function HelpPage() {
           </div>
           <ArrowRight className="text-muted-foreground size-5 transition group-hover:translate-x-0.5" />
         </Link>
+        {/*
+         * The FlockInsight course, with the signed-in person's own progress
+         * (course.modulesPassed and their rank chip) as its second line.
+         */}
+        <Link
+          href="/help/course"
+          className="bg-card group flex items-center gap-4 rounded-2xl border p-5 shadow-sm transition hover:shadow-md"
+        >
+          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <Award className="size-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="group-hover:text-primary font-bold">{t("course.takeTheCourse")}</p>
+            <CourseProgressLine />
+          </div>
+          <ArrowRight className="text-muted-foreground size-5 transition group-hover:translate-x-0.5" />
+        </Link>
+        {/* Renders nothing where the assistant is not available (the demo church, or off-plan). */}
+        <AssistantHelpCard />
       </div>
 
-      <HelpBrowser guides={GUIDES} categories={GUIDE_CATEGORIES} />
+      <HelpBrowser guides={GUIDES} categories={GUIDE_CATEGORIES} passed={passed} />
     </div>
   );
 }

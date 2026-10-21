@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/components/i18n-provider";
+import { TrainingBadge } from "@/components/training/training-badge";
+import { rankBadge, type CertRank } from "@/lib/certification-shared";
 
 type Member = {
   memberId: string;
@@ -54,6 +56,7 @@ export function TeamManager({
   currentUserId,
   invitableMembers = [],
   canInviteAdmin = false,
+  ranks = {},
 }: {
   members: Member[];
   invites: Invite[];
@@ -62,6 +65,8 @@ export function TeamManager({
   invitableMembers?: { id: string; name: string; email: string | null }[];
   /** Holds every permission, so may invite a plain admin (which is everything). */
   canInviteAdmin?: boolean;
+  /** FlockInsight course rank by user id, for the chip beside a name. */
+  ranks?: Record<string, CertRank>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -347,10 +352,15 @@ export function TeamManager({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">
-                    {m.name}
-                    {isSelf && (
-                      <span className="text-muted-foreground"> (you)</span>
+                  <p className="flex min-w-0 items-center gap-1.5 font-semibold">
+                    <span className="truncate">
+                      {m.name}
+                      {isSelf && (
+                        <span className="text-muted-foreground"> (you)</span>
+                      )}
+                    </span>
+                    {ranks[m.userId] && (
+                      <TrainingBadge badge={rankBadge(ranks[m.userId], null)} />
                     )}
                   </p>
                   <p className="text-muted-foreground truncate text-xs">

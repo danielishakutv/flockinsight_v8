@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { dayKeyIn, daysCovered } from "@/lib/calendar-days";
 import type { CalendarEntry } from "@/lib/facilities";
 
 /**
@@ -13,9 +14,43 @@ import type { CalendarEntry } from "@/lib/facilities";
  * the hall free on the 14th?", which a month answers at a glance; an
  * hour-by-hour view answers a question almost nobody has and does not fit on a
  * phone.
+ *
+ * Also the pastoral diary's month view, through three optional props. With
+ * none of them passed, Facilities renders exactly as it always has.
  */
 
-const DAY_MS = 86_400_000;
+export type CalendarTone = "held" | "pending" | "closed";
+
+export type CalendarLabels = {
+  /** Monday first, seven of them. */
+  weekdays: string[];
+  today: string;
+  more: (n: number) => string;
+  prev: string;
+  next: string;
+  legend: { held: string; pending: string; closed: string };
+};
+
+const DEFAULT_LABELS: CalendarLabels = {
+  weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  today: "Today",
+  more: (n) => `+${n} more`,
+  prev: "Previous month",
+  next: "Next month",
+  legend: { held: "Booked", pending: "Awaiting approval", closed: "Closed" },
+};
+
+/** Today's rule: a closure is closed, an approved booking holds, anything else waits. */
+function defaultTone(e: CalendarEntry): CalendarTone {
+  if (e.kind === "closure") return "closed";
+  return e.status === "approved" ? "held" : "pending";
+}
+
+const TONE_CLASS: Record<CalendarTone, string> = {
+  closed: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
+  held: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  pending: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+};
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -27,50 +62,44 @@ function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Every day an entry touches, so a three-day booking shows on all three. */
-function daysCovered(startsAt: string, endsAt: string): string[] {
-  const s = new Date(startsAt);
-  const e = new Date(endsAt);
-  const out: string[] = [];
-  const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-  // The end is exclusive at midnight: a booking ending 09:00 Tuesday covers
-  // Tuesday, but one ending exactly at midnight does not spill into it.
-  const last = new Date(e.getFullYear(), e.getMonth(), e.getDate());
-  const endsAtMidnight =
-    e.getHours() === 0 && e.getMinutes() === 0 && e.getSeconds() === 0;
-  while (cur.getTime() <= last.getTime()) {
-    if (!(endsAtMidnight && cur.getTime() === last.getTime() && out.length > 0)) {
-      out.push(ymd(cur));
-    }
-    cur.setTime(cur.getTime() + DAY_MS);
-  }
-  return out.length ? out : [ymd(s)];
-}
-
-const time = (iso: string) =>
-  new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+const time = (iso: string, timeZone?: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone });
 
 export function FacilityCalendar({
   entries,
   onPick,
+  timeZone,
+  tone = defaultTone,
+  labels = DEFAULT_LABELS,
 }: {
   entries: CalendarEntry[];
   /** Clicking a day offers to book it. */
   onPick?: (dayIso: string) => void;
+  /** Bucket days, "today" and times in this zone. Default: the browser's. */
+  timeZone?: string;
+  /** Which colour an entry gets. */
+  tone?: (e: CalendarEntry) => CalendarTone;
+  /** Translated words. Default: the English Facilities has always shown. */
+  labels?: CalendarLabels;
 }) {
-  const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
+  // "Today" as a calendar date in the zone, held as a local Date for the grid.
+  const zonedToday = () => {
+    const [y, m, d] = dayKeyIn(new Date(), timeZone).split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const [cursor, setCursor] = useState(() => startOfMonth(zonedToday()));
 
   const byDay = useMemo(() => {
     const m = new Map<string, CalendarEntry[]>();
     for (const e of entries) {
-      for (const day of daysCovered(e.startsAt, e.endsAt)) {
+      for (const day of daysCovered(e.startsAt, e.endsAt, timeZone)) {
         const list = m.get(day);
         if (list) list.push(e);
         else m.set(day, [e]);
       }
     }
     return m;
-  }, [entries]);
+  }, [entries, timeZone]);
 
   const cells = useMemo(() => {
     const first = startOfMonth(cursor);
@@ -86,7 +115,7 @@ export function FacilityCalendar({
     return out;
   }, [cursor]);
 
-  const todayIso = ymd(new Date());
+  const todayIso = dayKeyIn(new Date(), timeZone);
   const monthLabel = cursor.toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
@@ -97,13 +126,13 @@ export function FacilityCalendar({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-extrabold tracking-tight">{monthLabel}</h2>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" aria-label="Previous month" onClick={() => setCursor((c) => addMonths(c, -1))}>
+          <Button variant="outline" size="icon" aria-label={labels.prev} onClick={() => setCursor((c) => addMonths(c, -1))}>
             <ChevronLeft className="size-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCursor(startOfMonth(new Date()))}>
-            Today
+          <Button variant="outline" size="sm" onClick={() => setCursor(startOfMonth(zonedToday()))}>
+            {labels.today}
           </Button>
-          <Button variant="outline" size="icon" aria-label="Next month" onClick={() => setCursor((c) => addMonths(c, 1))}>
+          <Button variant="outline" size="icon" aria-label={labels.next} onClick={() => setCursor((c) => addMonths(c, 1))}>
             <ChevronRight className="size-4" />
           </Button>
         </div>
@@ -111,7 +140,7 @@ export function FacilityCalendar({
 
       <div className="overflow-hidden rounded-xl border">
         <div className="bg-muted/50 grid grid-cols-7">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+          {labels.weekdays.map((d) => (
             <div key={d} className="text-muted-foreground px-1 py-1.5 text-center text-[11px] font-bold">
               {d}
             </div>
@@ -146,14 +175,10 @@ export function FacilityCalendar({
                   {day.slice(0, 3).map((e) => (
                     <span
                       key={e.id + iso}
-                      title={`${e.facilityName} · ${e.title} · ${time(e.startsAt)}`}
+                      title={`${e.facilityName} · ${e.title} · ${time(e.startsAt, timeZone)}`}
                       className={cn(
                         "truncate rounded px-1 py-0.5 text-[10px] leading-tight font-medium",
-                        e.kind === "closure"
-                          ? "bg-slate-500/15 text-slate-700 dark:text-slate-300"
-                          : e.status === "approved"
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                            : "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                        TONE_CLASS[tone(e)],
                       )}
                     >
                       {e.kind === "closure" && <Lock className="mr-0.5 inline size-2.5" />}
@@ -162,7 +187,7 @@ export function FacilityCalendar({
                   ))}
                   {day.length > 3 && (
                     <span className="text-muted-foreground px-1 text-[10px] font-semibold">
-                      +{day.length - 3} more
+                      {labels.more(day.length - 3)}
                     </span>
                   )}
                 </span>
@@ -174,13 +199,13 @@ export function FacilityCalendar({
 
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-emerald-500/40" /> Booked
+          <span className="size-2.5 rounded-sm bg-emerald-500/40" /> {labels.legend.held}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-amber-500/40" /> Awaiting approval
+          <span className="size-2.5 rounded-sm bg-amber-500/40" /> {labels.legend.pending}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-slate-500/40" /> Closed
+          <span className="size-2.5 rounded-sm bg-slate-500/40" /> {labels.legend.closed}
         </span>
       </div>
     </div>

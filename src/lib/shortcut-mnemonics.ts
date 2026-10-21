@@ -17,6 +17,7 @@ export const MNEMONICS: Readonly<Record<string, TKey>> = {
   "go-groups": "shortcuts.mnemonicGroups",
   "go-first-timers": "shortcuts.mnemonicFirstTimers",
   "go-facilities": "shortcuts.mnemonicFacilities",
+  "go-appointments": "shortcuts.mnemonicPastor",
   "new-member": "shortcuts.mnemonicNew",
   "new-first-timer": "shortcuts.mnemonicFirstTimers",
   "new-booking": "shortcuts.mnemonicFacilities",

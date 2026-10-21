@@ -33,6 +33,8 @@ type Post = {
   publishedAt: string | null;
   announcedAt: string | null;
   updatedAt: string;
+  /** "ai" for a post the weekly drafter wrote; it cannot be published from here unread. */
+  source?: "human" | "ai";
 };
 
 export function BlogList({
@@ -88,9 +90,16 @@ export function BlogList({
     }
   }
 
+  const waiting = posts.filter((p) => p.source === "ai" && p.status === "draft").length;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {waiting > 0 && (
+          <p className="text-muted-foreground mr-auto text-sm">
+            {waiting} AI draft{waiting === 1 ? "" : "s"} waiting for review
+          </p>
+        )}
         <Button onClick={create} disabled={pending} size="lg">
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-5" />}
           New post
@@ -126,6 +135,9 @@ export function BlogList({
                   )}
                 </p>
               </Link>
+              {p.source === "ai" && p.status === "draft" && (
+                <Badge variant="warning">AI draft · needs review</Badge>
+              )}
               <Badge variant={p.status === "published" ? "success" : "outline"}>
                 {p.status === "published" ? "Published" : "Draft"}
               </Badge>

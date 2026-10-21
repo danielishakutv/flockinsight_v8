@@ -10,6 +10,7 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  CalendarClock,
   CalendarDays,
   ClipboardCheck,
   Database,
@@ -376,6 +377,22 @@ export const navSections: NavSection[] = [
         descriptionKey: "nav.followUpDesc",
         tile: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
         perm: "followup.view",
+      },
+      /*
+       * Beside Follow-up because it is the same errand from the other side:
+       * somebody asked to be looked after, and this is the time a pastor set
+       * aside for it. People reaches seven, the ceiling nav-coverage.test.ts
+       * allows, so the next People module splits the group.
+       */
+      {
+        labelKey: "nav.appointments",
+        feature: "pastoralBooking",
+        href: "/appointments",
+        icon: CalendarClock,
+        descriptionKey: "nav.appointmentsDesc",
+        tile: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+        perm: "pastoral.view",
+        beta: true,
       },
       {
         labelKey: "nav.groups",

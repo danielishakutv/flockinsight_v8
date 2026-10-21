@@ -27,6 +27,11 @@ import {
 import { getIsSuperAdmin, requireChurch } from "@/lib/session";
 import { getT } from "@/lib/i18n/server";
 import { getAccess } from "@/lib/permissions";
+import { churchRowHasFeature } from "@/lib/entitlements";
+import { getChurchSummaryView } from "@/lib/ai/summaries";
+import { canReadChurchSummary } from "@/lib/ai/ai-shared";
+import { AiSummaryCard } from "@/components/ai/ai-summary-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getAnchoredWeeklySeries,
   getLastSession,
@@ -317,6 +322,13 @@ export default async function DashboardPage() {
             </Link>
           )}
 
+          {/* Its own boundary, so a slow summary query cannot hold up the dashboard. */}
+          <Suspense fallback={<Skeleton className="h-32 rounded-2xl" />}>
+            <DashboardAiSummary
+              church={{ id: church.id, plan: church.plan, slug: church.slug, isDemo: church.isDemo }}
+            />
+          </Suspense>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -464,5 +476,25 @@ export default async function DashboardPage() {
         </aside>
       </div>
     </PageContainer>
+  );
+}
+
+/**
+ * The compact plain-language summary. Renders nothing unless this person may
+ * read it and the church can have it, apart from a one-line invitation to an
+ * owner who has not turned it on yet (the card decides that).
+ */
+async function DashboardAiSummary({
+  church,
+}: {
+  church: { id: string; plan: string | null; slug: string | null; isDemo: boolean | null };
+}) {
+  if (!churchRowHasFeature(church, "aiSummaries")) return null;
+  const access = await getAccess();
+  const canRead = canReadChurchSummary(access);
+  if (!canRead) return null;
+  const view = await getChurchSummaryView(church.id);
+  return (
+    <AiSummaryCard variant="compact" view={view} canRead={canRead} canGenerate={canRead} isOwner={access.isOwner} />
   );
 }

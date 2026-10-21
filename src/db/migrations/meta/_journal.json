@@ -743,6 +743,13 @@
       "when": 1791950318311,
       "tag": "0105_server_recordings",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1792555237647,
+      "tag": "0106_roadmap_features",
+      "breakpoints": true
     }
   ]
 }

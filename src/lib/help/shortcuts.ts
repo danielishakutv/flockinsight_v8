@@ -98,7 +98,7 @@ export const SHORTCUT_GUIDES: Omit<Guide, "minutes">[] = [
             items: [
               "G is for “go”.",
               "Most letters are simply the first letter of the page: G then M for Members, G then A for Attendance.",
-              "Three are not, because the first letter was already taken: G then R for g-r-oups, G then V for first-timers (V for visitors), and G then B for Facilities (B for bookings).",
+              "Four are not, because the first letter was already taken: G then R for g-r-oups, G then V for first-timers (V for visitors), G then B for Facilities (B for bookings), and G then P for Appointments (P for pastor).",
             ],
           },
           {

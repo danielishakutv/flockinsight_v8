@@ -52,6 +52,7 @@ describe("permission catalogue", () => {
       "attendance", "giving", "finance", "members", "groups",
       "training", "followup", "communication", "analytics", "meetings",
       "media", "forms", "devotionals", "settings", "team",
+      "pastoral",
     ]) {
       expect(modules, `${expected} should be in the catalogue`).toContain(
         expected,

@@ -81,7 +81,7 @@ function incomingTransformation(rt: ResourceType): string | undefined {
    * the original AND a derived copy, which uses MORE quota, and the playable
    * version would not exist for a while after the host was told it was saved.
    * Recordings are already encoded modestly at source (700 kbps video, 64 kbps
-   * audio — see lib/meeting-recorder.ts), so there is little left to squeeze.
+   * audio, as the retired in-browser recorder encoded them), so there is little left to squeeze.
    *
    * Images keep theirs: they are small, synchronous processing never refuses
    * them, and a 6 MB phone photo really does need resizing.

@@ -65,6 +65,9 @@ const ALL: Omit<Guide, "minutes">[] = [
   ...ACCOUNT_GUIDES,
 ];
 
+// A guide's slug is also its course module id (guide_progress.guide_slug and
+// platform_certificate.modules_at_issue). Never rename one: progress would be
+// orphaned. If a rename is ever unavoidable, copy the rows additively.
 export const GUIDES: Guide[] = ALL.map((g) => ({
   ...g,
   minutes: readingMinutes(g),

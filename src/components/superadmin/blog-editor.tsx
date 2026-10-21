@@ -24,6 +24,15 @@ import { Markdown } from "@/components/blog/markdown";
 import { MarkdownToolbar } from "@/components/superadmin/markdown-toolbar";
 import { AnnounceDialog } from "@/components/superadmin/blog-announce-dialog";
 import { uploadBlogImage } from "@/components/superadmin/blog-upload";
+import { BlogReviewBanner } from "@/components/superadmin/blog-review-banner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { slugify } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 
@@ -42,29 +51,52 @@ type PostState = {
   announcedAt: string | null;
 };
 
+/** Present only for a post the weekly drafter wrote. */
+export type BlogReview = {
+  aiDraftedAt: string | null;
+  reviewedAt: string | null;
+  topic: { question: string; primary: string; canonicalPath: string } | null;
+};
+
 export function BlogEditor({
   post,
   baseUrl,
+  review = null,
 }: {
   post: PostState;
   baseUrl: string;
+  review?: BlogReview | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState<PostState>(post);
   const [preview, setPreview] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [checked, setChecked] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const set = (patch: Partial<PostState>) => setF((p) => ({ ...p, ...patch }));
+  // An AI draft nobody has read yet: Publish asks first, and the server checks too.
+  const needsConfirm = Boolean(review && !review.reviewedAt);
 
-  function persist(status: "draft" | "published") {
+  function persist(status: "draft" | "published", confirmReviewed = false) {
     const merged = { ...f, status, tags: f.tags.slice(0, 20) };
     start(async () => {
-      const res = await savePost(merged);
+      const res = await savePost(confirmReviewed ? { ...merged, confirmReviewed } : merged);
       if (!res.ok) return void toast.error(res.error);
       setF(merged);
+      setConfirmOpen(false);
       toast.success(status === "published" ? "Saved & published" : "Draft saved");
       router.refresh();
     });
+  }
+
+  function publish() {
+    if (needsConfirm) {
+      setChecked(false);
+      setConfirmOpen(true);
+      return;
+    }
+    persist("published");
   }
 
   return (
@@ -111,12 +143,53 @@ export function BlogEditor({
             {pending && <Loader2 className="size-4 animate-spin" />}
             Save draft
           </Button>
-          <Button onClick={() => persist("published")} disabled={pending}>
+          <Button onClick={publish} disabled={pending}>
             {pending && <Loader2 className="size-4 animate-spin" />}
             {f.status === "published" ? "Update" : "Publish"}
           </Button>
         </div>
       </div>
+
+      {review && (
+        <BlogReviewBanner
+          aiDraftedAt={review.aiDraftedAt}
+          reviewedAt={review.reviewedAt}
+          topic={review.topic}
+          title={f.title}
+          body={f.body}
+          baseUrl={baseUrl}
+        />
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Publish an AI draft?</DialogTitle>
+            <DialogDescription>
+              This post was written by AI. Once published it is on the public blog under
+              FlockInsight&apos;s name, so every claim in it has to be true of the product today.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+              className="mt-0.5 size-4"
+            />
+            I&apos;ve read this post in full and checked every claim against the product.
+          </label>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => persist("published", true)} disabled={!checked || pending}>
+              {pending && <Loader2 className="size-4 animate-spin" />}
+              Publish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {preview ? (
         <ArticlePreview post={f} />

@@ -5,7 +5,11 @@ import { CalendarDays, Sparkles, TrendingUp, UserPlus } from "lucide-react";
 import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
-import { requireCan } from "@/lib/permissions";
+import { getAccess, requireCan } from "@/lib/permissions";
+import { churchRowHasFeature } from "@/lib/entitlements";
+import { getChurchSummaryView } from "@/lib/ai/summaries";
+import { canReadChurchSummary } from "@/lib/ai/ai-shared";
+import { AiSummaryCard } from "@/components/ai/ai-summary-card";
 import {
   getAnchoredWeeklySeries,
   growthPct,
@@ -131,6 +135,30 @@ export default async function AnalyticsPage() {
     .map(([name, e]) => ({ name, avg: Math.round(e.sum / e.count) }))
     .sort((a, b) => b.avg - a.avg);
 
+  /*
+   * The plain-language summary, only where the plan includes it. Off-plan the
+   * card is simply not mounted: PlanGate above already explains the plan, and
+   * a church is never shown a summary of numbers its plan cannot chart.
+   */
+  const onAiPlan = churchRowHasFeature(church, "aiSummaries");
+  let aiCard: React.ReactNode = null;
+  if (onAiPlan) {
+    const access = await getAccess();
+    const canRead = canReadChurchSummary(access);
+    const view = await getChurchSummaryView(church.id);
+    aiCard = (
+      <AiSummaryCard
+        variant="full"
+        // The card hides the text from a narrower role, but whatever is passed
+        // here is serialised into the page payload, so it must not be sent.
+        view={canRead ? view : { ...view, latest: null }}
+        canRead={canRead}
+        canGenerate={canRead && onAiPlan}
+        isOwner={access.isOwner}
+      />
+    );
+  }
+
   const avg = weeklyAverage(series, 8);
   const growth = growthPct(series, 4);
 
@@ -161,6 +189,8 @@ export default async function AnalyticsPage() {
       />
 
       <SetupNotices />
+
+      {aiCard}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">

@@ -29,6 +29,24 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.80.0",
+    date: "2026-10-21",
+    summary:
+      "Members can book time with a pastor online, everyone on your team can take the FlockInsight course and earn a certificate, and — once your church owner switches them on — plain-language AI summaries of your numbers and a help assistant that answers questions about using FlockInsight.",
+    changes: {
+      Added: [
+        "Pastor appointments. Each pastor sets their weekly hours, days away and how long a meeting lasts, and you choose what people can book: counselling, a home visit, prayer. Share your booking link (open to anyone, or only to people on your register) and bookings arrive in the pastor's own diary under Appointments. People get a confirmation straight away and a reminder before the day, by email — and by text on Pro — with a link to move or cancel. Two people can never be given the same time.",
+        "The FlockInsight course. Every guide in Help is now a lesson with a short quiz. Pass them all to become a FlockInsight Professional, with a certificate you can download and anyone can verify. Keep using FlockInsight and you become a Master after three months and an Expert after a year — counted from the days you actually work in it, not from when the account was made.",
+        "AI summaries (Growth). A short, plain-language read of your church's numbers — attendance, growth, first-timers, follow-up and whether giving is up or down — on your dashboard and analytics. Only counts, percentages and trends are ever sent: never a name, phone number, email, address, note or amount.",
+        "A help assistant that answers \"how do I…\" questions about FlockInsight from the guides, and says so when the guides don't cover it. It never reads your church's data.",
+        "Both AI features are off until your church owner turns them on in Settings → AI features, and every request is logged.",
+      ],
+      Improved: [
+        "A service-reminder or pledge-reminder text that fails for a passing reason — the gateway was busy, the wallet was briefly empty — is now tried again within the same day's 8am–8pm window, up to three times, and never sends the email twice. History shows each attempt.",
+      ],
+    },
+  },
+  {
     version: "0.79.0",
     date: "2026-10-21",
     summary:

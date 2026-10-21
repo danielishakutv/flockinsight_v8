@@ -104,6 +104,12 @@ export function PledgeReminderSettings({
               checked={f.sms}
               onChange={(v) => set({ sms: v })}
             />
+            {/* What happens to a text that can't go, so nobody resends it by hand. */}
+            {smsReady && f.sms && (
+              <p className="text-muted-foreground text-xs">
+                {t("settings.pledgeSmsRetryNote")}
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="pr-subj">{t("settings.emailSubject")}</Label>
               <Input

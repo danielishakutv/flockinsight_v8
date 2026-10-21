@@ -19,6 +19,7 @@ import {
   PartyPopper,
   ScrollText,
   ShieldCheck,
+  Sparkles,
   UserPlus,
   Users,
   Wallet,
@@ -37,7 +38,11 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 import type { TKey } from "@/lib/i18n/translate";
 
-export type Need = "settings" | "team" | "finance" | "giving";
+/**
+ * "owner" is for the one page only the church owner may open: AI consent,
+ * a decision to send figures out that belongs to whoever answers for the church.
+ */
+export type Need = "settings" | "team" | "finance" | "giving" | "owner";
 export type SettingsItem = {
   labelKey: TKey;
   href: string;
@@ -71,6 +76,7 @@ export const SETTINGS_GROUPS: Group[] = [
       { labelKey: "settings.onlineGiving", href: "/settings/payments", need: "giving", icon: CreditCard },
       { labelKey: "settings.financeSetup", href: "/settings/finance", need: "finance", icon: Landmark },
       { labelKey: "settings.language", href: "/settings/language", need: "settings", icon: Languages },
+      { labelKey: "settings.aiSummaries", href: "/settings/ai", need: "owner", icon: Sparkles },
     ],
   },
   {
@@ -107,19 +113,24 @@ export function SettingsNav({
   canTeam,
   canFinance,
   canGiving = false,
+  isOwner = false,
 }: {
   canSettings: boolean;
   canTeam: boolean;
   canFinance: boolean;
   /** Online giving answers to the giving permission, not to settings. */
   canGiving?: boolean;
+  /** Owner-only pages (AI consent). */
+  isOwner?: boolean;
 }) {
   const t = useT();
   const pathname = usePathname();
   const router = useRouter();
 
   const allow = (need: Need) =>
-    need === "settings"
+    need === "owner"
+      ? isOwner
+      : need === "settings"
       ? canSettings
       : need === "team"
         ? canTeam

@@ -36,6 +36,7 @@ export const AUDIT_MODULES: AuditModule[] = [
   },
   { key: "finance", label: "Finance", perm: "finance.view" },
   { key: "followup", label: "Follow-up", perm: "followup.view" },
+  { key: "pastoral", label: "Pastoral appointments", perm: "pastoral.view" },
   { key: "training", label: "Training", perm: "training.view" },
   { key: "meetings", label: "Meetings", perm: "meetings.view" },
   // Its own module rather than folded into meetings: a broadcast to the public
