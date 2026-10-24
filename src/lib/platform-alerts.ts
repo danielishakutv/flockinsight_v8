@@ -84,6 +84,26 @@ async function recorderSilentMinutes(): Promise<number | null> {
   return (Date.now() - at) / 60_000;
 }
 
+/** How long a Partner may go without hearing about a change to their account. */
+const PARTNER_STATUS_UNTOLD_HOURS = 24;
+
+/**
+ * Partners whose account was changed a day or more ago and who have not been
+ * told — every send of the email failed. Declared on the row
+ * (`status_notified_at` behind `status_changed_at`), never inferred. Two weeks
+ * back at most, so an address that will never work does not hold an alert
+ * open for ever; the Partner's own admin page still says it was not delivered.
+ */
+async function untoldPartnerCount(): Promise<number> {
+  const res = await db.execute(sql`
+    select count(*) as n from partner
+    where status_changed_at < now() - make_interval(hours => ${PARTNER_STATUS_UNTOLD_HOURS})
+      and status_changed_at > now() - interval '14 days'
+      and (status_notified_at is null or status_notified_at < status_changed_at)
+  `);
+  return Number((res.rows[0] as { n?: string } | undefined)?.n ?? 0);
+}
+
 async function pendingSenderIdCount(): Promise<number> {
   const res = await db.execute(sql`
     select count(*) as n from church
@@ -97,13 +117,15 @@ export async function evaluateConditions(
   float?: FloatOverview,
 ): Promise<EvaluatedAlert[]> {
   const f = float ?? (await getFloatOverviewFresh());
-  const [crons, backups, staleTickets, pendingSenders, recorderQuiet] = await Promise.all([
-    getCronLiveness(),
-    backupState(),
-    staleTicketCount(),
-    pendingSenderIdCount(),
-    recorderSilentMinutes(),
-  ]);
+  const [crons, backups, staleTickets, pendingSenders, recorderQuiet, untoldPartners] =
+    await Promise.all([
+      getCronLiveness(),
+      backupState(),
+      staleTicketCount(),
+      pendingSenderIdCount(),
+      recorderSilentMinutes(),
+      untoldPartnerCount(),
+    ]);
 
   const alerts: EvaluatedAlert[] = [];
 
@@ -223,6 +245,17 @@ export async function evaluateConditions(
       severity: "warning",
       message: `${staleTickets} support ticket${staleTickets === 1 ? "" : "s"} waiting over ${TICKET_MAX_AGE_HOURS}h for a reply.`,
       href: "/superadmin/support",
+    });
+  }
+
+  if (untoldPartners > 0) {
+    alerts.push({
+      key: "partners.status.untold",
+      severity: "critical",
+      message:
+        `${untoldPartners} Partner${untoldPartners === 1 ? " has" : "s have"} not been told about a change to their account ` +
+        `for over ${PARTNER_STATUS_UNTOLD_HOURS}h — every email failed. Contact them another way, and check the mail provider.`,
+      href: "/superadmin/partners",
     });
   }
 

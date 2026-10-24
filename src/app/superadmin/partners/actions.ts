@@ -17,7 +17,13 @@ import {
   updatePartnerProfile,
 } from "@/lib/partners";
 import { maskAccount, normaliseRates } from "@/lib/partners-shared";
-import { notifyBankChanged, notifyPartnerStatus } from "@/lib/partner-notices";
+import { deliverStatusEmail, notifyBankChanged } from "@/lib/partner-notices";
+import {
+  sendPartnerDigest,
+  setDigestOptOut,
+  setPartnerDigestEnabled,
+} from "@/lib/partner-digest";
+import { digestSlotIndex } from "@/lib/partner-digest-shared";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -115,12 +121,14 @@ const statusSchema = z.object({
   status: z.enum(["pending", "active", "paused", "suspended"]),
   /** Shown to the Partner. Only kept for paused and suspended. */
   reason: z.string().trim().max(500).optional(),
-  /** Email them about it. Defaults on: a hold nobody is told about is a ticket. */
-  notify: z.boolean().optional(),
 });
 
+/**
+ * `emailed` is null when the status did not change (a reworded reason), so
+ * there was nothing to send; false means the send failed and is being retried.
+ */
 export type StatusResult =
-  | { ok: true; emailed: boolean }
+  | { ok: true; emailed: boolean | null }
   | { ok: false; error: string };
 
 /**
@@ -130,6 +138,11 @@ export type StatusResult =
  * exist: a pause holds withdrawals while commission keeps being recorded, a
  * suspension stops commission being awarded at all (`awardPartnerCommission`
  * refuses a suspended Partner). See PARTNER_STATUS_EFFECT.
+ *
+ * EVERY status change is emailed to the Partner — there is no "don't tell
+ * them" option. A send that fails is retried hourly by the partner-emails job
+ * (`statusNotifiedAt` stays behind `statusChangedAt` until one is accepted),
+ * and a change still untold after a day raises a platform alert.
  *
  * Neither touches open withdrawal requests. They stay in the queue, marked
  * with the Partner's status, because a transfer that has already been made
@@ -164,17 +177,7 @@ export async function savePartnerStatus(
     meta: { partnerId, from: res.before, to: status },
   });
 
-  let emailed = false;
-  if (res.changed && parsed.data.notify !== false && who.email) {
-    emailed = await notifyPartnerStatus({
-      email: who.email,
-      code: who.code,
-      displayName: who.displayName,
-      status,
-      before: res.before,
-      reason: reason ?? null,
-    });
-  }
+  const emailed = res.changed ? (await deliverStatusEmail(partnerId)) === "sent" : null;
 
   revalidatePartner(partnerId);
   return { ok: true, emailed };
@@ -411,4 +414,102 @@ export async function decidePartnerPayout(
 
   revalidatePath("/superadmin/partners");
   return { ok: true };
+}
+
+/* ============================================================
+ * Partner emails
+ * ========================================================== */
+
+/** The switch for every Partner's Monday and Thursday progress email. */
+export async function savePartnerDigestEnabled(on: boolean): Promise<ActionResult> {
+  await requirePlatform("platform.finance.manage");
+  await setPartnerDigestEnabled(!!on);
+  await recordAudit({
+    action: "platform.partner.digest",
+    summary: on
+      ? "Turned the Partners' twice-weekly progress emails on"
+      : "Turned the Partners' twice-weekly progress emails off",
+    severity: "notice",
+  });
+  revalidatePath("/superadmin/partners");
+  return { ok: true };
+}
+
+/**
+ * Stop one Partner's progress emails — when they ask by phone or in a reply.
+ * There is deliberately no matching "start": putting somebody back on a list
+ * they left is their decision, made from their own Partner page.
+ */
+export async function stopPartnerDigest(partnerId: string): Promise<ActionResult> {
+  await requirePlatform("platform.finance.manage");
+  if (!z.string().uuid().safeParse(partnerId).success) return { ok: false, error: "Invalid id" };
+  const who = await partnerContact(partnerId);
+  if (!who) return { ok: false, error: "That Partner no longer exists." };
+  const changed = await setDigestOptOut(partnerId, true);
+  if (changed) {
+    await recordAudit({
+      action: "platform.partner.digest",
+      summary: `Stopped ${who.displayName}'s progress emails`,
+      targetType: "partner",
+      targetId: partnerId,
+      targetLabel: who.displayName,
+    });
+  }
+  revalidatePartner(partnerId);
+  return { ok: true };
+}
+
+export type DigestNowResult =
+  | { ok: true; subject: string; segment: string }
+  | { ok: false; error: string };
+
+/**
+ * Send one Partner their progress email now, outside the schedule.
+ *
+ * For seeing exactly what a Partner will read, and for a Partner who asks
+ * "where are my numbers?". Recorded under its own `manual:` slot, so it never
+ * uses up the scheduled send day. Refused for a Partner who opted out or is
+ * paused or suspended — the same people the schedule leaves alone.
+ */
+export async function sendPartnerDigestNow(partnerId: string): Promise<DigestNowResult> {
+  await requirePlatform("platform.finance.manage");
+  if (!z.string().uuid().safeParse(partnerId).success) return { ok: false, error: "Invalid id" };
+  const [p] = await db
+    .select({
+      displayName: partner.displayName,
+      status: partner.status,
+      optOut: partner.digestOptOutAt,
+    })
+    .from(partner)
+    .where(eq(partner.id, partnerId))
+    .limit(1);
+  if (!p) return { ok: false, error: "That Partner no longer exists." };
+  if (p.optOut) return { ok: false, error: "They turned these emails off." };
+  if (p.status === "paused" || p.status === "suspended") {
+    return {
+      ok: false,
+      error: `They are ${p.status}. Progress emails go to active and pending Partners.`,
+    };
+  }
+
+  const now = new Date();
+  const today = new Date(now.getTime() + 60 * 60_000).toISOString().slice(0, 10);
+  const res = await sendPartnerDigest({
+    partnerId,
+    slot: `manual:${now.toISOString()}`,
+    slotIndex: digestSlotIndex(today),
+    now,
+  });
+  if (res.outcome === "skipped") return { ok: false, error: `Not sent: ${res.reason}.` };
+  if (res.outcome === "failed") return { ok: false, error: `The email was not accepted: ${res.error}` };
+
+  await recordAudit({
+    action: "platform.partner.digest",
+    summary: `Sent ${p.displayName} their progress email by hand ("${res.subject}")`,
+    targetType: "partner",
+    targetId: partnerId,
+    targetLabel: p.displayName,
+  });
+  revalidatePartner(partnerId);
+  return { ok: true, subject: res.subject, segment: res.segment };
 }

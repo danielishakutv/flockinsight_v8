@@ -12,6 +12,8 @@ import {
   partnerWallet,
 } from "@/lib/partners";
 import { partnerShareLink } from "@/lib/partner-link";
+import { recentDigests } from "@/lib/partner-digest";
+import { nextDigestAt } from "@/lib/partner-digest-shared";
 import { siteUrl } from "@/lib/site";
 import { PartnerDetail } from "@/components/superadmin/partner-detail";
 
@@ -67,6 +69,7 @@ export default async function SuperadminPartnerPage({
     seats,
     [sessions],
     activity,
+    digests,
   ] = await Promise.all([
     partnerWallet(p.id),
     partnerChurches(p.id),
@@ -116,6 +119,7 @@ export default async function SuperadminPartnerPage({
       )
       .orderBy(desc(auditLog.createdAt))
       .limit(50),
+    recentDigests(p.id),
   ]);
 
   return (
@@ -127,6 +131,8 @@ export default async function SuperadminPartnerPage({
         status: p.status,
         statusReason: p.statusReason,
         statusChangedAt: p.statusChangedAt?.toISOString() ?? null,
+        statusNotifiedAt: p.statusNotifiedAt?.toISOString() ?? null,
+        digestOptOutAt: p.digestOptOutAt?.toISOString() ?? null,
         phone: p.phone,
         emailVerifiedAt: p.emailVerifiedAt?.toISOString() ?? null,
         phoneVerifiedAt: p.phoneVerifiedAt?.toISOString() ?? null,
@@ -182,6 +188,22 @@ export default async function SuperadminPartnerPage({
         requestedAt: x.requestedAt.toISOString(),
         paidAt: x.paidAt?.toISOString() ?? null,
       }))}
+      digests={digests.map((d) => ({
+        id: d.id,
+        manual: d.slot.startsWith("manual:"),
+        segment: d.segment,
+        status: d.status,
+        subject: d.subject,
+        error: d.error,
+        attempts: d.attempts,
+        at: (d.sentAt ?? d.createdAt).toISOString(),
+      }))}
+      nextDigestLabel={new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Africa/Lagos",
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+      }).format(nextDigestAt(now))}
       activity={activity.map((a) => ({
         id: a.id,
         summary: a.summary,

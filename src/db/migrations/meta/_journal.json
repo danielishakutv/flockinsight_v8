@@ -757,6 +757,13 @@
       "when": 1792841361932,
       "tag": "0107_partner_pause",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1792854597664,
+      "tag": "0108_partner_emails",
+      "breakpoints": true
     }
   ]
 }

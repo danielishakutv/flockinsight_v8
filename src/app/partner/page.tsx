@@ -68,6 +68,7 @@ export default async function PartnerPage() {
           displayName: me.displayName,
           status: me.status,
           statusReason: me.statusReason,
+          digestOptedOut: !!me.digestOptOutAt,
           phone: me.phone,
           emailVerified: !!me.emailVerifiedAt,
           phoneVerified: !!me.phoneVerifiedAt,

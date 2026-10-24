@@ -397,8 +397,19 @@ export async function sendEmail(opts: SendEmailOptions): Promise<boolean> {
   return res.ok;
 }
 
-/** Minimal branded HTML wrapper for transactional emails. */
-export function emailLayout(title: string, body: string, cta?: { label: string; url: string }) {
+/**
+ * Minimal branded HTML wrapper for transactional emails.
+ *
+ * `opts.footer` replaces the closing "If you didn't request this" line, for an
+ * email somebody is subscribed to — a progress update ending "you can ignore
+ * this" contradicts the unsubscribe line above it. HTML, so the caller escapes.
+ */
+export function emailLayout(
+  title: string,
+  body: string,
+  cta?: { label: string; url: string },
+  opts?: { footer?: string },
+) {
   return `
   <div style="font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a1626">
     <div style="font-size:20px;font-weight:800;margin-bottom:16px">Flock<span style="color:#5b3df5">Insight</span></div>
@@ -410,7 +421,7 @@ export function emailLayout(title: string, body: string, cta?: { label: string; 
            <p style="font-size:12px;color:#8a86a0;margin-top:16px;word-break:break-all">Or paste this link: ${cta.url}</p>`
         : ""
     }
-    <p style="font-size:12px;color:#8a86a0;margin-top:24px">If you didn't request this, you can ignore this email.</p>
+    <p style="font-size:12px;color:#8a86a0;margin-top:24px">${opts?.footer ?? "If you didn't request this, you can ignore this email."}</p>
   </div>`;
 }
 

@@ -158,6 +158,22 @@ export const CRON_JOBS = {
     intervalMinutes: 60,
     cron: "0 * * * *",
   },
+  /*
+   * Hourly at a quarter past, for two reasons that both want an hour.
+   *
+   * A status email that failed when superadmin changed a Partner's account is
+   * retried each hour until it is accepted. And the twice-weekly progress
+   * email goes on Mondays and Thursdays from 09:00 Lagos — parseFive refuses
+   * a day-of-week, so the days are decided inside the job (digestSlotFor),
+   * which claims each Partner's send day on partner_digest's unique index. A
+   * 09:00 run that hit a provider outage is made up at 10:00, not next week.
+   * Its own minute, so it never starts with first-timers on the hour.
+   */
+  "partner-emails": {
+    label: "Partner emails (status & twice-weekly progress)",
+    intervalMinutes: 60,
+    cron: "15 * * * *",
+  },
 
   /*
    * Every five minutes, because remind_at is a minute worked out from

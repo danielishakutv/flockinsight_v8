@@ -3621,6 +3621,23 @@ export const partner = pgTable(
      */
     statusReason: text(),
     statusChangedAt: timestamp({ withTimezone: true }),
+    /**
+     * What they were before the last change, so an email retried hours later
+     * can still say "active again" after a pause rather than "welcome".
+     */
+    statusPrevious: partnerStatusEnum(),
+    /**
+     * When the email about the CURRENT status was accepted for delivery.
+     * Behind `statusChangedAt` means they have not been told yet, and the
+     * hourly partner-emails job keeps trying. A Partner must hear about a
+     * change to their account; a send that failed once is not the end of it.
+     */
+    statusNotifiedAt: timestamp({ withTimezone: true }),
+    /**
+     * They asked to stop the twice-weekly progress emails. Status and payment
+     * emails still go: those are about their account, not encouragement.
+     */
+    digestOptOutAt: timestamp({ withTimezone: true }),
     /** Where a payout is sent. Snapshotted onto each payout as well. */
     bankName: text(),
     bankAccountNumber: text(),
@@ -3803,6 +3820,44 @@ export const partnerPayout = pgTable(
     uniqueIndex("partner_payout_one_open_idx")
       .on(t.partnerId)
       .where(sql`status in ('requested', 'approved')`),
+  ],
+);
+
+/**
+ * Every twice-weekly progress email, one row per Partner per send day.
+ *
+ * The row is the CLAIM as well as the record: it is inserted before the email
+ * is sent, and the unique index on (partner, slot) means two runs of the job
+ * — a retry, a manual run, a second worker — can never send one Partner two
+ * emails for the same Monday. `slot` is the Lagos date of the send day, or
+ * `manual:<time>` for one sent by hand from superadmin.
+ *
+ * It also keeps what they were told and why (`segment`, `subject`, `meta`
+ * with the figures used), so "what did we send this Partner?" has an answer
+ * that does not depend on anybody's inbox.
+ */
+export const partnerDigest = pgTable(
+  "partner_digest",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    partnerId: uuid()
+      .notNull()
+      .references(() => partner.id, { onDelete: "cascade" }),
+    slot: text().notNull(),
+    /** first_steps | activate | growing | top */
+    segment: text().notNull(),
+    /** claimed → sent | failed. A failed one is tried again later that day. */
+    status: text().notNull().default("claimed"),
+    attempts: integer().notNull().default(0),
+    subject: text(),
+    error: text(),
+    meta: jsonb().$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("partner_digest_slot_idx").on(t.partnerId, t.slot),
+    index("partner_digest_slot_status_idx").on(t.slot, t.status),
   ],
 );
 

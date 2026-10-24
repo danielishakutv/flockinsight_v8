@@ -1292,7 +1292,9 @@ export async function setPartnerStatus(opts: {
     .set({
       status: opts.status,
       statusReason: holding ? opts.reason?.trim() || null : null,
-      ...(changed ? { statusChangedAt: new Date() } : {}),
+      // A new change has not been told to anybody yet: the email that
+      // follows moves statusNotifiedAt past this.
+      ...(changed ? { statusChangedAt: new Date(), statusPrevious: row.status } : {}),
     })
     .where(eq(partner.id, opts.partnerId));
   return { ok: true, before: row.status, changed };

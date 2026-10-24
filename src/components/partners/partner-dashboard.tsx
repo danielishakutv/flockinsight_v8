@@ -12,6 +12,7 @@ import {
   EyeOff,
   LifeBuoy,
   Loader2,
+  Mail,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
   savePartnerBank,
   savePartnerPhone,
   sendPartnerOtp,
+  setPartnerDigestOptIn,
 } from "@/app/partner/actions";
 import {
   canWithdraw,
@@ -37,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   Dialog,
@@ -127,6 +130,8 @@ export function PartnerDashboard({
     status: PartnerStatus;
     /** Why they are paused or suspended, as superadmin wrote it for them. */
     statusReason: string | null;
+    /** They stopped the Monday and Thursday progress emails. */
+    digestOptedOut: boolean;
     phone: string | null;
     emailVerified: boolean;
     phoneVerified: boolean;
@@ -233,6 +238,15 @@ export function PartnerDashboard({
       if (!res.ok) return void toast.error(res.error);
       toast.success("Verified.");
       setOtp(null);
+      router.refresh();
+    });
+  }
+
+  function toggleDigest(on: boolean) {
+    startTransition(async () => {
+      const res = await setPartnerDigestOptIn(on);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(on ? "Progress updates are on." : "Progress updates are off.");
       router.refresh();
     });
   }
@@ -673,6 +687,28 @@ export function PartnerDashboard({
           </CardContent>
         </Card>
       </div>
+
+      {/* Progress emails */}
+      <Card>
+        <CardContent className="flex items-center justify-between gap-4 py-4">
+          <label htmlFor="pd-digest" className="min-w-0 text-sm">
+            <span className="flex items-center gap-2 font-semibold">
+              <Mail className="text-primary size-4 shrink-0" /> Progress updates by email
+            </span>
+            <span className="text-muted-foreground mt-0.5 block text-xs">
+              On Mondays and Thursdays: how your churches are doing, what you have earned, and one
+              idea for bringing the next church. Emails about your account and payments always come.
+            </span>
+          </label>
+          <Switch
+            id="pd-digest"
+            checked={!partner.digestOptedOut}
+            onCheckedChange={toggleDigest}
+            disabled={pending}
+            aria-label="Progress updates by email"
+          />
+        </CardContent>
+      </Card>
 
       {/* Verify dialog */}
       <Dialog open={!!otp} onOpenChange={(o) => !o && setOtp(null)}>

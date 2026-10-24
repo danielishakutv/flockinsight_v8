@@ -40,6 +40,7 @@ import { sendSms } from "@/lib/sms";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { escapeHtml } from "@/lib/html-escape";
 import { notifyBankChanged } from "@/lib/partner-notices";
+import { setDigestOptOut } from "@/lib/partner-digest";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -826,6 +827,26 @@ export async function raiseTicketForChurch(
     body: parsed.data.body,
   });
 
+  revalidatePath("/partner");
+  return { ok: true };
+}
+
+/* ============================================================
+ * Progress emails
+ * ========================================================== */
+
+/**
+ * Turn the Monday and Thursday progress emails on or off for yourself.
+ *
+ * The other way back in after following an unsubscribe link: that link stops
+ * them with no sign-in, and this — behind the Partner's own session — is the
+ * only thing that starts them again. Superadmin can stop them but not restart
+ * them; re-subscribing somebody is their decision.
+ */
+export async function setPartnerDigestOptIn(optIn: boolean): Promise<ActionResult> {
+  const { partner: p } = await me();
+  if (!p) return { ok: false, error: "You are not a Partner." };
+  await setDigestOptOut(p.id, !optIn);
   revalidatePath("/partner");
   return { ok: true };
 }

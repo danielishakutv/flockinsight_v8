@@ -3,13 +3,17 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, BadgeCheck, Banknote, Loader2, Save, Search } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Banknote, Loader2, Mail, Save, Search } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
   decidePartnerPayout,
+  savePartnerDigestEnabled,
   savePartnerRates,
   savePartnerStatus,
 } from "@/app/superadmin/partners/actions";
+import { DIGEST_SEGMENT_LABEL, type DigestSegment } from "@/lib/partner-digest-shared";
+import { Switch } from "@/components/ui/switch";
 import {
   PARTNER_STATUS_LABEL,
   PARTNER_STATUS_TONE,
@@ -69,11 +73,21 @@ type AdminPayout = {
  * commission rate would otherwise promise an agent four times what the church
  * paid us.
  */
+type PartnerEmails = {
+  enabled: boolean;
+  nextLabel: string;
+  latest: { slot: string; sent: number; failed: number; bySegment: Record<string, number> } | null;
+  optedOut: number;
+  untoldStatus: number;
+};
+
 export function PartnersAdmin({
+  emails,
   rates,
   partners,
   payouts,
 }: {
+  emails: PartnerEmails;
   rates: PartnerRates;
   partners: AdminPartner[];
   payouts: AdminPayout[];
@@ -115,6 +129,15 @@ export function PartnersAdmin({
   const pct = (bps: number) => String(Math.round(bps) / 100);
   const toBps = (v: string) => Math.round((Number(v) || 0) * 100);
 
+  function toggleDigest(on: boolean) {
+    startTransition(async () => {
+      const res = await savePartnerDigestEnabled(on);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(on ? "Progress emails are on." : "Progress emails are off.");
+      router.refresh();
+    });
+  }
+
   function saveRates() {
     startTransition(async () => {
       const res = await savePartnerRates(draft);
@@ -132,11 +155,13 @@ export function PartnersAdmin({
    */
   function approve(p: AdminPartner) {
     startTransition(async () => {
-      const res = await savePartnerStatus({ partnerId: p.id, status: "active", notify: true });
+      const res = await savePartnerStatus({ partnerId: p.id, status: "active" });
       if (!res.ok) return void toast.error(res.error);
-      toast.success(
-        `${p.displayName} approved.${res.emailed ? " They've been emailed." : " The email could not be sent."}`,
-      );
+      if (res.emailed) toast.success(`${p.displayName} approved. They've been emailed.`);
+      else
+        toast.warning(
+          `${p.displayName} approved. The email didn't go through — it is retried every hour.`,
+        );
       router.refresh();
     });
   }
@@ -238,6 +263,71 @@ export function PartnersAdmin({
                 </li>
               ))}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Emails */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Mail className="text-primary size-4" />
+                Partner emails
+              </CardTitle>
+              <p className="text-muted-foreground text-sm">
+                Every status change is emailed to the Partner, always. On Mondays and Thursdays
+                from 9:00 Lagos time, active and pending Partners also get a progress email
+                written for where they are: no churches yet, signed up but not paying, climbing,
+                or at the top.
+              </p>
+            </div>
+            <Switch
+              checked={emails.enabled}
+              onCheckedChange={toggleDigest}
+              disabled={pending}
+              aria-label="Twice-weekly progress emails"
+            />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>
+            {emails.enabled ? (
+              <>
+                Next progress emails:{" "}
+                <strong>{emails.nextLabel}</strong>
+              </>
+            ) : (
+              <strong>Progress emails are off.</strong>
+            )}
+            {emails.optedOut > 0 && (
+              <span className="text-muted-foreground">
+                {" "}
+                · {emails.optedOut} Partner{emails.optedOut === 1 ? " has" : "s have"} turned them off
+              </span>
+            )}
+          </p>
+          {emails.latest && (
+            <p className="text-muted-foreground">
+              {format(parseISO(emails.latest.slot), "EEEE d MMM")}: {emails.latest.sent} sent
+              {emails.latest.failed > 0 && (
+                <span className="font-semibold text-amber-700 dark:text-amber-300">
+                  , {emails.latest.failed} failed (retried through the day)
+                </span>
+              )}
+              {Object.keys(emails.latest.bySegment).length > 0 &&
+                ` — ${Object.entries(emails.latest.bySegment)
+                  .map(([k, n]) => `${n} ${DIGEST_SEGMENT_LABEL[k as DigestSegment]?.toLowerCase() ?? k}`)
+                  .join(", ")}`}
+            </p>
+          )}
+          {emails.untoldStatus > 0 && (
+            <p className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="size-4 shrink-0" />
+              {emails.untoldStatus} status email{emails.untoldStatus === 1 ? " hasn't" : "s haven't"} gone
+              through yet — retried every hour. Open the Partner to see which.
+            </p>
           )}
         </CardContent>
       </Card>

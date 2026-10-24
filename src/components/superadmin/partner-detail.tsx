@@ -29,7 +29,10 @@ import {
   savePartnerProfile,
   savePartnerStatus,
   savePartnerVerification,
+  sendPartnerDigestNow,
+  stopPartnerDigest,
 } from "@/app/superadmin/partners/actions";
+import { DIGEST_SEGMENT_LABEL, type DigestSegment } from "@/lib/partner-digest-shared";
 import {
   resetUserPasswordAction,
   sendResetLink,
@@ -77,6 +80,9 @@ type PartnerInfo = {
   status: PartnerStatus;
   statusReason: string | null;
   statusChangedAt: string | null;
+  /** When the email about the current status was accepted; behind = untold. */
+  statusNotifiedAt: string | null;
+  digestOptOutAt: string | null;
   phone: string | null;
   emailVerifiedAt: string | null;
   phoneVerifiedAt: string | null;
@@ -147,6 +153,17 @@ type Payout = {
   paidAt: string | null;
 };
 
+type Digest = {
+  id: string;
+  manual: boolean;
+  segment: string;
+  status: string;
+  subject: string | null;
+  error: string | null;
+  attempts: number;
+  at: string;
+};
+
 type Activity = {
   id: string;
   summary: string;
@@ -210,6 +227,8 @@ export function PartnerDetail({
   churches,
   earnings,
   payouts,
+  digests,
+  nextDigestLabel,
   activity,
 }: {
   partner: PartnerInfo;
@@ -224,6 +243,8 @@ export function PartnerDetail({
   churches: PartnerChurch[];
   earnings: Earning[];
   payouts: Payout[];
+  digests: Digest[];
+  nextDigestLabel: string;
   activity: Activity[];
 }) {
   const router = useRouter();
@@ -232,7 +253,6 @@ export function PartnerDetail({
   // Status dialog
   const [move, setMove] = useState<PartnerStatus | null>(null);
   const [reason, setReason] = useState("");
-  const [notify, setNotify] = useState(true);
 
   // Login
   const [loginName, setLoginName] = useState(login.name);
@@ -273,7 +293,6 @@ export function PartnerDetail({
     setMove(target);
     // Editing the reason of the status they are already in keeps the words.
     setReason(target === partner.status ? (partner.statusReason ?? "") : "");
-    setNotify(true);
   }
 
   function confirmMove() {
@@ -284,17 +303,14 @@ export function PartnerDetail({
         partnerId: partner.id,
         status: target,
         reason: reason.trim() || undefined,
-        notify,
       });
       if (!res.ok) return void toast.error(res.error);
-      const changed = target !== partner.status;
-      toast.success(
-        !changed
-          ? "Reason updated."
-          : `${PARTNER_STATUS_LABEL[target]}.${
-              notify ? (res.emailed ? " They've been emailed." : " The email could not be sent — tell them another way.") : ""
-            }`,
-      );
+      if (res.emailed === null) toast.success("Reason updated.");
+      else if (res.emailed) toast.success(`${PARTNER_STATUS_LABEL[target]}. They've been emailed.`);
+      else
+        toast.warning(
+          `${PARTNER_STATUS_LABEL[target]}. The email didn't go through — it is retried every hour, and you'll get an alert if it still hasn't gone in a day.`,
+        );
       setMove(null);
       router.refresh();
     });
@@ -415,6 +431,20 @@ export function PartnerDetail({
     });
   }
 
+  function digestNow() {
+    start(async () => {
+      const res = await sendPartnerDigestNow(partner.id);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(`Sent: "${res.subject}"`);
+      router.refresh();
+    });
+  }
+
+  function stopDigest() {
+    if (!confirm(`Stop ${partner.displayName}'s progress emails? Only they can turn them back on.`)) return;
+    run(() => stopPartnerDigest(partner.id), "Their progress emails are off.");
+  }
+
   function copyLink() {
     navigator.clipboard.writeText(shareLink).then(
       () => toast.success("Link copied"),
@@ -427,6 +457,12 @@ export function PartnerDetail({
 
   const holding = move === "paused" || move === "suspended";
   const sameStatus = move === partner.status;
+  // Declared on the row: the email about the current status was accepted, or not yet.
+  const statusTold =
+    !partner.statusChangedAt ||
+    (!!partner.statusNotifiedAt && partner.statusNotifiedAt >= partner.statusChangedAt);
+  const digestEligible =
+    !partner.digestOptOutAt && (partner.status === "active" || partner.status === "pending");
   // Your own Partner record is changed by another admin; the server refuses too.
   const locked = isSelf;
 
@@ -502,6 +538,19 @@ export function PartnerDetail({
             {partner.statusChangedAt ? ` since ${day(partner.statusChangedAt)}` : ""}.{" "}
             <span className="text-muted-foreground">{PARTNER_STATUS_EFFECT[partner.status]}</span>
           </p>
+          {partner.statusChangedAt && (
+            <p
+              className={cn(
+                "flex items-center gap-1.5 text-xs",
+                statusTold ? "text-muted-foreground" : "font-semibold text-amber-700 dark:text-amber-300",
+              )}
+            >
+              <Mail className="size-3.5 shrink-0" />
+              {statusTold
+                ? `They were emailed about this${partner.statusNotifiedAt ? ` on ${when(partner.statusNotifiedAt)}` : ""}.`
+                : "The email telling them hasn't gone through yet — it is retried every hour for three days."}
+            </p>
+          )}
           {partner.statusReason && (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 break-words">
               <span className="font-semibold">Reason they were given:</span> {partner.statusReason}
@@ -868,6 +917,64 @@ export function PartnerDetail({
         </Card>
       </div>
 
+      {/* Progress emails */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Mail className="text-primary size-4" /> Progress emails
+          </CardTitle>
+          <p className="text-muted-foreground text-xs">
+            {partner.digestOptOutAt
+              ? `They turned these off on ${day(partner.digestOptOutAt)}. Only they can turn them back on, from their Partner page.`
+              : digestEligible
+                ? `Mondays and Thursdays from 9:00 Lagos. Next: ${nextDigestLabel}.`
+                : `Not sent while they are ${partner.status} — they get the email about their status instead.`}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={digestNow} disabled={pending || !digestEligible}>
+              <Mail className="size-4" /> Send their update now
+            </Button>
+            {!partner.digestOptOutAt && (
+              <Button size="sm" variant="ghost" onClick={stopDigest} disabled={pending}>
+                Stop their updates
+              </Button>
+            )}
+          </div>
+          {digests.length === 0 ? (
+            <p className="text-muted-foreground text-xs">None sent yet.</p>
+          ) : (
+            <ul className="divide-y rounded-xl border">
+              {digests.map((d) => (
+                <li key={d.id} className="px-3 py-2">
+                  <p className="break-words">
+                    <span
+                      className={cn(
+                        "mr-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+                        d.status === "sent"
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                          : d.status === "failed"
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                            : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {d.status}
+                    </span>
+                    {d.subject ?? "—"}
+                  </p>
+                  <p className="text-muted-foreground text-xs break-words">
+                    {when(d.at)} · {DIGEST_SEGMENT_LABEL[d.segment as DigestSegment] ?? d.segment}
+                    {d.manual ? " · sent by hand" : ""}
+                    {d.status === "failed" && d.error ? ` · ${d.error} (try ${d.attempts})` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Churches */}
       <Card>
         <CardHeader className="pb-2">
@@ -1062,10 +1169,10 @@ export function PartnerDetail({
               </div>
             )}
             {!sameStatus && (
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-                Email {login.email} about this
-              </label>
+              <p className="text-muted-foreground flex items-center gap-2 text-xs">
+                <Mail className="size-3.5 shrink-0" />
+                {login.email} will be emailed about this{holding ? ", with the reason" : ""}.
+              </p>
             )}
             {move === "suspended" && (
               <p className="text-destructive text-xs">

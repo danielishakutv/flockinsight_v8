@@ -1,5 +1,8 @@
 import "server-only";
 
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { partner, user } from "@/db/schema";
 import { emailLayout, sendEmail } from "@/lib/mailer";
 import { sendSms } from "@/lib/sms";
 import { escapeHtml } from "@/lib/html-escape";
@@ -91,9 +94,17 @@ export async function notifyBankChanged(opts: {
 
 const STATUS_EMAIL: Record<
   PartnerStatus,
-  { subject: string; title: string; body: string } | null
+  { subject: string; title: string; body: string }
 > = {
-  pending: null,
+  /*
+   * Not offered as a button today, but a status change of any kind is
+   * something the Partner hears about — so every status has words.
+   */
+  pending: {
+    subject: "Your FlockInsight Partner account is under review",
+    title: "Your Partner account is under review",
+    body: "Your Partner account is being reviewed. You can keep sharing your link — what your churches pay is recorded for you — and you can withdraw once it is approved.",
+  },
   active: {
     subject: "Your FlockInsight Partner account is active",
     title: "You're an active Partner",
@@ -126,8 +137,6 @@ export async function notifyPartnerStatus(opts: {
   reason: string | null;
 }): Promise<boolean> {
   const tpl = STATUS_EMAIL[opts.status];
-  if (!tpl) return false;
-
   const resumed = opts.status === "active" && opts.before !== "pending";
   const title = resumed ? "Your Partner account is active again" : tpl.title;
   const subject = resumed
@@ -159,4 +168,52 @@ export async function notifyPartnerStatus(opts: {
     console.error(`[partners] ${opts.code}: status email (${opts.status}) failed`, e);
     return false;
   }
+}
+
+/**
+ * Tell a Partner about their CURRENT status, and record that they were told.
+ *
+ * The one path every status email takes — the moment superadmin changes it,
+ * and every hourly retry after a send that failed. It reads the status from
+ * the row rather than being handed one, so a retry hours later describes where
+ * the account stands now, not a change that has since been undone.
+ *
+ * `statusNotifiedAt` is only moved when the change it describes is still the
+ * latest: the update is conditioned on the `statusChangedAt` that was read, so
+ * an email about a pause can never mark a later resume as told.
+ */
+export async function deliverStatusEmail(
+  partnerId: string,
+): Promise<"sent" | "failed" | "nothing-to-send"> {
+  const [row] = await db
+    .select({
+      code: partner.code,
+      displayName: partner.displayName,
+      status: partner.status,
+      previous: partner.statusPrevious,
+      reason: partner.statusReason,
+      changedAt: partner.statusChangedAt,
+      email: user.email,
+    })
+    .from(partner)
+    .innerJoin(user, eq(user.id, partner.userId))
+    .where(eq(partner.id, partnerId))
+    .limit(1);
+  if (!row?.changedAt || !row.email) return "nothing-to-send";
+
+  const sent = await notifyPartnerStatus({
+    email: row.email,
+    code: row.code,
+    displayName: row.displayName,
+    status: row.status,
+    before: row.previous ?? "pending",
+    reason: row.reason,
+  });
+  if (!sent) return "failed";
+
+  await db
+    .update(partner)
+    .set({ statusNotifiedAt: new Date() })
+    .where(and(eq(partner.id, partnerId), eq(partner.statusChangedAt, row.changedAt)));
+  return "sent";
 }
