@@ -1,28 +1,28 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Banknote, Loader2, Save } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, BadgeCheck, Banknote, Loader2, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   decidePartnerPayout,
   savePartnerRates,
   savePartnerStatus,
 } from "@/app/superadmin/partners/actions";
-import type { PartnerRates } from "@/lib/partners-shared";
+import {
+  PARTNER_STATUS_LABEL,
+  PARTNER_STATUS_TONE,
+  PARTNER_STATUSES,
+  type PartnerRates,
+  type PartnerStatus,
+} from "@/lib/partners-shared";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +35,8 @@ type AdminPartner = {
   id: string;
   code: string;
   displayName: string;
-  status: "pending" | "active" | "suspended";
+  status: PartnerStatus;
+  email: string;
   phone: string | null;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -53,8 +54,10 @@ type AdminPayout = {
   bankAccountNumber: string | null;
   bankAccountName: string | null;
   requestedAt: string;
+  partnerId: string;
   partnerName: string;
   partnerCode: string;
+  partnerStatus: PartnerStatus;
 };
 
 /**
@@ -80,6 +83,34 @@ export function PartnersAdmin({
   const [draft, setDraft] = useState(rates);
   const [paying, setPaying] = useState<AdminPayout | null>(null);
   const [reference, setReference] = useState("");
+  const [query, setQuery] = useState("");
+  const [show, setShow] = useState<PartnerStatus | "all">("all");
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: partners.length };
+    for (const p of partners) c[p.status] = (c[p.status] ?? 0) + 1;
+    return c;
+  }, [partners]);
+
+  // Name, code, email or phone: whatever the Partner quoted when they wrote in.
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // Digits are compared only when the query IS a number: "agent-1012"
+    // must not match every phone with 1012 in it. A leading 0 is dropped
+    // because phones are stored as 234…, not 080….
+    const phoneLike = /^[\d\s+()-]+$/.test(q);
+    const digits = phoneLike ? q.replace(/\D/g, "").replace(/^0/, "") : "";
+    return partners.filter((p) => {
+      if (show !== "all" && p.status !== show) return false;
+      if (!q) return true;
+      return (
+        p.displayName.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        (digits.length >= 4 && (p.phone ?? "").replace(/\D/g, "").includes(digits))
+      );
+    });
+  }, [partners, query, show]);
 
   const pct = (bps: number) => String(Math.round(bps) / 100);
   const toBps = (v: string) => Math.round((Number(v) || 0) * 100);
@@ -93,14 +124,19 @@ export function PartnersAdmin({
     });
   }
 
-  function setStatus(p: AdminPartner, status: AdminPartner["status"]) {
+  /*
+   * Approving is the one status change made from the list: it needs no reason
+   * and it is the common case. Pausing and suspending happen on the Partner's
+   * own page, where the reason they will be shown is written and the difference
+   * between the two is spelled out.
+   */
+  function approve(p: AdminPartner) {
     startTransition(async () => {
-      const res = await savePartnerStatus({
-        partnerId: p.id,
-        status,
-        tierOverride: p.tierOverride ?? undefined,
-      });
+      const res = await savePartnerStatus({ partnerId: p.id, status: "active", notify: true });
       if (!res.ok) return void toast.error(res.error);
+      toast.success(
+        `${p.displayName} approved.${res.emailed ? " They've been emailed." : " The email could not be sent."}`,
+      );
       router.refresh();
     });
   }
@@ -149,11 +185,24 @@ export function PartnersAdmin({
                 <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-48 flex-1">
                     <p className="font-semibold">
-                      {formatMoney(p.amount, p.currency)} — {p.partnerName}{" "}
+                      {formatMoney(p.amount, p.currency)} —{" "}
+                      <Link
+                        href={`/superadmin/partners/${p.partnerId}`}
+                        className="hover:underline"
+                      >
+                        {p.partnerName}
+                      </Link>{" "}
                       <span className="text-muted-foreground font-mono text-xs">
                         {p.partnerCode}
                       </span>
                     </p>
+                    {p.partnerStatus !== "active" && (
+                      <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        <AlertTriangle className="size-3.5 shrink-0" />
+                        This Partner is {PARTNER_STATUS_LABEL[p.partnerStatus].toLowerCase()} —
+                        don&rsquo;t transfer until that is resolved.
+                      </p>
+                    )}
                     <p className="text-muted-foreground text-xs">
                       {p.bankName} · {p.bankAccountNumber} · {p.bankAccountName}
                     </p>
@@ -341,13 +390,44 @@ export function PartnersAdmin({
 
       {/* The people */}
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="space-y-3 pb-2">
           <CardTitle className="text-base">Partners ({partners.length})</CardTitle>
+          {partners.length > 0 && (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {(["all", ...PARTNER_STATUSES] as const).map((k) => (
+                  <Button
+                    key={k}
+                    size="sm"
+                    variant={show === k ? "default" : "outline"}
+                    onClick={() => setShow(k)}
+                  >
+                    {k === "all" ? "All" : PARTNER_STATUS_LABEL[k]} ({counts[k] ?? 0})
+                  </Button>
+                ))}
+              </div>
+              <div className="relative">
+                <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <Input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name, code, email or phone"
+                  className="pl-9"
+                  aria-label="Search Partners"
+                />
+              </div>
+            </>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {partners.length === 0 ? (
             <p className="text-muted-foreground px-4 py-8 text-center text-sm">
               Nobody has applied yet.
+            </p>
+          ) : shown.length === 0 ? (
+            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+              No Partner matches that.
             </p>
           ) : (
             <ScrollableTable stickyFirstColumn hint="Scroll for more" label="Partners">
@@ -358,15 +438,23 @@ export function PartnersAdmin({
                     <th className="px-3 py-2 text-right font-semibold">Churches</th>
                     <th className="px-3 py-2 font-semibold">Verified</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
+                    <th className="px-3 py-2 font-semibold">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {partners.map((p) => (
+                  {shown.map((p) => (
                     <tr key={p.id} className="hover:bg-accent/30">
                       <td className="px-3 py-2">
-                        <p className="font-medium">{p.displayName}</p>
-                        <p className="text-muted-foreground font-mono text-xs">
-                          {p.code}
+                        <Link
+                          href={`/superadmin/partners/${p.id}`}
+                          className="text-primary font-medium hover:underline"
+                        >
+                          {p.displayName}
+                        </Link>
+                        <p className="text-muted-foreground text-xs">
+                          <span className="font-mono">{p.code}</span> · {p.email}
                           {p.phone ? ` · ${p.phone}` : ""}
                         </p>
                       </td>
@@ -397,21 +485,29 @@ export function PartnersAdmin({
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <Select
-                          value={p.status}
-                          onValueChange={(v) =>
-                            setStatus(p, v as AdminPartner["status"])
-                          }
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
+                            PARTNER_STATUS_TONE[p.status],
+                          )}
                         >
-                          <SelectTrigger size="sm" className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="suspended">Suspended</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          {PARTNER_STATUS_LABEL[p.status]}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        {p.status === "pending" && (
+                          <Button
+                            size="sm"
+                            className="mr-2"
+                            onClick={() => approve(p)}
+                            disabled={pending}
+                          >
+                            Approve
+                          </Button>
+                        )}
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/superadmin/partners/${p.id}`}>Manage</Link>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -435,6 +531,13 @@ export function PartnersAdmin({
               Paid to {paying?.bankName} · {paying?.bankAccountNumber} ·{" "}
               {paying?.bankAccountName}
             </p>
+            {paying && paying.partnerStatus !== "active" && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs">
+                {paying.partnerName} is{" "}
+                {PARTNER_STATUS_LABEL[paying.partnerStatus].toLowerCase()}. Only mark this paid
+                if the transfer has already gone out.
+              </p>
+            )}
             <Input
               value={reference}
               onChange={(e) => setReference(e.target.value)}

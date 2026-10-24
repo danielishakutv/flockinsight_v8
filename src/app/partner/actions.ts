@@ -39,6 +39,7 @@ import { emailLayout, sendEmail } from "@/lib/mailer";
 import { sendSms } from "@/lib/sms";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { escapeHtml } from "@/lib/html-escape";
+import { notifyBankChanged } from "@/lib/partner-notices";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -377,63 +378,6 @@ export async function savePartnerBank(
       };
 }
 
-/**
- * Tell a Partner their payout account changed. Never throws, and never quiet:
- * a notice that could not be sent is logged by channel, because the change
- * itself has already been saved and is not undone by a mailer outage.
- */
-async function notifyBankChanged(opts: {
-  email: string | null;
-  phone: string | null;
-  code: string;
-  displayName: string;
-  bank: { bankName: string; bankAccountNumber: string; bankAccountName: string };
-  hadAccount: boolean;
-  reverify: boolean;
-}): Promise<void> {
-  const where = `${opts.bank.bankName} ${maskAccount(opts.bank.bankAccountNumber)} (${opts.bank.bankAccountName})`;
-  const verb = opts.hadAccount ? "changed to" : "set to";
-  const next = opts.reverify
-    ? " Confirm your email address again on your Partner page before you can withdraw."
-    : "";
-
-  if (opts.email) {
-    try {
-      const sent = await sendEmail({
-        to: opts.email,
-        subject: "Your FlockInsight Partner payout account was changed",
-        html: emailLayout(
-          "Your payout account was changed",
-          `Hello ${escapeHtml(opts.displayName)},<br><br>` +
-            `The account your Partner withdrawals are paid into was ${verb} <strong>${escapeHtml(where)}</strong>.` +
-            `${escapeHtml(next)}<br><br>` +
-            `<strong>If this wasn't you</strong>, reset your password now and reply to this email or contact support, quoting your Partner code ${escapeHtml(opts.code)}. Do not request a withdrawal until it is sorted out.`,
-        ),
-        text:
-          `Your FlockInsight Partner payout account was ${verb} ${where}.${next} ` +
-          `If this wasn't you, reset your password and contact support, quoting your Partner code ${opts.code}.`,
-      });
-      if (!sent) console.warn(`[partners] ${opts.code}: bank-change email was not accepted`);
-    } catch (e) {
-      console.error(`[partners] ${opts.code}: bank-change email failed`, e);
-    }
-  } else {
-    console.warn(`[partners] ${opts.code}: bank changed but the account has no email to tell`);
-  }
-
-  if (opts.phone) {
-    try {
-      const res = await sendSms({
-        to: opts.phone,
-        message: `FlockInsight: your Partner payout account was ${verb} ${opts.bank.bankName} ${maskAccount(opts.bank.bankAccountNumber)}. Not you? Reset your password and contact support.`,
-      });
-      if (!res.ok) console.warn(`[partners] ${opts.code}: bank-change SMS not sent: ${res.error}`);
-    } catch (e) {
-      console.error(`[partners] ${opts.code}: bank-change SMS failed`, e);
-    }
-  }
-}
-
 /* ============================================================
  * Verifying who they are
  *
@@ -447,10 +391,14 @@ export async function sendPartnerOtp(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const { user, partner: p } = await me();
   if (!p) return { ok: false, error: "You are not a Partner." };
-  // Pending Partners may verify while they wait for approval; a suspended one
-  // has nothing to verify for, and is not spending our SMS balance.
-  if (p.status === "suspended") {
-    return { ok: false, error: "Your Partner account is suspended. Please contact support." };
+  // Pending Partners may verify while they wait for approval; a paused or
+  // suspended one has nothing to verify for while it lasts, and is not
+  // spending our SMS balance.
+  if (p.status === "suspended" || p.status === "paused") {
+    return {
+      ok: false,
+      error: `Your Partner account is ${p.status}. Please contact support.`,
+    };
   }
 
   const raw = which === "email" ? (user.email ?? "") : (p.phone ?? "");

@@ -26,7 +26,9 @@ import {
 } from "@/app/partner/actions";
 import {
   canWithdraw,
+  partnerStatusNotice,
   type PartnerRates,
+  type PartnerStatus,
   type PartnerTier,
 } from "@/lib/partners-shared";
 import { formatMoney } from "@/lib/money";
@@ -122,7 +124,9 @@ export function PartnerDashboard({
     id: string;
     code: string;
     displayName: string;
-    status: "pending" | "active" | "suspended";
+    status: PartnerStatus;
+    /** Why they are paused or suspended, as superadmin wrote it for them. */
+    statusReason: string | null;
     phone: string | null;
     emailVerified: boolean;
     phoneVerified: boolean;
@@ -252,10 +256,8 @@ export function PartnerDashboard({
   return (
     <div className="space-y-6">
       {partner.status !== "active" && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-          {partner.status === "pending"
-            ? "Your Partner account is waiting to be approved. You can share your link and sign churches up now — your earnings are recorded either way, and you can withdraw once you are approved."
-            : "Your Partner account is suspended. Please contact support."}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm break-words">
+          {partnerStatusNotice(partner.status, partner.statusReason)}
         </div>
       )}
 

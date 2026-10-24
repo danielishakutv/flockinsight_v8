@@ -3582,6 +3582,13 @@ export const branchGroup = pgTable(
 export const partnerStatusEnum = pgEnum("partner_status", [
   "pending", // applied, not yet approved
   "active",
+  /*
+   * On hold: earning continues, withdrawing does not. For a question that
+   * needs answering before money moves — a disputed account, a church that
+   * looks like their own. Not `suspended`, which stops commission being
+   * awarded at all and so costs them money for every day it lasts.
+   */
+  "paused",
   "suspended",
 ]);
 
@@ -3607,6 +3614,13 @@ export const partner = pgTable(
     phoneVerifiedAt: timestamp({ withTimezone: true }),
     emailVerifiedAt: timestamp({ withTimezone: true }),
     status: partnerStatusEnum().notNull().default("pending"),
+    /**
+     * Why they are paused or suspended, in words the Partner is shown on their
+     * dashboard and in the email telling them. Cleared when they are active
+     * again. `note` is the internal one.
+     */
+    statusReason: text(),
+    statusChangedAt: timestamp({ withTimezone: true }),
     /** Where a payout is sent. Snapshotted onto each payout as well. */
     bankName: text(),
     bankAccountNumber: text(),

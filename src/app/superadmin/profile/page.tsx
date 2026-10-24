@@ -6,7 +6,6 @@ import { isSmsConfigured } from "@/lib/sms";
 import { ProfileDetails } from "@/components/profile/profile-details";
 import { AccountContact } from "@/components/profile/account-contact";
 import { ChangePassword } from "@/components/profile/change-password";
-import { Toaster } from "@/components/ui/sonner";
 
 export const metadata = { title: "Your profile · Admin" };
 export const dynamic = "force-dynamic";
@@ -62,8 +61,9 @@ export default async function SuperadminProfilePage() {
         }
         smsConfigured={isSmsConfigured()}
       />
+      {/* The Toaster comes from the superadmin layout; a second one here
+          would show every toast twice. */}
       <ChangePassword />
-      <Toaster />
     </div>
   );
 }

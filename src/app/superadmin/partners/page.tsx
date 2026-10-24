@@ -42,6 +42,7 @@ export default async function SuperadminPartnersPage() {
           code: p.code,
           displayName: p.displayName,
           status: p.status,
+          email: p.email,
           phone: p.phone,
           emailVerified: !!p.emailVerifiedAt,
           phoneVerified: !!p.phoneVerifiedAt,
@@ -58,8 +59,10 @@ export default async function SuperadminPartnersPage() {
           bankAccountNumber: p.bankAccountNumber,
           bankAccountName: p.bankAccountName,
           requestedAt: p.requestedAt.toISOString(),
+          partnerId: p.partnerId,
           partnerName: p.partnerName,
           partnerCode: p.partnerCode,
+          partnerStatus: p.partnerStatus,
         }))}
       />
     </div>

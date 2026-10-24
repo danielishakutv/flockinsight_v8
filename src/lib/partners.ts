@@ -23,9 +23,11 @@ import {
   partnerReferral,
   payment,
   platformSetting,
+  user,
 } from "@/db/schema";
 import {
   DEFAULT_PARTNER_RATES,
+  bankDetailsChanged,
   canonicalPhone,
   commissionBase,
   dropRepeatedOneOffs,
@@ -34,13 +36,16 @@ import {
   generatePartnerCode,
   normalisePartnerCode,
   normaliseRates,
+  otpDestination,
   PAYOUT_TRANSITIONS,
   payoutTransitionAllowed,
   payoutTransitionError,
   takeForPayout,
   tierFor,
   walletTotals,
+  type BankDetails,
   type PartnerRates,
+  type PartnerStatus,
   type PartnerTier,
 } from "@/lib/partners-shared";
 
@@ -1204,12 +1209,16 @@ export async function allPartners() {
         displayName: partner.displayName,
         status: partner.status,
         phone: partner.phone,
+        // The login's address, so the list can be searched by the email a
+        // Partner writes in from.
+        email: user.email,
         emailVerifiedAt: partner.emailVerifiedAt,
         phoneVerifiedAt: partner.phoneVerifiedAt,
         tierOverride: partner.tierOverride,
         createdAt: partner.createdAt,
       })
       .from(partner)
+      .innerJoin(user, eq(user.id, partner.userId))
       .orderBy(desc(partner.createdAt)),
     db
       .select({
@@ -1235,8 +1244,13 @@ export async function pendingPayouts() {
       bankAccountNumber: partnerPayout.bankAccountNumber,
       bankAccountName: partnerPayout.bankAccountName,
       requestedAt: partnerPayout.requestedAt,
+      partnerId: partner.id,
       partnerName: partner.displayName,
       partnerCode: partner.code,
+      // So the queue can say "paused — don't transfer" beside a request made
+      // before the hold. The request itself is left alone: a transfer that
+      // already went out must still be recordable as paid.
+      partnerStatus: partner.status,
     })
     .from(partnerPayout)
     .innerJoin(partner, eq(partner.id, partnerPayout.partnerId))
@@ -1244,20 +1258,194 @@ export async function pendingPayouts() {
     .orderBy(asc(partnerPayout.requestedAt));
 }
 
+/**
+ * Change a Partner's status, and nothing else.
+ *
+ * It used to take the tier override and the note as well and write whatever
+ * came in, so the status dropdown — which sent neither — blanked the note and
+ * kept the override only because it happened to be passed back. A status
+ * change now cannot touch a field it was not about.
+ *
+ * The reason is kept only while it explains something: paused or suspended.
+ * `statusChangedAt` moves only when the status does, so correcting the wording
+ * of a reason does not reset "paused since".
+ */
 export async function setPartnerStatus(opts: {
   partnerId: string;
-  status: "pending" | "active" | "suspended";
-  tierOverride?: string | null;
-  note?: string | null;
-}): Promise<void> {
+  status: PartnerStatus;
+  reason?: string | null;
+}): Promise<
+  | { ok: true; before: PartnerStatus; changed: boolean }
+  | { ok: false; error: string }
+> {
+  const [row] = await db
+    .select({ status: partner.status })
+    .from(partner)
+    .where(eq(partner.id, opts.partnerId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That Partner no longer exists." };
+
+  const holding = opts.status === "paused" || opts.status === "suspended";
+  const changed = row.status !== opts.status;
   await db
     .update(partner)
     .set({
       status: opts.status,
-      tierOverride: opts.tierOverride?.trim() || null,
-      note: opts.note?.trim() || null,
+      statusReason: holding ? opts.reason?.trim() || null : null,
+      ...(changed ? { statusChangedAt: new Date() } : {}),
     })
     .where(eq(partner.id, opts.partnerId));
+  return { ok: true, before: row.status, changed };
+}
+
+/**
+ * The details superadmin can correct on a Partner's behalf.
+ *
+ * A changed phone number loses its verification exactly as it does when the
+ * Partner changes it themselves (`savePartnerPhone`): a verification that
+ * survives the number changing is not a verification. The same number in a
+ * different spelling keeps it, and is stored in the gateway's spelling.
+ *
+ * The tier override must name a tier on the current ladder. `tierFor` falls
+ * back to the earned tier for a name it cannot find, so a typo here would
+ * look saved and do nothing.
+ */
+export async function updatePartnerProfile(opts: {
+  partnerId: string;
+  displayName: string;
+  phone: string | null;
+  tierOverride: string | null;
+  note: string | null;
+}): Promise<
+  | { ok: true; changed: Record<string, { from: unknown; to: unknown }> }
+  | { ok: false; error: string }
+> {
+  const [row] = await db
+    .select({
+      displayName: partner.displayName,
+      phone: partner.phone,
+      tierOverride: partner.tierOverride,
+      note: partner.note,
+    })
+    .from(partner)
+    .where(eq(partner.id, opts.partnerId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That Partner no longer exists." };
+
+  const typedPhone = opts.phone?.trim() ?? "";
+  const phone = typedPhone ? otpDestination("phone", typedPhone) : "";
+  if (typedPhone && !phone) {
+    return { ok: false, error: "That phone number looks incomplete — check the digits." };
+  }
+  const storedPhone = row.phone ? otpDestination("phone", row.phone) : "";
+  const phoneChanged = phone !== storedPhone;
+
+  let tierOverride: string | null = null;
+  if (opts.tierOverride?.trim()) {
+    const rates = await getPartnerRates();
+    const named = rates.tiers.find(
+      (t) => t.name.toLowerCase() === opts.tierOverride!.trim().toLowerCase(),
+    );
+    if (!named) {
+      return { ok: false, error: "That tier is not on the current ladder." };
+    }
+    tierOverride = named.name;
+  }
+
+  const next = {
+    displayName: opts.displayName.trim().slice(0, 120) || row.displayName,
+    phone: phone || null,
+    tierOverride,
+    note: opts.note?.trim() || null,
+  };
+
+  await db
+    .update(partner)
+    .set({ ...next, ...(phoneChanged ? { phoneVerifiedAt: null } : {}) })
+    .where(eq(partner.id, opts.partnerId));
+
+  const changed: Record<string, { from: unknown; to: unknown }> = {};
+  if (row.displayName !== next.displayName)
+    changed.displayName = { from: row.displayName, to: next.displayName };
+  if (phoneChanged) changed.phone = { from: row.phone, to: next.phone };
+  if ((row.tierOverride ?? null) !== next.tierOverride)
+    changed.tierOverride = { from: row.tierOverride, to: next.tierOverride };
+  // The note's text stays out of the log — it is free text about a person.
+  if ((row.note ?? null) !== next.note) changed.note = { from: "…", to: "…" };
+  return { ok: true, changed };
+}
+
+/**
+ * Mark a Partner's email or phone verified, or take the verification away.
+ *
+ * Marking one verified is a person vouching for it — they rang the number,
+ * or the Partner wrote in from that inbox — and it opens a gate on
+ * withdrawing, so the action that calls this records who did it. A phone can
+ * only be vouched for if there is one.
+ */
+export async function setPartnerVerification(opts: {
+  partnerId: string;
+  which: "email" | "phone";
+  verified: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [row] = await db
+    .select({ phone: partner.phone })
+    .from(partner)
+    .where(eq(partner.id, opts.partnerId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That Partner no longer exists." };
+  if (opts.which === "phone" && opts.verified && !row.phone) {
+    return { ok: false, error: "Add a phone number before marking it verified." };
+  }
+  const at = opts.verified ? new Date() : null;
+  await db
+    .update(partner)
+    .set(opts.which === "email" ? { emailVerifiedAt: at } : { phoneVerifiedAt: at })
+    .where(eq(partner.id, opts.partnerId));
+  return { ok: true };
+}
+
+/**
+ * Superadmin sets where a Partner's withdrawals are paid.
+ *
+ * Unlike the Partner's own change, this does not clear their email
+ * verification — the reason for that rule is a stolen session, and this is
+ * not one. They are still told, by the caller, because a payout account that
+ * changes without the owner hearing about it is the thing to never allow.
+ *
+ * Open withdrawal requests keep the account they were requested to: each
+ * payout snapshots the bank details when it is made.
+ */
+export async function setPartnerBankByAdmin(opts: {
+  partnerId: string;
+  bank: BankDetails;
+}): Promise<
+  | { ok: true; changed: boolean; hadAccount: boolean }
+  | { ok: false; error: string }
+> {
+  const [row] = await db
+    .select({
+      bankName: partner.bankName,
+      bankAccountNumber: partner.bankAccountNumber,
+      bankAccountName: partner.bankAccountName,
+    })
+    .from(partner)
+    .where(eq(partner.id, opts.partnerId))
+    .limit(1);
+  if (!row) return { ok: false, error: "That Partner no longer exists." };
+  await db
+    .update(partner)
+    .set({
+      bankName: opts.bank.bankName,
+      bankAccountNumber: opts.bank.bankAccountNumber,
+      bankAccountName: opts.bank.bankAccountName,
+    })
+    .where(eq(partner.id, opts.partnerId));
+  return {
+    ok: true,
+    changed: bankDetailsChanged(row, opts.bank),
+    hadAccount: !!(row.bankName || row.bankAccountNumber || row.bankAccountName),
+  };
 }
 
 export async function partnerTierNow(

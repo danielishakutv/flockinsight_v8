@@ -25,6 +25,10 @@ import {
   otpDestination,
   nextTier,
   partnerLink,
+  partnerStatusNotice,
+  PARTNER_STATUS_EFFECT,
+  PARTNER_STATUS_LABEL,
+  PARTNER_STATUSES,
   tierFor,
   walletTotals,
   type PartnerRates,
@@ -466,6 +470,50 @@ describe("whether a withdrawal may go ahead", () => {
     const suspended = canWithdraw({ ...ok, status: "suspended" });
     expect(suspended.ok).toBe(false);
     if (!suspended.ok) expect(suspended.reason).toMatch(/suspended/i);
+
+    // A pause holds the money: everything else in order, still no withdrawal.
+    const paused = canWithdraw({ ...ok, status: "paused" });
+    expect(paused.ok).toBe(false);
+    if (!paused.ok) expect(paused.reason).toMatch(/paused/i);
+  });
+});
+
+describe("what a Partner is told about their status", () => {
+  it("says nothing to an active Partner", () => {
+    expect(partnerStatusNotice("active", "left over from a pause")).toBeNull();
+  });
+
+  it("tells a paused Partner they are still earning, and why they are paused", () => {
+    /*
+     * The difference that matters to them: a pause costs nothing but time,
+     * a suspension costs commission. Saying "on hold" without "still earning"
+     * reads as the second.
+     */
+    const n = partnerStatusNotice("paused", "  Confirming your bank account. ");
+    expect(n).toMatch(/still earn/i);
+    expect(n).toMatch(/withdrawals are on hold/i);
+    expect(n).toContain("Reason: Confirming your bank account.");
+  });
+
+  it("tells a suspended Partner that commission stops, and why", () => {
+    const n = partnerStatusNotice("suspended", "Self-referral");
+    expect(n).toMatch(/do not earn commission/i);
+    expect(n).toContain("Reason: Self-referral");
+  });
+
+  it("leaves the reason out when none was given rather than printing a blank one", () => {
+    expect(partnerStatusNotice("paused", "   ")).not.toMatch(/Reason:/);
+    expect(partnerStatusNotice("suspended", null)).not.toMatch(/Reason:/);
+  });
+
+  it("explains every status on the admin side, so the buttons never go unlabelled", () => {
+    for (const s of PARTNER_STATUSES) {
+      expect(PARTNER_STATUS_EFFECT[s].length).toBeGreaterThan(10);
+      expect(PARTNER_STATUS_LABEL[s]).toBeTruthy();
+    }
+    // The cost of each hold is spelled out where the choice is made.
+    expect(PARTNER_STATUS_EFFECT.paused).toMatch(/still earning/i);
+    expect(PARTNER_STATUS_EFFECT.suspended).toMatch(/earns nothing/i);
   });
 });
 

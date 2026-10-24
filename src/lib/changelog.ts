@@ -29,6 +29,22 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.81.0",
+    date: "2026-10-24",
+    summary:
+      "Partners now hear from us when their account is approved, paused or suspended — and why — and a paused account keeps earning while its withdrawals wait.",
+    changes: {
+      Added: [
+        "Partners are emailed when their account is approved, paused, resumed or suspended, with the reason, and see the same reason on their Partner page.",
+        "A paused Partner account keeps earning on every payment its churches make; only withdrawals wait until it is resumed.",
+      ],
+      Security: [
+        "When FlockInsight support changes the email address on an account, both the old and the new address are told, so a change you didn't ask for is noticed straight away.",
+        "When support changes where a Partner's withdrawals are paid, the Partner is told by email, and by text if their phone is verified.",
+      ],
+    },
+  },
+  {
     version: "0.80.0",
     date: "2026-10-21",
     summary:

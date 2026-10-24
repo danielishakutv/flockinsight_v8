@@ -2,11 +2,16 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, staff, user } from "@/db/schema";
 
-import { adminResetPassword, setUserPassword } from "@/lib/admin-users";
+import {
+  adminResetPassword,
+  afterAccountEmailChanged,
+  expireUserSessions,
+  setUserPassword,
+} from "@/lib/admin-users";
 import { auth } from "@/lib/auth";
 import { sendEmail, emailLayout } from "@/lib/mailer";
 import { siteUrl } from "@/lib/site";
@@ -20,6 +25,10 @@ export type ResetResult =
   | { ok: true; tempPassword: string; emailed: boolean }
   | { ok: false; error: string };
 export type ActionResult = { ok: true } | { ok: false; error: string };
+/** `notices` is set only when the email moved: how many of the two were sent. */
+export type UpdateUserResult =
+  | { ok: true; notices?: { sent: number; of: number } }
+  | { ok: false; error: string };
 
 const ROLES = ["owner", "admin", "member"] as const;
 
@@ -55,7 +64,7 @@ async function guardAdminTarget(
 export async function updateUser(
   userId: string,
   input: { name: string; email: string },
-): Promise<ActionResult> {
+): Promise<UpdateUserResult> {
   const admin = await requirePlatform("platform.users.manage");
   if (!z.string().min(1).safeParse(userId).success)
     return { ok: false, error: "Invalid id" };
@@ -71,7 +80,8 @@ export async function updateUser(
   const [clash] = await db
     .select({ id: user.id })
     .from(user)
-    .where(and(eq(user.email, email), ne(user.id, userId)))
+    // Case-blind: "Ada@x.com" and "ada@x.com" are one mailbox, and one login.
+    .where(and(sql`lower(${user.email}) = ${email}`, ne(user.id, userId)))
     .limit(1);
   if (clash) return { ok: false, error: "That email is already in use." };
 
@@ -105,9 +115,16 @@ export async function updateUser(
       targetId: userId,
     });
   }
+  // Both addresses told, and a Partner's withdrawal inbox proved again.
+  // Compared case-blind: re-saving "Ada@x.com" as "ada@x.com" is not a move.
+  let notices: { sent: number; of: number } | undefined;
+  if (before.email.toLowerCase() !== email) {
+    const told = await afterAccountEmailChanged({ userId, name, from: before.email, to: email });
+    notices = { sent: told.noticesSent, of: told.noticesTried };
+  }
   revalidatePath("/superadmin/users");
   revalidatePath(`/superadmin/users/${userId}`);
-  return { ok: true };
+  return { ok: true, notices };
 }
 
 /** Permanently delete a user account. Can't delete your own. */
@@ -301,6 +318,37 @@ export async function setUserPasswordAction(
   });
   revalidatePath(`/superadmin/users/${userId}`);
   return { ok: true };
+}
+
+export type SignOutResult = { ok: true; ended: number } | { ok: false; error: string };
+
+/**
+ * Sign an account out of every device it is signed in on.
+ *
+ * What to do after a password is changed on an account somebody else may be
+ * in: a new password stops the next sign-in, not the session already open.
+ * Not for your own account — it would end the session you are using.
+ */
+export async function signOutEverywhere(userId: string): Promise<SignOutResult> {
+  const admin = await requirePlatform("platform.users.manage");
+  if (!z.string().min(1).safeParse(userId).success)
+    return { ok: false, error: "Invalid id" };
+  if (userId === admin.id)
+    return { ok: false, error: "That would sign you out too — use Sign out on each of your own devices instead." };
+  const refused = await guardAdminTarget(admin, userId);
+  if (refused) return refused;
+
+  const ended = await expireUserSessions(userId);
+  await recordAudit({
+    actorUserId: admin.id,
+    actorName: admin.name,
+    action: "platform.sessions.revoke",
+    summary: `Signed an account out of every device (${ended} session${ended === 1 ? "" : "s"})`,
+    targetType: "user",
+    targetId: userId,
+  });
+  revalidatePath(`/superadmin/users/${userId}`);
+  return { ok: true, ended };
 }
 
 /** Email the user a self-service password reset link (Better Auth flow). */

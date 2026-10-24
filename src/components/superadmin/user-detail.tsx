@@ -10,6 +10,7 @@ import {
   Copy,
   KeyRound,
   Loader2,
+  LogOut,
   Mail,
   Plus,
   Shield,
@@ -24,6 +25,7 @@ import {
   sendResetLink,
   setSuperAdmin,
   setUserPasswordAction,
+  signOutEverywhere,
   updateUser,
 } from "@/app/superadmin/users/actions";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +114,19 @@ export function UserDetail({
   }
   function resetLink() {
     run(() => sendResetLink(user.id), "Reset link emailed");
+  }
+  function signOutAll() {
+    if (!confirm(`Sign ${user.email} out of every device?`)) return;
+    start(async () => {
+      const res = await signOutEverywhere(user.id);
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(
+        res.ended === 0
+          ? "They weren't signed in anywhere."
+          : `Signed out of ${res.ended} session${res.ended === 1 ? "" : "s"}`,
+      );
+      router.refresh();
+    });
   }
   function assign() {
     if (!assignChurch) return toast.error("Pick a church.");
@@ -256,6 +271,11 @@ export function UserDetail({
             <Button variant="outline" onClick={resetLink} disabled={pending}>
               <Mail className="size-4" /> Send reset link
             </Button>
+            {!isSelf && (
+              <Button variant="outline" onClick={signOutAll} disabled={pending}>
+                <LogOut className="size-4" /> Sign out everywhere
+              </Button>
+            )}
           </div>
 
           {tempPw && (

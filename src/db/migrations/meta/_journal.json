@@ -750,6 +750,13 @@
       "when": 1792555237647,
       "tag": "0106_roadmap_features",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1792841361932,
+      "tag": "0107_partner_pause",
+      "breakpoints": true
     }
   ]
 }

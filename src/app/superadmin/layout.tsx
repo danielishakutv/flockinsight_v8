@@ -4,6 +4,7 @@ import { ArrowUpRight, Shield, UserRound } from "lucide-react";
 import { requireSuperAdmin, getMustChangePassword } from "@/lib/session";
 import { platformAccess } from "@/lib/platform-access";
 import { Logo } from "@/components/brand";
+import { Toaster } from "@/components/ui/sonner";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import {
@@ -94,6 +95,13 @@ export default async function SuperadminLayout({
       </div>
 
       <CommandPalette />
+      {/*
+        Every superadmin action reports through a toast, and the root layout
+        leaves the Toaster out on purpose — so until this was mounted, every
+        "saved", every refusal and every "the email could not be sent" on
+        these pages went nowhere. Only the profile page had its own.
+      */}
+      <Toaster />
     </div>
     </AssistantProvider>
   );

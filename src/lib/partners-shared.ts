@@ -587,6 +587,70 @@ export const PARTNER_OTP_LIMITS = {
   bankChangesPerDay: 5,
 } as const;
 
+/* ============================================================
+ * Status
+ * ========================================================== */
+
+export type PartnerStatus = "pending" | "active" | "paused" | "suspended";
+
+export const PARTNER_STATUSES: readonly PartnerStatus[] = [
+  "pending",
+  "active",
+  "paused",
+  "suspended",
+];
+
+export const PARTNER_STATUS_LABEL: Record<PartnerStatus, string> = {
+  pending: "Pending approval",
+  active: "Active",
+  paused: "Paused",
+  suspended: "Suspended",
+};
+
+/** Tailwind classes, written out in full so the compiler keeps them. */
+export const PARTNER_STATUS_TONE: Record<PartnerStatus, string> = {
+  pending: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  paused: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  suspended: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+};
+
+/**
+ * What each status DOES, in the words the superadmin page shows beside the
+ * button. Pause and suspend look alike from outside and cost the Partner very
+ * different amounts, so the difference is spelled out where the choice is made.
+ */
+export const PARTNER_STATUS_EFFECT: Record<PartnerStatus, string> = {
+  pending: "Earning is recorded; they can't withdraw until approved.",
+  active: "Earning and withdrawing normally.",
+  paused:
+    "Still earning on every payment their churches make, but can't withdraw or raise tickets until resumed.",
+  suspended:
+    "Earns nothing on payments made while suspended, and can't withdraw. Unpaid payments are re-checked for 7 days, so reinstating recovers those from the last week; older ones are lost.",
+};
+
+/**
+ * What the Partner reads on their own dashboard. The reason, when one was
+ * given, is said in full: "contact support" with no why is the sentence that
+ * turns into a support ticket asking why.
+ */
+export function partnerStatusNotice(
+  status: PartnerStatus,
+  reason?: string | null,
+): string | null {
+  const why = reason?.trim() ? ` Reason: ${reason.trim()}` : "";
+  switch (status) {
+    case "active":
+      return null;
+    case "pending":
+      return "Your Partner account is waiting to be approved. You can share your link and sign churches up now — your earnings are recorded either way, and you can withdraw once you are approved.";
+    case "paused":
+      return `Your Partner account is paused. Your churches' payments still earn for you, but withdrawals are on hold until it is resumed.${why} Please contact support if you have questions.`;
+    case "suspended":
+      return `Your Partner account is suspended, and payments made by your churches while it is suspended do not earn commission.${why} Please contact support.`;
+  }
+}
+
 /** An account number as it may appear in a message: the last four digits. */
 export function maskAccount(accountNumber: string | null | undefined): string {
   const digits = (accountNumber ?? "").replace(/\D/g, "");
@@ -604,7 +668,7 @@ export function canWithdraw(opts: {
   rates: PartnerRates;
   available: number;
   amount: number;
-  status: "pending" | "active" | "suspended";
+  status: PartnerStatus;
   hasBank: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -616,7 +680,9 @@ export function canWithdraw(opts: {
       reason:
         opts.status === "pending"
           ? "Your Partner account is still being approved."
-          : "Your Partner account is suspended. Please contact support.",
+          : opts.status === "paused"
+            ? "Your Partner account is paused, so withdrawals are on hold. Please contact support."
+            : "Your Partner account is suspended. Please contact support.",
     };
   }
   if (!opts.hasBank) {
