@@ -29,14 +29,27 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.82.0",
+    date: "2026-10-24",
+    summary:
+      "A short progress email for Partners twice a week, written for where they are — and an email about every change to a Partner's account that keeps trying until it gets through.",
+    changes: {
+      Added: [
+        "A progress email for Partners on Mondays and Thursdays: how their churches are doing, what they have earned since the last one, how close the next tier is, and one idea for bringing the next church. Partners with no churches yet get their link and a message they can forward; Partners whose churches signed up but haven't paid get help getting them started. One click stops them, and they can be turned back on from the Partner page.",
+      ],
+      Improved: [
+        "Every change to a Partner's account is now emailed to them, without exception, and an email that doesn't go through is tried again every hour until it does.",
+      ],
+    },
+  },
+  {
     version: "0.81.0",
     date: "2026-10-24",
     summary:
-      "Partners now hear from us: every change to their account, with the reason, and a short progress email twice a week written for where they are — and a paused account keeps earning while its withdrawals wait.",
+      "Partners now hear from us when their account is approved, paused or suspended — and why — and a paused account keeps earning while its withdrawals wait.",
     changes: {
       Added: [
-        "Partners are emailed whenever their account is approved, paused, resumed or suspended, with the reason, and see the same reason on their Partner page. If the email doesn't go through, we keep trying.",
-        "A progress email for Partners on Mondays and Thursdays: how their churches are doing, what they have earned since the last one, how close the next tier is, and one idea for bringing the next church. Partners with no churches yet get a link and a message they can forward; Partners whose churches signed up but haven't paid get help getting them started. One click stops them, and they can be turned back on from the Partner page.",
+        "Partners are emailed when their account is approved, paused, resumed or suspended, with the reason, and see the same reason on their Partner page.",
         "A paused Partner account keeps earning on every payment its churches make; only withdrawals wait until it is resumed.",
       ],
       Security: [
