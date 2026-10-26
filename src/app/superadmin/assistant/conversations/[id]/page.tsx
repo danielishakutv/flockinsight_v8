@@ -38,7 +38,10 @@ export default async function AssistantConversationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePlatform("platform.assistant.review");
+  const access = await requirePlatform("platform.assistant.review");
+  // Platform-scope advisor answers quote platform (or, when acting as a
+  // church, that church's) figures; the Overview permission guards those.
+  const seesPlatformFigures = access.perms.has("platform.overview.view");
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
 
@@ -153,7 +156,11 @@ export default async function AssistantConversationPage({
                   was given. Whoever asked saw a note saying so under the answer.
                 </p>
               )}
-              <p className="text-sm break-words whitespace-pre-wrap">{m.content}</p>
+              <p className="text-sm break-words whitespace-pre-wrap">
+                {conv.scope === "platform" && m.mode === "advisor" && !seesPlatformFigures
+                  ? "This answer was written from platform figures, which need the Overview permission to read. Ask an admin who has it to review this one."
+                  : m.content}
+              </p>
               {(m.sources ?? []).length > 0 && (
                 <p className="text-muted-foreground text-xs">
                   Sources: {(m.sources ?? []).map(sourceLabel).join(", ")}

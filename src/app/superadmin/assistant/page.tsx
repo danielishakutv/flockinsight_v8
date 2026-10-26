@@ -159,7 +159,9 @@ export default async function SuperadminAssistantPage({
         )}
       </div>
 
-      {tab === "queue" && <QueueTab page={page} mode={mode} />}
+      {tab === "queue" && (
+        <QueueTab page={page} mode={mode} seesPlatformFigures={access.perms.has("platform.overview.view")} />
+      )}
       {tab === "answers" && <AnswersTab />}
       {tab === "transcripts" && <TranscriptsTab page={page} q={sp.q ?? ""} scope={sp.scope ?? ""} mode={mode} />}
       {tab === "test" && <TestTab canOpenCalls={access.perms.has("platform.ai.view")} />}
@@ -244,7 +246,24 @@ function reasonFor(
   return "Unhelpful";
 }
 
-async function QueueTab({ page, mode }: { page: number; mode: AssistantMode | null }) {
+/**
+ * Shown in place of a platform-scope advisor answer to a reviewer without the
+ * Overview permission: those answers quote the platform's own figures, which
+ * that permission guards on every other page. Act-as answers sit in the same
+ * scope and quote a church's figures; they are withheld by the same rule.
+ */
+const PLATFORM_FIGURES_WITHHELD =
+  "This answer was written from platform figures, which need the Overview permission to read. Ask an admin who has it to review this one.";
+
+async function QueueTab({
+  page,
+  mode,
+  seesPlatformFigures,
+}: {
+  page: number;
+  mode: AssistantMode | null;
+  seesPlatformFigures: boolean;
+}) {
   const where: SQL[] = [eq(assistantMessage.reviewStatus, "open"), eq(assistantMessage.role, "assistant")];
   if (mode) where.push(eq(assistantMessage.mode, mode));
   const rows = await db
@@ -258,6 +277,7 @@ async function QueueTab({ page, mode }: { page: number; mode: AssistantMode | nu
       mode: assistantMessage.mode,
       figuresOk: assistantMessage.figuresOk,
       createdAt: assistantMessage.createdAt,
+      churchId: assistantMessage.churchId,
       churchName: church.name,
     })
     .from(assistantMessage)
@@ -293,7 +313,8 @@ async function QueueTab({ page, mode }: { page: number; mode: AssistantMode | nu
       reason: reasonFor(r.answerKind, r.sources ?? [], r.helpful, r.figuresOk),
       mode: r.mode === "advisor" ? "advisor" : "help",
       question: q?.content ?? "",
-      answer: r.content,
+      answer:
+        r.mode === "advisor" && r.churchId === null && !seesPlatformFigures ? PLATFORM_FIGURES_WITHHELD : r.content,
       createdAt: r.createdAt.toISOString(),
     };
   });

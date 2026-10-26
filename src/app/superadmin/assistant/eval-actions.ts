@@ -91,9 +91,32 @@ export async function runAssistantEvalBatch(input: unknown): Promise<EvalBatchRe
   const rl = rateLimit(`assistant-eval-batch:${admin.id}`, 24, 600_000);
   if (!rl.ok) return { ok: false, error: `Too many test batches. Try again in ${Math.ceil(rl.retryAfterSec / 60)} min.` };
 
+  /*
+   * Advisor cases answer from the platform's own figures (revenue change, churn
+   * and growth), which the Overview permission guards everywhere else. A
+   * reviewer without it can still run the help and off-topic cases; the
+   * advisor ones are not asked at all, rather than asked and hidden, so they
+   * cost nothing and show nothing.
+   */
+  const seesPlatformFigures = admin.perms.has("platform.overview.view");
+
   const rows = await Promise.all(
     cases.map(async (c): Promise<EvalRowResult> => {
       const testCase = c!;
+      if (testCase.mode === "advisor" && !seesPlatformFigures) {
+        return {
+          caseId: testCase.id,
+          verdict: "not_run",
+          notes: ["Advisor cases answer from platform figures, which need the Overview permission. Ask an admin who has it to run them."],
+          mode: null,
+          kind: null,
+          cited: [],
+          figuresOk: null,
+          preview: "",
+          costNano: 0,
+          callId: null,
+        };
+      }
       try {
         const res = await runAssistantEvalCase({
           mode: testCase.mode,
