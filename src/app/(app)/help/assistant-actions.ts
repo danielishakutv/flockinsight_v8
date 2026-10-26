@@ -1,7 +1,6 @@
 "use server";
 
 import { z } from "zod";
-import { requireChurch } from "@/lib/session";
 import { refuseWithoutFeature } from "@/lib/entitlements-server";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { aiReadiness } from "@/lib/ai/run-ai";
@@ -12,34 +11,27 @@ import {
   type AssistantSendResult,
   type AssistantThreadResult,
 } from "@/lib/assistant/shared";
-import {
-  askAssistant,
-  loadThread,
-  rateAnswer,
-  type AskResult,
-  type AssistantScope,
-} from "@/lib/assistant/server";
+import { churchShellAsker } from "@/lib/assistant/asker";
+import { askAssistant, loadThread, rateAnswer, type AskResult } from "@/lib/assistant/server";
 
 /*
- * The help assistant, from the church shell. Any staff login may ask, exactly
- * as /help is open to any staff login, so no church permission key gates it.
+ * The help assistant's side panel, from the church shell. Any staff login may
+ * ask, exactly as /help is open to any staff login, so no church permission
+ * key gates it.
  *
- * Who pays is decided here. A superadmin acting as a church is support, not
- * the church: their questions are filed under the platform scope and charged
- * to the platform budget, never to the church's share. The demo church is
- * shared by strangers and resets every two hours, so it never asks at all.
+ * Who pays is decided by the asker (lib/assistant/asker.ts). A superadmin
+ * acting as a church is support, not the church: their questions are filed
+ * under the platform scope and charged to the platform budget and their own
+ * day, never to the church's month. The demo church is shared by strangers
+ * and resets every two hours, so it never asks at all.
+ *
+ * RETIRED (0.83.0) with the panel: the chat page has its own actions
+ * (app/(app)/assistant/actions.ts), and only the retired assistant-panel.tsx
+ * imports these. They are kept, still plan-gated and demo-refused, so the
+ * panel's history stays readable. Copy the full page has its own keys for
+ * (the monthly allowance, an off-topic reply) uses the nearest existing
+ * sentence here.
  */
-
-async function whoAsks() {
-  const { user, church, impersonating } = await requireChurch();
-  const scope: AssistantScope = impersonating ? "platform" : "church";
-  return {
-    user,
-    church,
-    scope,
-    churchId: scope === "church" ? church.id : null,
-  };
-}
 
 function errorText(t: TFunction, r: Extract<AskResult, { ok: false }>): string {
   switch (r.code) {
@@ -51,6 +43,9 @@ function errorText(t: TFunction, r: Extract<AskResult, { ok: false }>): string {
       return t("assistant.rateLimited", r.vars);
     case "dailyLimit":
       return t("assistant.dailyLimit", r.vars);
+    case "monthlyLimit":
+      // "This month's AI allowance has been used. It starts again on the 1st."
+      return t("assistant.offBudget");
     case "conversationFull":
       return t("assistant.conversationFull");
     case "onlyPersonalDetails":
@@ -73,9 +68,9 @@ export async function sendAssistantMessage(input: {
   conversationId?: string | null;
   text: string;
 }): Promise<AssistantSendResult> {
-  const who = await whoAsks();
+  const asker = await churchShellAsker();
   const t = await getT();
-  if (who.church.isDemo) {
+  if (asker.kind !== "platform" && asker.church.isDemo) {
     return { ok: false, code: "notInDemo", error: t("assistant.notInDemo") };
   }
   const gate = await refuseWithoutFeature("assistant");
@@ -91,11 +86,7 @@ export async function sendAssistantMessage(input: {
   }
 
   const res = await askAssistant({
-    scope: who.scope,
-    churchId: who.churchId,
-    userId: who.user.id,
-    userName: who.user.name ?? "",
-    churchName: who.church.name,
+    asker,
     locale: await getLocale(),
     conversationId: parsed.data.conversationId ?? null,
     text: parsed.data.text,
@@ -104,6 +95,7 @@ export async function sendAssistantMessage(input: {
       declined: t("assistant.declined"),
       cutOff: t("assistant.cutOff"),
       failed: t("assistant.failed"),
+      outOfScope: t("assistant.declined"),
     },
   });
   if (!res.ok) return { ok: false, code: res.code, error: errorText(t, res) };
@@ -113,19 +105,14 @@ export async function sendAssistantMessage(input: {
 export async function getAssistantThread(input: {
   conversationId?: string | null;
 }): Promise<AssistantThreadResult> {
-  const who = await whoAsks();
+  const asker = await churchShellAsker();
   const t = await getT();
-  if (who.church.isDemo) return { ok: false, error: t("assistant.notInDemo") };
+  if (asker.kind !== "platform" && asker.church.isDemo) return { ok: false, error: t("assistant.notInDemo") };
   const id = z.string().uuid().nullable().optional().safeParse(input.conversationId);
   const [thread, ready] = await Promise.all([
-    loadThread({
-      scope: who.scope,
-      churchId: who.churchId,
-      userId: who.user.id,
-      conversationId: id.success ? (id.data ?? null) : null,
-    }),
+    loadThread({ asker, conversationId: id.success ? (id.data ?? null) : null }),
     // Read-only: no claim, no budget. Lets the panel say "turned off" on open.
-    aiReadiness({ churchId: who.churchId, feature: "chat" }),
+    aiReadiness({ churchId: asker.kind === "church" ? asker.church.id : null, feature: "chat" }),
   ]);
   const dormant =
     "ready" in ready
@@ -140,16 +127,10 @@ export async function rateAssistantAnswer(input: {
   messageId: string;
   helpful: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const who = await whoAsks();
+  const asker = await churchShellAsker();
   const t = await getT();
   const parsed = rateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("assistant.feedbackFailed") };
-  const res = await rateAnswer({
-    scope: who.scope,
-    churchId: who.churchId,
-    userId: who.user.id,
-    messageId: parsed.data.messageId,
-    helpful: parsed.data.helpful,
-  });
+  const res = await rateAnswer({ asker, messageId: parsed.data.messageId, helpful: parsed.data.helpful });
   return res.ok ? { ok: true } : { ok: false, error: t("assistant.feedbackFailed") };
 }

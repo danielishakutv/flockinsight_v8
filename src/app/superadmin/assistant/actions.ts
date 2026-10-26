@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { and, asc, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { assistantAnswer, assistantMessage } from "@/db/schema";
-import { platformAccess, requirePlatform } from "@/lib/platform-access";
+import { requirePlatform } from "@/lib/platform-access";
 import { recordAudit } from "@/lib/audit";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { englishT } from "@/lib/i18n/translate";
@@ -26,6 +26,8 @@ import {
 import { scrubPatterns } from "@/lib/assistant/scrub";
 import { retrieve } from "@/lib/assistant/grounding";
 import { askAssistant, loadThread, rateAnswer } from "@/lib/assistant/server";
+import { platformShellAsker } from "@/lib/assistant/asker";
+import { OUT_OF_SCOPE_COPY_EN } from "@/lib/assistant/advisor-shared";
 
 /*
  * The help assistant from the superadmin shell, and the reviewed pipeline that
@@ -40,17 +42,25 @@ import { askAssistant, loadThread, rateAnswer } from "@/lib/assistant/server";
 
 const t = englishT(en);
 
-async function requireAdmin() {
-  const access = await platformAccess();
-  if (!access) redirect("/dashboard");
-  return access;
+/*
+ * RETIRED (0.83.0): sendPlatformAssistantMessage, getPlatformAssistantThread
+ * and ratePlatformAssistantAnswer served the side panel, and only the retired
+ * assistant-panel.tsx imports them. /superadmin/ask has its own actions
+ * (app/superadmin/ask/actions.ts). The reviewed pipeline below is live.
+ */
+
+/** Any admin may ask, under the platform scope, budget and their own day. */
+async function requireAsker() {
+  const asker = await platformShellAsker();
+  if (!asker) redirect("/dashboard");
+  return asker;
 }
 
 export async function sendPlatformAssistantMessage(input: {
   conversationId?: string | null;
   text: string;
 }): Promise<AssistantSendResult> {
-  const admin = await requireAdmin();
+  const asker = await requireAsker();
   const parsed = z
     .object({
       conversationId: z.string().uuid().nullable().optional(),
@@ -61,11 +71,7 @@ export async function sendPlatformAssistantMessage(input: {
     return { ok: false, code: "tooLong", error: t("assistant.tooLong", { max: MAX_QUESTION_CHARS }) };
   }
   const res = await askAssistant({
-    scope: "platform",
-    churchId: null,
-    userId: admin.id,
-    userName: admin.name,
-    churchName: null,
+    asker,
     locale: "en",
     conversationId: parsed.data.conversationId ?? null,
     text: parsed.data.text,
@@ -74,6 +80,7 @@ export async function sendPlatformAssistantMessage(input: {
       declined: t("assistant.declined"),
       cutOff: t("assistant.cutOff"),
       failed: t("assistant.failed"),
+      outOfScope: OUT_OF_SCOPE_COPY_EN,
     },
   });
   if (res.ok) return res;
@@ -82,24 +89,22 @@ export async function sendPlatformAssistantMessage(input: {
       ? (res.message ?? `AI is not available (${res.reason ?? "unknown reason"}). Nothing was sent.`)
       : res.code === "tooLong" || res.code === "rateLimited" || res.code === "dailyLimit"
         ? t(`assistant.${res.code}`, res.vars)
-        : res.code === "invalid"
-          ? t("assistant.tooLong", { max: MAX_QUESTION_CHARS })
-          : t(`assistant.${res.code}`);
+        : res.code === "monthlyLimit"
+          ? // The platform scope has no monthly allowance; kept so a new code can never print a raw key.
+            "This month's question allowance has been used. It starts again on the 1st (UTC)."
+          : res.code === "invalid"
+            ? t("assistant.tooLong", { max: MAX_QUESTION_CHARS })
+            : t(`assistant.${res.code}`);
   return { ok: false, code: res.code, error };
 }
 
 export async function getPlatformAssistantThread(input: {
   conversationId?: string | null;
 }): Promise<AssistantThreadResult> {
-  const admin = await requireAdmin();
+  const asker = await requireAsker();
   const id = z.string().uuid().nullable().optional().safeParse(input.conversationId);
   const [thread, ready] = await Promise.all([
-    loadThread({
-      scope: "platform",
-      churchId: null,
-      userId: admin.id,
-      conversationId: id.success ? (id.data ?? null) : null,
-    }),
+    loadThread({ asker, conversationId: id.success ? (id.data ?? null) : null }),
     aiReadiness({ churchId: null, feature: "chat" }),
   ]);
   return { ok: true, ...thread, dormant: "ready" in ready ? null : ready.message };
@@ -109,15 +114,10 @@ export async function ratePlatformAssistantAnswer(input: {
   messageId: string;
   helpful: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireAdmin();
+  const asker = await requireAsker();
   const parsed = z.object({ messageId: z.string().uuid(), helpful: z.boolean() }).safeParse(input);
   if (!parsed.success) return { ok: false, error: t("assistant.feedbackFailed") };
-  const res = await rateAnswer({
-    scope: "platform",
-    churchId: null,
-    userId: admin.id,
-    ...parsed.data,
-  });
+  const res = await rateAnswer({ asker, ...parsed.data });
   return res.ok ? { ok: true } : { ok: false, error: t("assistant.feedbackFailed") };
 }
 
@@ -150,6 +150,7 @@ export async function draftCannedAnswer(input: { messageId: string }): Promise<C
       id: assistantMessage.id,
       conversationId: assistantMessage.conversationId,
       content: assistantMessage.content,
+      mode: assistantMessage.mode,
       createdAt: assistantMessage.createdAt,
     })
     .from(assistantMessage)
@@ -163,6 +164,17 @@ export async function draftCannedAnswer(input: { messageId: string }): Promise<C
     .limit(1);
   if (!answer) {
     return { ok: false, error: "That item is no longer open — someone may have resolved it. Refresh the page." };
+  }
+  /*
+   * An advisor answer quotes one church's figures. Sending it to the drafting
+   * prompt would put that church's numbers into a draft meant for EVERY
+   * church, one careless approval away from being shown to all of them.
+   */
+  if (answer.mode === "advisor") {
+    return {
+      ok: false,
+      error: "This answer quotes a church's own figures, so it is not drafted with AI. Write the canned answer by hand.",
+    };
   }
 
   // The question is the latest user row at or before the answer.

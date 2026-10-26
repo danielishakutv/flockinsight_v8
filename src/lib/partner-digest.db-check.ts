@@ -19,10 +19,16 @@ import { and, eq, inArray, like } from "drizzle-orm";
 
 const outbox: { to: string; subject: string }[] = [];
 let failSends = 0;
+/**
+ * When set, only sends to this address fail. The status retry walks every
+ * Partner owed an email, and another check's fixture can be owed one at the
+ * same moment; an unscoped failure would land on whichever comes first.
+ */
+let failOnlyFor: string | null = null;
 vi.mock("@/lib/mailer", () => ({
   emailLayout: (title: string, body: string) => `${title}\n${body}`,
   sendEmail: async (m: { to: string; subject: string }) => {
-    if (failSends > 0) {
+    if (failSends > 0 && (!failOnlyFor || m.to === failOnlyFor)) {
       failSends--;
       return false;
     }
@@ -30,7 +36,7 @@ vi.mock("@/lib/mailer", () => ({
     return true;
   },
   sendEmailWithId: async (m: { to: string; subject: string }) => {
-    if (failSends > 0) {
+    if (failSends > 0 && (!failOnlyFor || m.to === failOnlyFor)) {
       failSends--;
       return { ok: false, id: null, error: "provider unavailable" };
     }
@@ -222,7 +228,9 @@ describe("status emails that did not go through", () => {
 
     outbox.length = 0;
     failSends = 1;
+    failOnlyFor = email("paused");
     await retryStatusEmails();
+    failOnlyFor = null;
     let [p] = await db.select().from(partner).where(eq(partner.id, ids.paused));
     expect(p.statusNotifiedAt).toBeNull();
 

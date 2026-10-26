@@ -10,6 +10,7 @@
  */
 
 import { ASSISTANT_SYSTEM_PROMPT, CANNED_DRAFT_SYSTEM_PROMPT } from "@/lib/assistant/shared";
+import { ADVISOR_CHURCH_SYSTEM_PROMPT, ADVISOR_PLATFORM_SYSTEM_PROMPT } from "@/lib/assistant/advisor-shared";
 import { BLOG_DRAFT_SYSTEM_PROMPT } from "@/lib/blog-draft-shared";
 
 const SHARED_RULES =
@@ -47,6 +48,13 @@ export const PROMPTS = Object.freeze({
   "assistant-chat@1": ASSISTANT_SYSTEM_PROMPT,
   "assistant-canned@1": CANNED_DRAFT_SYSTEM_PROMPT,
   "blog-draft@1": BLOG_DRAFT_SYSTEM_PROMPT,
+  /*
+   * The advisor: the help assistant plus allow-listed figures. Its texts sit
+   * beside its OUT_OF_SCOPE / SOURCES parser and figure check in
+   * lib/assistant/advisor-shared.ts, for the same reason as the help prompt.
+   */
+  "assistant-advisor-church@1": ADVISOR_CHURCH_SYSTEM_PROMPT,
+  "assistant-advisor-platform@1": ADVISOR_PLATFORM_SYSTEM_PROMPT,
 } as const);
 
 export type PromptId = keyof typeof PROMPTS;
@@ -68,6 +76,9 @@ export const PROMPT_SCOPE: Readonly<Partial<Record<PromptId, "church" | "platfor
     "analytics-platform@1": "platform",
     // A canned-answer draft and a blog post are the platform's own work and
     // must never be charged to a church. A help question can be either.
+    // Neither advisor prompt is scoped: a superadmin acting as a church asks
+    // the church advisor with no church id (charged to the platform), so the
+    // caller checks that church's opt-in itself before sending its figures.
     "assistant-canned@1": "platform",
     "blog-draft@1": "platform",
   });

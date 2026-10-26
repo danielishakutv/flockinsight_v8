@@ -40,9 +40,10 @@ export default async function SuperadminLayout({
   const perms = [...(access?.perms ?? [])];
 
   /*
-   * The help assistant, under the platform scope and budget. This shell has
-   * no I18nProvider on purpose, so the English assistant strings are passed
-   * in: only that one plain object crosses to the client.
+   * The assistant, under the platform scope and budget: the header button
+   * links to /superadmin/ask, its own page. This shell has no I18nProvider on
+   * purpose, so the English assistant strings are passed in: only that one
+   * plain object crosses to the client.
    */
   return (
     <AssistantProvider scope="platform" available strings={en.assistant}>

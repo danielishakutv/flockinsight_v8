@@ -16,7 +16,16 @@ export type QueueItem = {
   id: string;
   conversationId: string;
   churchName: string;
-  reason: "Unhelpful" | "Not in the guides" | "No sources" | "Declined" | "Cut off" | "Failed";
+  reason:
+    | "Unhelpful"
+    | "Not in the guides"
+    | "No sources"
+    | "Declined"
+    | "Cut off"
+    | "Failed"
+    | "Figures not in the data";
+  /** The mode that answered: an advisor answer quotes the church's figures. */
+  mode: "help" | "advisor";
   question: string;
   answer: string;
   createdAt: string;
@@ -29,12 +38,19 @@ const REASON_STYLE: Record<QueueItem["reason"], string> = {
   Declined: "bg-muted text-muted-foreground",
   "Cut off": "bg-muted text-muted-foreground",
   Failed: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  "Figures not in the data": "bg-rose-500/10 text-rose-700 dark:text-rose-300",
 };
 
 /**
- * The questions the assistant did not answer well. Each one can become a
- * canned answer (drafted by AI or written by hand, approved by a human either
- * way) or be dismissed when there is nothing to learn from it.
+ * The answers that need a look. Each one can become a canned answer (drafted
+ * by AI or written by hand, approved by a human either way) or be dismissed
+ * when there is nothing to learn from it.
+ *
+ * "Figures not in the data" is an advisor answer quoting a number the check
+ * could not find in the figures it was given. A canned answer cannot fix
+ * that (canned answers are platform-wide how-to text), so the thing to do is
+ * read it against the conversation, then dismiss it or note the prompt for
+ * the next version.
  */
 export function AssistantQueue({ items }: { items: QueueItem[] }) {
   const router = useRouter();
@@ -58,7 +74,8 @@ export function AssistantQueue({ items }: { items: QueueItem[] }) {
   if (items.length === 0) {
     return (
       <p className="text-muted-foreground rounded-2xl border border-dashed p-8 text-center text-sm">
-        Nothing to review — every recent answer was grounded and nobody said it didn&apos;t help.
+        Nothing to review: every recent answer was grounded, its figures checked, and nobody said it didn&apos;t
+        help.
       </p>
     );
   }
@@ -70,6 +87,15 @@ export function AssistantQueue({ items }: { items: QueueItem[] }) {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className={`rounded px-1.5 py-0.5 font-semibold ${REASON_STYLE[item.reason]}`}>
               {item.reason}
+            </span>
+            <span
+              className={
+                item.mode === "advisor"
+                  ? "rounded bg-violet-500/10 px-1.5 py-0.5 font-semibold text-violet-700 dark:text-violet-300"
+                  : "bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-semibold"
+              }
+            >
+              {item.mode === "advisor" ? "Advisor" : "Help"}
             </span>
             <span className="text-muted-foreground">{item.churchName}</span>
             <span className="text-muted-foreground">
@@ -88,22 +114,30 @@ export function AssistantQueue({ items }: { items: QueueItem[] }) {
               <p className="mt-1 line-clamp-6 text-sm break-words whitespace-pre-wrap">{item.answer}</p>
             </div>
           </div>
+          {item.mode === "advisor" && (
+            <p className="text-muted-foreground text-xs">
+              This answer quotes one church&apos;s figures, so it is not drafted with AI: a canned answer is shown
+              to every church. Write one by hand if the question was really a how-to question.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                run(item.id, async () => {
-                  const res = await draftCannedAnswer({ messageId: item.id });
-                  if (!res.ok) return void toast.error(res.error);
-                  if (res.note) toast.message(res.note);
-                  router.push(`/superadmin/assistant/answers/${res.id}`);
-                })
-              }
-            >
-              {busy === item.id ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              Draft with AI
-            </Button>
+            {item.mode === "help" && (
+              <Button
+                size="sm"
+                disabled={busy !== null}
+                onClick={() =>
+                  run(item.id, async () => {
+                    const res = await draftCannedAnswer({ messageId: item.id });
+                    if (!res.ok) return void toast.error(res.error);
+                    if (res.note) toast.message(res.note);
+                    router.push(`/superadmin/assistant/answers/${res.id}`);
+                  })
+                }
+              >
+                {busy === item.id ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                Draft with AI
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"

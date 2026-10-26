@@ -69,7 +69,7 @@ export const PLANS: Plan[] = [
       // A price-list claim: ship it only with ANTHROPIC_API_KEY set on the
       // server and the AI kill switch off. Advertising a feature nobody can
       // turn on is the overstatement FORBIDDEN_CLAIMS exists to prevent.
-      "Help assistant — ask in your own words how to do something in FlockInsight and get the steps from our guides. Answers are written by an AI model and show the guide they came from. Off until you turn it on",
+      "Help assistant — 30 questions a month: ask in your own words how to do something in FlockInsight and get the steps from our guides. Chats are kept on their own page. Answers are written by an AI model, show the guide they came from and can be wrong. Off until you turn it on",
       "Your own public church page, with events people can register for",
       "Birthday & anniversary greetings by email",
       "Earn wallet credit for every church you refer",
@@ -104,6 +104,7 @@ export const PLANS: Plan[] = [
       "Automatic service reminders by email",
       "Analytics & growth trends",
       "Plain-language summaries: a short read of your attendance, growth, giving trend and first-timers, written by AI from counts and percentages only. Off until you turn it on, and no names, phone numbers or notes ever leave FlockInsight",
+      "Church advisor — 150 questions a month: ask about your attendance, first-timers, follow-up and giving trends and get recommendations for your ministry. Answers can be saved and downloaded as PDF. Uses counts and percentages only, written by an AI model and can be wrong. Off until you turn it on",
       "Livestream from YouTube or Facebook onto your own watch page",
       "Give a member a staff login with exactly the access you choose",
       "Activity log — who changed what, across every module",
@@ -130,6 +131,7 @@ export const PLANS: Plan[] = [
       "Reports centre: 31 datasets as CSV or PDF, plus a full export of everything",
       "Branded PDFs carrying your logo & colours",
       "Facilities — book the hall, the rooms and the bus on one calendar, with clashes refused and hire fees recorded",
+      "Church advisor with 500 questions a month",
       "Unlimited team members & roles",
       "Priority support",
     ],
@@ -145,6 +147,7 @@ export const PLANS: Plan[] = [
       "Everything in Pro",
       "Branches & denominations — one report across every branch, grouped by zone",
       "Automatic weekly or monthly branch reports by email",
+      "Church advisor with 2,000 questions a month",
       "For churches outside Nigeria: your own currency, timezone and language",
       "Dedicated account manager",
       "Custom integrations & onboarding",

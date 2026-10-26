@@ -1,3 +1,4 @@
+// RETIRED (0.83.0): the assistant is its own page now (chat-workspace.tsx at /assistant and /superadmin/ask); nothing imports this panel, and it stays only so its history is easy to read.
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";

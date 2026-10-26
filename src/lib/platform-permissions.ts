@@ -51,6 +51,13 @@ export const PLATFORM_MODULES: PlatformModule[] = [
       { label: "Health", href: "/superadmin/health", perm: "platform.overview.view", icon: "HeartPulse" },
       { label: "Usage", href: "/superadmin/usage", perm: "platform.overview.view", icon: "BarChart3" },
       { label: "Insights", href: "/superadmin/insights", perm: "platform.overview.view", icon: "Telescope" },
+      /*
+       * The assistant's own page. Any admin may ask there, but answers about
+       * the platform's figures need this permission, so the link is shown to
+       * the people it is most use to. /superadmin/assistant is the review
+       * queue, a different job with its own permission.
+       */
+      { label: "Ask", href: "/superadmin/ask", perm: "platform.overview.view", icon: "MessageSquare" },
     ],
   },
   {

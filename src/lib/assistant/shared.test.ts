@@ -5,11 +5,16 @@ import {
   ASSISTANT_SYSTEM_PROMPT,
   CANNED_DRAFT_PROMPT_ID,
   CANNED_DRAFT_SYSTEM_PROMPT,
+  CONVERSATION_TITLE_MAX,
   HISTORY_TURNS,
   answerKindFor,
   buildAssistantUserTurn,
   buildCannedDraftPrompt,
+  conversationTitle,
   dormantKeyFor,
+  exchangesOf,
+  type ChatAnswer,
+  type ChatQuestion,
   groundedFromStored,
   historyForModel,
   isModelFailure,
@@ -48,6 +53,51 @@ describe("parseAnswer", () => {
     expect(out.grounded).toBe(false);
     expect(out.sources).toEqual([]);
   });
+
+  it("counts facts only for the advisor: a help answer was given no figures", () => {
+    expect(parseAnswer("x\nSOURCES: facts", known)).toMatchObject({ sources: [], grounded: null });
+    expect(parseAnswer("x\nSOURCES: facts, guide:members, FACTS", known, { facts: true })).toMatchObject({
+      sources: ["facts", "guide:members"],
+      grounded: true,
+    });
+  });
+});
+
+describe("conversationTitle", () => {
+  it("is the first 80 characters of the question, on one line", () => {
+    expect(conversationTitle("  How do I\n record   attendance?  ")).toBe("How do I record attendance?");
+    const long = conversationTitle("word ".repeat(40));
+    expect(long.length).toBeLessThanOrEqual(CONVERSATION_TITLE_MAX);
+    expect(long.endsWith(" ")).toBe(false);
+  });
+});
+
+describe("exchangesOf", () => {
+  const q = (id: string): ChatQuestion => ({ role: "user", id, content: id, redactions: 0, mode: "help", createdAt: "" });
+  const a = (id: string): ChatAnswer => ({
+    role: "assistant",
+    id,
+    content: id,
+    kind: "answered",
+    sources: [],
+    helpful: null,
+    mode: "advisor",
+    figuresOk: true,
+    savedAt: null,
+    createdAt: "",
+  });
+
+  it("pairs each answer with the question before it", () => {
+    const out = exchangesOf([q("q1"), a("a1"), q("q2"), a("a2")]);
+    expect(out.map((e) => [e.question?.id ?? null, e.answer.id])).toEqual([
+      ["q1", "a1"],
+      ["q2", "a2"],
+    ]);
+  });
+
+  it("gives an orphan answer no question rather than the wrong one", () => {
+    expect(exchangesOf([a("a0"), q("q1"), a("a1")])[0].question).toBeNull();
+  });
 });
 
 describe("answerKindFor", () => {
@@ -84,10 +134,12 @@ describe("reviewStatusFor", () => {
     expect(reviewStatusFor({ answerKind: "answered", grounded: null, helpful: false, current: "dismissed" })).toBe("dismissed");
   });
 
-  it("opens every kind that is not answered", () => {
+  it("opens every kind that is not answered, except an off-topic reply", () => {
     for (const k of ["not_in_guides", "refused", "truncated", "failed"] as const) {
       expect(reviewStatusFor({ answerKind: k, grounded: true, helpful: null })).toBe("open");
     }
+    // Off-topic traffic must not flood the queue.
+    expect(reviewStatusFor({ answerKind: "out_of_scope", grounded: null, helpful: null })).toBe("none");
   });
 
   it("opens an ungrounded answer and an unhelpful one", () => {
@@ -126,6 +178,29 @@ describe("historyForModel", () => {
     const out = historyForModel(rows);
     expect(out).toHaveLength(HISTORY_TURNS);
     expect(out[0]).toEqual({ role: "user", content: "q7" });
+  });
+
+  /*
+   * A church withdrew consent, or a role lost giving: the next question is
+   * help, and the advisor's earlier answer (attendance, follow-up, the
+   * giving trend) must not ride along in its history.
+   */
+  it("leaves advisor exchanges out unless asked to include them, question and answer together", () => {
+    const advisorAnswer = { role: "assistant", content: "Attendance averaged 140.", answerKind: "answered", mode: "advisor" };
+    const rows = [
+      { ...q("How is attendance?"), mode: "advisor" },
+      advisorAnswer,
+      { ...q("How do I record it?"), mode: "help" },
+      { ...a("Open Attendance.", "answered"), mode: "help" },
+    ];
+    expect(historyForModel(rows).map((m) => m.content)).toEqual(["How do I record it?", "Open Attendance."]);
+    expect(historyForModel(rows, { includeAdvisor: false }).map((m) => m.content)).not.toContain(advisorAnswer.content);
+    expect(historyForModel(rows, { includeAdvisor: true }).map((m) => m.content)).toEqual([
+      "How is attendance?",
+      "Attendance averaged 140.",
+      "How do I record it?",
+      "Open Attendance.",
+    ]);
   });
 });
 

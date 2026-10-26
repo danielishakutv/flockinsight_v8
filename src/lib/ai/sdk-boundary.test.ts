@@ -45,6 +45,7 @@ const PURE = new Set([
   "lib/ai/church-facts-shared.ts",
   "lib/ai/platform-facts-shared.ts",
   "lib/ai/ai-shared.ts",
+  "lib/ai/settings-rules.ts",
 ]);
 
 describe("the AI SDK boundary", () => {

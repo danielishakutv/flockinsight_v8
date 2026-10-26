@@ -157,15 +157,15 @@ export function UserMenu({
           </Link>
         </DropdownMenuItem>
         {/*
-          The help assistant, for phones: the mobile top bar has no room for a
-          fifth control. Opened on the next frame, because a modal Dialog
-          opened in the same tick the dropdown closes leaves Radix's
-          pointer-events: none on <body> and the page stops taking taps.
+          The assistant, for phones: the mobile top bar has no room for a
+          fifth control. A link to its own page, like the rows around it.
         */}
         {assistant?.available && (
-          <DropdownMenuItem onSelect={() => requestAnimationFrame(assistant.open)}>
-            <MessageCircleQuestionMark />
-            {t("assistant.askAQuestion")}
+          <DropdownMenuItem asChild>
+            <Link href={assistant.href}>
+              <MessageCircleQuestionMark />
+              {t("assistant.askAQuestion")}
+            </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild>

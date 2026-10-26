@@ -25,7 +25,7 @@ export function DesktopTopbar({
         <PaletteHint />
       </div>
       <div className="flex items-center gap-1.5">
-        {/* Renders nothing where the assistant is not available (the demo church). */}
+        {/* A link to /assistant. Renders nothing where the assistant is not offered (the demo church). */}
         <AssistantButton />
         <LiveNotificationBell initial={unread} />
         <LanguageMenu />

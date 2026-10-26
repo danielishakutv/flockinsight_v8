@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { interpretResponse, validateRunInput, type ModelResponse, type RunAiInput } from "./run-ai-rules";
+import { effortFor, interpretResponse, validateRunInput, type ModelResponse, type RunAiInput } from "./run-ai-rules";
+import { FEATURE_POLICY, MODELS, WORKSPACE_FIX, isWorkspaceScopeError } from "./config";
 import { scrubFreeText } from "./safe-text";
 import type { SafePayload } from "./serialiser";
 
@@ -91,6 +92,85 @@ describe("validateRunInput", () => {
       }),
       "never runs for a church",
     );
+  });
+});
+
+describe("the advisor feature", () => {
+  const advisor = (over: Partial<RunAiInput> = {}): RunAiInput =>
+    input({
+      feature: "advisor",
+      promptId: "assistant-advisor-church@1",
+      maxTokens: 2500,
+      messages: [
+        { role: "user", content: payload },
+        { role: "assistant", content: scrubFreeText("I have the figures.", 100) },
+        { role: "user", content: text },
+      ],
+      ...over,
+    });
+
+  it("takes the figures and a typed question in alternating turns, for a church or for none", () => {
+    expect(validateRunInput(advisor())).toEqual({ ok: true });
+    // A superadmin acting as a church asks with no church id: neither advisor prompt is scoped.
+    expect(validateRunInput(advisor({ churchId: null }))).toEqual({ ok: true });
+    expect(validateRunInput(advisor({ churchId: null, promptId: "assistant-advisor-platform@1" }))).toEqual({
+      ok: true,
+    });
+  });
+
+  it("is pinned to Haiku and its own ceiling", () => {
+    expectInvalid(advisor({ model: "claude-sonnet-5-5" }), "may only use claude-haiku-5-5");
+    expectInvalid(advisor({ maxTokens: 2501 }), "maxTokens");
+    expect(FEATURE_POLICY.advisor).toMatchObject({
+      model: MODELS.haiku,
+      maxTokens: 2500,
+      maxRequestBytes: 49_152,
+      timeoutMs: 60_000,
+      freeText: true,
+      churchScoped: "optional",
+    });
+  });
+});
+
+describe("isWorkspaceScopeError", () => {
+  it("recognises Anthropic's refusal of an organisation-level key, and nothing else", () => {
+    expect(
+      isWorkspaceScopeError(
+        "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header",
+      ),
+    ).toBe(true);
+    expect(isWorkspaceScopeError("Invalid value for anthropic-workspace-id")).toBe(true);
+    expect(isWorkspaceScopeError("max_tokens: must be at most 64000")).toBe(false);
+    expect(isWorkspaceScopeError("")).toBe(false);
+  });
+
+  it("tells the operator both fixes and how to restart so the new value is read", () => {
+    expect(WORKSPACE_FIX).toContain("ANTHROPIC_WORKSPACE_ID");
+    expect(WORKSPACE_FIX).toContain("ANTHROPIC_API_KEY");
+    expect(WORKSPACE_FIX).toContain("--update-env");
+  });
+});
+
+describe("effortFor", () => {
+  it("keeps the briefings and the help assistant on low, as before", () => {
+    expect(effortFor("analytics", MODELS.haiku)).toBe("low");
+    expect(effortFor("chat", MODELS.haiku)).toBe("low");
+  });
+
+  it("gives the advisor medium, because it weighs figures and writes recommendations", () => {
+    expect(effortFor("advisor", MODELS.haiku)).toBe("medium");
+  });
+
+  it("sends no effort to a model that takes none", () => {
+    expect(effortFor("blog", MODELS.sonnet)).toBeNull();
+    // Decided by the policy's model, not by what a caller asks for.
+    expect(effortFor("advisor", MODELS.sonnet)).toBeNull();
+  });
+
+  it("gives every Haiku feature an effort, so none silently falls back to the model's default", () => {
+    for (const [feature, policy] of Object.entries(FEATURE_POLICY)) {
+      if (policy.model === MODELS.haiku) expect(policy.effort, feature).toBeDefined();
+    }
   });
 });
 

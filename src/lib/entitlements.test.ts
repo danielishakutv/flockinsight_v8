@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASSISTANT_ADMIN_DAILY,
+  ASSISTANT_PERSON_DAILY,
+  ASSISTANT_QUESTIONS_BY_PLAN,
+  assistantQuestionsFor,
   churchRowHasFeature,
   featuresFor,
   FEATURES,
@@ -61,6 +65,7 @@ describe("what each plan includes", () => {
     expect(planIncludes("starter", "branches")).toBe(false);
     expect(planIncludes("starter", "pastoralBooking")).toBe(false);
     expect(planIncludes("starter", "aiSummaries")).toBe(false);
+    expect(planIncludes("starter", "aiAdvisor")).toBe(false);
   });
 
   it("gives Growth the meetings tier but not the Pro one", () => {
@@ -72,6 +77,7 @@ describe("what each plan includes", () => {
     expect(planIncludes("growth", "analytics")).toBe(true);
     expect(planIncludes("growth", "pastoralBooking")).toBe(true);
     expect(planIncludes("growth", "aiSummaries")).toBe(true);
+    expect(planIncludes("growth", "aiAdvisor")).toBe(true);
 
     // The paid upgrades inside meetings, which is the whole reason they are
     // separate keys rather than part of "meetings".
@@ -158,6 +164,39 @@ describe("team size", () => {
   it("treats an unknown plan as the smallest team", () => {
     expect(teamLimitFor("something-new")).toBe(1);
     expect(teamLimitFor(null)).toBe(1);
+  });
+});
+
+describe("the assistant's allowances", () => {
+  it("matches the questions each plan advertises", () => {
+    expect(ASSISTANT_QUESTIONS_BY_PLAN).toEqual({ starter: 30, growth: 150, pro: 500, enterprise: 2000 });
+    expect(assistantQuestionsFor("starter")).toBe(30);
+    expect(assistantQuestionsFor("growth")).toBe(150);
+    expect(assistantQuestionsFor("pro")).toBe(500);
+    expect(assistantQuestionsFor("enterprise")).toBe(2000);
+    expect(ASSISTANT_PERSON_DAILY).toBe(25);
+    expect(ASSISTANT_ADMIN_DAILY).toBe(60);
+  });
+
+  it("treats an unknown plan as the smallest allowance, never the largest", () => {
+    expect(assistantQuestionsFor("something-new")).toBe(30);
+    expect(assistantQuestionsFor(null)).toBe(30);
+    expect(assistantQuestionsFor(undefined)).toBe(30);
+  });
+
+  it("reads null as no ceiling, not as the fallback", () => {
+    // The `null ?? 30` bug teamLimitFor's comment warns about.
+    const byPlan = { ...ASSISTANT_QUESTIONS_BY_PLAN, enterprise: null };
+    expect(assistantQuestionsFor("enterprise", byPlan)).toBeNull();
+    expect(assistantQuestionsFor("pro", byPlan)).toBe(500);
+  });
+
+  it("puts the church advisor beside the summaries, and the help half on Starter", () => {
+    expect(minPlanFor("aiAdvisor")).toBe("growth");
+    expect(planIncludes("starter", "aiAdvisor")).toBe(false);
+    expect(planIncludes("growth", "aiAdvisor")).toBe(true);
+    expect(planIncludes("starter", "assistant")).toBe(true);
+    expect(minPlanFor("aiAdvisor")).toBe(minPlanFor("aiSummaries"));
   });
 });
 

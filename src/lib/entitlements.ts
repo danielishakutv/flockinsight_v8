@@ -83,6 +83,7 @@ export type FeatureKey =
   | "reminders"
   | "analytics"
   | "aiSummaries"
+  | "aiAdvisor"
   | "activityLog"
   | "dataExport"
   | "onlineGiving"
@@ -321,6 +322,20 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
     blurb:
       "A short read of how your church is doing, written by AI from counts and percentages only. No names ever leave.",
   },
+  /*
+   * Beside `aiSummaries` and `analytics`, for the same reason: the advisor
+   * talks about the figures those two chart, so a church never gets advice
+   * about numbers its plan cannot show it. The help half of the same chat
+   * stays on Starter (`assistant`). As with every AI feature, the real gate
+   * is the owner's opt-in; the plan only decides whether the figures come
+   * along.
+   */
+  aiAdvisor: {
+    plan: "growth",
+    label: "Church advisor",
+    blurb:
+      "Ask about your attendance, first-timers, follow-up and giving trends and get recommendations for your ministry, from counts and percentages only.",
+  },
   activityLog: {
     plan: "growth",
     label: "Activity log",
@@ -530,6 +545,48 @@ export const TEAM_LIMIT_BY_PLAN: Record<PlanId, number | null> = {
 export function teamLimitFor(plan: string | null | undefined): number | null {
   const id = PLAN_ORDER[planRank(plan)];
   return id in TEAM_LIMIT_BY_PLAN ? TEAM_LIMIT_BY_PLAN[id] : 1;
+}
+
+/* ============================================================
+ * Assistant allowances
+ *
+ * Questions, not money: a church reads "37 of 150 left this month", which a
+ * dollar ceiling could never say. The money ceilings in lib/ai/settings.ts
+ * stay underneath as the backstop. These are the defaults; an admin can
+ * override them in platform_setting `assistant_allowances`, and
+ * lib/ai/settings-rules.ts falls back to these whenever that cannot be read.
+ * ========================================================== */
+
+/** Questions a church may ask in a calendar month (UTC). Null means no ceiling. */
+export const ASSISTANT_QUESTIONS_BY_PLAN: Record<PlanId, number | null> = {
+  starter: 30,
+  growth: 150,
+  pro: 500,
+  enterprise: 2000,
+};
+
+/** Questions one person may ask in a day (UTC), whatever the church's plan. */
+export const ASSISTANT_PERSON_DAILY = 25;
+
+/**
+ * A superadmin's day, on the platform's budget. Higher than a church
+ * member's because support work is asking on someone else's behalf all day.
+ */
+export const ASSISTANT_ADMIN_DAILY = 60;
+
+/**
+ * A plan's monthly question allowance, or null for no ceiling.
+ *
+ * Key presence, not `??`, for the same reason as teamLimitFor: null means
+ * unlimited, and `null ?? 30` is 30. An unknown plan reads as the smallest
+ * plan, never the largest.
+ */
+export function assistantQuestionsFor(
+  plan: string | null | undefined,
+  byPlan: Record<PlanId, number | null> = ASSISTANT_QUESTIONS_BY_PLAN,
+): number | null {
+  const id = PLAN_ORDER[planRank(plan)];
+  return id in byPlan ? byPlan[id] : byPlan.starter;
 }
 
 /** Every feature a plan includes — for the settings page, and for tests. */

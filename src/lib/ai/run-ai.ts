@@ -3,15 +3,18 @@ import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { aiChurchSetting, church, type AiFeature } from "@/db/schema";
-import { aiConfigured, FEATURE_POLICY } from "./config";
+import { aiConfigured, FEATURE_POLICY, WORKSPACE_FIX } from "./config";
 import { callModel, classifyModelError, FALLBACK_BETA } from "./client";
 import { getAiPlatformState } from "./settings";
+import { churchShareUsdFor } from "./settings-rules";
+import { usdToNano } from "./budget-rules";
 import { BudgetRefused, reserve, settle, sweepAbandoned } from "./budget";
 import { priceUsage, reservationFor } from "./pricing";
 import { PAYLOAD_CLOSE, PAYLOAD_PREAMBLE, PROMPTS, type PromptId } from "./prompts";
 import { AiPayloadRejected, revalidatePayload } from "./serialiser";
 import { scrubFreeText } from "./safe-text";
 import {
+  effortFor,
   interpretResponse,
   isPayloadShaped,
   isTextShaped,
@@ -43,6 +46,19 @@ export async function aiReadiness(input: {
   churchId: string | null;
   feature: AiFeature;
 }): Promise<{ ready: true } | Refusal> {
+  const r = await readiness(input);
+  return "ok" in r ? r : { ready: true };
+}
+
+/**
+ * aiReadiness plus the church's plan, which runAi needs for the church's
+ * share of the month's money. Read from the same row as the demo flag and
+ * the opt-in, so it costs no extra query.
+ */
+async function readiness(input: {
+  churchId: string | null;
+  feature: AiFeature;
+}): Promise<{ ready: true; churchPlan: string | null } | Refusal> {
   if (!aiConfigured()) {
     return {
       ok: false,
@@ -61,9 +77,10 @@ export async function aiReadiness(input: {
       message: `The ${input.feature} AI feature is paused in /superadmin/ai. Nothing was sent.`,
     };
   }
+  let churchPlan: string | null = null;
   if (input.churchId) {
     const [row] = await db
-      .select({ isDemo: church.isDemo, enabled: aiChurchSetting.enabled })
+      .select({ isDemo: church.isDemo, plan: church.plan, enabled: aiChurchSetting.enabled })
       .from(church)
       .leftJoin(aiChurchSetting, eq(aiChurchSetting.churchId, church.id))
       .where(eq(church.id, input.churchId))
@@ -84,8 +101,9 @@ export async function aiReadiness(input: {
         message: "This church's owner has not turned on AI. Nothing was sent.",
       };
     }
+    churchPlan = row.plan;
   }
-  return { ready: true };
+  return { ready: true, churchPlan };
 }
 
 function contentToWire(c: AiContent, maxChars: number): { text: string; schema: string | null } {
@@ -122,11 +140,17 @@ export async function runAi(input: RunAiInput): Promise<RunAiResult> {
     return { ok: false, reason: "invalid_input", message: valid.message };
   }
 
-  const ready = await aiReadiness({ churchId: input.churchId, feature: input.feature });
+  const ready = await readiness({ churchId: input.churchId, feature: input.feature });
   if ("ok" in ready) return ready;
 
   const policy = FEATURE_POLICY[input.feature];
   const state = await getAiPlatformState();
+  /*
+   * A church's calls are held against its PLAN's share of the month, not one
+   * flat share for everybody: the question allowances are per plan, and the
+   * money backstop under them has to be too. An unknown plan gets Starter's.
+   */
+  const churchShareUsd = input.churchId ? churchShareUsdFor(ready.churchPlan, state.churchShareByPlanUsd) : 0;
 
   let body: WireBody;
   let payloadSchema: string | null = null;
@@ -142,10 +166,9 @@ export async function runAi(input: RunAiInput): Promise<RunAiResult> {
       system: PROMPTS[input.promptId],
       messages,
     };
-    if (input.model === "claude-haiku-5-5") {
-      // Haiku 5.5 defaults to medium effort; a short briefing needs low.
-      body.output_config = { effort: "low" };
-    }
+    // Haiku 5.5 defaults to medium effort; each feature's policy says what it needs.
+    const effort = effortFor(input.feature, input.model);
+    if (effort) body.output_config = { effort };
   } catch (e) {
     if (e instanceof AiPayloadRejected) {
       return {
@@ -188,7 +211,7 @@ export async function runAi(input: RunAiInput): Promise<RunAiResult> {
       reservedNano,
       actorUserId: input.actorUserId,
       platformCeilingNano: state.platformCeilingNano,
-      churchShareNano: state.churchShareNano,
+      churchShareNano: usdToNano(churchShareUsd),
     }));
   } catch (e) {
     if (e instanceof BudgetRefused) {
@@ -201,7 +224,7 @@ export async function runAi(input: RunAiInput): Promise<RunAiResult> {
         : {
             ok: false,
             reason: "church_budget",
-            message: `This church's AI share of $${state.churchShareUsd.toFixed(2)} for the month has been used. It resets on the 1st (UTC).`,
+            message: `This church's AI share of $${churchShareUsd.toFixed(2)} for the month has been used. It resets on the 1st (UTC).`,
           };
     }
     throw e;
@@ -217,7 +240,9 @@ export async function runAi(input: RunAiInput): Promise<RunAiResult> {
     const message =
       err.kind === "auth"
         ? "The AI key on the server was refused (401). Check ANTHROPIC_API_KEY."
-        : err.kind === "rate_limit"
+        : err.kind === "workspace"
+          ? WORKSPACE_FIX
+          : err.kind === "rate_limit"
           ? "Anthropic is rate-limiting us. Try again in a few minutes."
           : err.kind === "timeout"
             ? `The AI request timed out after ${Math.round(policy.timeoutMs / 1000)} s. It may still have been billed, so it is charged at its reservation.`

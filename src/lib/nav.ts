@@ -31,6 +31,7 @@ import {
   QrCode,
   Radio,
   Settings,
+  Sparkles,
   Users,
   UsersRound,
   Video,
@@ -436,6 +437,22 @@ export const navSections: NavSection[] = [
         icon: BarChart3,
         descriptionKey: "nav.analyticsDesc",
         tile: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+      },
+      /*
+       * The assistant sits beside Analytics because, for a church on Growth,
+       * it is another way of reading the same figures: ask in your own words
+       * and get the numbers with recommendations. On every plan it also
+       * answers "how do I", which is why it has no permission: any staff login
+       * may ask, as /help is open to any staff login. Whether an answer may
+       * use the figures is decided per question on the server.
+       */
+      {
+        labelKey: "nav.assistant",
+        feature: "assistant",
+        href: "/assistant",
+        icon: Sparkles,
+        descriptionKey: "nav.assistantDesc",
+        tile: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
       },
       {
         labelKey: "nav.reports",

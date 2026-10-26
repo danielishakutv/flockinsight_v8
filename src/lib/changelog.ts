@@ -29,6 +29,27 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.83.0",
+    date: "2026-10-26",
+    summary:
+      "The assistant has a page of its own: keep your chats, save and download answers, and on Growth and above ask about your own church's numbers and get recommendations for your ministry.",
+    changes: {
+      Added: [
+        "The assistant now has its own page (Assistant in the menu). Your chats are kept, and you can come back to them, rename them, search them and delete them. Save the answers you want to keep, and download one answer or a whole chat as a PDF or as text.",
+        "Church advisor, on Growth and above: ask how attendance, first-timers, follow-up and giving are going and get recommendations for your ministry. It works only from counts, percentages and trends, never names, phone numbers or giving amounts, and checks every figure it quotes against your records. It is being introduced to a few churches first.",
+        "About our church, on Settings → AI features: tell the advisor what you call your groups and services and what you are working on, so its suggestions fit your church.",
+        "Every plan now includes a number of questions a month: 30 on Starter, 150 on Growth, 500 on Pro and 2,000 on Enterprise, and up to 25 a day for each person. The page always shows how many are left.",
+      ],
+      Improved: [
+        "Starter churches can now turn on the help assistant themselves from Settings → AI features.",
+        "Questions that have nothing to do with church life, ministry or running your church are politely declined, and anyone who describes danger or abuse is pointed to real help straight away.",
+      ],
+      Security: [
+        "A chat you delete is removed for good within 30 days, including our record of what was sent to the AI provider. Chats you keep are removed after 180 days unless you save an answer.",
+      ],
+    },
+  },
+  {
     version: "0.82.0",
     date: "2026-10-24",
     summary:

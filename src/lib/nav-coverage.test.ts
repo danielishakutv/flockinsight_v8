@@ -233,6 +233,7 @@ const MODULES_THAT_NEED_A_LINK = [
   "/communication",
   "/reports",
   "/analytics",
+  "/assistant",
   "/celebrations",
   "/settings",
 ];

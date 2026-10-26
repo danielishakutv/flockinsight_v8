@@ -279,6 +279,72 @@ export const SERVICE_GUIDES: Omit<Guide, "minutes">[] = [
           },
         ],
       },
+      {
+        title: "Ask the assistant about your numbers",
+        blocks: [
+          {
+            kind: "text",
+            text: "The Assistant page answers two kinds of question in one chat. Ask how to do something and it answers from these guides. On Growth and above, ask about your church and it reads the same counts, percentages and trends as your analytics, then answers with what the numbers show and a few recommendations for this month. Each answer says which kind it is: Help or Advisor.",
+          },
+          {
+            kind: "table",
+            headers: ["What", "Help answers", "Advisor answers"],
+            rows: [
+              ["Plan", "Every plan", "Growth and above"],
+              [
+                "What it reads",
+                "These guides and answers our team has approved",
+                "Your counts, percentages and trends, the guides, and your notes in About our church",
+              ],
+              [
+                "Who can ask",
+                "Anyone on your team",
+                "The owner, and staff who can see analytics, giving and follow-up",
+              ],
+              [
+                "Good for",
+                "How do I record attendance?",
+                "How is attendance trending, and what should we do about first-timers who have not come back?",
+              ],
+            ],
+          },
+          {
+            kind: "steps",
+            items: [
+              {
+                title: "The church owner opens Settings → AI features",
+                detail:
+                  "One switch covers the assistant, the summaries and the advisor. Read what is sent before turning it on; it can be turned off at any time.",
+              },
+              {
+                title: "Write a few lines in About our church (optional)",
+                detail:
+                  "What you call your services and groups, and what you are working on this year. The advisor reads them with every answer, so it speaks your language instead of guessing.",
+              },
+              {
+                title: "Open Assistant and ask",
+                detail:
+                  "Start with one of the suggested questions. Under each answer, the sources show where it came from; Your figures means it used your numbers.",
+              },
+            ],
+          },
+          {
+            kind: "bullets",
+            items: [
+              "Each church has a number of questions a month by plan (30 on Starter, 150 on Growth, 500 on Pro and 2,000 on Enterprise), and each person can ask 25 a day. The page shows how many are left and when they start again.",
+              "Answers are written by an AI model and can be wrong. When an answer carries the note that some figures could not be checked against your records, check those numbers on Analytics before you repeat them.",
+              "The advisor sees counts, never people. It cannot tell you who stopped coming; it points you to the page that lists them, such as Follow-up.",
+              "Giving is only ever a trend or a percentage. No amount of money is sent, so the advisor cannot quote one.",
+              "A question about anything other than your church, its ministry and administration, or FlockInsight gets a short reply saying it is outside what the assistant helps with.",
+              "Chats are kept for 180 days unless you save an answer in them. Save the answers you want to keep; any answer or whole chat downloads as a PDF or Markdown.",
+            ],
+          },
+          {
+            kind: "note",
+            text: "Do not type anyone's phone number, email or address into a question. Those are removed before the question is sent, and so are names on your register, but a name that is not on your register may not be.",
+          },
+        ],
+      },
     ],
     faq: [
       {
@@ -293,13 +359,23 @@ export const SERVICE_GUIDES: Omit<Guide, "minutes">[] = [
         q: "Who can see analytics?",
         a: "Anyone with the Analytics permission. It is worth restricting: attendance numbers are sensitive in most churches.",
       },
+      {
+        q: "Why does the assistant only answer from the guides?",
+        a: "Advisor answers need a plan that includes them (Growth and above), the owner's consent in Settings → AI features, and a role that can see analytics, giving and follow-up. They are also being tried with a few churches first. The top of the Assistant page says which of these applies, and Settings → AI features shows each feature's state.",
+      },
+      {
+        q: "Does the assistant send our members' details anywhere?",
+        a: "No. A help answer sends only the typed question, with personal details removed. An advisor answer adds counts, percentages and trends (the same figures as the summaries) and your About our church notes, never a name, phone number, address or amount of money.",
+      },
     ],
     links: [
       { label: "Analytics", href: "/analytics" },
       { label: "Reports", href: "/reports" },
+      { label: "Assistant", href: "/assistant" },
+      { label: "AI features", href: "/settings/ai" },
     ],
     tip: "Look at the same chart on the first Monday of every month. A number checked regularly changes behaviour; a number checked once a year does not.",
     related: ["attendance", "reports", "branches"],
-    keywords: ["analytics", "chart", "growth", "trend", "report", "statistics"],
+    keywords: ["analytics", "chart", "growth", "trend", "report", "statistics", "assistant", "advisor", "ai", "recommendations"],
   },
 ];

@@ -6864,7 +6864,12 @@ export const platformCertificate = pgTable(
  * not an ALTER TYPE that cannot run inside a transaction.
  * ========================================================== */
 
-export type AiFeature = "analytics" | "chat" | "blog";
+/**
+ * "advisor" is the assistant answering from a church's (or the platform's)
+ * allow-listed figures, on its own policy and pause switch. "chat" stays the
+ * how-to help assistant and the canned-answer drafter.
+ */
+export type AiFeature = "analytics" | "chat" | "blog" | "advisor";
 export type AiCallStatus =
   | "reserved" // written, budget held, request in flight
   | "ok" // end_turn / stop_sequence
@@ -6987,6 +6992,12 @@ export const aiChurchSetting = pgTable("ai_church_setting", {
     .primaryKey()
     .references(() => church.id, { onDelete: "cascade" }),
   enabled: boolean().notNull().default(false),
+  /**
+   * "About our church", written by the owner for the advisor: what they call
+   * their groups, their services, what they are working on. Scrubbed before
+   * it is sent, and sent only to this church's own advisor answers.
+   */
+  notes: text(),
   changedByUserId: text().references(() => user.id, { onDelete: "set null" }),
   enabledAt: timestamp({ withTimezone: true }),
   disabledAt: timestamp({ withTimezone: true }),
@@ -7038,12 +7049,20 @@ export const aiSummary = pgTable(
 );
 
 /* ============================================================
- * Help assistant: questions staff ask about USING FlockInsight.
+ * The assistant: questions staff ask, answered in one of two modes, which
+ * the server picks per question and stores on each row (`mode`).
+ *
+ *   help     how to use FlockInsight, grounded on lib/help/** plus the canned
+ *            answers a human has approved. It sees no church records.
+ *   advisor  help plus the church's own allow-listed figures (counts and
+ *            percentages through the serialiser, never a person or an amount
+ *            of money) and the owner's "About our church" notes, for a church
+ *            whose plan, rollout, consent and asker's role all allow it.
  *
  * Every exchange is kept, along with the answer given and whether it helped.
- * That record is how the reviewed pipeline finds the questions the guides do
- * not answer. The assistant never sees church records: it is grounded on
- * lib/help/** plus the canned answers a human has approved.
+ * That record is how the reviewed pipeline finds the answers that need a
+ * look: the questions the guides do not answer, and advisor answers quoting
+ * a figure the check could not find in the data (`figures_ok` false).
  *
  * WHAT IS STORED IS WHAT WAS SENT. A user row holds the SCRUBBED question
  * (emails, phone numbers, long digit runs, street addresses, and names found
@@ -7053,14 +7072,19 @@ export const aiSummary = pgTable(
  * the UI can say "we removed 2 details".
  *
  * scope "platform" covers two cases: a superadmin asking from /superadmin, or
- * a superadmin asking while acting as a church. Either way church_id is null,
- * the question is charged to the platform budget only, and no opt-in applies.
+ * a superadmin asking while acting as a church. Either way church_id is null
+ * and the question is charged to the platform budget and the admin's own day,
+ * never the church's allowance. Acting as a church, `context_church_id` names
+ * it, and the advisor uses its figures only if that church's owner opted in
+ * (checked explicitly, because runAi sees no church id to check).
  * The check makes "a church row with no church" impossible.
  *
- * Kept for ASSISTANT_RETENTION_DAYS (180) after the last message. The
- * assistant-retention cron then deletes the conversation, and its messages
- * cascade. An approved canned answer keeps its own copy of the question, so
- * an expiring transcript never takes the answer with it.
+ * Kept for ASSISTANT_RETENTION_DAYS (180) after the last message, unless an
+ * answer in it was saved; a conversation the person deleted (`deleted_at`) is
+ * hidden at once and removed 30 days later, saved or not. The
+ * assistant-retention cron does both, and messages cascade. An approved
+ * canned answer keeps its own copy of the question, so an expiring transcript
+ * never takes the answer with it.
  * ========================================================== */
 export const assistantConversation = pgTable(
   "assistant_conversation",
@@ -7074,6 +7098,25 @@ export const assistantConversation = pgTable(
     locale: text().notNull().default("en"),
     /** User and assistant rows together. A conversation stops at 30. */
     messageCount: integer().notNull().default(0),
+    /** Shown in the history list: the first question, until the person renames it. */
+    title: text(),
+    /**
+     * The person deleted it. Hidden from them at once; the retention sweep
+     * removes it for good after 30 days.
+     */
+    deletedAt: timestamp({ withTimezone: true }),
+    /**
+     * Platform scope only: the church a superadmin was acting as, so the
+     * history can say which church's figures an advisor answer was about.
+     * The conversation is still the admin's and charged to the platform.
+     *
+     * Deleted with the church, like the church's own conversations. The
+     * tenancy predicate (owner.ts) reads a null here as "asked on
+     * /superadmin, about no church", so SET NULL would have turned support
+     * chats full of a deleted church's figures into the admin's ordinary
+     * platform chats, replayed as history beside the platform's figures.
+     */
+    contextChurchId: text().references(() => church.id, { onDelete: "cascade" }),
     startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     lastMessageAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -7166,6 +7209,19 @@ export const assistantMessage = pgTable(
     answerKind: text(),
     /** "guide:<slug>" and "answer:<uuid>" the answer cited, checked against what exists. */
     sources: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
+     * "help" answered how to use FlockInsight from the guides; "advisor" also
+     * had the church's (or platform's) allow-listed figures in front of it.
+     */
+    mode: text().notNull().default("help"),
+    /**
+     * Advisor answers only: every figure in the answer was found in the
+     * figures the model was given. False opens a review item. Null for help
+     * answers, which carry no figures.
+     */
+    figuresOk: boolean(),
+    /** The person kept this answer. Saved answers outlive the retention sweep. */
+    savedAt: timestamp({ withTimezone: true }),
     /** The person's verdict. Null until they tap. Assistant rows only. */
     helpful: boolean(),
     feedbackAt: timestamp({ withTimezone: true }),
@@ -7182,6 +7238,16 @@ export const assistantMessage = pgTable(
     }),
     inputTokens: integer(),
     outputTokens: integer(),
+    /**
+     * Assistant rows: the AI ledger row of the call that wrote this answer.
+     * That row keeps a copy of everything sent (the question, the earlier
+     * turns, the figures, the church notes) and what came back, so when the
+     * person's deleted conversation is purged after 30 days, the retention
+     * sweep clears those copies too, instead of leaving them readable for
+     * the rest of the ledger's 180 days. Null for rows from before this
+     * column and for answers no call wrote.
+     */
+    callId: uuid().references(() => aiCall.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -7193,10 +7259,15 @@ export const assistantMessage = pgTable(
     index("assistant_message_review_idx")
       .on(t.createdAt)
       .where(sql`${t.reviewStatus} = 'open'`),
+    // "Saved answers": a few rows per person in a large table.
+    index("assistant_message_saved_idx")
+      .on(t.userId, t.savedAt)
+      .where(sql`${t.savedAt} is not null`),
+    check("assistant_message_mode_chk", sql`${t.mode} in ('help','advisor')`),
     check("assistant_message_role_chk", sql`${t.role} in ('user','assistant')`),
     check(
       "assistant_message_kind_chk",
-      sql`((${t.role} = 'assistant') = (${t.answerKind} is not null)) and (${t.answerKind} is null or ${t.answerKind} in ('answered','not_in_guides','refused','truncated','failed'))`,
+      sql`((${t.role} = 'assistant') = (${t.answerKind} is not null)) and (${t.answerKind} is null or ${t.answerKind} in ('answered','not_in_guides','refused','truncated','failed','out_of_scope'))`,
     ),
     check(
       "assistant_message_feedback_chk",
@@ -7206,6 +7277,42 @@ export const assistantMessage = pgTable(
       "assistant_message_review_chk",
       sql`${t.reviewStatus} in ('none','open','dismissed','resolved')`,
     ),
+  ],
+);
+
+/* ============================================================
+ * Assistant allowances: how many questions a church has asked this month,
+ * and a person today.
+ *
+ * A COUNTER, claimed before the model is asked, because counting
+ * assistant_message rows is check-then-insert and READ COMMITTED lets two
+ * questions at the limit both pass (AGENTS.md: a transaction is not
+ * isolation). The claim is all three parts: the row locked FOR UPDATE, the
+ * limit repeated in the UPDATE's WHERE with the returning() count checked,
+ * and this unique index making the row the one place the count lives.
+ *
+ *   period  "YYYY-MM" (UTC) for a church's month, "YYYY-MM-DD" (UTC) for a
+ *           person's day
+ *   subject "church:<id>" or "user:<id>"
+ *
+ * A question that is refused before the model is asked is handed back
+ * (used - 1), so an outage or a switched-off feature never eats allowance.
+ * ========================================================== */
+export const assistantUsage = pgTable(
+  "assistant_usage",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    period: text().notNull(),
+    subject: text().notNull(),
+    used: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("assistant_usage_period_subject_idx").on(t.period, t.subject),
+    check("assistant_usage_used_nonneg", sql`${t.used} >= 0`),
   ],
 );
 

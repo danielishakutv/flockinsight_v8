@@ -1,21 +1,44 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { and, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, like, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { aiBudgetMonth, aiCall, aiChurchSetting, church, type AiCallStatus, type AiFeature } from "@/db/schema";
+import {
+  aiBudgetMonth,
+  aiCall,
+  aiChurchSetting,
+  assistantUsage,
+  church,
+  type AiCallStatus,
+  type AiFeature,
+} from "@/db/schema";
 import { requirePlatform } from "@/lib/platform-access";
-import { getAiPlatformState } from "@/lib/ai/settings";
+import {
+  AI_CHURCH_SHARE_MAX_USD,
+  getAdvisorPilot,
+  getAdvisorRollout,
+  getAiPlatformState,
+  getAssistantAllowances,
+} from "@/lib/ai/settings";
+import { ALLOWANCE_MAX, ASSISTANT_ALLOWANCE_DEFAULTS } from "@/lib/ai/settings-rules";
+import { WORKSPACE_FIX, isWorkspaceScopeError } from "@/lib/ai/config";
 import { monthKey } from "@/lib/ai/budget-rules";
 import { formatNanoUsd } from "@/lib/ai/pricing";
+import { ASSISTANT_ADMIN_DAILY, PLAN_ORDER, churchRowHasFeature, planRank } from "@/lib/entitlements";
+import { planName, type PlanId } from "@/lib/plans";
+import { monthlyAllowanceFor, usagePeriods } from "@/lib/assistant/advisor-shared";
 import { AiControls } from "@/components/superadmin/ai-controls";
+import { AiAllowances } from "@/components/superadmin/ai-allowances";
+import { AiAdvisorRollout } from "@/components/superadmin/ai-advisor-rollout";
+import type { PilotChurch } from "@/app/superadmin/ai/actions";
 import { AiCallsTable, type AiCallRow } from "@/components/superadmin/ai-calls-table";
 import { ListCardSkeleton, StatusLineSkeleton } from "@/components/superadmin/skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 
 export const metadata = { title: "AI · Admin" };
 export const dynamic = "force-dynamic";
 
-const FEATURES: AiFeature[] = ["analytics", "chat", "blog"];
+const FEATURES: AiFeature[] = ["analytics", "chat", "blog", "advisor"];
 const STATUSES: AiCallStatus[] = ["reserved", "ok", "refused", "truncated", "error", "abandoned"];
 
 type Search = Promise<Record<string, string | string[] | undefined>>;
@@ -52,6 +75,10 @@ export default async function SuperadminAiPage({ searchParams }: { searchParams:
         <StatusStrip canManage={canManage} />
       </Suspense>
 
+      <Suspense fallback={<ListCardSkeleton rows={4} />}>
+        <AssistantSection canManage={canManage} />
+      </Suspense>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Suspense fallback={<ListCardSkeleton rows={3} />}>
           <SpendByFeature />
@@ -68,9 +95,16 @@ export default async function SuperadminAiPage({ searchParams }: { searchParams:
   );
 }
 
+const PLAN_LABEL: Record<PlanId, string> = {
+  starter: planName("starter"),
+  growth: planName("growth"),
+  pro: planName("pro"),
+  enterprise: planName("enterprise"),
+};
+
 async function StatusStrip({ canManage }: { canManage: boolean }) {
   const month = monthKey();
-  const [state, [budget], [optIns], statusRows] = await Promise.all([
+  const [state, [budget], [optIns], statusRows, [lastError], [lastOk]] = await Promise.all([
     getAiPlatformState(),
     db
       .select({ spent: aiBudgetMonth.spentNano, reserved: aiBudgetMonth.reservedNano })
@@ -86,6 +120,18 @@ async function StatusStrip({ canManage }: { canManage: boolean }) {
       .from(aiCall)
       .where(eq(aiCall.budgetMonth, month))
       .groupBy(aiCall.status),
+    db
+      .select({ id: aiCall.id, error: aiCall.error, createdAt: aiCall.createdAt })
+      .from(aiCall)
+      .where(eq(aiCall.status, "error"))
+      .orderBy(desc(aiCall.createdAt))
+      .limit(1),
+    db
+      .select({ createdAt: aiCall.createdAt })
+      .from(aiCall)
+      .where(eq(aiCall.status, "ok"))
+      .orderBy(desc(aiCall.createdAt))
+      .limit(1),
   ]);
   const spent = budget?.spent ?? 0;
   const reserved = budget?.reserved ?? 0;
@@ -94,10 +140,51 @@ async function StatusStrip({ canManage }: { canManage: boolean }) {
   const byStatus = new Map(statusRows.map((r) => [r.status, Number(r.n)]));
   const calls = [...byStatus.values()].reduce((a, b) => a + b, 0);
 
+  // What this process was started with, which is what the AI client reads
+  // (once, when it is first created). Only whether it is set: like the key,
+  // the value itself is never rendered.
+  const workspaceSet = Boolean(process.env.ANTHROPIC_WORKSPACE_ID?.trim());
+  // The latest failure says "organisation key" and nothing has succeeded
+  // since. A success after it means the fix already landed, and a banner
+  // still shouting about it would send someone to fix what is not broken.
+  // The raw provider text is tested, so rows stored before the "workspace"
+  // classification existed ("bad_request: …") are recognised too.
+  const workspaceProblem =
+    lastError && isWorkspaceScopeError(lastError.error ?? "") && (!lastOk || lastOk.createdAt < lastError.createdAt)
+      ? lastError
+      : null;
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {workspaceProblem && (
+        <div
+          className="space-y-1 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-900 dark:text-rose-100"
+          role="alert"
+        >
+          <p className="font-semibold">Anthropic is refusing the AI key: it is not scoped to a workspace.</p>
+          <p>{WORKSPACE_FIX}</p>
+          <p className="text-xs">
+            Last seen {workspaceProblem.createdAt.toLocaleString("en-GB", { timeZone: "UTC" })} UTC, with no
+            successful call since.{" "}
+            <Link href={`/superadmin/ai/calls/${workspaceProblem.id}`} className="font-semibold underline">
+              Open that call
+            </Link>
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Tile label="API key" value={state.configured ? "Set" : "Not set"} tone={state.configured ? "ok" : "muted"} />
+        <Tile
+          label="Workspace id"
+          value={workspaceSet ? "Set" : "Not set"}
+          tone={workspaceSet ? "ok" : "muted"}
+          sub={
+            workspaceSet
+              ? "Sent as anthropic-workspace-id on every call"
+              : "Needed only for an organisation-level key"
+          }
+        />
         <Tile label="Kill switch" value={state.killed ? "ON: all stopped" : "Off"} tone={state.killed ? "bad" : "ok"} />
         <Tile label="Churches opted in" value={String(Number(optIns?.n ?? 0))} />
         <Tile
@@ -122,8 +209,9 @@ async function StatusStrip({ canManage }: { canManage: boolean }) {
             />
           </div>
           <p className="text-muted-foreground text-xs">
-            Each church may spend up to {formatNanoUsd(state.churchShareNano, 2)} a month. Paused features:{" "}
-            {state.pausedFeatures.length ? state.pausedFeatures.join(", ") : "none"}.
+            Each church may spend, by its plan:{" "}
+            {PLAN_ORDER.map((p) => `${PLAN_LABEL[p]} $${state.churchShareByPlanUsd[p].toFixed(2)}`).join(" · ")} a
+            month. Paused features: {state.pausedFeatures.length ? state.pausedFeatures.join(", ") : "none"}.
           </p>
           {!state.configured && (
             <p className="text-muted-foreground text-sm">
@@ -137,9 +225,172 @@ async function StatusStrip({ canManage }: { canManage: boolean }) {
         <AiControls
           killed={state.killed}
           platformUsd={state.platformCeilingUsd}
-          churchUsd={state.churchShareUsd}
+          churchShareByPlan={state.churchShareByPlanUsd}
+          maxChurchShareUsd={AI_CHURCH_SHARE_MAX_USD}
           paused={state.pausedFeatures}
         />
+      )}
+    </div>
+  );
+}
+
+const ROLLOUT_TEXT = {
+  off: "Off: every question is answered from the guides",
+  pilot: "Pilot churches only",
+  all: "Every eligible church",
+} as const;
+
+/**
+ * The assistant's allowances and the church advisor's rollout, with this
+ * month's questions by plan beside them: an allowance is only worth editing
+ * against what churches actually ask, and "at the limit" is the number that
+ * says a plan's allowance is too small (or doing its job).
+ */
+async function AssistantSection({ canManage }: { canManage: boolean }) {
+  const { month } = usagePeriods();
+  const [allowances, rollout, pilotSlugs, usageRows] = await Promise.all([
+    getAssistantAllowances(),
+    getAdvisorRollout(),
+    getAdvisorPilot(),
+    db
+      .select({ subject: assistantUsage.subject, used: assistantUsage.used })
+      .from(assistantUsage)
+      .where(and(eq(assistantUsage.period, month), like(assistantUsage.subject, "church:%"))),
+  ]);
+
+  const usageIds = usageRows.map((r) => r.subject.slice("church:".length));
+  const [pilotRows, usagePlans] = await Promise.all([
+    pilotSlugs.length
+      ? db
+          .select({
+            slug: church.slug,
+            name: church.name,
+            plan: church.plan,
+            isDemo: church.isDemo,
+            aiOn: aiChurchSetting.enabled,
+          })
+          .from(church)
+          .leftJoin(aiChurchSetting, eq(aiChurchSetting.churchId, church.id))
+          .where(inArray(church.slug, pilotSlugs))
+      : Promise.resolve([]),
+    usageIds.length
+      ? db.select({ id: church.id, plan: church.plan }).from(church).where(inArray(church.id, usageIds))
+      : Promise.resolve([]),
+  ]);
+
+  // In the order they were added; a slug no church has any more stays visible
+  // so it can be removed, rather than silently dropping out of the list.
+  const bySlug = new Map(pilotRows.map((r) => [r.slug, r]));
+  const pilot: PilotChurch[] = pilotSlugs.map((slug) => {
+    const r = bySlug.get(slug);
+    if (!r) return { slug, name: null, plan: null, aiOn: false, advisorOnPlan: false, isDemo: false };
+    return {
+      slug,
+      name: r.name,
+      plan: r.plan,
+      aiOn: r.aiOn === true,
+      advisorOnPlan: !r.isDemo && churchRowHasFeature(r, "aiAdvisor"),
+      isDemo: r.isDemo,
+    };
+  });
+
+  // This month's questions by plan. A church's counter row outlives a plan
+  // change, so it is read against the plan the church is on now, which is
+  // also the allowance its next question is checked against.
+  const planOf = new Map(usagePlans.map((c) => [c.id, c.plan]));
+  const byPlan = new Map<PlanId, { churches: number; questions: number; atLimit: number }>(
+    PLAN_ORDER.map((p) => [p, { churches: 0, questions: 0, atLimit: 0 }]),
+  );
+  for (const r of usageRows) {
+    const id = r.subject.slice("church:".length);
+    if (!planOf.has(id)) continue; // a deleted church
+    const plan = PLAN_ORDER[planRank(planOf.get(id))];
+    const limit = monthlyAllowanceFor(plan, allowances);
+    const row = byPlan.get(plan)!;
+    if (r.used > 0) row.churches += 1;
+    row.questions += r.used;
+    if (limit !== null && r.used >= limit) row.atLimit += 1;
+  }
+  const totalQuestions = [...byPlan.values()].reduce((a, b) => a + b.questions, 0);
+  const totalChurches = [...byPlan.values()].reduce((a, b) => a + b.churches, 0);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Assistant</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm">
+            <span className="font-semibold">Church advisor:</span> {ROLLOUT_TEXT[rollout]}
+            {rollout === "pilot" && ` (${pilot.length} church${pilot.length === 1 ? "" : "es"})`}.{" "}
+            <span className="text-muted-foreground">
+              {totalQuestions.toLocaleString("en")} question{totalQuestions === 1 ? "" : "s"} from{" "}
+              {totalChurches.toLocaleString("en")} church{totalChurches === 1 ? "" : "es"} in {month} (UTC). Questions
+              asked while acting as a church are on the platform&apos;s count, not these.
+            </span>
+          </p>
+          <ScrollableTable label="Assistant questions this month by plan" hint="Scroll for more">
+            <table className="w-full min-w-[34rem] text-sm">
+              <thead className="text-muted-foreground border-b text-left text-xs">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Plan</th>
+                  <th className="px-3 py-2 text-right font-medium">Allowance a month</th>
+                  <th className="px-3 py-2 text-right font-medium">Churches asking</th>
+                  <th className="px-3 py-2 text-right font-medium">Questions</th>
+                  <th className="py-2 pl-3 text-right font-medium">At the limit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {PLAN_ORDER.map((p) => {
+                  const r = byPlan.get(p)!;
+                  const limit = allowances[p];
+                  return (
+                    <tr key={p}>
+                      <td className="py-2 pr-3">{PLAN_LABEL[p]}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {limit === null ? "No limit" : limit.toLocaleString("en")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.churches.toLocaleString("en")}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.questions.toLocaleString("en")}</td>
+                      <td
+                        className={
+                          r.atLimit > 0
+                            ? "py-2 pl-3 text-right font-semibold text-amber-700 tabular-nums dark:text-amber-300"
+                            : "py-2 pl-3 text-right tabular-nums"
+                        }
+                      >
+                        {r.atLimit.toLocaleString("en")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollableTable>
+          <p className="text-muted-foreground text-xs">
+            Each person may ask {allowances.perPersonDaily.toLocaleString("en")} a day; a superadmin{" "}
+            {ASSISTANT_ADMIN_DAILY}. Months and days reset in UTC.
+            {!canManage && " Changing these needs the Control AI permission."}
+          </p>
+          {!canManage && rollout === "pilot" && (
+            <p className="text-muted-foreground text-xs">
+              Pilot churches: {pilot.length ? pilot.map((c) => c.name ?? c.slug).join(", ") : "none"}.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {canManage && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <AiAllowances
+            allowances={allowances}
+            defaults={ASSISTANT_ALLOWANCE_DEFAULTS}
+            adminDaily={ASSISTANT_ADMIN_DAILY}
+            max={ALLOWANCE_MAX}
+          />
+          <AiAdvisorRollout rollout={rollout} pilot={pilot} />
+        </div>
       )}
     </div>
   );

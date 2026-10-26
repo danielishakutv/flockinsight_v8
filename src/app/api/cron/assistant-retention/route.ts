@@ -1,23 +1,20 @@
-import { inArray, lt } from "drizzle-orm";
-import { db } from "@/db";
-import { assistantConversation } from "@/db/schema";
 import { withCronRun } from "@/lib/cron-run";
-import { ASSISTANT_RETENTION_DAYS } from "@/lib/assistant/shared";
+import { runAssistantRetention } from "@/lib/assistant/retention";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const BATCH = 1000;
-const MAX_BATCHES = 20;
-
 /**
- * GET /api/cron/assistant-retention, daily. Keeps the promise the assistant's
- * privacy line makes: a conversation is deleted 180 days after its last
- * message, and its messages cascade with it. An approved canned answer keeps
- * its own copy of the question, so nothing a church relies on expires here.
+ * GET /api/cron/assistant-retention, daily. Keeps the promises the
+ * assistant's privacy line makes (lib/assistant/retention.ts has them in
+ * full): a conversation goes 180 days after its last message unless an
+ * answer in it was saved, a conversation the person deleted goes for good 30
+ * days later, and the AI ledger's stored copy of an assistant question goes
+ * with its conversation, or after 180 days at the latest (its cost and
+ * tokens stay).
  *
  * Batched so one run never holds a long lock; anything left over goes on the
- * next day's run, and the count is on the cron_run row either way.
+ * next day's run, and the counts are on the cron_run row either way.
  * Auth via ?key=CRON_SECRET or a Bearer header.
  */
 export async function GET(request: Request) {
@@ -31,32 +28,8 @@ export async function GET(request: Request) {
   }
 
   return withCronRun("assistant-retention", async () => {
-    const cutoff = new Date(Date.now() - ASSISTANT_RETENTION_DAYS * 86_400_000);
-    let deleted = 0;
-    let batches = 0;
-    for (; batches < MAX_BATCHES; batches++) {
-      // A non-correlated subquery: the ids are chosen first, then deleted.
-      const gone = await db
-        .delete(assistantConversation)
-        .where(
-          inArray(
-            assistantConversation.id,
-            db
-              .select({ id: assistantConversation.id })
-              .from(assistantConversation)
-              .where(lt(assistantConversation.lastMessageAt, cutoff))
-              .limit(BATCH),
-          ),
-        )
-        .returning({ id: assistantConversation.id });
-      deleted += gone.length;
-      if (gone.length < BATCH) break;
-    }
-    return Response.json({
-      ok: true,
-      deleted,
-      cutoff: cutoff.toISOString(),
-      more: batches === MAX_BATCHES,
-    });
+    const r = await runAssistantRetention();
+    // `deleted` is kept from the old summary so the cron history reads on.
+    return Response.json({ ok: true, deleted: r.expired + r.removed, ...r });
   });
 }

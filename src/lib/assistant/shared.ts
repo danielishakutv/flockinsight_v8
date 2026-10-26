@@ -1,12 +1,19 @@
 /**
- * The help assistant's pure half: limits, the prompt text, and the rules for
- * reading an answer back. Client-safe and database-free, so the panel can use
- * the constants and vitest can pin every rule.
+ * The assistant's pure half: limits, the help prompt text, and the rules for
+ * reading an answer back. Client-safe and database-free, so the chat page can
+ * use the constants and vitest can pin every rule.
  *
- * The assistant answers "how do I use FlockInsight" from lib/help/** and from
- * canned answers a human approved. It never sees church records, and nothing
- * in this file takes a church as an argument, so nothing here can put one in
- * a prompt.
+ * The assistant answers in one of two modes, and the server picks which for
+ * each question:
+ *
+ *   help     "how do I use FlockInsight", from lib/help/** and from canned
+ *            answers a human approved. It sees no church records. Everything
+ *            in THIS file is the help half, and nothing here takes a church
+ *            as an argument, so nothing here can put one in a prompt.
+ *   advisor  help plus the church's (or the platform's) allow-listed figures,
+ *            counts and percentages only, through the serialiser. Its prompt,
+ *            its user turn and its parsing live in advisor-shared.ts, so the
+ *            figures can never be threaded into the help prompt by accident.
  */
 import { isLocale, localeInfo } from "@/lib/i18n/locales";
 
@@ -16,13 +23,25 @@ export const MAX_CONVERSATION_MESSAGES = 30;
 /** Rows of earlier conversation sent with a question: three exchanges. */
 export const HISTORY_TURNS = 6;
 /**
- * In-memory and therefore per worker. The database cap below is the real
- * bound; this only stops a held-down Enter key from reaching it in a second.
+ * In-memory and therefore per worker. The allowance counter (usage.ts) is
+ * the real bound; this only stops a held-down Enter key from reaching it in a
+ * second.
  */
 export const BURST_LIMIT = { count: 20, windowMs: 600_000 } as const;
+/**
+ * @deprecated The old rolling 24-hour count. Nothing enforces it any more:
+ * the per-person daily allowance in lib/entitlements.ts (ASSISTANT_PERSON_DAILY,
+ * ASSISTANT_ADMIN_DAILY), claimed atomically in usage.ts, replaced it.
+ */
 export const DAILY_QUESTIONS = 60;
-/** Promised to churches in the privacy line; the assistant-retention cron keeps it. */
+/**
+ * Promised to churches in the privacy line; the assistant-retention cron keeps
+ * it. A conversation with a saved answer in it is kept until the person
+ * deletes it or unsaves the answer.
+ */
 export const ASSISTANT_RETENTION_DAYS = 180;
+/** A conversation the person deleted is hidden at once and gone for good this many days later. */
+export const ASSISTANT_DELETED_PURGE_DAYS = 30;
 /** Must equal FEATURE_POLICY.chat.model in lib/ai/config.ts, or runAi refuses. */
 export const CHAT_MODEL = "claude-haiku-5-5" as const;
 /*
@@ -55,13 +74,25 @@ export function isModelFailure(reason: string): reason is ModelFailureReason {
   return (MODEL_FAILURE_REASONS as readonly string[]).includes(reason);
 }
 
-export type AnswerKind = "answered" | "not_in_guides" | "refused" | "truncated" | "failed";
+/**
+ * "out_of_scope" is the advisor declining a question outside church ministry
+ * and administration (sport, coding, politics, medical advice). It is stored
+ * so the person sees what happened, and never opens a review item: off-topic
+ * traffic must not flood the queue.
+ */
+export type AnswerKind = "answered" | "not_in_guides" | "refused" | "truncated" | "failed" | "out_of_scope";
 export type ReviewStatus = "none" | "open" | "dismissed" | "resolved";
+
+/** Which half answered: the guides alone, or the guides plus the figures. */
+export type AssistantMode = "help" | "advisor";
 
 export type AssistantErrorCode =
   | "tooLong"
   | "rateLimited"
+  /** The person's allowance for today (UTC) is used. vars.max is the allowance. */
   | "dailyLimit"
+  /** The church's allowance for this month (UTC) is used. vars.max is the allowance. */
+  | "monthlyLimit"
   | "conversationFull"
   | "onlyPersonalDetails"
   | "notInDemo"
@@ -73,7 +104,105 @@ export type AssistantErrorCode =
 /** What the panel renders for a source chip. */
 export type AssistantSource = { ref: string; title: string; href: string | null };
 
-/** One stored row as the panel sees it. */
+/** A stored question as the chat page sees it. Dates are ISO strings, safe to hand to a client. */
+export type ChatQuestion = {
+  role: "user";
+  id: string;
+  /** The SCRUBBED question: what was sent and stored, not what was typed. */
+  content: string;
+  redactions: number;
+  mode: AssistantMode;
+  createdAt: string;
+};
+
+/** A stored answer as the chat page sees it. */
+export type ChatAnswer = {
+  role: "assistant";
+  id: string;
+  content: string;
+  kind: AnswerKind;
+  sources: AssistantSource[];
+  helpful: boolean | null;
+  mode: AssistantMode;
+  /**
+   * Advisor answers: whether every figure in the answer was found in the
+   * figures the model was given. False shows "Some figures could not be
+   * checked against your records." Null for help answers.
+   */
+  figuresOk: boolean | null;
+  /** When the person saved it, or null. Saved answers outlive the retention sweep. */
+  savedAt: string | null;
+  createdAt: string;
+  /**
+   * An advisor answer written from figures this person may no longer read
+   * (their role was narrowed after they asked). The server sent it with no
+   * content and no sources, and the page says why instead of showing it.
+   */
+  withheld?: true;
+};
+
+export type ChatItem = ChatQuestion | ChatAnswer;
+
+/** One row of the history list. */
+export type ConversationSummary = {
+  id: string;
+  /** The stored title, or the first question for a conversation from before titles. Never null. */
+  title: string;
+  messageCount: number;
+  /** Answers in it the person saved. */
+  savedCount: number;
+  startedAt: string;
+  lastMessageAt: string;
+};
+
+/** A conversation opened on the page. */
+export type ConversationDetail = {
+  id: string;
+  title: string;
+  messageCount: number;
+  /** No room for another exchange: the page offers a new conversation instead. */
+  full: boolean;
+  locale: string;
+  startedAt: string;
+  lastMessageAt: string;
+  /**
+   * Platform scope only: the church a superadmin was acting as when they
+   * asked, so the page can say whose figures the answers were about. Null on
+   * /superadmin and in every church conversation.
+   */
+  contextChurch: { id: string; name: string } | null;
+};
+
+/** One entry on the "Saved" tab: the answer, the question it answered, and where it came from. */
+export type SavedAnswer = {
+  conversationId: string;
+  conversationTitle: string;
+  /** The latest question at or before the answer. Null only if that row is somehow gone. */
+  question: ChatQuestion | null;
+  answer: ChatAnswer;
+};
+
+/**
+ * The question each answer answered, in order: the latest question at or
+ * before the answer. Both rows of an exchange share one timestamp and arrive
+ * question first (createdAt asc, role desc), so walking the list is enough.
+ * For a download, one exchange per answer.
+ */
+export function exchangesOf(items: readonly ChatItem[]): { question: ChatQuestion | null; answer: ChatAnswer }[] {
+  const out: { question: ChatQuestion | null; answer: ChatAnswer }[] = [];
+  let question: ChatQuestion | null = null;
+  for (const item of items) {
+    if (item.role === "user") question = item;
+    else out.push({ question, answer: item });
+  }
+  return out;
+}
+
+/**
+ * One stored row as the old side panel sees it. Its question shape is the
+ * original one (the panel builds it locally from the typed text); its answer
+ * is the full ChatAnswer.
+ */
 export type AssistantThreadItem =
   | {
       role: "user";
@@ -81,14 +210,7 @@ export type AssistantThreadItem =
       content: string;
       redactions: number;
     }
-  | {
-      role: "assistant";
-      id: string;
-      content: string;
-      kind: AnswerKind;
-      sources: AssistantSource[];
-      helpful: boolean | null;
-    };
+  | ChatAnswer;
 
 /** What the send action answers, in both shells. `error` is already translated. */
 export type AssistantSendResult =
@@ -172,7 +294,8 @@ export const CANNED_DRAFT_SYSTEM_PROMPT = [
   "<the answer>",
 ].join("\n");
 
-function languageLine(locale: string): string {
+/** "French (Français)" for a known locale, "English" for anything else. Shared with the advisor's turn. */
+export function languageLine(locale: string): string {
   if (!isLocale(locale)) return "English";
   const info = localeInfo(locale);
   return info.name === info.native ? info.name : `${info.name} (${info.native})`;
@@ -248,10 +371,15 @@ export type KnownSources = {
  * do not exist: the model ignored the format, which is worth a human look.
  * Answer ids travel as short codes because runAi's scrubber removes UUIDs from
  * free text; they are mapped back to ids here.
+ *
+ * `facts` counts as a real source only when opts.facts is set: the advisor
+ * cites the figures it was given that way, and the help assistant was given
+ * none, so from a help answer the token means nothing and is dropped.
  */
 export function parseAnswer(
   text: string,
   known: KnownSources,
+  opts: { facts?: boolean } = {},
 ): { body: string; sources: string[]; grounded: boolean | null } {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   let at = -1;
@@ -273,6 +401,10 @@ export function parseAnswer(
   const sources: string[] = [];
   for (const raw of value.split(/[,;]/)) {
     const ref = raw.trim().replace(/^\[|\]$/g, "");
+    if (opts.facts && /^facts$/i.test(ref)) {
+      if (!sources.includes("facts")) sources.push("facts");
+      continue;
+    }
     const guide = /^guide:([a-z0-9-]+)$/i.exec(ref);
     if (guide && known.guides.has(guide[1].toLowerCase())) {
       const r = `guide:${guide[1].toLowerCase()}`;
@@ -287,6 +419,17 @@ export function parseAnswer(
     }
   }
   return { body, sources, grounded: sources.length > 0 ? true : null };
+}
+
+/** The most a conversation title holds, from the first question or a rename. */
+export const CONVERSATION_TITLE_MAX = 80;
+
+/**
+ * A conversation's title until the person renames it: the first 80
+ * characters of the first (scrubbed) question, on one line.
+ */
+export function conversationTitle(question: string): string {
+  return question.replace(/\s+/g, " ").trim().slice(0, CONVERSATION_TITLE_MAX).trimEnd();
 }
 
 /** The stored kind for a runAi outcome. */
@@ -325,6 +468,8 @@ export function reviewStatusFor(input: {
   current?: ReviewStatus | string | null;
 }): ReviewStatus {
   if (input.current === "resolved" || input.current === "dismissed") return input.current;
+  // Off-topic is a correct answer, not a gap in the guides.
+  if (input.answerKind === "out_of_scope") return "none";
   if (input.answerKind !== "answered") return "open";
   if (input.grounded === null) return "open";
   if (input.helpful === false) return "open";
@@ -338,9 +483,19 @@ export function reviewStatusFor(input: {
  * The fixed "failed / cut off / declined" copy is ours, not the model's, and
  * replaying it as an assistant turn would teach the model to repeat it. The
  * result always starts with a user turn, which the Messages API requires.
+ *
+ * An advisor answer carries the figures it was written from (attendance and
+ * follow-up counts, the giving trend), so it is replayed only into another
+ * advisor question, which the asker was just found eligible for. A help
+ * question is asked when that eligibility is gone (the owner withdrew
+ * consent, a role lost giving, an admin lost the dashboard permission) or
+ * was never there, and the figures must not ride along in its history:
+ * includeAdvisor is off unless the caller says otherwise. The whole exchange
+ * goes, question and answer, so the pairing stays intact.
  */
 export function historyForModel(
-  rows: { role: string; content: string; answerKind: string | null }[],
+  rows: { role: string; content: string; answerKind: string | null; mode?: string | null }[],
+  opts: { includeAdvisor?: boolean } = {},
 ): { role: "user" | "assistant"; content: string }[] {
   const pairs: { role: "user" | "assistant"; content: string }[][] = [];
   for (let i = 0; i < rows.length - 1; i++) {
@@ -348,6 +503,10 @@ export function historyForModel(
     const a = rows[i + 1];
     if (q.role !== "user" || a.role !== "assistant") continue;
     if (a.answerKind !== "answered" && a.answerKind !== "not_in_guides") continue;
+    if (a.mode === "advisor" && !opts.includeAdvisor) {
+      i++;
+      continue;
+    }
     pairs.push([
       { role: "user", content: q.content },
       { role: "assistant", content: a.content },

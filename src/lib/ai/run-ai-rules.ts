@@ -4,7 +4,7 @@
  */
 
 import type { AiFeature } from "@/db/schema";
-import { FEATURE_POLICY, type AiModel } from "./config";
+import { FEATURE_POLICY, MODELS, type AiEffort, type AiModel } from "./config";
 import { PROMPT_SCOPE, isPromptId, type PromptId } from "./prompts";
 import type { SafePayload } from "./serialiser";
 import type { ScrubbedText } from "./safe-text";
@@ -45,9 +45,20 @@ export type WireBody = {
   max_tokens: number;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
-  output_config?: { effort: "low" };
+  output_config?: { effort: AiEffort };
   fallbacks?: "default";
 };
+
+/**
+ * The effort to send, or null for none. Only Haiku takes one, and each
+ * feature's policy says which: low for a briefing or a how-to answer, medium
+ * for the advisor. Decided by the policy, never by the caller, so a feature
+ * cannot quietly buy itself a more expensive answer.
+ */
+export function effortFor(feature: AiFeature, model: string): AiEffort | null {
+  if (model !== MODELS.haiku) return null;
+  return FEATURE_POLICY[feature]?.effort ?? null;
+}
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
