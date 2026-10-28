@@ -29,6 +29,17 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.85.2",
+    date: "2026-10-28",
+    summary: "Two fixes for phones: the recording player and the course certificate.",
+    changes: {
+      Fixed: [
+        "On a phone, tapping a recording after its controls had faded paused it. The first tap now brings the controls back, so skipping forward or changing speed works the way you expect.",
+        "On a phone, the message saying you had earned a FlockInsight certificate showed one letter per line. It reads normally now, with the download button underneath.",
+      ],
+    },
+  },
+  {
     version: "0.85.1",
     date: "2026-10-28",
     summary: "Shared recordings and sermons play in FlockInsight's own player.",
