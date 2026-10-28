@@ -135,7 +135,9 @@ export function GuideQuiz({
             className="flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/10 p-4"
           >
             <Award className="size-5 shrink-0 text-violet-600 dark:text-violet-400" />
-            <p className="min-w-0 flex-1 font-bold">{t("course.newRank", { rank: rankInfo(rank).label })}</p>
+            {/* min-w-48, not min-w-0: with a zero floor the sentence, not the
+                button, gave way on a phone and read one letter per line. */}
+            <p className="min-w-48 flex-1 font-bold">{t("course.newRank", { rank: rankInfo(rank).label })}</p>
             <Button asChild size="sm">
               {/* A route handler download, not a page: a plain anchor, no prefetch. */}
               <a href={`/help/course/certificate/${rank}`}>
