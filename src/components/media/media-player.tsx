@@ -91,6 +91,8 @@ export function MediaPlayer({
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Whether the controls were hidden when this tap began. */
+  const hiddenAtTap = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
@@ -325,12 +327,19 @@ export function MediaPlayer({
         <button type="button" className={iconBtn} onClick={() => skip(SKIP_SEC)} aria-label={`Forward ${SKIP_SEC} seconds`}>
           <RotateCw className="size-[18px]" />
         </button>
-        <span className="ml-1 text-xs text-white/85 tabular-nums sm:text-sm">
+        <span className="ml-1 text-xs whitespace-nowrap text-white/85 tabular-nums sm:text-sm">
           {clock(time)} / {clock(duration)}
         </span>
 
         <div className="ml-auto flex items-center gap-0.5">
-          <button type="button" className={iconBtn} onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>
+          {/* Not on phones, which have their own volume buttons and too
+              little room on this bar. */}
+          <button
+            type="button"
+            className={`${iconBtn} hidden sm:grid`}
+            onClick={toggleMute}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
             {muted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
           </button>
           {/* Phones set the volume with their own buttons and ignore this. */}
@@ -389,6 +398,10 @@ export function MediaPlayer({
         tabIndex={-1}
         onKeyDown={onKey}
         onPointerMove={poke}
+        onPointerDown={() => {
+          hiddenAtTap.current = !showBar;
+          poke();
+        }}
         className={
           isVideo
             ? `group relative overflow-hidden bg-black outline-none ${fullscreen ? "grid h-full w-full place-items-center" : "rounded-xl"} ${playing && !showBar ? "cursor-none" : ""}`
@@ -402,7 +415,12 @@ export function MediaPlayer({
               src={src}
               playsInline
               preload="metadata"
-              onClick={toggle}
+              // A phone has no pointer to hover with, so once the controls
+              // have faded the first tap brings them back rather than pausing.
+              onClick={() => {
+                if (hiddenAtTap.current) hiddenAtTap.current = false;
+                else toggle();
+              }}
               onError={() => setFailed(true)}
               aria-label={title}
               className={fullscreen ? "max-h-full w-full" : "aspect-video w-full"}
