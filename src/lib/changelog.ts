@@ -29,6 +29,16 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.85.1",
+    date: "2026-10-28",
+    summary: "Shared recordings and sermons play in FlockInsight's own player.",
+    changes: {
+      Improved: [
+        "A shared recording or sermon link now plays with FlockInsight's own controls, the same on every phone and computer: play and pause, a bar to jump to any point, the time, back and forward 15 seconds, volume, speed and full screen.",
+      ],
+    },
+  },
+  {
     version: "0.85.0",
     date: "2026-10-28",
     summary:

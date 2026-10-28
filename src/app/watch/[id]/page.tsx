@@ -119,7 +119,13 @@ export default async function WatchMediaPage({
           </div>
         </div>
 
-        <MediaPlayer id={row.id} kind={kind} title={title} artwork={row.churchLogo} />
+        <MediaPlayer
+          id={row.id}
+          kind={kind}
+          title={title}
+          artwork={row.churchLogo}
+          durationHint={row.durationSec}
+        />
 
         <p className="mt-8 text-center text-[11px] text-slate-600">
           Shared with FlockInsight
