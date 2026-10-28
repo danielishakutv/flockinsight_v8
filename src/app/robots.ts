@@ -52,6 +52,8 @@ const PRIVATE = [
   // A certificate check names a person. It is for whoever holds the paper,
   // not for search results.
   "/cert/",
+  // A recording's player page. Unlisted: it is for whoever was sent the link.
+  "/watch/",
 ];
 
 /**

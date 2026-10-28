@@ -65,6 +65,15 @@ function srcOf(item: { url: string | null; id: string }): string {
   return item.url || `/media/${item.id}`;
 }
 
+/**
+ * The link to hand somebody. Audio and video get the player page, which has a
+ * title and controls; anything else is shown by its own link.
+ */
+function shareLinkOf(item: { id: string; mime: string }): string {
+  const g = groupOf(item);
+  return g === "audio" || g === "video" ? `/watch/${item.id}` : `/media/${item.id}`;
+}
+
 const CATEGORIES = [
   { value: "sermon", label: "Sermon" },
   { value: "photo", label: "Photo" },
@@ -367,10 +376,11 @@ function MediaCard({
   const src = srcOf(item);
 
   function copyLink() {
+    const share = shareLinkOf(item);
     const abs =
       typeof window !== "undefined"
-        ? new URL(link, window.location.origin).toString()
-        : link;
+        ? new URL(share, window.location.origin).toString()
+        : share;
     navigator.clipboard
       .writeText(abs)
       .then(() => toast.success(t("media.linkCopied")))
@@ -498,6 +508,7 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
   const name = item.title || item.originalName || "Untitled";
   const src = srcOf(item);
   const isPdf = item.mime === "application/pdf";
+  const playable = group === "audio" || group === "video";
 
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
@@ -553,7 +564,7 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
               variant="outline"
               size="sm"
               onClick={() => {
-                const abs = new URL(`/media/${item.id}`, window.location.origin).toString();
+                const abs = new URL(shareLinkOf(item), window.location.origin).toString();
                 navigator.clipboard.writeText(abs).then(
                   () => toast.success(t("media.linkCopied")),
                   (e: unknown) => {
@@ -565,6 +576,13 @@ function PreviewModal({ item, onClose }: { item: Item | null; onClose: () => voi
             >
               <Link2 className="size-4" /> Copy link
             </Button>
+            {playable && (
+              <Button asChild variant="outline" size="sm">
+                <a href={`/watch/${item.id}`} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" /> Open player
+                </a>
+              </Button>
+            )}
             <Button asChild variant="outline" size="sm">
               <a href={`/media/${item.id}?download=1`}>
                 <Download className="size-4" /> Download

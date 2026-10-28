@@ -29,6 +29,23 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.85.0",
+    date: "2026-10-28",
+    summary:
+      "Recordings and sermons now play on a FlockInsight page of their own, and the Play button on a finished meeting works again.",
+    changes: {
+      Added: [
+        "Every recording and sermon has a player page: your church's name, the title and the date above the player, buttons to go back or forward 15 seconds and to play faster, and it offers to pick up where you stopped. Links you have already shared open it too.",
+      ],
+      Fixed: [
+        "Play on a finished meeting's recording, and a recording link opened in Chrome, showed a player that would not start. They play now.",
+      ],
+      Improved: [
+        "Copy link on a recording or sermon in the media library now copies the player page, and the preview has an Open player button.",
+      ],
+    },
+  },
+  {
     version: "0.84.0",
     date: "2026-10-28",
     summary:

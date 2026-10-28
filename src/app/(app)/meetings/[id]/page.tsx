@@ -243,9 +243,15 @@ export default async function MeetingDetailPage({
                       </p>
                       {r.error && <p className="mt-1 text-xs text-amber-600">{r.error}</p>}
                     </div>
-                    {r.url && (
+                    {/* The player page rather than the raw file: it carries
+                        the title and the controls, and is the link to share. */}
+                    {(r.mediaId || r.url) && (
                       <Button asChild size="sm" variant="secondary">
-                        <a href={r.url} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={r.mediaId ? `/watch/${r.mediaId}` : r.url!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           Play
                         </a>
                       </Button>

@@ -12,6 +12,9 @@ const UUID_RE =
 // GET /media/[id]            -> serve / redirect to the asset
 // GET /media/[id]?download=1 -> force a download (Content-Disposition / fl_attachment)
 //
+// Audio and video opened as a page (a shared link tapped in WhatsApp) are sent
+// on to /watch/[id], the player page; the media elements there fetch from here.
+//
 // The id is a random UUID and the bytes never change, so responses are
 // cacheable forever. Cloudinary-backed rows redirect to the optimised remote
 // asset; legacy db-backed rows are streamed from Postgres.
@@ -43,10 +46,37 @@ const UUID_RE =
  * that even a response a browser DID decide to render as a document could run
  * no script and reach nothing.
  */
+/*
+ * `allow-same-origin` is what lets a link opened straight in a tab play.
+ *
+ * A browser shows a bare video or audio URL as a document of its own with one
+ * <video> in it, and that element then fetches this same URL. A bare `sandbox`
+ * gives that document an opaque origin ("null"), so Chrome refused the fetch
+ * as cross-origin and every recording opened from a link showed a dead player
+ * — while the same file played in the library, where it is a subresource of
+ * the app's own page and this header never applies. Without `allow-scripts`
+ * nothing can run in the document either way, which was the point.
+ */
 const LOCKDOWN: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
-  "Content-Security-Policy": "sandbox; default-src 'none'; media-src 'self'; img-src 'self'",
+  "Content-Security-Policy":
+    "sandbox allow-same-origin; default-src 'none'; media-src 'self'; img-src 'self'",
 };
+
+/**
+ * Whether this request is somebody opening the link in a tab, as opposed to a
+ * <video> or <audio> element (or a download) fetching the bytes.
+ *
+ * Fetch metadata says so outright; every current browser sends it. One that
+ * does not just gets the file, as before.
+ */
+function isPageVisit(req: Request): boolean {
+  return req.headers.get("sec-fetch-dest") === "document";
+}
+
+function isAudioOrVideo(mime: string | null): boolean {
+  return /^(audio|video)\//i.test(String(mime ?? "").trim());
+}
 
 /** Types the legacy database-backed rows may be served as, inline. */
 const LEGACY_INLINE = /^(image\/(png|jpe?g|gif|webp|avif|heic|heif)|application\/pdf)$/;
@@ -81,6 +111,18 @@ export async function GET(
   if (!row) return new Response("Not found", { status: 404 });
 
   const name = row.originalName || row.title || "file";
+
+  /*
+   * A recording or a sermon opened as a page goes to the player page, which
+   * carries the title, the church and the controls. The bytes stay here for
+   * the player itself, for downloads, and for anything that embeds them.
+   */
+  if (!download && isPageVisit(req) && isAudioOrVideo(row.mime)) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `/watch/${id}`, "Cache-Control": "no-store" },
+    });
+  }
 
   // Cloudinary-backed: redirect to the (optionally attachment-flagged) URL.
   if (row.provider === "cloudinary" && row.url) {
@@ -124,6 +166,8 @@ export async function GET(
       // and updates the row — so this is safe to cache hard.
       "Cache-Control": "public, max-age=31536000, immutable",
       "Accept-Ranges": "bytes",
+      // The same URL answers a page visit with a redirect to the player.
+      Vary: "Sec-Fetch-Dest",
     };
     if (download || !safe) common["Content-Disposition"] = attachment(name);
 
