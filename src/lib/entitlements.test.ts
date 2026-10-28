@@ -13,6 +13,7 @@ import {
   PLAN_ORDER,
   teamLimitFor,
   upgradeMessage,
+  DEFAULT_CATALOG,
   type FeatureKey,
 } from "@/lib/entitlements";
 import { PLANS, PLAN_BY_ID } from "@/lib/plans";
@@ -217,20 +218,30 @@ describe("a church read by id, for a public link", () => {
   it("answers to that church's own plan", () => {
     // The public first-timer link writes into the register, and follow-up is
     // Growth. A Starter church, or one that has downgraded, must not keep it.
-    const starter = { plan: "starter", slug: "grace", isDemo: false };
-    expect(churchRowHasFeature(starter, "followUp")).toBe(false);
-    expect(churchRowHasFeature({ ...starter, plan: "growth" }, "followUp")).toBe(true);
+    const starter = { plan: "starter", customPlanId: null, slug: "grace", isDemo: false };
+    expect(churchRowHasFeature(starter, "followUp", DEFAULT_CATALOG)).toBe(false);
+    expect(churchRowHasFeature({ ...starter, plan: "growth" }, "followUp", DEFAULT_CATALOG)).toBe(
+      true,
+    );
   });
 
   it("gives an unknown plan the smallest allowance", () => {
-    expect(churchRowHasFeature({ plan: null, slug: "grace", isDemo: null }, "followUp")).toBe(
-      false,
-    );
+    expect(
+      churchRowHasFeature(
+        { plan: null, customPlanId: null, slug: "grace", isDemo: null },
+        "followUp",
+        DEFAULT_CATALOG,
+      ),
+    ).toBe(false);
   });
 
   it("shows the demonstration church everything, as activePlan does", () => {
     expect(
-      churchRowHasFeature({ plan: "starter", slug: "demo", isDemo: true }, "followUp"),
+      churchRowHasFeature(
+        { plan: "starter", customPlanId: null, slug: "demo", isDemo: true },
+        "followUp",
+        DEFAULT_CATALOG,
+      ),
     ).toBe(true);
   });
 });

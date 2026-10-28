@@ -1,9 +1,9 @@
 import "server-only";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { aiChurchSetting, church, user, type AiFeature } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/platform-settings";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import type { PlanId } from "@/lib/plans";
 import { CHURCH_NOTES_MAX } from "@/lib/assistant/advisor-shared";
 import { aiConfigured } from "./config";
@@ -334,7 +334,12 @@ export async function churchAiAvailability(churchId: string): Promise<ChurchAiAv
     getAiPlatformState(),
     getChurchAiSetting(churchId),
     db
-      .select({ plan: church.plan, slug: church.slug, isDemo: church.isDemo })
+      .select({
+        plan: church.plan,
+        customPlanId: church.customPlanId,
+        slug: church.slug,
+        isDemo: church.isDemo,
+      })
       .from(church)
       .where(eq(church.id, churchId))
       .limit(1),
@@ -345,6 +350,6 @@ export async function churchAiAvailability(churchId: string): Promise<ChurchAiAv
     analyticsPaused: state.pausedFeatures.includes("analytics"),
     optedIn: setting.enabled,
     isDemo: row?.isDemo ?? false,
-    onPlan: row ? churchRowHasFeature(row, "aiSummaries") : false,
+    onPlan: row ? await rowHasFeature(row, "aiSummaries") : false,
   };
 }

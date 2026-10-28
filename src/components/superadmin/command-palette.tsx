@@ -35,6 +35,7 @@ const NAV_ENTRIES: PaletteEntry[] = [
   { id: "nav-ask", label: "Ask", sub: "Ask the assistant about the platform's figures", href: "/superadmin/ask", kind: "church" },
   { id: "nav-assistant", label: "Assistant", sub: "Help questions and canned answers", href: "/superadmin/assistant", kind: "church" },
   { id: "nav-pricing", label: "Pricing", sub: "Plans and prices", href: "/superadmin/pricing", kind: "church" },
+  { id: "nav-plans", label: "Plans & features", sub: "What each plan includes, custom plans", href: "/superadmin/plans", kind: "church" },
   { id: "nav-backups", label: "Backups", sub: "Database backups", href: "/superadmin/backups", kind: "church" },
 ];
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { church, payment, walletTxn, walletTopup } from "@/db/schema";
+import { church, customPlan, payment, walletTxn, walletTopup } from "@/db/schema";
 import { getPlanPrices } from "@/lib/pricing";
 import { getReferralRewards } from "@/lib/referrals";
 import {
@@ -31,6 +31,8 @@ export type FinanceChurchRow = {
   id: string;
   name: string;
   plan: PlanId;
+  /** Set when the church is on a custom plan; `plan` is then its base tier. */
+  customPlanId: string | null;
   discountPct: number;
   walletBalance: number;
   trialEndsAt: Date | null;
@@ -83,7 +85,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const windowStart = new Date(now.getFullYear(), now.getMonth() - (MONTHS_SHOWN - 1), 1);
 
-  const [prices, rewards, churchRows, paymentRows] = await Promise.all([
+  const [prices, rewards, churchRows, paymentRows, customs] = await Promise.all([
     getPlanPrices(),
     getReferralRewards(),
     db
@@ -91,6 +93,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
         id: church.id,
         name: church.name,
         plan: church.plan,
+        customPlanId: church.customPlanId,
         discountPct: church.planDiscountPct,
         walletBalance: church.walletBalance,
         trialEndsAt: church.trialEndsAt,
@@ -123,15 +126,29 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
       .leftJoin(church, eq(church.id, payment.churchId))
       .orderBy(desc(payment.createdAt))
       .limit(500),
+    db
+      .select({ id: customPlan.id, priceMonthly: customPlan.priceMonthly })
+      .from(customPlan),
   ]);
 
   const nameById = new Map(churchRows.map((c) => [c.id, c.name]));
+  /*
+   * A church on a custom plan is worth that plan's price, not its base tier's.
+   * monthlyValue reads `prices[plan]`, so the church's own tier is priced at
+   * its custom plan for that one church.
+   */
+  const customPrice = new Map(customs.map((p) => [p.id, p.priceMonthly]));
+  const pricesFor = (c: { plan: string; customPlanId: string | null }) =>
+    c.customPlanId && customPrice.has(c.customPlanId)
+      ? { ...prices, [c.plan]: customPrice.get(c.customPlanId) ?? null }
+      : prices;
 
   const churches: FinanceChurchRow[] = churchRows
     .map((c) => ({
       id: c.id,
       name: c.name,
       plan: c.plan as PlanId,
+      customPlanId: c.customPlanId,
       discountPct: c.discountPct ?? 0,
       walletBalance: Number(c.walletBalance) || 0,
       trialEndsAt: c.trialEndsAt ? new Date(c.trialEndsAt) : null,
@@ -139,7 +156,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
       planRenewsAt: c.planRenewsAt ? new Date(c.planRenewsAt) : null,
       monthly: monthlyValue({
         plan: c.plan as PlanId,
-        prices,
+        prices: pricesFor(c),
         discountPct: c.discountPct,
         trialEndsAt: c.trialEndsAt,
         planRenewsAt: c.planRenewsAt,
@@ -147,7 +164,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
       }),
       zeroReason: zeroReason({
         plan: c.plan as PlanId,
-        prices,
+        prices: pricesFor(c),
         trialEndsAt: c.trialEndsAt,
         planRenewsAt: c.planRenewsAt,
         now,

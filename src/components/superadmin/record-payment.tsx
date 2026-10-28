@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { recordOfflinePayment } from "@/app/superadmin/finance/actions";
+import type { PlanOption } from "@/lib/plan-options";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,8 +34,11 @@ import {
  */
 export function RecordPayment({
   churches,
+  planOptions,
 }: {
-  churches: { id: string; name: string }[];
+  /** `planKey` is the church's plan now, so picking a church picks its plan. */
+  churches: { id: string; name: string; planKey: string }[];
+  planOptions: PlanOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -76,7 +80,7 @@ export function RecordPayment({
       const res = await recordOfflinePayment({
         churchId,
         amount: Number(amount),
-        plan: plan as "growth",
+        plan,
         months: monthsN,
         extendPlan,
         gateway: gateway as "transfer",
@@ -120,7 +124,19 @@ export function RecordPayment({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="rp-church">Church</Label>
-              <Select value={churchId} onValueChange={setChurchId}>
+              <Select
+                value={churchId}
+                onValueChange={(id) => {
+                  setChurchId(id);
+                  /*
+                   * Their own plan, by default. A transfer from a church on a
+                   * custom plan recorded against "Growth" would otherwise move
+                   * it off the plan it pays for, quietly.
+                   */
+                  const key = churches.find((c) => c.id === id)?.planKey;
+                  if (key && planOptions.some((p) => p.key === key)) setPlan(key);
+                }}
+              >
                 <SelectTrigger id="rp-church">
                   <SelectValue placeholder="Choose a church" />
                 </SelectTrigger>
@@ -163,10 +179,11 @@ export function RecordPayment({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="starter">Starter</SelectItem>
-                  <SelectItem value="growth">Growth</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
-                  <SelectItem value="enterprise">Enterprise</SelectItem>
+                  {planOptions.map((p) => (
+                    <SelectItem key={p.key} value={p.key}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

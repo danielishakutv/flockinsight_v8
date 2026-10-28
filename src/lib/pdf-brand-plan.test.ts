@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CATALOG } from "@/lib/entitlements";
 import { getChurchBrand, type BrandSource } from "@/lib/pdf-brand";
 
 /**
@@ -25,23 +26,23 @@ const base: BrandSource = {
 
 describe("branded PDFs follow the plan", () => {
   it("gives a Pro church its own theme", async () => {
-    const pro = await getChurchBrand({ ...base, plan: "pro" });
-    const starter = await getChurchBrand({ ...base, plan: "starter" });
+    const pro = await getChurchBrand({ ...base, plan: "pro" }, DEFAULT_CATALOG);
+    const starter = await getChurchBrand({ ...base, plan: "starter" }, DEFAULT_CATALOG);
     // The church picked Forest; a plan without branding gets the default, so
     // the two must differ somewhere a reader would see.
     expect(pro.primary).not.toBe(starter.primary);
   });
 
   it("gives Enterprise the same as Pro", async () => {
-    const pro = await getChurchBrand({ ...base, plan: "pro" });
-    const ent = await getChurchBrand({ ...base, plan: "enterprise" });
+    const pro = await getChurchBrand({ ...base, plan: "pro" }, DEFAULT_CATALOG);
+    const ent = await getChurchBrand({ ...base, plan: "enterprise" }, DEFAULT_CATALOG);
     expect(ent.primary).toBe(pro.primary);
   });
 
   it("gives Starter and Growth the default colours", async () => {
-    const starter = await getChurchBrand({ ...base, plan: "starter" });
-    const growth = await getChurchBrand({ ...base, plan: "growth" });
-    const unthemed = await getChurchBrand({ ...base, theme: null, plan: "pro" });
+    const starter = await getChurchBrand({ ...base, plan: "starter" }, DEFAULT_CATALOG);
+    const growth = await getChurchBrand({ ...base, plan: "growth" }, DEFAULT_CATALOG);
+    const unthemed = await getChurchBrand({ ...base, theme: null, plan: "pro" }, DEFAULT_CATALOG);
     expect(starter.primary).toBe(unthemed.primary);
     expect(growth.primary).toBe(unthemed.primary);
   });
@@ -52,8 +53,8 @@ describe("branded PDFs follow the plan", () => {
      * hand out the paid document — an unsaid plan is the smallest allowance,
      * exactly as everywhere else in lib/entitlements.ts.
      */
-    const silent = await getChurchBrand(base);
-    const starter = await getChurchBrand({ ...base, plan: "starter" });
+    const silent = await getChurchBrand(base, DEFAULT_CATALOG);
+    const starter = await getChurchBrand({ ...base, plan: "starter" }, DEFAULT_CATALOG);
     expect(silent.primary).toBe(starter.primary);
     expect(silent.logo).toBeNull();
   });
@@ -62,7 +63,7 @@ describe("branded PDFs follow the plan", () => {
     // The data is not what is being sold; the document looking like theirs is.
     // So a Starter PDF must still have a name, colours and a working link.
     for (const plan of ["starter", "growth", "pro", "enterprise", "nonsense"]) {
-      const brand = await getChurchBrand({ ...base, plan });
+      const brand = await getChurchBrand({ ...base, plan }, DEFAULT_CATALOG);
       expect(brand.name).toBe("Grace Chapel");
       expect(brand.primary).toMatch(/^#?[0-9a-fA-F]{3,8}$|^rgb/);
       expect(brand.referralUrl).toBeTruthy();
@@ -76,7 +77,7 @@ describe("branded PDFs follow the plan", () => {
       ...base,
       logo: "https://example.invalid/logo.png",
       plan: "growth",
-    });
+    }, DEFAULT_CATALOG);
     expect(brand.logo).toBeNull();
   });
 });

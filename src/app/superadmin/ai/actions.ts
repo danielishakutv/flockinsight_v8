@@ -25,6 +25,7 @@ import {
 } from "@/lib/ai/settings";
 import { ALLOWANCE_MAX } from "@/lib/ai/settings-rules";
 import { churchRowHasFeature } from "@/lib/entitlements";
+import { loadCatalog } from "@/lib/plan-catalog";
 import { generatePlatformSummary } from "@/lib/ai/summaries";
 import type { PlatformSummaryView, UiReason } from "@/lib/ai/ai-shared";
 
@@ -204,6 +205,7 @@ export async function searchPilotChurchesAction(input: unknown): Promise<PilotSe
       slug: church.slug,
       name: church.name,
       plan: church.plan,
+      customPlanId: church.customPlanId,
       isDemo: church.isDemo,
       aiOn: aiChurchSetting.enabled,
     })
@@ -212,6 +214,7 @@ export async function searchPilotChurchesAction(input: unknown): Promise<PilotSe
     .where(or(ilike(church.name, like), ilike(church.slug, like)))
     .orderBy(church.name)
     .limit(10);
+  const catalog = await loadCatalog();
   return {
     ok: true,
     churches: rows.map((r) => ({
@@ -220,7 +223,7 @@ export async function searchPilotChurchesAction(input: unknown): Promise<PilotSe
       plan: r.plan,
       aiOn: r.aiOn === true,
       // churchRowHasFeature treats the demo church as Enterprise; the advisor never answers there.
-      advisorOnPlan: !r.isDemo && churchRowHasFeature(r, "aiAdvisor"),
+      advisorOnPlan: !r.isDemo && churchRowHasFeature(r, "aiAdvisor", catalog),
       isDemo: r.isDemo,
     })),
   };

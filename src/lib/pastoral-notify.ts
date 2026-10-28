@@ -1,9 +1,9 @@
 import "server-only";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, otpCode, pastorProfile, user } from "@/db/schema";
 import { smsAvailableForCountry } from "@/lib/country-profile";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import type { TFunction } from "@/lib/i18n/translate";
 import { isEmailConfigured, sendEmailWithId, type EmailAttachment } from "@/lib/mailer";
 import { notifyUser } from "@/lib/notifications";
@@ -76,6 +76,7 @@ type NotifyChurch = {
   publicPhone: string | null;
   defaultLocale: string | null;
   plan: string;
+  customPlanId: string | null;
   slug: string;
   isDemo: boolean;
 };
@@ -102,6 +103,7 @@ async function loadCtx(id: string, churchId: string): Promise<Ctx | null> {
       publicPhone: church.publicPhone,
       defaultLocale: church.defaultLocale,
       plan: church.plan,
+      customPlanId: church.customPlanId,
       slug: church.slug,
       isDemo: church.isDemo,
     })
@@ -194,7 +196,7 @@ async function smsBooker(ctx: Ctx, message: string, now: Date): Promise<Delivery
   const to = ctx.appt.bookerPhone;
   if (!to) return null;
   if (!ctx.page?.smsBooker) return "off";
-  if (!churchRowHasFeature(ctx.church, "sms")) return "noplan";
+  if (!(await rowHasFeature(ctx.church, "sms"))) return "noplan";
   if (!smsAvailableForCountry(ctx.church.country)) return failedToken("texts are not available in this country");
   if (smsTiming(now, ctx.appt.startsAt, ctx.church.timezone) === "skip") return "skipped";
   if (!rateLimit(`pastoral-sms:${ctx.church.id}`, SMS_PER_CHURCH_PER_HOUR, 60 * 60_000).ok)
@@ -456,7 +458,14 @@ export async function sendReminder(churchId: string, id: string, now = new Date(
  * "refuse", because a code that waits until 8am is dead when it arrives.
  */
 export async function sendBookingCode(opts: {
-  church: { id: string; name: string; plan: string; slug: string; isDemo: boolean };
+  church: {
+    id: string;
+    name: string;
+    plan: string;
+    customPlanId: string | null;
+    slug: string;
+    isDemo: boolean;
+  };
   member: { id: string; email: string | null; phone: string | null };
   t: TFunction;
 }): Promise<{ ok: true; otpId: string } | { ok: false; error: string }> {
@@ -499,7 +508,7 @@ export async function sendBookingCode(opts: {
     await db.update(otpCode).set({ consumedAt: new Date() }).where(eq(otpCode.id, issued.id));
   }
 
-  if (phone && churchRowHasFeature(c, "sms")) {
+  if (phone && (await rowHasFeature(c, "sms"))) {
     const issued = await issueOtp({
       churchId: c.id,
       purpose: PASTORAL_OTP_PURPOSE,

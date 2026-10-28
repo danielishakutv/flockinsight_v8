@@ -17,7 +17,7 @@ import { awardPartnerCommission, reversePartnerCommission } from "@/lib/partners
 import { awardReferralIfDue } from "@/lib/referrals";
 import { creditWallet, debitWallet } from "@/lib/wallet";
 import { recordAudit } from "@/lib/audit";
-import { planName } from "@/lib/plans";
+import { resolvePlanForChurch } from "@/lib/plan-catalog";
 import { trialEndDate } from "@/lib/trial";
 import { referenceKind } from "@/lib/paystack-outcome";
 import { isPaystackConfigured } from "@/lib/paystack";
@@ -32,8 +32,6 @@ export type FinanceResult =
   | { ok: true; warning?: string }
   | { ok: false; error: string };
 
-const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
-
 /**
  * Record money that arrived outside a payment gateway.
  *
@@ -47,7 +45,8 @@ const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
 const recordSchema = z.object({
   churchId: z.string().min(1),
   amount: z.number().positive("Enter the amount received").max(100_000_000),
-  plan: z.enum(PLANS),
+  /** A plan key: "growth", or "custom:<id>" for a plan made at /superadmin/plans. */
+  plan: z.string().min(1).max(120),
   /*
    * How much subscription this money pays for — which is what the Partner's
    * commission is priced across. Never 0: "0 months" used to be how an admin
@@ -89,6 +88,9 @@ export async function recordOfflinePayment(
     .where(eq(church.id, d.churchId))
     .limit(1);
   if (!target) return { ok: false, error: "Church not found." };
+  const resolved = await resolvePlanForChurch(d.churchId, d.plan);
+  if (!resolved.ok) return resolved;
+  const bought = resolved.target;
 
   /*
    * Build the paid date at midday.
@@ -119,7 +121,8 @@ export async function recordOfflinePayment(
         .insert(payment)
         .values({
           churchId: d.churchId,
-          plan: d.plan,
+          plan: bought.plan,
+          customPlanId: bought.customPlanId,
           amount: d.amount,
           currency: "NGN",
           gateway: d.gateway,
@@ -136,7 +139,12 @@ export async function recordOfflinePayment(
       // An operator who types "12 months of Pro" means exactly that: no
       // revaluation of what was left (see ActivateOptions.convertRemaining).
       const renewsAt = d.extendPlan
-        ? await activatePlan(d.churchId, d.plan, d.months, { tx })
+        ? await activatePlan(
+            d.churchId,
+            { plan: bought.plan, customPlanId: bought.customPlanId },
+            d.months,
+            { tx },
+          )
         : null;
       return { id: row.id, renewsAt };
     });
@@ -173,7 +181,7 @@ export async function recordOfflinePayment(
     actorUserId: admin.id,
     actorName: admin.name,
     action: "payment.record",
-    summary: `Recorded ₦${d.amount.toLocaleString()} from ${target.name} via ${d.gateway} for ${planName(d.plan)} · ${d.months}mo${
+    summary: `Recorded ₦${d.amount.toLocaleString()} from ${target.name} via ${d.gateway} for ${bought.name} · ${d.months}mo${
       d.extendPlan
         ? recorded.renewsAt
           ? ` — paid through ${recorded.renewsAt.toDateString()}`

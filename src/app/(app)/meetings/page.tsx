@@ -8,7 +8,7 @@ import { siteUrl } from "@/lib/site";
 import { PageContainer, PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { MeetingsList, type MeetingRow } from "@/components/meetings/meetings-list";
-import { canRepeatMeetings } from "@/lib/meetings-shared";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { getT } from "@/lib/i18n/server";
 import { BetaBadge } from "@/components/beta-badge";
 import { PlanGate } from "@/components/app/plan-gate";
@@ -32,6 +32,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 export default async function MeetingsPage() {
   const { church } = await requireChurch();
+  const canRepeat = await rowHasFeature(church, "meetings.repeat");
   const t = await getT();
   await requireCan("meetings.view");
   const canManage = await can("meetings.manage");
@@ -156,7 +157,7 @@ export default async function MeetingsPage() {
           meetings={meetings}
           origin={siteUrl()}
           canManage={canManage}
-          canRepeat={canRepeatMeetings(church.plan)}
+          canRepeat={canRepeat}
           timezone={church.timezone}
         />
       )}

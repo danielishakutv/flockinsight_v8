@@ -1,6 +1,7 @@
 "use client";
 
-import { FEATURES, planIncludes, planNameFor, type FeatureKey } from "@/lib/entitlements";
+import { FEATURES, type FeatureKey } from "@/lib/entitlements";
+import { usePlanChips } from "@/components/app/plan-chips";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,17 +11,19 @@ import { cn } from "@/lib/utils";
  * the menu never finds out the next tier has it — and hiding it would also hide
  * the records of the five churches that already have data in modules they do not
  * pay for. Clicking through lands on the module, readable, with its banner.
+ *
+ * What it says comes from the live catalogue, worked out on the server — see
+ * components/app/plan-chips.tsx.
  */
 export function PlanChip({
   feature,
-  plan,
   className,
 }: {
   feature: FeatureKey;
-  plan: string;
   className?: string;
 }) {
-  if (planIncludes(plan, feature)) return null;
+  const label = usePlanChips()[feature];
+  if (!label) return null;
   return (
     <span
       title={FEATURES[feature].blurb}
@@ -30,7 +33,7 @@ export function PlanChip({
         className,
       )}
     >
-      {planNameFor(feature)}
+      {label}
     </span>
   );
 }

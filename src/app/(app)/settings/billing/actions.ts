@@ -12,7 +12,8 @@ import { isPaystackConfigured, paystackInit } from "@/lib/paystack";
 import { planAmountLabel } from "@/lib/plan-price";
 import { notifySupport } from "@/lib/support";
 import { audit } from "@/lib/audit";
-import type { PlanId } from "@/lib/plans";
+import { parsePlanKey, type PlanId } from "@/lib/plans";
+import { resolvePlanKey } from "@/lib/plan-catalog";
 
 const BASE_URL = process.env.BETTER_AUTH_URL || "https://flockinsight.com";
 
@@ -35,15 +36,33 @@ export type CheckoutResult =
  * or, worse, billing a year.
  */
 export async function startCheckout(
-  plan: PlanId,
+  /** A plan key: "growth", or "custom:<id>" for a plan made at /superadmin/plans. */
+  planKey: string,
   cycleInput: BillingCycle | string = "monthly",
 ): Promise<CheckoutResult> {
-  if (!["starter", "growth", "pro"].includes(plan))
+  const parsedKey = parsePlanKey(planKey);
+  if (!parsedKey || ("tier" in parsedKey && !["starter", "growth", "pro"].includes(parsedKey.tier)))
     return { ok: false, error: "Choose a valid plan." };
 
   const { church: c, user } = await requireChurch();
   if (!(await can("settings.manage")))
     return { ok: false, error: "You don't have permission to manage billing." };
+
+  const target = await resolvePlanKey(planKey);
+  if (!target) return { ok: false, error: "Choose a valid plan." };
+  /*
+   * A custom plan is bought only when it is on offer — on the website and not
+   * archived — or when it is the church's own plan, which it may always
+   * renew. The key comes from a browser; a hidden plan's id in a hand-made
+   * request must not buy a price agreed with somebody else.
+   */
+  if (target.customPlanId) {
+    const own = c.customPlanId === target.customPlanId;
+    if (!own && (target.archived || !target.showOnWebsite))
+      return { ok: false, error: "That plan isn't available. Please choose another." };
+  }
+  const plan: PlanId = target.plan;
+  const choice = { plan, customPlanId: target.customPlanId };
 
   const cycle = asCycle(cycleInput);
   /*
@@ -53,7 +72,7 @@ export async function startCheckout(
    * can edit. `chargeFor` is the same book the billing page and the trial
    * gate print from, so the figure a church was shown is the one billed.
    */
-  const charge = await chargeFor(plan, cycle, c);
+  const charge = await chargeFor(planKey, cycle, c);
   if (!charge)
     return { ok: false, error: "That plan is custom — please contact us." };
   const { monthly, months, freeMonths, priced } = charge;
@@ -65,7 +84,8 @@ export async function startCheckout(
    * Activating on it would hand out Growth or Pro — and a year of it — for
    * nothing. Refuse, loudly, rather than give the product away.
    */
-  if (price === 0 && plan !== "starter" && c.planDiscountPct < 100) {
+  // A custom plan priced at 0 was made free on purpose; only a tier can be misconfigured this way.
+  if (price === 0 && !target.customPlanId && plan !== "starter" && c.planDiscountPct < 100) {
     console.error(
       `[billing] ${plan} resolves to ₦0 without a 100% discount — refusing to activate it free`,
     );
@@ -86,10 +106,11 @@ export async function startCheckout(
      */
     try {
       await db.transaction(async (tx) => {
-        await activatePlan(c.id, plan, months, { tx, convertRemaining: true });
+        await activatePlan(c.id, choice, months, { tx, convertRemaining: true });
         await tx.insert(payment).values({
           churchId: c.id,
           plan,
+          customPlanId: target.customPlanId,
           amount: 0,
           // Every payment row is in naira, whatever the church's own money.
           currency: "NGN",
@@ -113,11 +134,11 @@ export async function startCheckout(
     await audit({
       churchId: c.id,
       action: "billing.plan.update",
-      summary: `Activated the ${plan} plan at no charge`,
+      summary: `Activated the ${target.name} plan at no charge`,
       targetType: "church",
       targetId: c.id,
-      targetLabel: plan,
-      meta: { plan, price: 0, discountPct: c.planDiscountPct, cycle, months },
+      targetLabel: target.name,
+      meta: { plan: planKey, price: 0, discountPct: c.planDiscountPct, cycle, months },
       severity: "critical",
     });
 
@@ -162,6 +183,7 @@ export async function startCheckout(
     await db.insert(payment).values({
       churchId: c.id,
       plan,
+      customPlanId: target.customPlanId,
       amount: priced.chargeNgn,
       currency: "NGN",
       gateway: "paystack",
@@ -206,6 +228,7 @@ export async function startCheckout(
     metadata: {
       churchId: c.id,
       plan,
+      customPlanId: target.customPlanId,
       cycle,
       months,
       country: c.country ?? null,
@@ -220,11 +243,12 @@ export async function startCheckout(
   await audit({
     churchId: c.id,
     action: "billing.checkout.create",
-    summary: `Started checkout for the ${plan} plan, ${cycle === "annual" ? `${months} months` : "1 month"} (₦${priced.chargeNgn.toLocaleString()})`,
+    summary: `Started checkout for the ${target.name} plan, ${cycle === "annual" ? `${months} months` : "1 month"} (₦${priced.chargeNgn.toLocaleString()})`,
     targetType: "payment",
     targetLabel: reference,
     meta: {
       plan,
+      customPlanId: target.customPlanId,
       cycle,
       months,
       price: priced.chargeNgn,

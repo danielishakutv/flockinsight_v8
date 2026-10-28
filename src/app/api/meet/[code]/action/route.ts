@@ -31,8 +31,8 @@ import { SLIDE_KINDS } from "@/lib/media-slide-kinds";
 import { lookupVerse } from "@/lib/scripture";
 import { DEFAULT_TRANSLATION } from "@/lib/scripture-shared";
 import { fail, json, readJson, requirePeer } from "@/lib/meeting-api";
-import { planIncludes, upgradeMessage } from "@/lib/entitlements";
-import { churchPlanOf } from "@/lib/entitlements-server";
+import { upgradeMessage } from "@/lib/entitlements";
+import { churchIdHasFeature, loadCatalog } from "@/lib/plan-catalog";
 import { audit, auditGuest } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -480,8 +480,10 @@ export async function POST(
        * church, not from whoever is asking. A guest host holding the host link
        * is still operating that church's plan.
        */
-      if (!planIncludes(await churchPlanOf(m.churchId), "meetings.record")) {
-        return fail(upgradeMessage("meetings.record"), 403, { code: "upgrade" });
+      if (!(await churchIdHasFeature(m.churchId, "meetings.record"))) {
+        return fail(upgradeMessage("meetings.record", await loadCatalog()), 403, {
+          code: "upgrade",
+        });
       }
       const mode = str(body?.mode, 10) === "audio" ? "audio" : "video";
       /*

@@ -1,10 +1,10 @@
 import "server-only";
 
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { aiCall, assistantAnswer, assistantConversation, assistantMessage } from "@/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { isLocale } from "@/lib/i18n/locales";
 import { aiReadiness, runAi } from "@/lib/ai/run-ai";
 import { scrubFreeText } from "@/lib/ai/safe-text";
@@ -217,7 +217,7 @@ async function decideMode(asker: AssistantAsker): Promise<ModeDecision> {
   ]);
   const d = advisorEligibility({
     kind: asker.kind,
-    planAllows: churchRowHasFeature(asker.church, "aiAdvisor"),
+    planAllows: await rowHasFeature(asker.church, "aiAdvisor"),
     rolloutAllows,
     optedIn: setting.enabled,
     isDemo: !!asker.church.isDemo,

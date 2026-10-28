@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminSetBilling } from "@/app/superadmin/actions";
-import { PLANS, planName, type PlanId } from "@/lib/plans";
+import type { PlanOption } from "@/lib/plan-options";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,20 +34,26 @@ type PaymentRow = {
 
 export function AdminBilling({
   churchId,
-  plan,
+  planKey,
+  planName: currentName,
+  planOptions,
   discount,
   renewsAt,
   payments,
 }: {
   churchId: string;
-  plan: string;
+  /** "growth", or "custom:<id>" for a plan made at /superadmin/plans. */
+  planKey: string;
+  planName: string;
+  planOptions: PlanOption[];
   discount: number;
   renewsAt: string | null;
+  /** `plan` is the name to print, custom plans included. */
   payments: PaymentRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [planId, setPlanId] = useState(plan);
+  const [planId, setPlanId] = useState(planKey);
   const [disc, setDisc] = useState(String(discount));
   const [months, setMonths] = useState("0");
   const [note, setNote] = useState("");
@@ -56,7 +62,7 @@ export function AdminBilling({
     startTransition(async () => {
       const res = await adminSetBilling({
         churchId,
-        plan: planId as PlanId,
+        plan: planId,
         discountPct: Number(disc),
         months: Number(months),
         note,
@@ -79,7 +85,7 @@ export function AdminBilling({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Current: <span className="text-foreground font-semibold">{planName(plan)}</span>
+          Current: <span className="text-foreground font-semibold">{currentName}</span>
           {discount > 0 && <> · {discount}% discount</>} ·{" "}
           {renewsAt
             ? `renews ${format(parseISO(renewsAt), "MMM d, yyyy")}`
@@ -94,8 +100,8 @@ export function AdminBilling({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLANS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                {planOptions.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
                     {p.name}
                   </SelectItem>
                 ))}
@@ -148,7 +154,7 @@ export function AdminBilling({
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">
-                    {planName(p.plan)}{" "}
+                    {p.plan}{" "}
                     <span className="text-muted-foreground">· {p.gateway}</span>
                   </p>
                   <p className="text-muted-foreground text-xs">

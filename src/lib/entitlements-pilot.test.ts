@@ -6,9 +6,13 @@ import {
   isPilot,
   pilotAllows,
   planIncludes,
+  DEFAULT_CATALOG,
   type PilotMap,
 } from "@/lib/entitlements";
 import { navVisible } from "@/lib/nav";
+
+/** A church on a tier, with no custom plan. */
+const h = (plan: string, slug: string) => ({ plan, customPlanId: null, slug });
 
 /**
  * Shipping a module to one church first.
@@ -58,8 +62,8 @@ describe("the pilot list", () => {
       expect(pilotAllows("facilities", slug), String(slug)).toBe(true);
     }
     // Still Pro, though. Ending a pilot is not a free upgrade either.
-    expect(churchHasFeature("pro", "some-other-church", "facilities")).toBe(true);
-    expect(churchHasFeature("growth", "some-other-church", "facilities")).toBe(false);
+    expect(churchHasFeature(h("pro", "some-other-church"), "facilities", DEFAULT_CATALOG)).toBe(true);
+    expect(churchHasFeature(h("growth", "some-other-church"), "facilities", DEFAULT_CATALOG)).toBe(false);
   });
 });
 
@@ -71,7 +75,7 @@ describe("who a pilot lets in", () => {
   it("keeps every other church out, however much they pay", () => {
     expect(pilotAllows("facilities", "another-church", PRETEND)).toBe(false);
     expect(
-      churchHasFeature("enterprise", "another-church", "facilities", PRETEND),
+      churchHasFeature(h("enterprise", "another-church"), "facilities", DEFAULT_CATALOG, PRETEND),
     ).toBe(false);
   });
 
@@ -88,18 +92,18 @@ describe("a pilot narrows, it never widens", () => {
   it("still refuses the pilot church if its plan is too low", () => {
     // facilities is Pro. Being in the pilot is not a free upgrade.
     expect(planIncludes("starter", "facilities")).toBe(false);
-    expect(churchHasFeature("starter", "pilot-church", "facilities", PRETEND)).toBe(false);
-    expect(churchHasFeature("growth", "pilot-church", "facilities", PRETEND)).toBe(false);
+    expect(churchHasFeature(h("starter", "pilot-church"), "facilities", DEFAULT_CATALOG, PRETEND)).toBe(false);
+    expect(churchHasFeature(h("growth", "pilot-church"), "facilities", DEFAULT_CATALOG, PRETEND)).toBe(false);
   });
 
   it("allows it only when BOTH agree", () => {
-    expect(churchHasFeature("pro", "pilot-church", "facilities", PRETEND)).toBe(true);
-    expect(churchHasFeature("enterprise", "pilot-church", "facilities", PRETEND)).toBe(true);
+    expect(churchHasFeature(h("pro", "pilot-church"), "facilities", DEFAULT_CATALOG, PRETEND)).toBe(true);
+    expect(churchHasFeature(h("enterprise", "pilot-church"), "facilities", DEFAULT_CATALOG, PRETEND)).toBe(true);
   });
 
   it("changes nothing for an ordinary feature", () => {
     for (const plan of ["starter", "growth", "pro", "enterprise"]) {
-      expect(churchHasFeature(plan, "anybody", "members", PRETEND)).toBe(
+      expect(churchHasFeature(h(plan, "anybody"), "members", DEFAULT_CATALOG, PRETEND)).toBe(
         planIncludes(plan, "members"),
       );
     }

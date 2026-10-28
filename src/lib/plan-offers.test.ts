@@ -28,7 +28,7 @@ vi.mock("@/lib/fx", async (importOriginal) => {
   };
 });
 
-const { chargeFor, gateOffers, priceBook } = await import("@/lib/plan-offers");
+const { chargeFor, gateOffers, priceBook, tierOffers } = await import("@/lib/plan-offers");
 const { planPriceLabelFor } = await import("@/lib/plan-price");
 
 const mozambique = { country: "Mozambique", planDiscountPct: 0 };
@@ -36,7 +36,7 @@ const discountedNigeria = { country: "Nigeria", planDiscountPct: 50 };
 
 describe("the gate quotes what checkout charges", () => {
   it("for a church abroad: its own money, with the card fee, monthly and yearly", async () => {
-    const { offers, note } = await gateOffers(mozambique);
+    const { offers, note } = await gateOffers(mozambique, await tierOffers());
     const growth = offers.find((o) => o.id === "growth")!;
     const monthly = (await chargeFor("growth", "monthly", mozambique))!;
     const annual = (await chargeFor("growth", "annual", mozambique))!;
@@ -51,7 +51,7 @@ describe("the gate quotes what checkout charges", () => {
   });
 
   it("for a discounted church at home: the discounted naira price, no note", async () => {
-    const { offers, note } = await gateOffers(discountedNigeria);
+    const { offers, note } = await gateOffers(discountedNigeria, await tierOffers());
     const pro = offers.find((o) => o.id === "pro")!;
     const charge = (await chargeFor("pro", "monthly", discountedNigeria))!;
     expect(charge.priced.chargeNgn).toBe(charge.total);
@@ -60,14 +60,14 @@ describe("the gate quotes what checkout charges", () => {
   });
 
   it("offers 'Activate' rather than 'Pay' when a 100% discount makes it free", async () => {
-    const { offers } = await gateOffers({ country: "Nigeria", planDiscountPct: 100 });
+    const { offers } = await gateOffers({ country: "Nigeria", planDiscountPct: 100 }, await tierOffers());
     expect(offers.every((o) => o.free)).toBe(true);
   });
 });
 
 describe("priceBook", () => {
   it("strikes through a 'was' price in the same money as the price", async () => {
-    const book = await priceBook({ country: "Kenya", planDiscountPct: 20 });
+    const book = await priceBook({ country: "Kenya", planDiscountPct: 20 }, await tierOffers());
     const now = book.local.monthly.growth!;
     const was = book.local.baseMonthly.growth!;
     expect(was.displayCurrency).toBe(now.displayCurrency);

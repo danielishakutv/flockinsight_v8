@@ -10,14 +10,14 @@ import {
   requestTrialExtension,
 } from "@/app/(app)/settings/billing/actions";
 import { signOut } from "@/lib/auth-client";
-import type { PlanId } from "@/lib/plans";
 import { freeMonthsLabel, type BillingCycle } from "@/lib/billing-cycle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 
 type PlanOpt = {
-  id: PlanId;
+  /** A plan key: "growth", or "custom:<id>". */
+  id: string;
   name: string;
   tagline: string;
   priceLabel: string;
@@ -53,7 +53,7 @@ export function TrialGate({
   const router = useRouter();
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const annual = cycle === "annual";
-  const [paying, setPaying] = useState<PlanId | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
   const [requesting, startRequest] = useTransition();
   const [requested, setRequested] = useState(false);
 
@@ -67,7 +67,7 @@ export function TrialGate({
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
 
-  async function pay(plan: PlanId) {
+  async function pay(plan: string) {
     if (paying) return;
     setPaying(plan);
     let res: Awaited<ReturnType<typeof startCheckout>>;

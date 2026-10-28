@@ -242,7 +242,6 @@ function NavRow({
   rail,
   pinned,
   pinFull,
-  plan,
   hint,
   onPin,
   onNavigate,
@@ -257,7 +256,6 @@ function NavRow({
    * a pin off is never refused.
    */
   pinFull?: boolean;
-  plan: string;
   /** The keys that open this page, one label per press, already platformed. */
   hint?: string[];
   onPin?: () => void;
@@ -331,7 +329,7 @@ function NavRow({
         >
           <span className="truncate">{label}</span>
           {item.beta && <BetaBadge />}
-          {item.feature && <PlanChip feature={item.feature} plan={plan} />}
+          {item.feature && <PlanChip feature={item.feature} />}
         </span>
 
         {/*
@@ -409,7 +407,6 @@ function QuickAccessBlock({
   rows,
   pathname,
   rail,
-  plan,
   hints,
   onToggle,
   onDismiss,
@@ -419,7 +416,6 @@ function QuickAccessBlock({
   rows: QuickAccessRow[];
   pathname: string;
   rail: boolean;
-  plan: string;
   hints: Record<string, string[]>;
   onToggle: (href: string) => void;
   onDismiss: (href: string) => void;
@@ -451,7 +447,6 @@ function QuickAccessBlock({
               active={isActive(pathname, row.href)}
               rail={rail}
               pinned={row.pinned}
-              plan={plan}
               hint={hints[row.href]}
               onNavigate={onNavigate}
               onFlyout={onFlyout}
@@ -515,7 +510,6 @@ function Group({
   onToggleOpen,
   pathname,
   rail,
-  plan,
   first,
   hints,
   isPinned,
@@ -528,7 +522,6 @@ function Group({
   onToggleOpen: () => void;
   pathname: string;
   rail: boolean;
-  plan: string;
   /** Only to decide whether the rail draws a rule above this group. */
   first: boolean;
   hints: Record<string, string[]>;
@@ -566,7 +559,6 @@ function Group({
               active={isActive(pathname, item.href)}
               rail
               pinned={isPinned(item.href)}
-              plan={plan}
               hint={hints[item.href]}
               onFlyout={onFlyout}
             />
@@ -592,7 +584,6 @@ function Group({
             rail={false}
             pinned={isPinned(item.href)}
             pinFull={pinFull}
-            plan={plan}
             hint={hints[item.href]}
             onPin={() => onPin(item.href)}
             onFlyout={onFlyout}
@@ -644,7 +635,6 @@ function Group({
                 rail={false}
                 pinned={isPinned(item.href)}
                 pinFull={pinFull}
-                plan={plan}
                 hint={hints[item.href]}
                 onPin={() => onPin(item.href)}
                 onFlyout={onFlyout}
@@ -736,7 +726,6 @@ export function Sidebar({
   perms = [],
   churchSlug = null,
   isOwner = false,
-  plan = "starter",
   churches = [],
   activeChurchId = null,
   defaultRail = false,
@@ -751,11 +740,6 @@ export function Sidebar({
   /** For hiding a module that is only being piloted elsewhere. */
   churchSlug?: string | null;
   isOwner?: boolean;
-  /**
-   * The church's plan, so the menu can say which tier a module needs. Defaults
-   * to the smallest, like every other allowance in the app.
-   */
-  plan?: string;
   /** For the switcher in the account menu. Empty or one = no switcher. */
   churches?: { id: string; name: string }[];
   activeChurchId?: string | null;
@@ -1027,7 +1011,6 @@ export function Sidebar({
           rows={quick.rows}
           pathname={pathname}
           rail={rail}
-          plan={plan}
           hints={hints}
           onToggle={quick.toggle}
           onDismiss={quick.dismiss}
@@ -1044,7 +1027,6 @@ export function Sidebar({
               onToggleOpen={() => toggleGroup(section.titleKey)}
               pathname={pathname}
               rail={rail}
-              plan={plan}
               hints={hints}
               isPinned={quick.isPinned}
               pinFull={quick.full}
@@ -1084,7 +1066,6 @@ export function Sidebar({
               rail={rail}
               pinned={quick.isPinned(item.href)}
               pinFull={quick.full}
-              plan={plan}
               hint={hints[item.href]}
               onPin={() => quick.toggle(item.href)}
               onFlyout={setFlyout}

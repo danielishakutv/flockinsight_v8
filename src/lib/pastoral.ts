@@ -1,4 +1,5 @@
 import "server-only";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -15,7 +16,6 @@ import {
   user,
 } from "@/db/schema";
 import { automationPaused, standingColumns } from "@/lib/church-standing";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { isBookingOverlapViolation } from "@/lib/facilities";
 import type { ClashCandidate } from "@/lib/facility-shared";
 import { instantFromWallClock } from "@/lib/meeting-recurrence";
@@ -555,6 +555,7 @@ export type PublicChurch = {
   publicEmail: string | null;
   defaultLocale: string | null;
   plan: string;
+  customPlanId: string | null;
   slug: string;
   isDemo: boolean;
 };
@@ -590,6 +591,7 @@ export async function getBookingPageBySlug(
       publicEmail: church.publicEmail,
       defaultLocale: church.defaultLocale,
       slug: church.slug,
+      customPlanId: church.customPlanId,
       status: church.status,
       ...standingColumns,
     })
@@ -597,7 +599,7 @@ export async function getBookingPageBySlug(
     .where(eq(church.id, page.churchId))
     .limit(1);
   if (!c || c.status === "suspended") return null;
-  if (!churchRowHasFeature(c, "pastoralBooking")) return null;
+  if (!(await rowHasFeature(c, "pastoralBooking"))) return null;
   if (automationPaused(c)) return null;
 
   return {
@@ -613,6 +615,7 @@ export async function getBookingPageBySlug(
       publicEmail: c.publicEmail,
       defaultLocale: c.defaultLocale,
       plan: c.plan,
+      customPlanId: c.customPlanId,
       slug: c.slug,
       isDemo: c.isDemo,
     },

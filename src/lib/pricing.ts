@@ -1,5 +1,6 @@
 import "server-only";
 import { PLANS, PLAN_BY_ID, type Plan, type PlanId } from "@/lib/plans";
+import { FEATURES, type FeatureKey } from "@/lib/entitlements";
 import {
   DEFAULT_ANNUAL_FREE_MONTHS,
   normaliseFreeMonths,
@@ -102,6 +103,46 @@ export async function getPlans(): Promise<Plan[]> {
         : `${emails[p.id]!.toLocaleString()} emails a month`,
     ],
   }));
+}
+
+/**
+ * The bullet list on a custom plan's card — on the website, in Settings →
+ * Billing and at the trial gate.
+ *
+ * The admin's own lines when there are any, or the ticked features by name
+ * when there are none. The member, team, storage and email lines are always
+ * generated from the plan's numbers, for the same reason as the tiers' (see
+ * getPlans): a number typed into a sentence goes stale the first time the
+ * number changes.
+ */
+export function customPlanBullets(
+  row: {
+    memberLimit: number | null;
+    teamLimit: number | null;
+    storageMb: number;
+    emailAllowance: number | null;
+    highlights: string[];
+  },
+  features: readonly FeatureKey[],
+): string[] {
+  const lines = row.highlights.length
+    ? row.highlights
+    : features.map((k) => FEATURES[k].label);
+  return [
+    row.memberLimit === null
+      ? "Unlimited members"
+      : `Up to ${row.memberLimit.toLocaleString()} members`,
+    ...lines,
+    row.teamLimit === null
+      ? "Unlimited team members"
+      : row.teamLimit === 1
+        ? "1 admin account"
+        : `Up to ${row.teamLimit.toLocaleString()} team members`,
+    `${formatBytes(row.storageMb * MB, 0)} of storage for photos, documents and media`,
+    row.emailAllowance === null
+      ? "Email volume to suit"
+      : `${row.emailAllowance.toLocaleString()} emails a month`,
+  ];
 }
 
 /** Persist a plan's monthly price (admin only — caller must authorize). */

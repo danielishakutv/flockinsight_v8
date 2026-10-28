@@ -76,17 +76,21 @@ export function orgEndpointPolicy(path: string | undefined | null): OrgEndpointP
  */
 export const UNLIMITED_PLAN_INVITATION_CAP = 1000;
 export function invitationCapFor(plan: string | null | undefined): number {
-  const team = teamLimitFor(plan);
+  return capForTeam(teamLimitFor(plan));
+}
+
+function capForTeam(team: number | null): number {
   return team === null ? UNLIMITED_PLAN_INVITATION_CAP : Math.max(team, 100);
 }
 
+/** A church's team limit — its custom plan's if it has one, else its tier's. */
+async function churchTeamLimit(churchId: string): Promise<number | null> {
+  const { churchPlanLimits } = await import("@/lib/plan-catalog");
+  return (await churchPlanLimits(churchId)).teamLimit;
+}
+
 export async function invitationCapForChurch(churchId: string): Promise<number> {
-  const [c] = await db
-    .select({ plan: church.plan })
-    .from(church)
-    .where(eq(church.id, churchId))
-    .limit(1);
-  return invitationCapFor(c?.plan);
+  return capForTeam(await churchTeamLimit(churchId));
 }
 
 /**
@@ -298,12 +302,7 @@ export async function guardTeamCall(input: TeamCallInput): Promise<void> {
       typeof input.email === "string" &&
       (await hasLivePendingInvite(churchId, input.email));
     if (!resending) {
-      const [p] = await db
-        .select({ plan: church.plan })
-        .from(church)
-        .where(eq(church.id, churchId))
-        .limit(1);
-      const limit = teamLimitFor(p?.plan);
+      const limit = await churchTeamLimit(churchId);
       if (limit !== null) {
         const [{ used }] = await db
           .select({ used: count() })

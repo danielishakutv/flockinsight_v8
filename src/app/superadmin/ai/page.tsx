@@ -24,6 +24,7 @@ import { WORKSPACE_FIX, isWorkspaceScopeError } from "@/lib/ai/config";
 import { monthKey } from "@/lib/ai/budget-rules";
 import { formatNanoUsd } from "@/lib/ai/pricing";
 import { ASSISTANT_ADMIN_DAILY, PLAN_ORDER, churchRowHasFeature, planRank } from "@/lib/entitlements";
+import { loadCatalog } from "@/lib/plan-catalog";
 import { planName, type PlanId } from "@/lib/plans";
 import { monthlyAllowanceFor, usagePeriods } from "@/lib/assistant/advisor-shared";
 import { AiControls } from "@/components/superadmin/ai-controls";
@@ -266,6 +267,7 @@ async function AssistantSection({ canManage }: { canManage: boolean }) {
             slug: church.slug,
             name: church.name,
             plan: church.plan,
+            customPlanId: church.customPlanId,
             isDemo: church.isDemo,
             aiOn: aiChurchSetting.enabled,
           })
@@ -281,6 +283,7 @@ async function AssistantSection({ canManage }: { canManage: boolean }) {
   // In the order they were added; a slug no church has any more stays visible
   // so it can be removed, rather than silently dropping out of the list.
   const bySlug = new Map(pilotRows.map((r) => [r.slug, r]));
+  const catalog = await loadCatalog();
   const pilot: PilotChurch[] = pilotSlugs.map((slug) => {
     const r = bySlug.get(slug);
     if (!r) return { slug, name: null, plan: null, aiOn: false, advisorOnPlan: false, isDemo: false };
@@ -289,7 +292,7 @@ async function AssistantSection({ canManage }: { canManage: boolean }) {
       name: r.name,
       plan: r.plan,
       aiOn: r.aiOn === true,
-      advisorOnPlan: !r.isDemo && churchRowHasFeature(r, "aiAdvisor"),
+      advisorOnPlan: !r.isDemo && churchRowHasFeature(r, "aiAdvisor", catalog),
       isDemo: r.isDemo,
     };
   });

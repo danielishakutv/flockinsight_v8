@@ -5,11 +5,11 @@ import { db } from "@/db";
 import { church, staff } from "@/db/schema";
 import { getSession, getActAsChurchId } from "@/lib/session";
 import {
-  churchHasFeature,
-  teamLimitFor,
+  churchRowHasFeature,
   upgradeMessage,
   type FeatureKey,
 } from "@/lib/entitlements";
+import { loadCatalog, planLimitsFor } from "@/lib/plan-catalog";
 
 /**
  * The enforcing half of the price list.
@@ -60,26 +60,43 @@ export const activePlan = cache(async (): Promise<string> => {
 });
 
 /**
- * The active church's slug, for the pilot check.
+ * The active church as the plan checks need it: tier, custom plan, slug (for
+ * the pilot check) and whether it is the demonstration church.
  *
  * Separate from `activePlan` rather than folded into it, because the plan is
  * read on paths that have no church at all and must still answer "starter".
- * Null here simply means "no church", and `pilotAllows` refuses a pilot for a
- * church it cannot name — the smaller allowance, as everywhere else in this
- * file.
+ * A null slug means "no church", and `pilotAllows` refuses a pilot for a
+ * church it cannot name — the smaller allowance, as everywhere else here.
  */
-export const activeChurchSlug = cache(async (): Promise<string | null> => {
-  const data = await getSession();
-  const churchId = (await getActAsChurchId()) ?? data?.session?.activeOrganizationId;
-  if (!churchId) return null;
+export const activeHolder = cache(
+  async (): Promise<{
+    plan: string;
+    customPlanId: string | null;
+    slug: string | null;
+    isDemo: boolean;
+  }> => {
+    const data = await getSession();
+    const churchId = (await getActAsChurchId()) ?? data?.session?.activeOrganizationId;
+    if (!churchId) return { plan: "starter", customPlanId: null, slug: null, isDemo: false };
 
-  const [row] = await db
-    .select({ slug: church.slug })
-    .from(church)
-    .where(eq(church.id, churchId))
-    .limit(1);
-  return row?.slug ?? null;
-});
+    const [row] = await db
+      .select({
+        plan: church.plan,
+        customPlanId: church.customPlanId,
+        slug: church.slug,
+        isDemo: church.isDemo,
+      })
+      .from(church)
+      .where(eq(church.id, churchId))
+      .limit(1);
+    return {
+      plan: row?.plan ?? "starter",
+      customPlanId: row?.customPlanId ?? null,
+      slug: row?.slug ?? null,
+      isDemo: row?.isDemo ?? false,
+    };
+  },
+);
 
 /**
  * One church's plan, by id.
@@ -105,17 +122,17 @@ export async function churchPlanOf(churchId: string): Promise<string> {
  * module to a plan that does not include it either.
  */
 export async function hasFeature(feature: FeatureKey): Promise<boolean> {
-  const [plan, slug] = await Promise.all([activePlan(), activeChurchSlug()]);
-  return churchHasFeature(plan, slug, feature);
+  const [holder, catalog] = await Promise.all([activeHolder(), loadCatalog()]);
+  return churchRowHasFeature(holder, feature, catalog);
 }
 
 /** Several at once, for a page that renders more than one gated section. */
 export async function hasFeatures<K extends FeatureKey>(
   ...features: K[]
 ): Promise<Record<K, boolean>> {
-  const [plan, slug] = await Promise.all([activePlan(), activeChurchSlug()]);
+  const [holder, catalog] = await Promise.all([activeHolder(), loadCatalog()]);
   return Object.fromEntries(
-    features.map((f) => [f, churchHasFeature(plan, slug, f)]),
+    features.map((f) => [f, churchRowHasFeature(holder, f, catalog)]),
   ) as Record<K, boolean>;
 }
 
@@ -138,7 +155,7 @@ export async function refuseWithoutFeature(
   feature: FeatureKey,
 ): Promise<FeatureRefusal | null> {
   if (await hasFeature(feature)) return null;
-  return { ok: false, error: upgradeMessage(feature), upgrade: feature };
+  return { ok: false, error: upgradeMessage(feature, await loadCatalog()), upgrade: feature };
 }
 
 /**
@@ -156,12 +173,16 @@ export async function teamLimitStatus(churchId: string): Promise<{
   atLimit: boolean;
 }> {
   const [c] = await db
-    .select({ plan: church.plan })
+    .select({ plan: church.plan, customPlanId: church.customPlanId })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
   const plan = c?.plan ?? "starter";
-  const limit = teamLimitFor(plan);
+  // A custom plan sets its own team size; a tier reads TEAM_LIMIT_BY_PLAN.
+  const { teamLimit: limit } = await planLimitsFor({
+    plan,
+    customPlanId: c?.customPlanId ?? null,
+  });
 
   const [{ used }] = await db
     .select({ used: count() })

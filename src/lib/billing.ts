@@ -2,7 +2,8 @@ import "server-only";
 import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment } from "@/db/schema";
-import { planName, type PlanId } from "@/lib/plans";
+import { parsePlanKey, planKeyOf, type PlanId } from "@/lib/plans";
+import { getCustomPlan, planKeyName } from "@/lib/plan-catalog";
 import { applyDiscount, getPlanPrice } from "@/lib/pricing";
 import { paystackVerify } from "@/lib/paystack";
 import { classifyCharge, referenceKind } from "@/lib/paystack-outcome";
@@ -27,8 +28,31 @@ export async function effectivePrice(
   plan: string,
   discountPct: number,
 ): Promise<number | null> {
-  return applyDiscount(await getPlanPrice(plan), discountPct);
+  return applyDiscount(await planKeyPrice(plan), discountPct);
 }
+
+/**
+ * The list price of a plan KEY: a tier ("growth") from the pricing page, a
+ * custom plan ("custom:<id>") from its own row. Null = custom / contact us.
+ */
+async function planKeyPrice(key: string): Promise<number | null> {
+  const parsed = parsePlanKey(key);
+  if (parsed && "customId" in parsed) {
+    const c = await getCustomPlan(parsed.customId);
+    return c ? c.priceMonthly : null;
+  }
+  return getPlanPrice(key);
+}
+
+/**
+ * What a church is being put on: a tier, or a custom plan (which also names
+ * the tier it starts from, for `church.plan`). A bare tier id is accepted
+ * everywhere a choice is, and clears any custom plan.
+ */
+export type PlanChoice = { plan: PlanId; customPlanId: string | null };
+
+const asChoice = (p: PlanId | PlanChoice): PlanChoice =>
+  typeof p === "string" ? { plan: p, customPlanId: null } : p;
 
 export type ActivateOptions = {
   /** Run inside this transaction (the payment claim's), rather than a new one. */
@@ -44,7 +68,7 @@ export type ActivateOptions = {
 async function applyPlanPeriod(
   tx: DbTx,
   churchId: string,
-  plan: PlanId,
+  target: PlanChoice,
   months: number,
   convertRemaining: boolean,
 ): Promise<PeriodResult> {
@@ -57,6 +81,7 @@ async function applyPlanPeriod(
   const [c] = await tx
     .select({
       plan: church.plan,
+      customPlanId: church.customPlanId,
       renewsAt: church.planRenewsAt,
       trialEndsAt: church.trialEndsAt,
       discount: church.planDiscountPct,
@@ -67,21 +92,28 @@ async function applyPlanPeriod(
     .limit(1);
   if (!c) throw new Error(`activatePlan: church ${churchId} not found`);
 
-  const changing = c.plan !== plan;
+  /*
+   * Compared as plan KEYS, so moving between a tier and a custom plan built
+   * on that same tier is a change of plan — the two can cost very different
+   * amounts, and remaining time is revalued exactly as between two tiers.
+   */
+  const currentKey = planKeyOf(c);
+  const newKey = planKeyOf(target);
+  const changing = currentKey !== newKey;
   const [currentMonthly, newMonthly] =
     changing && convertRemaining
       ? await Promise.all([
-          effectivePrice(c.plan, c.discount),
-          effectivePrice(plan, c.discount),
+          effectivePrice(currentKey, c.discount),
+          effectivePrice(newKey, c.discount),
         ])
       : [null, null];
 
   const period = nextRenewal({
     now: new Date(),
-    currentPlan: c.plan,
+    currentPlan: currentKey,
     renewsAt: c.renewsAt,
     trialEndsAt: c.trialEndsAt,
-    plan,
+    plan: newKey,
     months,
     currentMonthly,
     newMonthly,
@@ -89,7 +121,11 @@ async function applyPlanPeriod(
   });
   await tx
     .update(church)
-    .set({ plan, planRenewsAt: period.renewsAt })
+    .set({
+      plan: target.plan,
+      customPlanId: target.customPlanId,
+      planRenewsAt: period.renewsAt,
+    })
     .where(eq(church.id, churchId));
   return period;
 }
@@ -104,14 +140,15 @@ async function applyPlanPeriod(
  */
 export async function activatePlan(
   churchId: string,
-  plan: PlanId,
+  plan: PlanId | PlanChoice,
   months: number,
   opts: ActivateOptions = {},
 ): Promise<Date> {
   const convert = opts.convertRemaining ?? false;
+  const target = asChoice(plan);
   const period = opts.tx
-    ? await applyPlanPeriod(opts.tx, churchId, plan, months, convert)
-    : await db.transaction((tx) => applyPlanPeriod(tx, churchId, plan, months, convert));
+    ? await applyPlanPeriod(opts.tx, churchId, target, months, convert)
+    : await db.transaction((tx) => applyPlanPeriod(tx, churchId, target, months, convert));
   return period.renewsAt;
 }
 
@@ -123,6 +160,8 @@ export type ClaimedPayment = {
   /** Null when the church that paid has since been deleted. */
   churchId: string | null;
   plan: PlanId;
+  /** The custom plan the payment bought, if it was one. */
+  customPlanId: string | null;
   amount: number;
   periodMonths: number;
   renewsAt: Date | null;
@@ -174,11 +213,13 @@ export async function claimSubscriptionPayment(
         id: payment.id,
         churchId: payment.churchId,
         plan: payment.plan,
+        customPlanId: payment.customPlanId,
         amount: payment.amount,
         periodMonths: payment.periodMonths,
         extendsPlan: payment.extendsPlan,
       });
     if (!row) return null;
+    const bought: PlanChoice = { plan: row.plan, customPlanId: row.customPlanId };
 
     let period: PeriodResult | null = null;
     /*
@@ -190,7 +231,7 @@ export async function claimSubscriptionPayment(
       period = await applyPlanPeriod(
         tx,
         row.churchId,
-        row.plan,
+        bought,
         row.periodMonths,
         opts.convertRemaining,
       );
@@ -198,8 +239,8 @@ export async function claimSubscriptionPayment(
         // On the row, so support can see why the date moved the way it did.
         const line = conversionSentence(
           period.conversion,
-          planName(row.plan),
-          planName(period.conversion.fromPlan),
+          await planKeyName(planKeyOf(bought)),
+          await planKeyName(period.conversion.fromPlan),
         );
         await tx
           .update(payment)
@@ -213,6 +254,7 @@ export async function claimSubscriptionPayment(
       id: row.id,
       churchId: row.churchId,
       plan: row.plan,
+      customPlanId: row.customPlanId,
       amount: Number(row.amount),
       periodMonths: row.periodMonths,
       renewsAt: period?.renewsAt ?? null,
@@ -223,13 +265,17 @@ export async function claimSubscriptionPayment(
 
   await payAwardsFor(claimed.id);
 
+  const [boughtName, fromName] = await Promise.all([
+    planKeyName(planKeyOf(claimed)),
+    claimed.conversion ? planKeyName(claimed.conversion.fromPlan) : Promise.resolve(""),
+  ]);
   await auditSystem({
     churchId: claimed.churchId,
     actorName: opts.actorName,
     action: "billing.payment.confirm",
-    summary: `Payment of ₦${claimed.amount.toLocaleString()} confirmed for the ${planName(claimed.plan)} plan${
+    summary: `Payment of ₦${claimed.amount.toLocaleString()} confirmed for the ${boughtName} plan${
       claimed.renewsAt ? ` — paid through ${claimed.renewsAt.toDateString()}` : ""
-    }${claimed.conversion ? ` (${claimed.conversion.fromDays} days of ${planName(claimed.conversion.fromPlan)} became ${claimed.conversion.toDays})` : ""}`,
+    }${claimed.conversion ? ` (${claimed.conversion.fromDays} days of ${fromName} became ${claimed.conversion.toDays})` : ""}`,
     targetType: "payment",
     targetId: claimed.id,
     meta: {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { planLimitsFor, rowHasFeature } from "@/lib/plan-catalog";
 import { Suspense } from "react";
 import { InstallNotice } from "@/components/pwa/install-notice";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
@@ -27,7 +28,6 @@ import {
 import { getIsSuperAdmin, requireChurch } from "@/lib/session";
 import { getT } from "@/lib/i18n/server";
 import { getAccess } from "@/lib/permissions";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { getChurchSummaryView } from "@/lib/ai/summaries";
 import { canReadChurchSummary } from "@/lib/ai/ai-shared";
 import { AiSummaryCard } from "@/components/ai/ai-summary-card";
@@ -47,7 +47,6 @@ import { formatMoney } from "@/lib/money";
 import { siteUrl, churchPath } from "@/lib/site";
 import { getSmsPrice } from "@/lib/platform-settings";
 import { churchUsageSince } from "@/lib/usage";
-import { emailAllowanceFor } from "@/lib/plans";
 import { smsAvailableForCountry } from "@/lib/sms-availability";
 import { PageContainer } from "@/components/app/page-header";
 import { DateTime } from "@/components/app/date-time";
@@ -191,7 +190,7 @@ export default async function DashboardPage() {
     churchUsageSince(church.id, startOfMonth),
   ]);
 
-  const emailAllowance = emailAllowanceFor(church.plan);
+  const { emailAllowance } = await planLimitsFor(church);
   const smsAvailable = smsAvailableForCountry(church.country);
   const smsApproved = church.smsSenderStatus === "approved";
   const smsAffordable =
@@ -325,7 +324,13 @@ export default async function DashboardPage() {
           {/* Its own boundary, so a slow summary query cannot hold up the dashboard. */}
           <Suspense fallback={<Skeleton className="h-32 rounded-2xl" />}>
             <DashboardAiSummary
-              church={{ id: church.id, plan: church.plan, slug: church.slug, isDemo: church.isDemo }}
+              church={{
+                id: church.id,
+                plan: church.plan,
+                customPlanId: church.customPlanId,
+                slug: church.slug,
+                isDemo: church.isDemo,
+              }}
             />
           </Suspense>
 
@@ -487,9 +492,15 @@ export default async function DashboardPage() {
 async function DashboardAiSummary({
   church,
 }: {
-  church: { id: string; plan: string | null; slug: string | null; isDemo: boolean | null };
+  church: {
+    id: string;
+    plan: string | null;
+    customPlanId: string | null;
+    slug: string | null;
+    isDemo: boolean | null;
+  };
 }) {
-  if (!churchRowHasFeature(church, "aiSummaries")) return null;
+  if (!(await rowHasFeature(church, "aiSummaries"))) return null;
   const access = await getAccess();
   const canRead = canReadChurchSummary(access);
   if (!canRead) return null;

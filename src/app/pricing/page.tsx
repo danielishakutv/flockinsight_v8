@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
-import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths } from "@/lib/pricing";
+import { getWebsitePlans } from "@/lib/plan-offers";
 import { annualTotal } from "@/lib/billing-cycle";
 import { landingContent } from "@/lib/landing-content";
 import {
@@ -74,7 +75,7 @@ export default async function PricingPage({ searchParams }: PageProps) {
    * client-side conversion that could disagree with what checkout charges.
    */
   const [plans, locale, country, freeMonths] = await Promise.all([
-    getPlans(),
+    getWebsitePlans(),
     marketingLocale(searchParams),
     requestCountry(),
     getAnnualFreeMonths(),

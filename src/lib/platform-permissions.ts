@@ -131,6 +131,7 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     pages: [
       { label: "Finance", href: "/superadmin/finance", perm: "platform.finance.view", icon: "Banknote" },
       { label: "Pricing", href: "/superadmin/pricing", perm: "platform.pricing.manage", icon: "Tag" },
+      { label: "Plans & features", href: "/superadmin/plans", perm: "platform.pricing.manage", icon: "Layers" },
       { label: "Partners", href: "/superadmin/partners", perm: "platform.finance.manage", icon: "Handshake" },
     ],
   },

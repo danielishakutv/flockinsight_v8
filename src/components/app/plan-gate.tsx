@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
 import { FEATURES, planNameFor, type FeatureKey } from "@/lib/entitlements";
 import { hasFeature } from "@/lib/entitlements-server";
+import { loadCatalog } from "@/lib/plan-catalog";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -29,7 +30,7 @@ export async function PlanGate({ feature }: { feature: FeatureKey }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-bold">
-            {meta.label} is on the {planNameFor(feature)} plan
+            {meta.label} is on the {planNameFor(feature, await loadCatalog())} plan
           </p>
           <p className="text-muted-foreground mt-0.5 text-sm">{meta.blurb}</p>
           {/*
@@ -61,7 +62,7 @@ export async function PlanNote({ feature }: { feature: FeatureKey }) {
   return (
     <p className="text-muted-foreground mt-1.5 text-xs">
       <Sparkles className="mr-1 inline size-3.5 text-amber-500" />
-      {meta.label} is on the {planNameFor(feature)} plan.{" "}
+      {meta.label} is on the {planNameFor(feature, await loadCatalog())} plan.{" "}
       <Link href="/settings/billing" className="font-semibold underline">
         See plans
       </Link>

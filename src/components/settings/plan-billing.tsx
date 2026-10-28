@@ -6,7 +6,6 @@ import { format, parseISO } from "date-fns";
 import { Check, CreditCard, Gift, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { startCheckout } from "@/app/(app)/settings/billing/actions";
-import { PLANS, planName, type PlanId } from "@/lib/plans";
 import {
   annualSaving,
   annualTotal,
@@ -38,8 +37,13 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> = 
   failed: "destructive",
 };
 
+/** A plan the church may choose: a tier, or a custom plan made at /superadmin/plans. */
+type BillingPlan = { key: string; name: string; features: string[]; custom: boolean };
+
 export function PlanBilling({
   currentPlan,
+  currentName,
+  plans,
   renewsAt,
   discount,
   prices,
@@ -51,15 +55,19 @@ export function PlanBilling({
   trial,
   international,
 }: {
+  /** The church's plan key: "growth", or "custom:<id>". */
   currentPlan: string;
+  currentName: string;
+  plans: BillingPlan[];
   renewsAt: string | null;
   discount: number;
-  prices: Record<PlanId, number | null>;
+  /** By plan key. */
+  prices: Record<string, number | null>;
   /** The yearly total per plan, worked out on the server. */
-  annualPrices: Record<PlanId, number | null>;
+  annualPrices: Record<string, number | null>;
   /** How many of the twelve months are free when paying for a year. */
   annualFreeMonths: number;
-  basePrices: Record<PlanId, number | null>;
+  basePrices: Record<string, number | null>;
   payments: PaymentRow[];
   status: string | null;
   trial?: {
@@ -140,9 +148,10 @@ export function PlanBilling({
     router.replace("/settings/billing");
   }, [status, router, t]);
 
-  const currentIndex = PLANS.findIndex((p) => p.id === currentPlan);
+  const currentIndex = plans.findIndex((p) => p.key === currentPlan);
+  const currentIsTier = plans[currentIndex]?.custom === false;
 
-  function checkout(plan: PlanId) {
+  function checkout(plan: string) {
     if (redirecting) return;
     setBusyPlan(plan);
     startTransition(async () => {
@@ -247,7 +256,7 @@ export function PlanBilling({
               Current plan
             </p>
             <div className="mt-0.5 flex items-center gap-2">
-              <p className="text-2xl font-extrabold">{planName(currentPlan)}</p>
+              <p className="text-2xl font-extrabold">{currentName}</p>
               {discount > 0 && (
                 <Badge variant="success">{discount}% off</Badge>
               )}
@@ -302,10 +311,10 @@ export function PlanBilling({
 
       {/* Plans */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {PLANS.map((p, i) => {
-          const isCurrent = p.id === currentPlan;
-          const monthlyPrice = prices[p.id];
-          const price = annual ? annualPrices[p.id] : monthlyPrice;
+        {plans.map((p, i) => {
+          const isCurrent = p.key === currentPlan;
+          const monthlyPrice = prices[p.key];
+          const price = annual ? annualPrices[p.key] : monthlyPrice;
           // A church abroad sees its own money; the naira total is explained
           // once below the grid rather than repeated on every card.
           const priceLabel =
@@ -314,9 +323,9 @@ export function PlanBilling({
               : price === 0
                 ? "Free"
                 : annual
-                  ? (international?.annualLabels[p.id] ??
+                  ? (international?.annualLabels[p.key] ??
                     `₦${price.toLocaleString()}/yr`)
-                  : (international?.labels[p.id] ??
+                  : (international?.labels[p.key] ??
                     `₦${price.toLocaleString()}/mo`);
           // What the year works out at per month, and what it saves. Said in
           // naira even for a church abroad: the conversion is on the price
@@ -325,12 +334,12 @@ export function PlanBilling({
           const perMonth = monthlyEquivalent(monthlyPrice, annualFreeMonths);
           const saving = annualSaving(monthlyPrice, annualFreeMonths);
           const nairaWas = annual
-            ? annualTotal(basePrices[p.id], annualFreeMonths)
-            : basePrices[p.id];
+            ? annualTotal(basePrices[p.key], annualFreeMonths)
+            : basePrices[p.key];
           // Abroad: the converted "was" price, or nothing — never naira
           // beside a figure in another currency.
           const wasLabel = international
-            ? ((annual ? international.annualBaseLabels : international.baseLabels)?.[p.id] ??
+            ? ((annual ? international.annualBaseLabels : international.baseLabels)?.[p.key] ??
               null)
             : nairaWas !== null
               ? `₦${nairaWas.toLocaleString()}`
@@ -342,19 +351,27 @@ export function PlanBilling({
            * disabled "Current plan" button, so the only way to pay for the
            * plan a church was already on was to be locked out first.
            */
+          /*
+           * A plan with no price (Enterprise, or a custom plan marked
+           * "contact us") is a conversation, not a checkout. Between two
+           * tiers the words follow the tiers' order; a custom plan is not
+           * above or below anything, so moving to or from one is a switch.
+           */
           const action =
-            p.id === "enterprise"
+            basePrices[p.key] === null || basePrices[p.key] === undefined
               ? "contact"
               : isCurrent
                 ? onTrial || !renewsDate
                   ? `Pay for ${p.name}`
                   : "Renew"
-                : i > currentIndex
-                  ? "Upgrade"
-                  : "Downgrade";
+                : p.custom || !currentIsTier
+                  ? "Switch"
+                  : i > currentIndex
+                    ? "Upgrade"
+                    : "Downgrade";
           return (
             <div
-              key={p.id}
+              key={p.key}
               className={cn(
                 "flex flex-col rounded-2xl border p-5",
                 isCurrent ? "border-primary ring-primary/30 ring-2" : "",
@@ -408,7 +425,7 @@ export function PlanBilling({
               </ul>
               {action === "contact" ? (
                 <Button asChild variant="outline" className="mt-4 w-full">
-                  <a href="mailto:hello@flockinsight.com?subject=Enterprise%20plan">
+                  <a href={`mailto:hello@flockinsight.com?subject=${encodeURIComponent(`${p.name} plan`)}`}>
                     Contact us
                   </a>
                 </Button>
@@ -420,10 +437,10 @@ export function PlanBilling({
                       ? "default"
                       : "outline"
                   }
-                  onClick={() => checkout(p.id)}
+                  onClick={() => checkout(p.key)}
                   disabled={busy}
                 >
-                  {busy && busyPlan === p.id && (
+                  {busy && busyPlan === p.key && (
                     <Loader2 className="animate-spin" />
                   )}
                   {action}
@@ -487,7 +504,7 @@ export function PlanBilling({
               >
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {planName(p.plan)}{" "}
+                    {p.plan}{" "}
                     <span className="text-muted-foreground">
                       · {p.gateway}
                       {p.note ? ` · ${p.note}` : ""}

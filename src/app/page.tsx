@@ -22,7 +22,8 @@ import { SectionHeading } from "@/components/landing/section-heading";
 import { ModuleGroups } from "@/components/landing/module-groups";
 import { ReplacesTable } from "@/components/landing/replaces-table";
 import { CompareTable } from "@/components/landing/compare-table";
-import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths } from "@/lib/pricing";
+import { getWebsitePlans } from "@/lib/plan-offers";
 import { annualTotal } from "@/lib/billing-cycle";
 import {
   currencyNoteFor,
@@ -136,7 +137,7 @@ export default async function LandingPage({ searchParams }: PageProps) {
   ];
 
   const [plans, freeMonths] = await Promise.all([
-    getPlans(),
+    getWebsitePlans(),
     getAnnualFreeMonths(),
   ]);
 

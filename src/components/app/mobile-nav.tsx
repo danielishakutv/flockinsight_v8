@@ -70,7 +70,6 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 function SheetRow({
   item,
   pathname,
-  plan,
   pinned,
   pinFull,
   onPin,
@@ -78,7 +77,6 @@ function SheetRow({
 }: {
   item: MenuItem;
   pathname: string;
-  plan: string;
   pinned: boolean;
   /** Quick access already holds its four; only an unpinned row is refused. */
   pinFull: boolean;
@@ -130,7 +128,7 @@ function SheetRow({
           >
             <span className="truncate">{label}</span>
             {item.beta && <BetaBadge />}
-            {item.feature && <PlanChip feature={item.feature} plan={plan} />}
+            {item.feature && <PlanChip feature={item.feature} />}
           </span>
           <span className="text-muted-foreground block truncate text-xs">
             {t(item.descriptionKey)}
@@ -174,14 +172,11 @@ export function MobileNav({
   perms = [],
   churchSlug = null,
   isOwner = false,
-  plan = "starter",
 }: {
   perms?: string[];
   /** For hiding a module that is only being piloted elsewhere. */
   churchSlug?: string | null;
   isOwner?: boolean;
-  /** The church's plan, so the sheet can say which tier a module needs. */
-  plan?: string;
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -384,7 +379,6 @@ export function MobileNav({
                         key={item.href}
                         item={item}
                         pathname={pathname}
-                        plan={plan}
                         pinned={quick.isPinned(item.href)}
                         pinFull={quick.full}
                         onPin={() => quick.toggle(item.href)}
@@ -462,7 +456,6 @@ export function MobileNav({
                             key={item.href}
                             item={item}
                             pathname={pathname}
-                            plan={plan}
                             pinned={quick.isPinned(item.href)}
                             pinFull={quick.full}
                             onPin={() => quick.toggle(item.href)}

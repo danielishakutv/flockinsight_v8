@@ -1,9 +1,9 @@
 import "server-only";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { church, firstTimerSignup, member } from "@/db/schema";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { churchDial, findExistingMember } from "@/lib/member-signup";
 import { memberLimitStatus } from "@/lib/plan-limits";
 import { planName } from "@/lib/plans";
@@ -176,6 +176,7 @@ export async function getWelcomeBySlug(
       logo: church.logo,
       theme: church.theme,
       plan: church.plan,
+      customPlanId: church.customPlanId,
       slug: church.slug,
       isDemo: church.isDemo,
     })
@@ -183,7 +184,7 @@ export async function getWelcomeBySlug(
     .where(eq(church.id, s.churchId))
     .limit(1);
   if (!c) return null;
-  if (!churchRowHasFeature(c, "followUp")) return null;
+  if (!(await rowHasFeature(c, "followUp"))) return null;
 
   return {
     signup: s,

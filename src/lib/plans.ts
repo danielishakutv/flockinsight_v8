@@ -170,6 +170,43 @@ export function emailAllowanceFor(id: string): number | null {
   return p ? p.emailAllowance : 500;
 }
 
+/*
+ * A plan KEY names either a tier ("growth") or a custom plan made at
+ * /superadmin/plans ("custom:<id>"). It is what a checkout button, a picker
+ * and a payment reference carry, so one string can say which of the two a
+ * church is buying. Custom plans themselves live in the database
+ * (lib/plan-catalog.ts) and are read there.
+ */
+export const CUSTOM_PLAN_PREFIX = "custom:";
+
+export function customPlanKey(id: string): string {
+  return `${CUSTOM_PLAN_PREFIX}${id}`;
+}
+
+export function isPlanId(v: unknown): v is PlanId {
+  return typeof v === "string" && v in PLAN_BY_ID;
+}
+
+/** A key, taken apart. Null for anything that is neither. */
+export function parsePlanKey(
+  key: string | null | undefined,
+): { tier: PlanId } | { customId: string } | null {
+  if (!key) return null;
+  if (key.startsWith(CUSTOM_PLAN_PREFIX)) {
+    const id = key.slice(CUSTOM_PLAN_PREFIX.length).trim();
+    return id ? { customId: id } : null;
+  }
+  return isPlanId(key) ? { tier: key } : null;
+}
+
+/** The key for a church: its custom plan if it has one, else its tier. */
+export function planKeyOf(h: {
+  plan: string | null | undefined;
+  customPlanId: string | null | undefined;
+}): string {
+  return h.customPlanId ? customPlanKey(h.customPlanId) : (h.plan ?? "starter");
+}
+
 export function planPriceLabel(p: Plan): string {
   if (p.priceMonthly === null) return "Custom";
   if (p.priceMonthly === 0) return "Free";

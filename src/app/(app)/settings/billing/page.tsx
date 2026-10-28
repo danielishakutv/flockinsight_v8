@@ -4,7 +4,9 @@ import { church, payment } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { requireCan } from "@/lib/permissions";
 import { computeStanding } from "@/lib/trial";
-import { offerLabel, priceBook } from "@/lib/plan-offers";
+import { offerLabel, offerPlans, priceBook } from "@/lib/plan-offers";
+import { customPlanNames, planLabel } from "@/lib/plan-catalog";
+import { planKeyOf } from "@/lib/plans";
 import type { PlanPrice } from "@/lib/plan-price";
 import { PlanBilling } from "@/components/settings/plan-billing";
 
@@ -23,6 +25,7 @@ export default async function BillingPage({
     db
       .select({
         plan: church.plan,
+        customPlanId: church.customPlanId,
         renewsAt: church.planRenewsAt,
         discount: church.planDiscountPct,
         currency: church.currency,
@@ -34,6 +37,7 @@ export default async function BillingPage({
       .select({
         id: payment.id,
         plan: payment.plan,
+        customPlanId: payment.customPlanId,
         amount: payment.amount,
         currency: payment.currency,
         status: payment.status,
@@ -56,7 +60,12 @@ export default async function BillingPage({
    * multiplies a price itself, because a total computed in a client component
    * is a total a browser can edit.
    */
-  const book = await priceBook({ country: c.country, planDiscountPct: row.discount });
+  // The tiers, the custom plans on the website, and the church's own plan.
+  const [offers, customNames] = await Promise.all([
+    offerPlans({ customPlanId: row.customPlanId }),
+    customPlanNames(),
+  ]);
+  const book = await priceBook({ country: c.country, planDiscountPct: row.discount }, offers);
   const { basePrices, prices, annualPrices, freeMonths } = book;
 
   const standing = computeStanding(c);
@@ -92,7 +101,14 @@ export default async function BillingPage({
 
   return (
     <PlanBilling
-      currentPlan={row.plan}
+      currentPlan={planKeyOf(row)}
+      currentName={planLabel(row, customNames)}
+      plans={offers.map((o) => ({
+        key: o.key,
+        name: o.name,
+        features: o.features,
+        custom: o.custom,
+      }))}
       renewsAt={row.renewsAt ? row.renewsAt.toISOString() : null}
       discount={row.discount}
       prices={prices}
@@ -107,7 +123,7 @@ export default async function BillingPage({
       }}
       payments={payments.map((p) => ({
         id: p.id,
-        plan: p.plan,
+        plan: planLabel(p, customNames),
         amount: Number(p.amount),
         currency: p.currency,
         status: p.status,

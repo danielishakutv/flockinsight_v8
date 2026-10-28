@@ -16,7 +16,8 @@ import {
   solutionPath,
 } from "@/lib/seo/pages";
 import { countryProfile, smsAvailableForCountry } from "@/lib/country-profile";
-import { getAnnualFreeMonths, getPlans } from "@/lib/pricing";
+import { getAnnualFreeMonths } from "@/lib/pricing";
+import { getWebsitePlans } from "@/lib/plan-offers";
 import { annualTotal, chargedMonths } from "@/lib/billing-cycle";
 import { getPartnerRates } from "@/lib/partners";
 
@@ -55,7 +56,7 @@ export const revalidate = 3600;
 export async function GET() {
   const site = siteUrl();
   const [plans, freeMonths, partnerRates] = await Promise.all([
-    getPlans(),
+    getWebsitePlans(),
     getAnnualFreeMonths(),
     getPartnerRates(),
   ]);

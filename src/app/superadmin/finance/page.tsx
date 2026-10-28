@@ -7,6 +7,9 @@ import {
   revenueByGateway,
 } from "@/lib/finance-admin";
 import { formatMoney } from "@/lib/money";
+import { planKeyOf } from "@/lib/plans";
+import { listCustomPlans } from "@/lib/plan-catalog";
+import { pickablePlans } from "@/lib/plan-options";
 import { RecordPayment } from "@/components/superadmin/record-payment";
 import { FinanceTabs } from "@/components/superadmin/finance-tabs";
 import { RevenueChart } from "@/components/superadmin/revenue-chart";
@@ -17,17 +20,23 @@ export const dynamic = "force-dynamic";
 
 export default async function FinancePage() {
   await requirePlatform("platform.finance.view");
-  const [overview, movements, topups, gateways] = await Promise.all([
+  const [overview, movements, topups, gateways, customPlans] = await Promise.all([
     getFinanceOverview(),
     recentWalletMovements(40),
     pendingTopups(),
     revenueByGateway(),
+    listCustomPlans({ includeArchived: true }),
   ]);
 
   const churchOptions = overview.churches.map((c) => ({
     id: c.id,
     name: c.name,
+    planKey: planKeyOf(c),
   }));
+  const planOptions = pickablePlans(
+    customPlans,
+    overview.churches.map((c) => c.customPlanId),
+  );
 
   return (
     <div className="space-y-6">
@@ -38,7 +47,7 @@ export default async function FinancePage() {
             Money in, money held, and what each church is worth.
           </p>
         </div>
-        <RecordPayment churches={churchOptions} />
+        <RecordPayment churches={churchOptions} planOptions={planOptions} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

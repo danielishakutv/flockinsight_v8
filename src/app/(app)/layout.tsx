@@ -1,4 +1,7 @@
 import { cookies } from "next/headers";
+import { loadCatalog, rowHasFeature } from "@/lib/plan-catalog";
+import { planChipsFor } from "@/lib/entitlements";
+import { PlanChipsProvider } from "@/components/app/plan-chips";
 import { redirect } from "next/navigation";
 import {
   getIsPartner,
@@ -11,7 +14,7 @@ import { getAccess } from "@/lib/permissions";
 import { unreadCount } from "@/lib/notifications";
 import { computeStanding } from "@/lib/trial";
 import { getDemoState } from "@/lib/demo";
-import { gateOffers } from "@/lib/plan-offers";
+import { gateOffers, offerPlans } from "@/lib/plan-offers";
 import { TrialGate, TrialBanner } from "@/components/app/trial-gate";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Sidebar } from "@/components/app/sidebar";
@@ -33,7 +36,6 @@ import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/components/i18n-provider";
 import { AssistantProvider } from "@/components/assistant/assistant-provider";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { getI18n } from "@/lib/i18n/server";
 import { RAIL_COOKIE, railFromCookie } from "@/lib/nav-rail";
 
@@ -95,7 +97,7 @@ export default async function AppLayout({
      * print the undiscounted Nigerian list price in naira, and the button
      * under it then charged something else.
      */
-    const { offers, freeMonths, note } = await gateOffers(church);
+    const { offers, freeMonths, note } = await gateOffers(church, await offerPlans(church));
     return (
       <I18nProvider locale={locale} dict={dict} timeZone={church.timezone}>
         <TrialGate
@@ -118,12 +120,15 @@ export default async function AppLayout({
    * off" is the wrong first impression for a prospect.
    */
   const assistantAvailable =
-    !church.isDemo && churchRowHasFeature(church, "assistant");
+    !church.isDemo && (await rowHasFeature(church, "assistant"));
+  // The demonstration church shows every module, so its menu carries no chips.
+  const catalog = await loadCatalog();
 
   return (
     <I18nProvider locale={locale} dict={dict} timeZone={church.timezone}>
     {/* The church actions decide who pays: acting-as files under the platform. */}
     <AssistantProvider scope="church" available={assistantAvailable}>
+    <PlanChipsProvider chips={church.isDemo ? {} : planChipsFor(church, catalog)}>
     <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
       {/*
         The status bar band. viewportFit is "cover", so the app is drawn behind
@@ -164,7 +169,6 @@ export default async function AppLayout({
           activeChurchId={church.id}
           perms={perms}
           isOwner={access.isOwner}
-          plan={church.plan}
           churchSlug={church.slug}
           defaultRail={rail}
         />
@@ -199,7 +203,6 @@ export default async function AppLayout({
         <MobileNav
           perms={perms}
           isOwner={access.isOwner}
-          plan={church.plan}
           churchSlug={church.slug}
         />
       </div>
@@ -240,6 +243,7 @@ export default async function AppLayout({
         role={access.isOwner ? "owner" : "member"}
       />
     </div>
+    </PlanChipsProvider>
     </AssistantProvider>
     </I18nProvider>
   );

@@ -33,7 +33,9 @@ import {
   user,
 } from "@/db/schema";
 import { formatMoney } from "@/lib/money";
-import { planName } from "@/lib/plans";
+import { planKeyOf } from "@/lib/plans";
+import { listCustomPlans, planLabel } from "@/lib/plan-catalog";
+import { pickablePlans } from "@/lib/plan-options";
 import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 import { computeStanding, waiverActive } from "@/lib/trial";
@@ -75,7 +77,7 @@ export default async function SuperadminChurchPage({
   await requirePlatform("platform.churches.view");
   const { id } = await params;
 
-  const [[c], denominations, networkChurches] = await Promise.all([
+  const [[c], denominations, networkChurches, customPlans] = await Promise.all([
     db.select().from(church).where(eq(church.id, id)).limit(1),
     denominationOptions(),
     // Everything we need to show and edit this church's place in a network.
@@ -88,8 +90,10 @@ export default async function SuperadminChurchPage({
       })
       .from(church)
       .orderBy(asc(church.name)),
+    listCustomPlans({ includeArchived: true }),
   ]);
   if (!c) notFound();
+  const customNames = new Map(customPlans.map((p) => [p.id, p.name]));
 
   const [
     membersByStatus,
@@ -186,6 +190,7 @@ export default async function SuperadminChurchPage({
       .select({
         id: payment.id,
         plan: payment.plan,
+        customPlanId: payment.customPlanId,
         amount: payment.amount,
         currency: payment.currency,
         status: payment.status,
@@ -264,7 +269,7 @@ export default async function SuperadminChurchPage({
             >
               {c.status}
             </Badge>
-            <Badge variant="secondary">{planName(c.plan)}</Badge>
+            <Badge variant="secondary">{planLabel(c, customNames)}</Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
             /{c.slug} · {c.currency} · {c.country}
@@ -356,12 +361,14 @@ export default async function SuperadminChurchPage({
 
       <AdminBilling
         churchId={c.id}
-        plan={c.plan}
+        planKey={planKeyOf(c)}
+        planName={planLabel(c, customNames)}
+        planOptions={pickablePlans(customPlans, [c.customPlanId])}
         discount={c.planDiscountPct}
         renewsAt={c.planRenewsAt ? c.planRenewsAt.toISOString() : null}
         payments={payments.map((p) => ({
           id: p.id,
-          plan: p.plan,
+          plan: planLabel(p, customNames),
           amount: Number(p.amount),
           currency: p.currency,
           status: p.status,

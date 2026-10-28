@@ -25,6 +25,7 @@ export type AskerChurch = {
   id: string;
   name: string;
   plan: string | null;
+  customPlanId: string | null;
   slug: string | null;
   isDemo: boolean | null;
 };

@@ -29,6 +29,20 @@ export const CATEGORY_ORDER: ChangeCategory[] = [
 
 export const releases: Release[] = [
   {
+    version: "0.84.0",
+    date: "2026-10-28",
+    summary:
+      "Plans made for particular ministries — a campus fellowship, say — can now sit beside the usual four, with their own price and exactly the features they need.",
+    changes: {
+      Added: [
+        "Plans for particular kinds of ministry can now appear on the pricing page and in Settings → Billing, with their own price, member limit and features, and be paid for monthly or yearly like any other plan.",
+      ],
+      Improved: [
+        "The menu, the upgrade notes and the billing page always agree on what your plan includes, because they now read it from one place.",
+      ],
+    },
+  },
+  {
     version: "0.83.0",
     date: "2026-10-26",
     summary:

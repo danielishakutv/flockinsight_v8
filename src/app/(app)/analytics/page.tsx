@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { and, eq, gte } from "drizzle-orm";
 import { format, parseISO } from "date-fns";
 import { CalendarDays, Sparkles, TrendingUp, UserPlus } from "lucide-react";
@@ -6,7 +7,6 @@ import { db } from "@/db";
 import { attendanceSession, service } from "@/db/schema";
 import { requireChurch } from "@/lib/session";
 import { getAccess, requireCan } from "@/lib/permissions";
-import { churchRowHasFeature } from "@/lib/entitlements";
 import { getChurchSummaryView } from "@/lib/ai/summaries";
 import { canReadChurchSummary } from "@/lib/ai/ai-shared";
 import { AiSummaryCard } from "@/components/ai/ai-summary-card";
@@ -140,7 +140,7 @@ export default async function AnalyticsPage() {
    * card is simply not mounted: PlanGate above already explains the plan, and
    * a church is never shown a summary of numbers its plan cannot chart.
    */
-  const onAiPlan = churchRowHasFeature(church, "aiSummaries");
+  const onAiPlan = await rowHasFeature(church, "aiSummaries");
   let aiCard: React.ReactNode = null;
   if (onAiPlan) {
     const access = await getAccess();

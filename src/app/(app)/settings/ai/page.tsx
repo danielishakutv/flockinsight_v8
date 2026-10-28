@@ -16,6 +16,7 @@ import { churchToday } from "@/lib/church-today";
 import { getChurchSummaryView, previewChurchPayload } from "@/lib/ai/summaries";
 import { hasFeatures } from "@/lib/entitlements-server";
 import { planNameFor, type FeatureKey } from "@/lib/entitlements";
+import { loadCatalog } from "@/lib/plan-catalog";
 import { advisorRolloutAllows } from "@/lib/assistant/advisor-shared";
 import { PlanGate } from "@/components/app/plan-gate";
 import { AiSettings } from "@/components/settings/ai-settings";
@@ -79,6 +80,7 @@ export default async function AiSettingsPage() {
   const t = await getT();
   const access = await getAccess();
   if (!access.isOwner) redirect("/settings");
+  const catalog = await loadCatalog();
 
   const [setting, view, actAs, plans, state, rollout, pilot] = await Promise.all([
     getChurchAiSetting(church.id),
@@ -123,7 +125,7 @@ export default async function AiSettingsPage() {
       feature: "aiSummaries",
       name: t("ai.featureSummaries"),
       body: t("ai.featureSummariesBody"),
-      plan: t("ai.planFrom", { plan: planNameFor("aiSummaries") }),
+      plan: t("ai.planFrom", { plan: planNameFor("aiSummaries", catalog) }),
       status: statusOf({
         onPlan: plans.aiSummaries,
         configured: state.configured,
@@ -136,7 +138,7 @@ export default async function AiSettingsPage() {
       feature: "aiAdvisor",
       name: t("ai.featureAdvisor"),
       body: t("ai.featureAdvisorBody"),
-      plan: t("ai.planFrom", { plan: planNameFor("aiAdvisor") }),
+      plan: t("ai.planFrom", { plan: planNameFor("aiAdvisor", catalog) }),
       status: statusOf({
         onPlan: plans.aiAdvisor,
         configured: state.configured,
@@ -191,7 +193,7 @@ export default async function AiSettingsPage() {
                   STATUS_TONE[r.status],
                 )}
               >
-                {t(STATUS_KEY[r.status], { plan: planNameFor(r.feature) })}
+                {t(STATUS_KEY[r.status], { plan: planNameFor(r.feature, catalog) })}
               </span>
             </li>
           ))}
@@ -212,7 +214,7 @@ export default async function AiSettingsPage() {
         locked={church.isDemo || actAs !== null}
         onPlan={plans.aiAdvisor}
         aiOn={setting.enabled}
-        planName={planNameFor("aiAdvisor")}
+        planName={planNameFor("aiAdvisor", catalog)}
       />
 
       <details className="bg-card rounded-2xl border p-4">

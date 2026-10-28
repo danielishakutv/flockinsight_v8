@@ -1,5 +1,5 @@
 import "server-only";
-import { planIncludes } from "@/lib/entitlements";
+import { holderIncludes, type EntitlementCatalog } from "@/lib/entitlements";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { and, eq } from "drizzle-orm";
@@ -57,6 +57,8 @@ export type BrandSource = {
    * call site that forgets cannot hand out the paid version by accident.
    */
   plan?: string | null;
+  /** The church's custom plan, if it is on one (lib/plan-catalog.ts). */
+  customPlanId?: string | null;
 };
 
 /**
@@ -235,6 +237,8 @@ function contactLine(c: BrandSource): string | null {
  */
 export async function getChurchBrand(
   church: BrandSource,
+  /** The live catalogue; loaded here when not given. Tests pass the defaults. */
+  catalog?: EntitlementCatalog,
 ): Promise<ChurchBrand> {
   /*
    * The one place a PDF becomes this church's document, so the one place the
@@ -245,7 +249,14 @@ export async function getChurchBrand(
    * document outright would be taking away the data, which is not what is being
    * sold; what is being sold is the document looking like theirs.
    */
-  const branded = planIncludes(church.plan, "brandedPdf");
+  const cat = catalog ?? (await (await import("@/lib/plan-catalog")).loadCatalog());
+  const branded =
+    church.plan != null &&
+    holderIncludes(
+      { plan: church.plan, customPlanId: church.customPlanId ?? null },
+      "brandedPdf",
+      cat,
+    );
   const theme = getTheme(branded ? church.theme : null);
 
   let logo: Buffer | null = null;

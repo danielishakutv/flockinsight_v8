@@ -458,6 +458,153 @@ export function isPilot(
   return !!pilots[feature];
 }
 
+/* ============================================================
+ * The live catalogue: what each plan includes TODAY
+ *
+ * `FEATURES[k].plan` above is the DEFAULT — the tier a feature ships on. A
+ * superadmin can tick a feature onto or off any tier at /superadmin/plans,
+ * and can make plans of their own (a student fellowship plan) that start
+ * from a tier and differ from it.
+ *
+ * Both are stored as CHANGES, never as full lists. A full list saved today
+ * would leave out every module shipped tomorrow, silently and for ever —
+ * which is how the public price list once went months without mentioning
+ * anything new. As changes, a new feature lands on its default tier
+ * everywhere, custom plans included, unless somebody has said otherwise
+ * about that feature in particular.
+ *
+ * The catalogue is plain data so this file stays pure and client-safe:
+ * lib/plan-catalog.ts loads it on the server, and every check that decides
+ * what a church may do takes it as an argument. There is deliberately no
+ * default for that argument on the church checks — a check that forgot to
+ * load it would quietly enforce the code defaults instead of the admin's
+ * ticks, and nothing would say so.
+ * ========================================================== */
+
+/** How a list of features differs from the one it starts from. */
+export type FeatureDelta = {
+  added: readonly FeatureKey[];
+  removed: readonly FeatureKey[];
+};
+
+export const NO_DELTA: FeatureDelta = { added: [], removed: [] };
+
+export type CustomPlanEntry = {
+  name: string;
+  /** The tier it starts from, and what anything it does not set follows. */
+  base: PlanId;
+  features: readonly FeatureKey[];
+};
+
+export type EntitlementCatalog = {
+  /** Each tier's live feature list. */
+  tiers: Record<PlanId, readonly FeatureKey[]>;
+  /** Custom plans by id, archived ones included (churches keep them). */
+  custom: Record<string, CustomPlanEntry>;
+};
+
+/** Who is asking: a church's tier, and its custom plan if it has one. */
+export type PlanHolder = {
+  plan: string | null | undefined;
+  customPlanId: string | null | undefined;
+};
+
+export const ALL_FEATURES = Object.keys(FEATURES) as FeatureKey[];
+
+export function isFeatureKey(k: unknown): k is FeatureKey {
+  return typeof k === "string" && Object.prototype.hasOwnProperty.call(FEATURES, k);
+}
+
+/**
+ * A stored delta, made safe: unknown keys dropped (a feature retired from the
+ * code), duplicates removed, and a key never both added and removed.
+ */
+export function cleanDelta(raw: unknown): FeatureDelta {
+  const r = (raw ?? {}) as { added?: unknown; removed?: unknown };
+  const list = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter(isFeatureKey))] : []);
+  const added = list(r.added);
+  const removed = list(r.removed).filter((k) => !added.includes(k));
+  return { added, removed };
+}
+
+/** Apply a delta to a list, keeping the order of FEATURES. */
+export function applyDelta(base: readonly FeatureKey[], delta: FeatureDelta): FeatureKey[] {
+  const set = new Set(base);
+  for (const k of delta.added) set.add(k);
+  for (const k of delta.removed) set.delete(k);
+  return ALL_FEATURES.filter((k) => set.has(k));
+}
+
+/**
+ * The delta that turns `base` into `target` — what the admin's ticks are
+ * saved as. Ticking a feature back to its default produces no entry, so a
+ * plan whose boxes all match the default is stored as no change at all.
+ */
+export function deltaBetween(
+  base: readonly FeatureKey[],
+  target: readonly FeatureKey[],
+): FeatureDelta {
+  const b = new Set(base);
+  const t = new Set(target.filter(isFeatureKey));
+  return {
+    added: ALL_FEATURES.filter((k) => t.has(k) && !b.has(k)),
+    removed: ALL_FEATURES.filter((k) => b.has(k) && !t.has(k)),
+  };
+}
+
+/** The code's own answer for a tier: every feature whose default tier it reaches. */
+export function defaultTierFeatures(tier: PlanId): FeatureKey[] {
+  return ALL_FEATURES.filter((k) => planRank(tier) >= planRank(FEATURES[k].plan));
+}
+
+/** Build the catalogue from the stored changes. Pure; tested. */
+export function buildCatalog(
+  tierDeltas: Partial<Record<PlanId, FeatureDelta>>,
+  customPlans: ReadonlyArray<{
+    id: string;
+    name: string;
+    basePlan: string;
+    delta: FeatureDelta;
+  }>,
+): EntitlementCatalog {
+  const tiers = Object.fromEntries(
+    PLAN_ORDER.map((t) => [t, applyDelta(defaultTierFeatures(t), tierDeltas[t] ?? NO_DELTA)]),
+  ) as Record<PlanId, FeatureKey[]>;
+  const custom: Record<string, CustomPlanEntry> = {};
+  for (const c of customPlans) {
+    const base = PLAN_ORDER[planRank(c.basePlan)];
+    custom[c.id] = { name: c.name, base, features: applyDelta(tiers[base], c.delta) };
+  }
+  return { tiers, custom };
+}
+
+/** The catalogue with nothing changed — what a fresh install enforces, and what tests use. */
+export const DEFAULT_CATALOG: EntitlementCatalog = buildCatalog({}, []);
+
+/**
+ * Everything a church's plan includes.
+ *
+ * A custom plan the catalogue does not know (a bad id) falls back to the
+ * church's tier, which for a custom-plan church is the plan's base tier — the
+ * smaller of the two possible readings, never "everything".
+ */
+export function holderFeatures(
+  holder: PlanHolder,
+  catalog: EntitlementCatalog,
+): readonly FeatureKey[] {
+  const custom = holder.customPlanId ? catalog.custom[holder.customPlanId] : undefined;
+  if (custom) return custom.features;
+  return catalog.tiers[PLAN_ORDER[planRank(holder.plan)]];
+}
+
+export function holderIncludes(
+  holder: PlanHolder,
+  feature: FeatureKey,
+  catalog: EntitlementCatalog,
+): boolean {
+  return holderFeatures(holder, catalog).includes(feature);
+}
+
 /**
  * The whole question: may THIS church use this feature?
  *
@@ -466,46 +613,68 @@ export function isPilot(
  * still being tried out somewhere else.
  */
 export function churchHasFeature(
-  plan: string | null | undefined,
-  churchSlug: string | null | undefined,
+  church: PlanHolder & { slug: string | null | undefined },
   feature: FeatureKey,
+  catalog: EntitlementCatalog,
   pilots: PilotMap = PILOT_ONLY,
 ): boolean {
-  return planIncludes(plan, feature) && pilotAllows(feature, churchSlug, pilots);
+  return holderIncludes(church, feature, catalog) && pilotAllows(feature, church.slug, pilots);
 }
 
 /**
- * The same question for a church read BY ID, on a path with no signed-in
- * church for `hasFeature` to read — a public link that writes into a church's
- * records answers to that church's plan, not the visitor's.
+ * The same question for a church ROW, on a path with no signed-in church for
+ * `hasFeature` to read — a public link that writes into a church's records
+ * answers to that church's plan, not the visitor's.
  *
- * The demonstration church shows everything, exactly as `activePlan` treats
- * it, so its public pages work the way its signed-in pages do.
+ * The demonstration church shows everything, whatever the ticks say, exactly
+ * as `activePlan` treats it, so its public pages work the way its signed-in
+ * pages do. Pilots still apply: the demo is not a pilot church.
  */
 export function churchRowHasFeature(
-  row: { plan: string | null; slug: string | null; isDemo: boolean | null },
+  row: PlanHolder & { slug: string | null; isDemo: boolean | null },
   feature: FeatureKey,
+  catalog: EntitlementCatalog,
   pilots: PilotMap = PILOT_ONLY,
 ): boolean {
-  return churchHasFeature(row.isDemo ? "enterprise" : row.plan, row.slug, feature, pilots);
+  if (row.isDemo) return pilotAllows(feature, row.slug, pilots);
+  return churchHasFeature(row, feature, catalog, pilots);
 }
 
-/** The lowest plan that includes a feature. */
+/** The tier a feature ships on — the code's default, before any ticks. */
 export function minPlanFor(feature: FeatureKey): PlanId {
   return FEATURES[feature].plan;
 }
 
-/** Whether a plan includes a feature. */
+/** The lowest tier whose LIVE list includes a feature, or null if none does. */
+export function lowestTierWith(feature: FeatureKey, catalog: EntitlementCatalog): PlanId | null {
+  return PLAN_ORDER.find((t) => catalog.tiers[t].includes(feature)) ?? null;
+}
+
+/**
+ * Whether a TIER includes a feature. Defaults to the code's catalogue, which
+ * is what the tests pin down. Anything deciding what a real church may do
+ * goes through `churchHasFeature` with the live catalogue instead —
+ * entitlements.test.ts fails the build if product code calls this.
+ */
 export function planIncludes(
   plan: string | null | undefined,
   feature: FeatureKey,
+  catalog: EntitlementCatalog = DEFAULT_CATALOG,
 ): boolean {
-  return planRank(plan) >= planRank(minPlanFor(feature));
+  return catalog.tiers[PLAN_ORDER[planRank(plan)]].includes(feature);
 }
 
-/** The name of the plan a church would have to be on, for a prompt. */
-export function planNameFor(feature: FeatureKey): string {
-  return PLAN_BY_ID[minPlanFor(feature)]?.name ?? minPlanFor(feature);
+/**
+ * The name of the plan a church would have to be on, for a prompt. Falls back
+ * to the default tier when an admin has ticked the feature off every tier —
+ * the prompt still has to name something.
+ */
+export function planNameFor(
+  feature: FeatureKey,
+  catalog: EntitlementCatalog = DEFAULT_CATALOG,
+): string {
+  const tier = lowestTierWith(feature, catalog) ?? minPlanFor(feature);
+  return PLAN_BY_ID[tier]?.name ?? tier;
 }
 
 /**
@@ -514,9 +683,29 @@ export function planNameFor(feature: FeatureKey): string {
  * Says what the feature is and which plan has it, because "not permitted" sends
  * somebody to their church administrator to ask about a permission they do have.
  */
-export function upgradeMessage(feature: FeatureKey): string {
+export function upgradeMessage(
+  feature: FeatureKey,
+  catalog: EntitlementCatalog = DEFAULT_CATALOG,
+): string {
   const f = FEATURES[feature];
-  return `${f.label} is on the ${planNameFor(feature)} plan. ${f.blurb}`;
+  const tier = lowestTierWith(feature, catalog);
+  if (!tier) return `${f.label} isn't included in your plan. ${f.blurb}`;
+  return `${f.label} is on the ${PLAN_BY_ID[tier]?.name ?? tier} plan. ${f.blurb}`;
+}
+
+/**
+ * The menu's chips: for each feature this church does NOT have, the plan name
+ * to put beside it. Worked out on the server and handed to the menu, so the
+ * menu reads the same live ticks the server enforces.
+ */
+export function planChipsFor(
+  holder: PlanHolder,
+  catalog: EntitlementCatalog,
+): Partial<Record<FeatureKey, string>> {
+  const has = new Set(holderFeatures(holder, catalog));
+  const out: Partial<Record<FeatureKey, string>> = {};
+  for (const k of ALL_FEATURES) if (!has.has(k)) out[k] = planNameFor(k, catalog);
+  return out;
 }
 
 /* ============================================================
@@ -589,7 +778,10 @@ export function assistantQuestionsFor(
   return id in byPlan ? byPlan[id] : byPlan.starter;
 }
 
-/** Every feature a plan includes — for the settings page, and for tests. */
-export function featuresFor(plan: string | null | undefined): FeatureKey[] {
-  return (Object.keys(FEATURES) as FeatureKey[]).filter((k) => planIncludes(plan, k));
+/** Every feature a tier includes — for the settings page, and for tests. */
+export function featuresFor(
+  plan: string | null | undefined,
+  catalog: EntitlementCatalog = DEFAULT_CATALOG,
+): FeatureKey[] {
+  return [...catalog.tiers[PLAN_ORDER[planRank(plan)]]];
 }

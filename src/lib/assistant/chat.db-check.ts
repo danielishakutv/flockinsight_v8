@@ -44,7 +44,7 @@ const OTHER = `zzcheck-other-${stamp}`;
 const DAY = 86_400_000;
 const callIds: string[] = [];
 
-const askerChurch = (id: string) => ({ id, name: `ZZ Check ${id}`, plan: "growth", slug: id, isDemo: false });
+const askerChurch = (id: string) => ({ id, name: `ZZ Check ${id}`, plan: "growth", customPlanId: null, slug: id, isDemo: false });
 const asChurch: AssistantAsker = { kind: "church", userId: ME, userName: "ZZ", church: askerChurch(CHURCH_A), canReadFigures: true };
 const asOther: AssistantAsker = { kind: "church", userId: OTHER, userName: "ZZ", church: askerChurch(CHURCH_A), canReadFigures: true };
 const actingAsB: AssistantAsker = { kind: "actingAs", userId: ME, userName: "ZZ", church: askerChurch(CHURCH_B) };

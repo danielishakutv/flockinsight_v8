@@ -30,13 +30,13 @@ import {
   type MeetingRepeat,
 } from "@/lib/meeting-recurrence";
 import {
-  canRepeatMeetings,
   chooseTransport,
   generatePasscode,
   MEETING_KINDS,
   meetingLimitFor,
   type MeetingKind,
 } from "@/lib/meetings-shared";
+import { churchIdHasFeature } from "@/lib/plan-catalog";
 
 export type ActionResult =
   | { ok: true; id?: string; code?: string }
@@ -162,7 +162,7 @@ export async function saveMeeting(input: MeetingInput): Promise<ActionResult> {
    * came from a browser — and this is the only place the church's actual plan is
    * known for certain. Worded as what to do about it rather than as a refusal.
    */
-  if (repeat !== "none" && !canRepeatMeetings(g.plan)) {
+  if (repeat !== "none" && !(await churchIdHasFeature(g.churchId, "meetings.repeat"))) {
     return {
       ok: false,
       error:

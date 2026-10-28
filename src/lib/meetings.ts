@@ -21,7 +21,6 @@ import {
   MEMBER_DEFAULT_PERMISSIONS,
 } from "@/lib/permissions-catalog";
 import {
-  canRepeatMeetings,
   generateMeetingCode,
   generatePasscode,
   insideBookedSlot,
@@ -32,6 +31,7 @@ import {
   type SignalType,
   type Stage,
 } from "@/lib/meetings-shared";
+import { churchIdHasFeature } from "@/lib/plan-catalog";
 import {
   isMeetingRepeat,
   MAX_MISSED_RUNS,
@@ -1084,7 +1084,7 @@ export async function rollSeriesForward(
    * somebody's calendar and its link has been shared. Only the chain stops, and
    * the log says why, so it is not a mystery when somebody asks.
    */
-  if (!canRepeatMeetings(c?.plan)) {
+  if (!(await churchIdHasFeature(m.churchId, "meetings.repeat"))) {
     await stopSeries(m.id);
     await auditSystem({
       churchId: m.churchId,

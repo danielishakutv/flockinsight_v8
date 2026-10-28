@@ -271,6 +271,17 @@ export const church = pgTable("church", {
   country: text().notNull().default("Nigeria"),
   state: text(),
   plan: planEnum().notNull().default("starter"),
+  /**
+   * A plan made in /superadmin/plans (a student fellowship plan, a deal for
+   * one denomination). Null for every church on an ordinary tier.
+   *
+   * When set, `plan` above still holds the custom plan's BASE tier, so the
+   * many places that only ask "which tier" — a meeting's room size, the
+   * assistant's allowance, a broadcast to "everyone on Growth" — keep working
+   * without knowing custom plans exist. Features and the limits a custom plan
+   * sets come from the custom plan (lib/plan-catalog.ts).
+   */
+  customPlanId: text().references(() => customPlan.id, { onDelete: "set null" }),
   status: churchStatusEnum().notNull().default("active"),
   // ----- Billing -----
   planRenewsAt: timestamp({ withTimezone: true }),
@@ -2103,6 +2114,53 @@ export const smsSenderSubmission = pgTable(
   (t) => [index("sms_sender_submission_church_idx").on(t.churchId)],
 );
 
+/**
+ * A plan beyond the four tiers, made by a superadmin: "Student Fellowship",
+ * a price agreed with one denomination, a plan for a ministry that needs
+ * three modules and nothing else.
+ *
+ * It STARTS FROM a tier (`basePlan`) and records only how it differs. The
+ * features are stored as changes against that tier's live list, never as a
+ * full list: a full list saved today would silently leave out every module
+ * shipped tomorrow, which is exactly how the public price list once went
+ * months without mentioning anything new (see lib/pricing.ts). Anything this
+ * row does not set — a meeting's room size, the assistant's allowance —
+ * follows the base tier.
+ *
+ * Never deleted: churches and payments point at it. Archiving takes it off
+ * the website and out of the pickers; churches already on it keep it.
+ */
+export const customPlan = pgTable("custom_plan", {
+  id: text().primaryKey(),
+  /** For a link and for a payment reference. Unique among custom plans. */
+  slug: text().notNull().unique(),
+  name: text().notNull(),
+  tagline: text().notNull().default(""),
+  basePlan: planEnum().notNull().default("starter"),
+  /** Naira a month. Null = "contact us" (no checkout). 0 = free. */
+  priceMonthly: integer(),
+  /** Null = unlimited, for all four. */
+  memberLimit: integer(),
+  teamLimit: integer(),
+  emailAllowance: integer(),
+  storageMb: integer().notNull().default(200),
+  /** Features ticked beyond the base tier's list. */
+  featuresAdded: text().array().notNull().default(sql`'{}'::text[]`),
+  /** Features the base tier has that this plan does not. */
+  featuresRemoved: text().array().notNull().default(sql`'{}'::text[]`),
+  /** The lines its card shows on the website, in the order written. */
+  highlights: text().array().notNull().default(sql`'{}'::text[]`),
+  showOnWebsite: boolean().notNull().default(false),
+  sortOrder: integer().notNull().default(0),
+  archivedAt: timestamp({ withTimezone: true }),
+  createdBy: text().references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
 export const payment = pgTable(
   "payment",
   {
@@ -2123,7 +2181,13 @@ export const payment = pgTable(
      * is gone still says whose it was. Live rows read `church.name`.
      */
     churchName: text(),
+    /** For a custom plan, its base tier — the plan itself is `customPlanId`. */
     plan: planEnum().notNull(),
+    /**
+     * The custom plan this payment buys, or null for an ordinary tier. What
+     * `activatePlan` puts the church on once the payment clears.
+     */
+    customPlanId: text().references(() => customPlan.id, { onDelete: "set null" }),
     amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
     currency: text().notNull().default("NGN"),
     gateway: text().notNull().default("paystack"),

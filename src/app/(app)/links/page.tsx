@@ -4,6 +4,7 @@ import { requireChurch } from "@/lib/session";
 import { can, requireCan } from "@/lib/permissions";
 import { hasFeatures } from "@/lib/entitlements-server";
 import { upgradeMessage } from "@/lib/entitlements";
+import { loadCatalog } from "@/lib/plan-catalog";
 import { siteUrl } from "@/lib/site";
 import { churchLinkStats, listLinks } from "@/lib/links";
 import { listLinkPages } from "@/lib/link-pages";
@@ -31,6 +32,7 @@ export default async function LinksPage() {
   const t = await getT();
   const { church } = await requireChurch();
   await requireCan("links.view");
+  const catalog = await loadCatalog();
 
   const [canManage, features] = await Promise.all([
     can("links.manage"),
@@ -104,7 +106,7 @@ export default async function LinksPage() {
           baseUrl={base}
           canManage={canManage}
           locked={!features.linkPages}
-          lockedMessage={upgradeMessage("linkPages")}
+          lockedMessage={upgradeMessage("linkPages", catalog)}
         />
 
         <QrCodeList
@@ -147,7 +149,7 @@ export default async function LinksPage() {
           baseUrl={base}
           canManage={canManage}
           locked={!features.shortLinks}
-          lockedMessage={upgradeMessage("shortLinks")}
+          lockedMessage={upgradeMessage("shortLinks", catalog)}
         />
       </div>
     </PageContainer>

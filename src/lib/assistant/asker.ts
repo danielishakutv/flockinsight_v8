@@ -32,6 +32,7 @@ export async function churchShellAsker(): Promise<AssistantAsker> {
     id: church.id,
     name: church.name,
     plan: church.plan,
+    customPlanId: church.customPlanId,
     slug: church.slug,
     isDemo: church.isDemo,
   };

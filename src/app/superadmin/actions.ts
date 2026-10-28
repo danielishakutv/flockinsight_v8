@@ -13,7 +13,7 @@ import {
   emailChurchBeforeDeletion,
   notifyChurchOfAdminAction,
 } from "@/lib/admin-notify";
-import { planName } from "@/lib/plans";
+import { resolvePlanForChurch } from "@/lib/plan-catalog";
 import { recordAudit } from "@/lib/audit";
 
 import { requirePlatform } from "@/lib/platform-access";
@@ -96,21 +96,22 @@ export async function exitImpersonation(): Promise<void> {
   redirect("/superadmin");
 }
 
-const PLANS = ["starter", "growth", "pro", "enterprise"] as const;
-
 /** Admin onboarding/billing: set plan + discount, optionally extend renewal. */
 export async function adminSetBilling(input: {
   churchId: string;
-  plan: (typeof PLANS)[number];
+  /** A plan key: "growth", or "custom:<id>". */
+  plan: string;
   discountPct: number;
   months: number;
   note?: string;
 }): Promise<ActionResult> {
   const admin = await requirePlatform("platform.churches.manage");
-  const { churchId, plan } = input;
-  if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
+  const { churchId } = input;
   if (!z.string().min(1).safeParse(churchId).success)
     return { ok: false, error: "Invalid id" };
+  const resolved = await resolvePlanForChurch(churchId, input.plan);
+  if (!resolved.ok) return resolved;
+  const { plan, customPlanId, name } = resolved.target;
 
   const disc = Math.min(100, Math.max(0, Math.round(input.discountPct || 0)));
   const months = Math.min(36, Math.max(0, Math.round(input.months || 0)));
@@ -119,12 +120,13 @@ export async function adminSetBilling(input: {
     .update(church)
     .set({ planDiscountPct: disc })
     .where(eq(church.id, churchId));
-  if (months > 0) await activatePlan(churchId, plan, months);
-  else await db.update(church).set({ plan }).where(eq(church.id, churchId));
+  if (months > 0) await activatePlan(churchId, { plan, customPlanId }, months);
+  else await db.update(church).set({ plan, customPlanId }).where(eq(church.id, churchId));
 
   await db.insert(payment).values({
     churchId,
     plan,
+    customPlanId,
     amount: 0,
     currency: "NGN",
     gateway: "admin",
@@ -136,7 +138,7 @@ export async function adminSetBilling(input: {
     extendsPlan: months > 0,
     note:
       (input.note && input.note.slice(0, 200)) ||
-      `Admin set ${plan}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
+      `Admin set ${name}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
     createdBy: admin.id,
     paidAt: new Date(),
   });
@@ -144,10 +146,10 @@ export async function adminSetBilling(input: {
   await notifyChurchOfAdminAction({
     churchId,
     title: "Your plan was updated",
-    subject: `Your FlockInsight plan is now ${planName(plan)}`,
-    body: `The FlockInsight team has set your church to the ${planName(plan)} plan${months ? `, paid up for ${months} month${months === 1 ? "" : "s"}` : ""}. The features on that plan are available immediately.`,
+    subject: `Your FlockInsight plan is now ${name}`,
+    body: `The FlockInsight team has set your church to the ${name} plan${months ? `, paid up for ${months} month${months === 1 ? "" : "s"}` : ""}. The features on that plan are available immediately.`,
     details: [
-      { label: "Plan", value: planName(plan) },
+      { label: "Plan", value: name },
       ...(disc ? [{ label: "Discount", value: `${disc}% off` }] : []),
       ...(months
         ? [{ label: "Period", value: `${months} month${months === 1 ? "" : "s"}` }]
@@ -161,7 +163,7 @@ export async function adminSetBilling(input: {
     actorUserId: admin.id,
     actorName: admin.name,
     action: "set_billing",
-    summary: `Set plan to ${planName(plan)}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
+    summary: `Set plan to ${name}${disc ? ` (${disc}% off)` : ""}${months ? ` · ${months}mo` : ""}`,
     targetType: "church",
     targetId: churchId,
   });
@@ -172,20 +174,23 @@ export async function adminSetBilling(input: {
 
 export async function setChurchPlan(
   id: string,
-  plan: (typeof PLANS)[number],
+  /** A plan key: "growth", or "custom:<id>". */
+  key: string,
 ): Promise<ActionResult> {
   await requirePlatform("platform.churches.manage");
   if (!z.string().min(1).safeParse(id).success)
     return { ok: false, error: "Invalid id" };
-  if (!PLANS.includes(plan)) return { ok: false, error: "Invalid plan" };
+  const resolved = await resolvePlanForChurch(id, key);
+  if (!resolved.ok) return resolved;
+  const { plan, customPlanId, name } = resolved.target;
 
-  await db.update(church).set({ plan }).where(eq(church.id, id));
+  await db.update(church).set({ plan, customPlanId }).where(eq(church.id, id));
   await notifyChurchOfAdminAction({
     churchId: id,
     title: "Your plan was updated",
-    subject: `Your FlockInsight plan is now ${planName(plan)}`,
-    body: `The FlockInsight team has moved your church onto the ${planName(plan)} plan.`,
-    details: [{ label: "Plan", value: planName(plan) }],
+    subject: `Your FlockInsight plan is now ${name}`,
+    body: `The FlockInsight team has moved your church onto the ${name} plan.`,
+    details: [{ label: "Plan", value: name }],
     linkUrl: "/settings/billing",
     ctaLabel: "View billing",
   });

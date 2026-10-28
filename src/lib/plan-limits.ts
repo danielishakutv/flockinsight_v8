@@ -2,7 +2,8 @@ import "server-only";
 import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { church, member } from "@/db/schema";
-import { PLAN_BY_ID, type PlanId } from "@/lib/plans";
+import { type PlanId } from "@/lib/plans";
+import { planLimitsFor } from "@/lib/plan-catalog";
 
 export type MemberLimitStatus = {
   limit: number | null; // null = unlimited
@@ -16,12 +17,16 @@ export async function memberLimitStatus(
   churchId: string,
 ): Promise<MemberLimitStatus> {
   const [c] = await db
-    .select({ plan: church.plan })
+    .select({ plan: church.plan, customPlanId: church.customPlanId })
     .from(church)
     .where(eq(church.id, churchId))
     .limit(1);
   const plan = (c?.plan as PlanId) ?? "starter";
-  const limit = PLAN_BY_ID[plan]?.memberLimit ?? null;
+  // A custom plan sets its own member limit; a tier keeps the one in lib/plans.ts.
+  const { memberLimit: limit } = await planLimitsFor({
+    plan,
+    customPlanId: c?.customPlanId ?? null,
+  });
   const [{ used }] = await db
     .select({ used: count() })
     .from(member)
