@@ -44,3 +44,41 @@ export function activeHref(pathname: string, hrefs: string[]): string | undefine
 
 export const NAV_RAIL_KEY = "fi-admin-nav-rail";
 export const NAV_CLOSED_GROUPS_KEY = "fi-admin-nav-closed";
+
+/* ============================================================
+ * The phone's bottom bar
+ * ========================================================== */
+
+/**
+ * The three pages an operator reaches for from a phone, in bar order: the
+ * Command centre, a church someone is calling about, and the support queue.
+ */
+export const BOTTOM_TAB_PREFERENCE = [
+  "/superadmin",
+  "/superadmin/churches",
+  "/superadmin/support",
+] as const;
+
+/** Short labels for a tab 80px wide; the menu keeps the long ones. */
+export const BOTTOM_TAB_LABELS: Record<string, string> = {
+  "/superadmin": "Home",
+  "/superadmin/churches": "Churches",
+  "/superadmin/support": "Support",
+};
+
+/**
+ * The hrefs on the bottom bar for an admin who can open `visible`.
+ *
+ * The preferred pages they may open, in order, then topped up from the rest
+ * of their menu, so a scoped role (finance only, support only) still gets a
+ * full bar of pages it can actually open rather than a link that bounces it.
+ */
+export function bottomTabs(visible: string[], count = BOTTOM_TAB_PREFERENCE.length): string[] {
+  const allowed = new Set(visible);
+  const picked: string[] = BOTTOM_TAB_PREFERENCE.filter((h) => allowed.has(h));
+  for (const href of visible) {
+    if (picked.length >= count) break;
+    if (!picked.includes(href)) picked.push(href);
+  }
+  return picked.slice(0, count);
+}

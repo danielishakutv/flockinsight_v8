@@ -26,6 +26,12 @@ export const AT_RISK_DAYS = 14;
 export const AT_RISK_MIN_WEEKS = 3;
 /** Grace period before an empty church counts as failed onboarding. */
 export const NEVER_ACTIVATED_DAYS = 7;
+/**
+ * Weeks of real use that prove a church started. Two, because signing up is
+ * itself a week of use: the owner clicks round on day one whether or not
+ * they ever come back. Coming back in a second week is starting.
+ */
+export const STARTED_MIN_WEEKS = 2;
 
 export type HealthInput = {
   status: string;
@@ -54,13 +60,23 @@ export function classifyHealth(input: HealthInput): ChurchHealth {
 
   if (input.status === "suspended") return "suspended";
 
-  // Failed onboarding is a different problem from churn, and needs a different
-  // conversation — separate it before any recency rule can claim the church.
+  /*
+   * Failed onboarding is a different problem from churn, and needs a different
+   * conversation — separate it before any recency rule can claim the church.
+   *
+   * "Never activated" means never STARTED, so it needs both: no data in, AND
+   * no real use after the week they signed up. It used to look at the data
+   * alone — fewer than two members and no attendance session — so a church
+   * whose people opened the app every week for meetings, finance, follow-up
+   * or giving, and had not typed its register in, was filed as never having
+   * begun, left out of the reminders and listed for a "how do I start" call.
+   */
   const ageDays = daysBetween(now, input.createdAt);
   if (
     ageDays >= NEVER_ACTIVATED_DAYS &&
     input.memberCount < 2 &&
-    input.sessionCount === 0
+    input.sessionCount === 0 &&
+    input.activeWeeks < STARTED_MIN_WEEKS
   ) {
     return "never_activated";
   }
@@ -74,7 +90,10 @@ export function classifyHealth(input: HealthInput): ChurchHealth {
     return "at_risk";
   }
 
-  if (silentDays <= HEALTHY_DAYS) return "healthy";
+  // Healthy is something a church does, so it needs real use. A new church
+  // nobody has used yet falls back to its signup date above, which is recent,
+  // and was being badged "Healthy" — and counted as active — for a week.
+  if (silentDays <= HEALTHY_DAYS && input.lastSeenAt) return "healthy";
   if (silentDays <= IDLE_DAYS) return "idle";
   return "dormant";
 }

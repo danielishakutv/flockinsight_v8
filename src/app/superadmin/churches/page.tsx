@@ -1,7 +1,7 @@
 import { count, eq, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, giving, group, staff, user } from "@/db/schema";
-import { getChurchHealth } from "@/lib/platform-health";
+import { getActiveChurchCount, getChurchHealth } from "@/lib/platform-health";
 import { getChurchPnl } from "@/lib/platform-stats";
 import { isChurchVerified } from "@/lib/verification-shared";
 import { OnboardChurch } from "@/components/superadmin/onboard-church";
@@ -16,9 +16,11 @@ export const dynamic = "force-dynamic";
 
 export default async function SuperadminChurchesPage() {
   await requirePlatform("platform.churches.view");
-  const [health, pnl, extras, groupCounts, givingAgg, owners] = await Promise.all([
+  const [health, active, pnl, extras, groupCounts, givingAgg, owners] = await Promise.all([
     // Real activity + health, from every module rather than attendance/giving.
     getChurchHealth(),
+    // Used in the last 7 days — the Command centre's number, not a badge count.
+    getActiveChurchCount(7),
     getChurchPnl(),
     db
       .select({
@@ -50,9 +52,12 @@ export default async function SuperadminChurchesPage() {
       .where(eq(staff.role, "owner")),
   ]);
 
+  // Real seats only: the temp seat acting-as creates is an operator, not
+  // somebody on the church's team.
   const staffCounts = await db
     .select({ orgId: staff.organizationId, c: count() })
     .from(staff)
+    .where(eq(staff.temp, false))
     .groupBy(staff.organizationId);
 
   const extraMap = new Map(extras.map((e) => [e.id, e]));
@@ -90,8 +95,11 @@ export default async function SuperadminChurchesPage() {
     };
   });
 
-  const active = rows.filter((r) => r.health === "healthy").length;
-  const attention = rows.filter(
+  // The demo church is listed so it can be managed, but counted nowhere: it
+  // is one shared login, rebuilt every two hours, and always "active".
+  const demoIds = new Set(health.filter((c) => c.isDemo).map((c) => c.churchId));
+  const counted = rows.filter((r) => !demoIds.has(r.id));
+  const attention = counted.filter(
     (r) => r.health === "at_risk" || r.health === "never_activated",
   ).length;
 
@@ -103,7 +111,7 @@ export default async function SuperadminChurchesPage() {
           Churches
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {rows.length} church{rows.length === 1 ? "" : "es"} · {active} active
+          {counted.length} church{counted.length === 1 ? "" : "es"} · {active} active
           this week
           {attention > 0 ? ` · ${attention} need attention` : ""}.
         </p>

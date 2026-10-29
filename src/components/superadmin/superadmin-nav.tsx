@@ -22,13 +22,13 @@ import {
   LifeBuoy,
   Map,
   Megaphone,
-  Menu,
   MessageSquare,
   Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
   Rocket,
   ScrollText,
+  Search,
   ShieldCheck,
   Sparkles,
   Layers,
@@ -44,7 +44,9 @@ import { visibleNav } from "@/lib/platform-permissions";
 import {
   NAV_CLOSED_GROUPS_KEY,
   NAV_RAIL_KEY,
+  BOTTOM_TAB_LABELS,
   activeHref,
+  bottomTabs,
   parseStored,
   resolveOpenGroups,
   toggleClosed,
@@ -340,26 +342,90 @@ export function SuperadminSidebar({ perms }: { perms: string[] }) {
 }
 
 /* ============================================================
- * Mobile drawer
+ * Phone: the bottom bar and its "More" sheet
  * ========================================================== */
 
+/** Opens the command palette, which listens for ⌘K / Ctrl+K. */
+function openSearch() {
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+}
+
+function BarTab({
+  item,
+  label,
+  active,
+}: {
+  item: Item;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
+        active ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <item.icon className={cn("size-6 shrink-0", active && "fill-primary/10")} />
+      <span className="max-w-full truncate px-0.5">{label}</span>
+    </Link>
+  );
+}
+
+function MoreGlyph({ active }: { active: boolean }) {
+  return (
+    <span aria-hidden className="grid size-6 grid-cols-2 gap-1 p-1">
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={cn("rounded-[2px]", active ? "bg-primary" : "bg-muted-foreground")}
+        />
+      ))}
+    </span>
+  );
+}
+
 /**
- * The drawer, portalled to <body>.
+ * Below lg, the admin is driven from the bottom of the screen, as the church
+ * app is: the three pages an operator reaches for, Search in the middle (the
+ * command palette — churches, people and pages, which had no way in on a phone
+ * because the header's Search button is hidden there) and More for the whole
+ * menu. The menu used to be a ☰ in the header, at the top of a tall phone and,
+ * on an installed iPhone app, right under the clock.
  *
- * The admin header carries `backdrop-blur`, and a blurred element becomes the
- * containing block for `position: fixed` descendants — so a drawer rendered
- * inside it resolved against the 56px header and opened as an empty sliver.
- * The portal is the fix and must stay.
+ * The sheet is portalled to <body>. The bar carries `backdrop-blur`, and a
+ * blurred element becomes the containing block for `position: fixed`
+ * descendants — a sheet rendered inside it resolved against the bar and
+ * opened as a sliver (it happened to the old drawer inside the header). The
+ * portal must stay.
  */
-export function SuperadminMobileNav({ perms }: { perms: string[] }) {
+export function SuperadminBottomNav({ perms }: { perms: string[] }) {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
   const pathname = usePathname();
   const groups = useGroups(perms);
+  const items = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const active = activeHref(
     pathname,
-    groups.flatMap((g) => g.items.map((i) => i.href)),
+    items.map((i) => i.href),
   );
+
+  const tabs = useMemo(() => {
+    // A find, not a Map: `Map` here is the lucide icon imported above.
+    return bottomTabs(items.map((i) => i.href)).flatMap((href) => {
+      const item = items.find((i) => i.href === href);
+      return item ? [{ item, label: BOTTOM_TAB_LABELS[href] ?? item.label }] : [];
+    });
+  }, [items]);
+  const left = tabs.slice(0, 2);
+  const right = tabs.slice(2);
+  // More lights up for any page that is not one of the tabs.
+  const moreActive =
+    open ||
+    pathname === "/superadmin/profile" ||
+    (!!active && !tabs.some((t) => t.item.href === active));
 
   useEffect(() => {
     if (!open) return;
@@ -375,33 +441,74 @@ export function SuperadminMobileNav({ perms }: { perms: string[] }) {
     };
   }, [open]);
 
+  const close = () => setOpen(false);
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open the menu"
-        className="text-muted-foreground hover:text-foreground grid size-11 place-items-center rounded-lg lg:hidden"
+      <nav
+        aria-label="Admin menu"
+        className="bg-background/90 fixed inset-x-0 bottom-0 z-30 flex items-end border-t backdrop-blur lg:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <Menu className="size-5" />
-      </button>
+        <div className="flex min-w-0 flex-1 items-stretch">
+          {left.map((t) => (
+            <BarTab key={t.item.href} item={t.item} label={t.label} active={active === t.item.href} />
+          ))}
+        </div>
+
+        <div className="flex w-20 shrink-0 justify-center">
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Search churches, people and pages"
+            className="border-background bg-primary text-primary-foreground -mt-6 grid size-16 place-items-center rounded-full border-4 shadow-lg transition-transform active:scale-95 motion-reduce:transition-none"
+          >
+            <Search className="size-7" strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <div className="flex min-w-0 flex-1 items-stretch">
+          {right.map((t) => (
+            <BarTab key={t.item.href} item={t.item} label={t.label} active={active === t.item.href} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="More"
+            aria-expanded={open}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-semibold transition-colors",
+              moreActive ? "text-primary" : "text-muted-foreground",
+            )}
+          >
+            <MoreGlyph active={moreActive} />
+            <span className="max-w-full truncate px-0.5">More</span>
+          </button>
+        </div>
+      </nav>
 
       {mounted &&
         open &&
         createPortal(
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setOpen(false)}
+          <div className="lg:hidden">
+            <button
+              type="button"
+              aria-label="Close the menu"
+              onClick={close}
+              className="animate-in fade-in fixed inset-0 z-40 bg-black/50 backdrop-blur-sm duration-200 motion-reduce:animate-none"
             />
-            {/* Padded for the status bar: the drawer covers the whole screen,
-                so its close button would otherwise sit under the clock. */}
-            <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r pt-[env(safe-area-inset-top)] shadow-xl">
-              <div className="flex h-14 shrink-0 items-center justify-between border-b px-3">
-                <span className="text-sm font-bold">Menu</span>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Admin menu"
+              className="bg-background animate-in slide-in-from-bottom-6 fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-3xl border-t shadow-2xl duration-200 motion-reduce:animate-none"
+            >
+              <div className="bg-muted mx-auto mt-3 h-1.5 w-12 shrink-0 rounded-full" />
+              <div className="flex shrink-0 items-center justify-between px-5 pt-3 pb-2">
+                <p className="text-xl font-extrabold tracking-tight">Menu</p>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={close}
                   aria-label="Close the menu"
                   className="text-muted-foreground hover:text-foreground grid size-11 place-items-center rounded-lg"
                 >
@@ -409,24 +516,19 @@ export function SuperadminMobileNav({ perms }: { perms: string[] }) {
                 </button>
               </div>
               <div
-                className="min-h-0 flex-1 overflow-y-auto px-3 py-4"
+                className="min-h-0 flex-1 overflow-y-auto px-3 pt-1"
                 style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
               >
-                <NavList
-                  groups={groups}
-                  active={active}
-                  rail={false}
-                  onNavigate={() => setOpen(false)}
-                />
-                {/* The header hides these two below sm to keep the bar on
-                    one line, so on a phone this is the only way to them. */}
+                <NavList groups={groups} active={active} rail={false} onNavigate={close} />
+                {/* The header hides these two below sm to keep the bar on one
+                    line, so on a phone this is the only way to them. */}
                 <ul className="mt-3 space-y-0.5 border-t pt-3 sm:hidden">
                   <li>
                     <NavLink
                       item={{ label: "Your profile", href: "/superadmin/profile", icon: UserRound }}
                       active={pathname === "/superadmin/profile"}
                       rail={false}
-                      onNavigate={() => setOpen(false)}
+                      onNavigate={close}
                     />
                   </li>
                   <li>
@@ -434,7 +536,7 @@ export function SuperadminMobileNav({ perms }: { perms: string[] }) {
                       item={{ label: "Back to app", href: "/dashboard", icon: ArrowUpRight }}
                       active={false}
                       rail={false}
-                      onNavigate={() => setOpen(false)}
+                      onNavigate={close}
                     />
                   </li>
                 </ul>

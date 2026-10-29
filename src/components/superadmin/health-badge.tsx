@@ -40,9 +40,12 @@ export function HealthBadge({
 }
 
 /**
- * "Last seen" in plain words. Says "Never signed in" only when that is
- * genuinely true — the old dashboard printed "No activity recorded yet" for
- * churches that were simply not using attendance or giving.
+ * "Last seen" in plain words: the newest real use (lib/real-use-sql.ts).
+ *
+ * With none, it says exactly that and no more. It used to say "Never signed
+ * in", which nothing here can prove — sessions are deleted when they expire
+ * and pageviews are pruned at 180 days — and which was printed beside
+ * churches whose people had signed in that week.
  */
 export function LastSeen({
   at,
@@ -54,7 +57,7 @@ export function LastSeen({
   if (!at) {
     return (
       <span className={cn("text-muted-foreground", className)}>
-        Never signed in
+        No use recorded
       </span>
     );
   }

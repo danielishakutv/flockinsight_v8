@@ -4,7 +4,8 @@ import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getPlanPrices } from "@/lib/pricing";
 import { getTermiiUnitCost, getSmsPrice } from "@/lib/platform-settings";
-import { getChurchHealth, type ChurchHealthRow } from "@/lib/platform-health";
+import { getCountedChurchHealth, type ChurchHealthRow } from "@/lib/platform-health";
+import { REAL_USE } from "@/lib/real-use-sql";
 import { church, payment, platformMrrSnapshot } from "@/db/schema";
 import { churchMrr, type MrrPayment } from "@/lib/mrr";
 
@@ -64,7 +65,8 @@ async function loadOverviewStats(): Promise<OverviewStats> {
     getPlanPrices(),
     getTermiiUnitCost(),
     getSmsPrice(),
-    getChurchHealth(),
+    // Without the demo church, which is always "active" and never real.
+    getCountedChurchHealth(),
     // What decides whether a church is paying at all: computeStanding's inputs.
     db
       .select({
@@ -195,7 +197,7 @@ async function loadOverviewStats(): Promise<OverviewStats> {
 
 export const getOverviewStats = unstable_cache(
   loadOverviewStats,
-  ["overview-stats"],
+  ["overview-stats-v2"],
   { revalidate: 60, tags: ["platform-stats"] },
 );
 
@@ -270,14 +272,14 @@ async function loadGrowthSeries(days = 90): Promise<GrowthPoint[]> {
     signups as (
       select created_at::date as day, count(*) as n
       from church
-      where created_at >= now() - make_interval(days => ${days})
+      where created_at >= now() - make_interval(days => ${days}) and is_demo = false
       group by 1
     ),
     active as (
-      select created_at::date as day, count(distinct church_id) as n
-      from analytics_event
-      where church_id is not null
-        and created_at >= now() - make_interval(days => ${days})
+      -- The same "really used it" as the Active churches tile (real-use-sql).
+      select at::date as day, count(distinct church_id) as n
+      from (${REAL_USE}) as activity
+      where at >= now() - make_interval(days => ${days})
       group by 1
     ),
     rev as (
@@ -309,7 +311,7 @@ async function loadGrowthSeries(days = 90): Promise<GrowthPoint[]> {
 
 export const getGrowthSeries = unstable_cache(
   loadGrowthSeries,
-  ["growth-series"],
+  ["growth-series-v2"],
   { revalidate: 300, tags: ["platform-stats"] },
 );
 
@@ -323,85 +325,85 @@ export type CohortRow = {
 
 /**
  * Of the churches that signed up in a month, what share were still active
- * 4, 8 and 12 weeks later. A cohort too young to have reached a milestone
- * reports null rather than 0% — which would read as total churn.
+ * 4, 8 and 12 weeks later. "Active" is real use (lib/real-use-sql.ts), not a
+ * birthday SMS a cron sent on their behalf.
+ *
+ * Each share is out of the churches OLD ENOUGH to have reached that week. It
+ * used to be out of the whole month's signups once the month's first signup
+ * was old enough, so a church that joined three weeks ago counted as having
+ * churned by week 4. A milestone nobody in the cohort has reached yet is
+ * null, not 0% — which would read as total churn.
  */
 async function loadCohortRetention(): Promise<CohortRow[]> {
   const res = await db.execute(sql`
     with cohort as (
       select id, date_trunc('month', created_at) as month, created_at
       from church
-      where created_at >= now() - interval '12 months'
+      where created_at >= now() - interval '12 months' and is_demo = false
     ),
     activity as (
-      select church_id, created_at from analytics_event where church_id is not null
-      union all select church_id, created_at from attendance_session
-      union all select church_id, created_at from giving
-      union all select church_id, created_at from member
-      union all select church_id, created_at from communication_log
-      union all select church_id, created_at from media
-      union all select church_id, created_at from form
-      union all select church_id, created_at from devotional
+      select church_id, at from (${REAL_USE}) as real_use
+    ),
+    flags as (
+      select
+        c.month,
+        c.id,
+        c.created_at <= now() - interval '5 weeks' as due4,
+        c.created_at <= now() - interval '9 weeks' as due8,
+        c.created_at <= now() - interval '13 weeks' as due12,
+        exists (select 1 from activity a where a.church_id = c.id
+          and a.at >= c.created_at + interval '4 weeks'
+          and a.at <  c.created_at + interval '5 weeks') as kept4,
+        exists (select 1 from activity a where a.church_id = c.id
+          and a.at >= c.created_at + interval '8 weeks'
+          and a.at <  c.created_at + interval '9 weeks') as kept8,
+        exists (select 1 from activity a where a.church_id = c.id
+          and a.at >= c.created_at + interval '12 weeks'
+          and a.at <  c.created_at + interval '13 weeks') as kept12
+      from cohort c
     )
     select
-      to_char(c.month, 'YYYY-MM') as month,
-      count(distinct c.id) as signups,
-      count(distinct c.id) filter (
-        where exists (
-          select 1 from activity a where a.church_id = c.id
-            and a.created_at >= c.created_at + interval '4 weeks'
-            and a.created_at <  c.created_at + interval '5 weeks')
-      ) as w4,
-      count(distinct c.id) filter (
-        where exists (
-          select 1 from activity a where a.church_id = c.id
-            and a.created_at >= c.created_at + interval '8 weeks'
-            and a.created_at <  c.created_at + interval '9 weeks')
-      ) as w8,
-      count(distinct c.id) filter (
-        where exists (
-          select 1 from activity a where a.church_id = c.id
-            and a.created_at >= c.created_at + interval '12 weeks'
-            and a.created_at <  c.created_at + interval '13 weeks')
-      ) as w12,
-      min(c.created_at) as first_signup
-    from cohort c
-    group by c.month
-    order by c.month desc
+      to_char(month, 'YYYY-MM') as month,
+      count(*) as signups,
+      count(*) filter (where due4) as due4,
+      count(*) filter (where due4 and kept4) as w4,
+      count(*) filter (where due8) as due8,
+      count(*) filter (where due8 and kept8) as w8,
+      count(*) filter (where due12) as due12,
+      count(*) filter (where due12 and kept12) as w12
+    from flags
+    group by month
+    order by month desc
   `);
 
-  const now = Date.now();
-  const WEEK = 7 * 86_400_000;
+  const pct = (kept: string, due: string): number | null => {
+    const d = Number(due);
+    return d > 0 ? Math.round((Number(kept) / d) * 100) : null;
+  };
 
   return (
     res.rows as unknown as {
       month: string;
       signups: string;
+      due4: string;
       w4: string;
+      due8: string;
       w8: string;
+      due12: string;
       w12: string;
-      first_signup: string;
     }[]
-  ).map((r) => {
-    const signups = Number(r.signups);
-    const age = now - new Date(r.first_signup).getTime();
-    const pct = (n: string, weeks: number): number | null => {
-      if (age < weeks * WEEK) return null; // cohort too young to judge
-      return signups > 0 ? Math.round((Number(n) / signups) * 100) : null;
-    };
-    return {
-      month: r.month,
-      signups,
-      week4: pct(r.w4, 5),
-      week8: pct(r.w8, 9),
-      week12: pct(r.w12, 13),
-    };
-  });
+  ).map((r) => ({
+    month: r.month,
+    signups: Number(r.signups),
+    week4: pct(r.w4, r.due4),
+    week8: pct(r.w8, r.due8),
+    week12: pct(r.w12, r.due12),
+  }));
 }
 
 export const getCohortRetention = unstable_cache(
   loadCohortRetention,
-  ["cohort-retention"],
+  ["cohort-retention-v2"],
   { revalidate: 3600, tags: ["platform-stats"] },
 );
 

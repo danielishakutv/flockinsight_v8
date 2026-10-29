@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { analyticsEvent } from "@/db/schema";
+import { REAL_APP_EVENTS, REAL_USE } from "@/lib/real-use-sql";
 
 /**
  * First-party product analytics. A thin event log (pageviews + key actions)
@@ -107,7 +108,13 @@ function num(v: unknown): number {
   return Number(v ?? 0);
 }
 
-/** Everything the superadmin Usage dashboard needs, in one call. */
+/**
+ * Everything the superadmin Usage dashboard needs, in one call.
+ *
+ * Every figure is real use only (lib/real-use-sql.ts): no demo church — whose
+ * one shared login every visitor to /try signs into, and which counted each of
+ * them as a daily active user — and no operator acting as a church.
+ */
 export async function getUsageOverview(): Promise<UsageOverview> {
   const [
     activeUsers,
@@ -122,26 +129,28 @@ export async function getUsageOverview(): Promise<UsageOverview> {
         count(distinct user_id) filter (where created_at >= now() - interval '1 day') as dau,
         count(distinct user_id) filter (where created_at >= now() - interval '7 days') as wau,
         count(distinct user_id) filter (where created_at >= now() - interval '30 days') as mau
-      from analytics_event
-      where user_id is not null and created_at >= now() - interval '30 days'
+      from (${REAL_APP_EVENTS}) as ev
+      where created_at >= now() - interval '30 days'
     `),
+    // Churches read the whole of real use, not only pageviews, so these are
+    // the same numbers as the Command centre's Active churches tile.
     db.execute(sql`
       select
-        count(distinct church_id) filter (where created_at >= now() - interval '7 days') as c7,
-        count(distinct church_id) filter (where created_at >= now() - interval '30 days') as c30
-      from analytics_event
-      where church_id is not null and created_at >= now() - interval '30 days'
+        count(distinct church_id) filter (where at >= now() - interval '7 days') as c7,
+        count(distinct church_id) filter (where at >= now() - interval '30 days') as c30
+      from (${REAL_USE}) as activity
+      where at >= now() - interval '30 days'
     `),
     db.execute(sql`
       select
         count(*) as events,
         count(*) filter (where kind = 'pageview') as pageviews
-      from analytics_event
+      from (${REAL_APP_EVENTS}) as ev
       where created_at >= now() - interval '30 days'
     `),
     db.execute(sql`
       select name, count(*) as views, count(distinct church_id) as churches
-      from analytics_event
+      from (${REAL_APP_EVENTS}) as ev
       where kind = 'pageview' and created_at >= now() - interval '30 days'
       group by name
       order by views desc
@@ -151,7 +160,7 @@ export async function getUsageOverview(): Promise<UsageOverview> {
       select coalesce(plan, 'unknown') as plan,
              count(*) as events,
              count(distinct church_id) as churches
-      from analytics_event
+      from (${REAL_APP_EVENTS}) as ev
       where created_at >= now() - interval '30 days'
       group by coalesce(plan, 'unknown')
       order by events desc
@@ -160,7 +169,7 @@ export async function getUsageOverview(): Promise<UsageOverview> {
       select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
              count(distinct user_id) as users,
              count(*) as events
-      from analytics_event
+      from (${REAL_APP_EVENTS}) as ev
       where created_at >= now() - interval '30 days'
       group by 1
       order by 1

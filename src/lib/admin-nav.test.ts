@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeHref,
+  bottomTabs,
   groupOf,
   resolveOpenGroups,
   toggleClosed,
@@ -91,5 +92,28 @@ describe("toggleClosed", () => {
 
   it("leaves the other groups alone", () => {
     expect(toggleClosed(["Money"], "Growth").sort()).toEqual(["Growth", "Money"]);
+  });
+});
+
+describe("bottomTabs", () => {
+  it("is Home, Churches, Support for an admin who can open everything", () => {
+    expect(
+      bottomTabs([
+        "/superadmin",
+        "/superadmin/health",
+        "/superadmin/churches",
+        "/superadmin/support",
+        "/superadmin/finance",
+      ]),
+    ).toEqual(["/superadmin", "/superadmin/churches", "/superadmin/support"]);
+  });
+
+  it("tops a scoped role up from its own menu, never with a page it cannot open", () => {
+    expect(bottomTabs(["/superadmin/finance", "/superadmin/pricing", "/superadmin/partners", "/superadmin/plans"])).toEqual([
+      "/superadmin/finance",
+      "/superadmin/pricing",
+      "/superadmin/partners",
+    ]);
+    expect(bottomTabs(["/superadmin/support"])).toEqual(["/superadmin/support"]);
   });
 });

@@ -1,5 +1,5 @@
 import "server-only";
-import { getChurchHealth } from "@/lib/platform-health";
+import { getCountedChurchHealth, type ChurchHealthRow } from "@/lib/platform-health";
 import {
   FUNNEL_STEPS,
   type ChurchHealth,
@@ -85,7 +85,7 @@ export type ActivationBoard = {
   sample: Sample;
 };
 
-function toRow(r: Awaited<ReturnType<typeof getChurchHealth>>[number], now: Date): ActivationRow {
+function toRow(r: ChurchHealthRow, now: Date): ActivationRow {
   const stalledAt = firstGap(r.funnel);
   return {
     churchId: r.churchId,
@@ -108,7 +108,7 @@ function toRow(r: Awaited<ReturnType<typeof getChurchHealth>>[number], now: Date
 }
 
 export async function getActivationBoard(): Promise<ActivationBoard> {
-  const rows = await getChurchHealth();
+  const rows = await getCountedChurchHealth();
   const now = new Date();
 
   const mapped = rows.map((r) => toRow(r, now));

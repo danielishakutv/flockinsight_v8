@@ -31,6 +31,34 @@ describe("classifyHealth", () => {
     ).toBe("never_activated");
   });
 
+  it("a church used every week is never 'never_activated', register or not", () => {
+    // The production report: weekly users of meetings, finance and follow-up,
+    // no members typed in and no service recorded, filed as never started.
+    expect(
+      classifyHealth({
+        ...base,
+        createdAt: ago(60),
+        memberCount: 0,
+        sessionCount: 0,
+        activeWeeks: 8,
+        lastSeenAt: ago(2),
+      }),
+    ).toBe("healthy");
+  });
+
+  it("one week of clicking round at signup is still never_activated", () => {
+    expect(
+      classifyHealth({
+        ...base,
+        createdAt: ago(30),
+        memberCount: 1,
+        sessionCount: 0,
+        activeWeeks: 1,
+        lastSeenAt: ago(29),
+      }),
+    ).toBe("never_activated");
+  });
+
   it("does not call a brand-new empty church never_activated", () => {
     expect(
       classifyHealth({
@@ -62,6 +90,19 @@ describe("classifyHealth", () => {
     expect(classifyHealth({ ...notRegular, lastSeenAt: ago(8) })).toBe("idle");
     expect(classifyHealth({ ...notRegular, lastSeenAt: ago(30) })).toBe("idle");
     expect(classifyHealth({ ...notRegular, lastSeenAt: ago(31) })).toBe("dormant");
+  });
+
+  it("is never healthy without any real use, however new", () => {
+    expect(
+      classifyHealth({
+        ...base,
+        createdAt: ago(2),
+        lastSeenAt: null,
+        memberCount: 0,
+        sessionCount: 0,
+        activeWeeks: 0,
+      }),
+    ).toBe("idle");
   });
 
   it("falls back to createdAt when lastSeenAt is null", () => {

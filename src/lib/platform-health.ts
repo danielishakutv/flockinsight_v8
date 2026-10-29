@@ -8,34 +8,14 @@ import {
   type ChurchHealth,
   type FunnelFlags,
 } from "@/lib/health-rules";
+import { REAL_USE } from "@/lib/real-use-sql";
 
 /**
- * Real per-church activity signals.
- *
- * The old dashboard derived "last activity" from attendance and giving dates
- * alone — two of roughly twenty modules — so churches busy with members,
- * messaging, forms, media or devotionals reported "No activity recorded yet".
- * Both of those columns are also user-entered *event* dates, so a church
- * backfilling last year's register read as inactive for a year.
- *
- * Everything here reads `created_at`: when the row was actually written.
+ * Real per-church activity signals: when somebody in each church last really
+ * used FlockInsight, and in how many distinct weeks. What counts, and why the
+ * old eight-table union overstated some churches and lost others entirely, is
+ * in lib/real-use-sql.ts.
  */
-
-/**
- * Every table that proves a human touched the system, unioned. `analytics_event`
- * is the primary signal (a pageview by a signed-in user) but it is pruned at
- * 180 days, so the domain tables are the durable floor and must stay in.
- */
-const ACTIVITY_UNION = sql`
-  select church_id, created_at from analytics_event where church_id is not null
-  union all select church_id, created_at from attendance_session
-  union all select church_id, created_at from giving
-  union all select church_id, created_at from member
-  union all select church_id, created_at from communication_log
-  union all select church_id, created_at from media
-  union all select church_id, created_at from form
-  union all select church_id, created_at from devotional
-`;
 
 export type ChurchSignal = {
   churchId: string;
@@ -50,9 +30,9 @@ async function loadChurchSignals(): Promise<ChurchSignal[]> {
   const res = await db.execute(sql`
     select
       church_id,
-      max(created_at) as last_seen,
-      count(distinct date_trunc('week', created_at)) as active_weeks
-    from (${ACTIVITY_UNION}) as activity
+      max(at) as last_seen,
+      count(distinct date_trunc('week', at)) as active_weeks
+    from (${REAL_USE}) as activity
     group by church_id
   `);
 
@@ -63,7 +43,7 @@ async function loadChurchSignals(): Promise<ChurchSignal[]> {
   }));
 }
 
-const cachedSignals = unstable_cache(loadChurchSignals, ["church-signals"], {
+const cachedSignals = unstable_cache(loadChurchSignals, ["church-signals-v2"], {
   revalidate: 60,
   tags: ["platform-stats"],
 });
@@ -102,7 +82,8 @@ async function loadFunnels(): Promise<FunnelRow[]> {
     select
       c.id as church_id,
       exists (select 1 from member m where m.church_id = c.id) as has_members,
-      (select count(*) from staff s where s.organization_id = c.id) > 1 as has_staff,
+      -- A temp seat is an operator acting as the church, not a second person.
+      (select count(*) from staff s where s.organization_id = c.id and s.temp = false) > 1 as has_staff,
       exists (select 1 from attendance_session a where a.church_id = c.id) as has_attendance,
       exists (select 1 from giving g where g.church_id = c.id) as has_giving,
       exists (select 1 from communication_log l where l.church_id = c.id) as has_message
@@ -121,7 +102,7 @@ async function loadFunnels(): Promise<FunnelRow[]> {
   });
 }
 
-export const getChurchFunnels = unstable_cache(loadFunnels, ["church-funnels"], {
+export const getChurchFunnels = unstable_cache(loadFunnels, ["church-funnels-v2"], {
   revalidate: 60,
   tags: ["platform-stats"],
 });
@@ -132,6 +113,8 @@ export type ChurchHealthRow = {
   slug: string;
   plan: string;
   status: string;
+  /** The shared demo church: listed, but never in a platform count. */
+  isDemo: boolean;
   createdAt: Date;
   lastSeenAt: Date | null;
   activeWeeks: number;
@@ -148,6 +131,7 @@ type ChurchBaseRow = {
   slug: string;
   plan: string;
   status: string;
+  is_demo: boolean;
   created_at: string;
   member_count: string;
   session_count: string;
@@ -161,7 +145,7 @@ async function loadChurchHealth(): Promise<ChurchHealthRow[]> {
   const [base, signals, funnels] = await Promise.all([
     db.execute(sql`
       select
-        c.id, c.name, c.slug, c.plan, c.status, c.created_at,
+        c.id, c.name, c.slug, c.plan, c.status, c.is_demo, c.created_at,
         (select count(*) from member m where m.church_id = c.id) as member_count,
         (select count(*) from attendance_session a where a.church_id = c.id) as session_count
       from church c
@@ -188,6 +172,7 @@ async function loadChurchHealth(): Promise<ChurchHealthRow[]> {
       slug: c.slug,
       plan: c.plan,
       status: c.status,
+      isDemo: !!c.is_demo,
       createdAt,
       lastSeenAt: signal?.lastSeenAt ?? null,
       activeWeeks: signal?.activeWeeks ?? 0,
@@ -214,7 +199,7 @@ async function loadChurchHealth(): Promise<ChurchHealthRow[]> {
   });
 }
 
-const cachedHealth = unstable_cache(loadChurchHealth, ["church-health"], {
+const cachedHealth = unstable_cache(loadChurchHealth, ["church-health-v2"], {
   revalidate: 60,
   tags: ["platform-stats"],
 });
@@ -229,10 +214,20 @@ export async function getChurchHealth(): Promise<ChurchHealthRow[]> {
   }));
 }
 
+/**
+ * The churches a platform number is about: every real one. The demo church
+ * stays in getChurchHealth() so the Churches page can still list and manage
+ * it, but it is one shared login rebuilt every two hours, so it is always
+ * "healthy" and was quietly adding one to every active count.
+ */
+export async function getCountedChurchHealth(): Promise<ChurchHealthRow[]> {
+  return (await getChurchHealth()).filter((r) => !r.isDemo);
+}
+
 export type HealthCounts = Record<ChurchHealth, number>;
 
 export async function getHealthCounts(): Promise<HealthCounts> {
-  const rows = await getChurchHealth();
+  const rows = await getCountedChurchHealth();
   const counts: HealthCounts = {
     healthy: 0,
     idle: 0,
@@ -249,7 +244,7 @@ export async function getHealthCounts(): Promise<HealthCounts> {
 export async function getChurchesNeedingAttention(
   limit = 8,
 ): Promise<ChurchHealthRow[]> {
-  const rows = await getChurchHealth();
+  const rows = await getCountedChurchHealth();
   return rows
     .filter((r) => r.health === "at_risk" || r.health === "never_activated")
     .sort((a, b) => {
@@ -264,7 +259,7 @@ export async function getChurchesNeedingAttention(
 
 /** Churches active in the last N days, by real signal. */
 export async function getActiveChurchCount(days = 7): Promise<number> {
-  const rows = await getChurchHealth();
+  const rows = await getCountedChurchHealth();
   const cutoff = Date.now() - days * 86_400_000;
   return rows.filter((r) => (r.lastSeenAt?.getTime() ?? 0) >= cutoff).length;
 }

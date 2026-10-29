@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import {
-  SuperadminMobileNav,
+  SuperadminBottomNav,
   SuperadminSidebar,
 } from "@/components/superadmin/superadmin-nav";
 import {
@@ -72,8 +72,6 @@ export default async function SuperadminLayout({
                 </span>
               </span>
             </Link>
-            <span className="bg-border hidden h-5 w-px lg:block" />
-            <SuperadminMobileNav perms={perms} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
@@ -102,10 +100,13 @@ export default async function SuperadminLayout({
 
       <div className="flex">
         <SuperadminSidebar perms={perms} />
-        <main className="min-w-0 flex-1 px-4 py-6 lg:px-8">
+        {/* Below lg the bottom bar covers the foot of the page; the padding
+            lets the last card scroll clear of it and of the home indicator. */}
+        <main className="min-w-0 flex-1 px-4 pt-6 pb-[calc(var(--mobile-nav-clearance)+env(safe-area-inset-bottom)+1.5rem)] lg:px-8 lg:pb-6">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
+      <SuperadminBottomNav perms={perms} />
 
       <CommandPalette />
       {/*
