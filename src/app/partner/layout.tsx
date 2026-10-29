@@ -34,7 +34,13 @@ export default async function PartnerLayout({
     : [[], false];
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)]">
+      {/* The status bar band: an installed PWA draws behind the clock, so
+          without the padding above the header's buttons sat under it. */}
+      <div
+        aria-hidden
+        className="bg-background fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)]"
+      />
       <header className="bg-background border-b">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4 lg:px-8">
           <Link

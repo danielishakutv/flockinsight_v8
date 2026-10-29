@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowUpRight,
   Banknote,
   BarChart3,
   Bell,
@@ -33,6 +34,7 @@ import {
   Layers,
   Tag,
   Telescope,
+  UserRound,
   Users,
   X,
   type LucideIcon,
@@ -310,7 +312,7 @@ export function SuperadminSidebar({ perms }: { perms: string[] }) {
         sidebar's own width, and a scroll container here would clip every one
         of them.
       */}
-      <div className="sticky top-14 overflow-visible px-3 py-4">
+      <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] overflow-visible px-3 py-4">
         <NavList groups={groups} active={active} rail={rail} />
 
         <button
@@ -392,7 +394,9 @@ export function SuperadminMobileNav({ perms }: { perms: string[] }) {
               className="absolute inset-0 bg-black/50"
               onClick={() => setOpen(false)}
             />
-            <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r shadow-xl">
+            {/* Padded for the status bar: the drawer covers the whole screen,
+                so its close button would otherwise sit under the clock. */}
+            <div className="bg-background absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r pt-[env(safe-area-inset-top)] shadow-xl">
               <div className="flex h-14 shrink-0 items-center justify-between border-b px-3">
                 <span className="text-sm font-bold">Menu</span>
                 <button
@@ -414,6 +418,26 @@ export function SuperadminMobileNav({ perms }: { perms: string[] }) {
                   rail={false}
                   onNavigate={() => setOpen(false)}
                 />
+                {/* The header hides these two below sm to keep the bar on
+                    one line, so on a phone this is the only way to them. */}
+                <ul className="mt-3 space-y-0.5 border-t pt-3 sm:hidden">
+                  <li>
+                    <NavLink
+                      item={{ label: "Your profile", href: "/superadmin/profile", icon: UserRound }}
+                      active={pathname === "/superadmin/profile"}
+                      rail={false}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </li>
+                  <li>
+                    <NavLink
+                      item={{ label: "Back to app", href: "/dashboard", icon: ArrowUpRight }}
+                      active={false}
+                      rail={false}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </li>
+                </ul>
               </div>
             </div>
           </div>,

@@ -295,6 +295,23 @@ input[type="number"] {
   background: color-mix(in oklch, var(--background) 92%, black);
 }
 
+/*
+ * A grid item may be narrower than its content. The admin's layouts are
+ * `grid gap-6 lg:grid-cols-2`: below lg that is ONE implicit `auto` column,
+ * and a grid item's default `min-width: auto` is its min-content width — for
+ * a `truncate` line that is the whole unwrapped string. So one long church
+ * name in "Needs a human", or one long job summary on Health, sized the column
+ * and the whole page to 600–1,400px on a 402px phone, and every page scrolled
+ * sideways. Nothing on a wide screen shows it, and a small database does not
+ * either. Zero lets the column be the screen and lets `truncate` do its job.
+ * In the base layer, with no specificity, so a `min-w-*` utility still wins.
+ */
+@layer base {
+  [data-admin] :where(.grid) > * {
+    min-width: 0;
+  }
+}
+
 [data-admin] [data-slot="card"] {
   gap: 0.75rem;
   padding-block: 0.875rem;

@@ -47,8 +47,20 @@ export default async function SuperadminLayout({
    */
   return (
     <AssistantProvider scope="platform" available strings={en.assistant}>
-    <div data-admin className="min-h-dvh">
-      <header className="bg-background/85 sticky top-0 z-30 border-b backdrop-blur">
+    <div data-admin className="min-h-dvh pt-[env(safe-area-inset-top)]">
+      {/*
+        The status bar band, as in the church app's layout. viewportFit is
+        "cover", so an installed PWA draws behind the clock and the Dynamic
+        Island; without the padding above and this band, the header sat under
+        them and its menu, help and sign-out buttons could not be tapped. The
+        band keeps content scrolling up from running under the clock. Zero
+        height on anything without a notch.
+      */}
+      <div
+        aria-hidden
+        className="bg-background fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)]"
+      />
+      <header className="bg-background/85 sticky top-[env(safe-area-inset-top)] z-30 border-b backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-3">
             <Link href="/superadmin" className="flex min-w-0 items-center gap-2">
