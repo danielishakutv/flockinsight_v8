@@ -23,6 +23,7 @@ import { normalisePartnerCode } from "@/lib/partners-shared";
 import { attributeChurch } from "@/lib/partners";
 import { internationalPhone, phoneMatchCandidates } from "@/lib/phone-intl";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { cleanOrgType } from "@/lib/org-type";
 
 export type SignUpResult =
   | { ok: true; signedIn: boolean }
@@ -58,7 +59,14 @@ function isUniqueViolation(e: unknown): boolean {
  * `auth.ts` auto-selects this church as their active tenant.
  */
 export async function createChurchAccount(input: {
+  /** The organisation's name — a church's, a fellowship's, a mission's. */
   churchName: string;
+  /**
+   * What kind of organisation it is (lib/org-type.ts). Optional, and anything
+   * not on the list is stored as "church", so an older client that never sends
+   * it signs up exactly as it always did.
+   */
+  orgType?: string;
   name: string;
   email: string;
   password: string;
@@ -93,6 +101,7 @@ export async function createChurchAccount(input: {
    * able to say otherwise and be believed.
    */
   const country = cleanCountry(input.country);
+  const orgType = cleanOrgType(input.orgType);
 
   if (!churchName || !name || !email || !input.password) {
     return { ok: false, error: "Please fill in every field." };
@@ -259,6 +268,7 @@ export async function createChurchAccount(input: {
         await tx.insert(church).values({
           id: churchId,
           name: churchName,
+          orgType,
           slug,
           handle: slug,
           // Seed the account contact so the verification page opens pre-filled.
@@ -332,7 +342,7 @@ export async function createChurchAccount(input: {
       }
       return {
         ok: false,
-        error: "Account created, but church setup failed. You can finish setup now.",
+        error: "Account created, but setting up your organisation failed. You can finish setup now.",
         needsOnboarding: true,
       };
     }

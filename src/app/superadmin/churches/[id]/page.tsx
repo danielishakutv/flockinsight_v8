@@ -40,6 +40,7 @@ import { getStorageInfo } from "@/lib/storage";
 import { formatBytes } from "@/lib/storage-bytes";
 import { computeStanding, waiverActive } from "@/lib/trial";
 import { denominationOptions } from "@/lib/denominations";
+import { orgTypeLabel } from "@/lib/org-type";
 import { AdminBilling } from "@/components/superadmin/admin-billing";
 import { ChurchDenomination } from "@/components/superadmin/church-denomination";
 import { ChurchNetwork } from "@/components/superadmin/church-network";
@@ -270,6 +271,7 @@ export default async function SuperadminChurchPage({
               {c.status}
             </Badge>
             <Badge variant="secondary">{planLabel(c, customNames)}</Badge>
+            <Badge variant="outline">{orgTypeLabel(c.orgType)}</Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
             /{c.slug} · {c.currency} · {c.country}

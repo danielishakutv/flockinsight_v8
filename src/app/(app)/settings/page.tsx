@@ -30,6 +30,7 @@ export default async function GeneralSettingsPage() {
     <div className="space-y-6">
       <ProfileForm
         initialName={church.name}
+        initialOrgType={church.orgType}
         initialTimezone={church.timezone}
         initialCurrency={church.currency}
         initialCountry={church.country}

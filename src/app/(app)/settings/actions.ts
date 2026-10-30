@@ -17,6 +17,7 @@ import { createFundForCategory } from "@/app/(app)/finance/actions";
 import { can, canAny } from "@/lib/permissions";
 import { audit, diffFields, summariseChanges } from "@/lib/audit";
 import { isValidTimeZone } from "@/lib/country-profile";
+import { ORG_TYPES, orgTypeLabel } from "@/lib/org-type";
 
 export type ActionResult =
   | { ok: true }
@@ -53,10 +54,13 @@ const profileSchema = z.object({
   currency: z.string().trim().min(1).max(8),
   country: z.string().trim().min(1).max(80),
   state: z.preprocess(emptyToNullStr, z.string().trim().max(80).nullable()),
+  // Optional so a caller that predates it leaves the stored type alone.
+  orgType: z.enum(ORG_TYPES).optional(),
 });
 
 export async function updateChurchProfile(input: {
   name: string;
+  orgType?: string;
   timezone: string;
   currency: string;
   country: string;
@@ -75,6 +79,7 @@ export async function updateChurchProfile(input: {
     currency: parsed.data.currency,
     country: parsed.data.country,
     state: parsed.data.state,
+    ...(parsed.data.orgType ? { orgType: parsed.data.orgType } : {}),
   };
   await db.update(church).set(next).where(eq(church.id, c.id));
 
@@ -83,13 +88,20 @@ export async function updateChurchProfile(input: {
     next as unknown as Record<string, unknown>,
     Object.keys(next),
   );
+  // Said in words in the trail rather than as "fellowship" → "campus".
+  if (changed.orgType) {
+    changed.orgType = {
+      from: orgTypeLabel(c.orgType),
+      to: orgTypeLabel(parsed.data.orgType),
+    };
+  }
   if (Object.keys(changed).length > 0) {
     await audit({
       churchId: c.id,
       action: "settings.profile.update",
       // The currency is the one that matters here: changing it re-labels every
       // figure in the church's history without converting any of them.
-      summary: `Changed the church ${summariseChanges(changed)}`,
+      summary: `Changed the church ${summariseChanges(changed, { orgType: "organisation type" })}`,
       targetType: "church",
       targetId: c.id,
       targetLabel: parsed.data.name,

@@ -27,6 +27,7 @@ import {
 import type { PgTable } from "drizzle-orm/pg-core";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { trialEndDate } from "@/lib/trial";
+import { cleanOrgType } from "@/lib/org-type";
 import {
   chunkForInsert,
   planChurchRestore,
@@ -221,6 +222,7 @@ export async function restoreChurchAsNew(
       await tx.insert(church).values({
         id: newChurchId,
         name: `${baseName} (restored)`,
+        orgType: cleanOrgType(src.orgType),
         slug,
         handle: null,
         logo: (src.logo as string) ?? null,

@@ -10,6 +10,7 @@ import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/money";
 import { COUNTRIES, NIGERIAN_STATES } from "@/lib/geo";
 import { knownTimezones } from "@/lib/country-profile";
 import { planName } from "@/lib/plans";
+import { ORG_TYPES, cleanOrgType, type OrgType } from "@/lib/org-type";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +36,7 @@ const TIMEZONES = knownTimezones();
 
 export function ProfileForm({
   initialName,
+  initialOrgType,
   initialTimezone,
   initialCurrency,
   initialCountry,
@@ -43,6 +45,7 @@ export function ProfileForm({
   planPriceLabel,
 }: {
   initialName: string;
+  initialOrgType: string;
   initialTimezone: string;
   initialCurrency: string;
   initialCountry: string;
@@ -54,6 +57,7 @@ export function ProfileForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(initialName);
+  const [orgType, setOrgType] = useState<OrgType>(cleanOrgType(initialOrgType));
   const [timezone, setTimezone] = useState(
     // The church's own value wins, always. A value this list does not know is
     // a gap in the list, not a mistake by the church.
@@ -81,6 +85,7 @@ export function ProfileForm({
     startTransition(async () => {
       const res = await updateChurchProfile({
         name,
+        orgType,
         timezone,
         currency,
         country,
@@ -100,7 +105,28 @@ export function ProfileForm({
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">{t("settings.churchName")}</Label>
+            <Label htmlFor="orgType">{t("orgType.settingsLabel")}</Label>
+            <Select
+              value={orgType}
+              onValueChange={(v) => setOrgType(cleanOrgType(v))}
+            >
+              <SelectTrigger id="orgType" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ORG_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {t(`orgType.${type}.label`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              {t("orgType.settingsHint")}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="name">{t(`orgType.${orgType}.name`)}</Label>
             <Input
               id="name"
               value={name}

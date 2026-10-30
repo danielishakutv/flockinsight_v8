@@ -40,6 +40,8 @@ import {
   smsAvailableForCountry,
 } from "@/lib/country-profile";
 import { CURRENCIES } from "@/lib/money";
+import { ORG_TYPES, cleanOrgType, type OrgType } from "@/lib/org-type";
+import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 
 /**
@@ -174,6 +176,15 @@ function SignupForm() {
 
   const [loading, setLoading] = useState(false);
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  /*
+   * What they are setting up. Church first and preselected, because most
+   * people who arrive here run one and should not have to answer anything new.
+   * `?type=fellowship` preselects another, so a page written for fellowships
+   * can link straight to a form that already speaks to them.
+   */
+  const [orgType, setOrgType] = useState<OrgType>(() =>
+    cleanOrgType(params.get("type")),
+  );
 
   /*
    * Cloudflare's guess, applied once as the field's starting value.
@@ -295,10 +306,11 @@ function SignupForm() {
         return;
       }
 
-      // Normal sign-up: create the user AND their church in one server step.
+      // Normal sign-up: create the user AND their organisation in one server step.
       const churchName = String(form.get("churchName")).trim();
       const result = await createChurchAccount({
         churchName,
+        orgType,
         name,
         email: email.trim(),
         password,
@@ -345,12 +357,12 @@ function SignupForm() {
           </div>
           <CardTitle className="text-2xl">{t("common.checkYourInbox")}</CardTitle>
           <CardDescription>
-            {inviteMode ? "Your account is ready." : "Your church account is ready."}{" "}
+            {t("auth.accountReady")}{" "}
             We sent a verification link to{" "}
             <span className="text-foreground font-semibold">{verifyEmail}</span>.
             Confirm your email
             {inviteMode
-              ? " to finish joining the church."
+              ? " to finish accepting your invitation."
               : ", then log in to continue."}
           </CardDescription>
         </CardHeader>
@@ -382,24 +394,59 @@ function SignupForm() {
   return (
     <Card className="shadow-lg">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">
-          {inviteMode ? "Create your account" : "Create your church account"}
-        </CardTitle>
+        <CardTitle className="text-2xl">{t("auth.createYourAccount")}</CardTitle>
         <CardDescription>
           {inviteMode
-            ? "Set up your account to join the church you were invited to."
+            ? "Set up your account to accept the invitation you were sent."
             : "Free 30-day trial · No credit card required"}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
+          {/*
+            One tap, already answered for the common case. The only thing it
+            changes on this form is the wording of the box below it — a
+            fellowship asked for its "Church name" reads that as "not for you".
+            Every type gets the same account, plans and modules.
+          */}
+          {!inviteMode && (
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm leading-none font-medium">
+                {t("orgType.question")}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {ORG_TYPES.map((type) => (
+                  <label
+                    key={type}
+                    className={cn(
+                      "has-[:focus-visible]:ring-ring/50 flex min-h-9 cursor-pointer items-center rounded-full border px-3 text-sm transition-colors has-[:focus-visible]:ring-[3px]",
+                      orgType === type
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "hover:bg-muted text-muted-foreground",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="orgType"
+                      value={type}
+                      checked={orgType === type}
+                      onChange={() => setOrgType(type)}
+                      className="sr-only"
+                    />
+                    {t(`orgType.${type}.label`)}
+                  </label>
+                ))}
+              </div>
+              <FieldNote tone="quiet">{t(`orgType.${orgType}.hint`)}</FieldNote>
+            </fieldset>
+          )}
           {!inviteMode && (
             <div className="space-y-2">
-              <Label htmlFor="churchName">{t("common.churchName")}</Label>
+              <Label htmlFor="churchName">{t(`orgType.${orgType}.name`)}</Label>
               <Input
                 id="churchName"
                 name="churchName"
-                placeholder={t("common.graceChapel")}
+                placeholder={t(`orgType.${orgType}.placeholder`)}
                 required
               />
             </div>
@@ -446,7 +493,12 @@ function SignupForm() {
               id="name"
               name="name"
               autoComplete="name"
-              placeholder={t("common.pastorJohnAdeyemi")}
+              placeholder={
+                // "Pastor" suits a church; a campus fellowship is led by a student.
+                !inviteMode && orgType !== "church"
+                  ? t("auth.eGMaryJohnson")
+                  : t("common.pastorJohnAdeyemi")
+              }
               required
             />
           </div>
@@ -457,7 +509,7 @@ function SignupForm() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="you@church.org"
+              placeholder="you@example.org"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onBlur={(e) => void emailCheck.check(e.target.value)}
@@ -619,11 +671,11 @@ function SignupForm() {
             Log in
           </Link>
         </p>
-        {/* This form makes a CHURCH. Somebody who only wants to bring
-            churches must not have to invent one to get an account. */}
+        {/* This form makes an ORGANISATION. Somebody who only wants to bring
+            others in must not have to invent one to get an account. */}
         {!inviteMode && (
           <p className="text-muted-foreground mt-2 text-center text-xs">
-            {t("auth.notAChurch")}{" "}
+            {t("auth.onlyReferring")}{" "}
             <Link
               href="/partner/join"
               className="text-primary font-semibold hover:underline"

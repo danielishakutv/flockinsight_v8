@@ -339,6 +339,60 @@ export const en = {
     referralUnknown: "We don’t recognise that code. Check it with whoever gave it to you, or empty the box to carry on without one.",
     referralPartnerCredited: "{name} will be credited for bringing you.",
     referralByChurch: "Referred by {name}.",
+    createYourAccount: "Create your account",
+    accountReady: "Your account is ready.",
+    onlyReferring: "Only here to refer others?",
+  },
+
+  /* ============================================================
+   * What kind of organisation an account is (lib/org-type.ts)
+   * ========================================================== */
+  orgType: {
+    question: "What are you setting up?",
+    settingsLabel: "Type of organisation",
+    settingsHint: "Tells us what you run. It doesn’t change your plan or what’s switched on.",
+    church: {
+      label: "Church",
+      hint: "A local church or assembly.",
+      name: "Church name",
+      placeholder: "Grace Chapel",
+    },
+    fellowship: {
+      label: "Fellowship",
+      hint: "A house, prayer or cell fellowship.",
+      name: "Fellowship name",
+      placeholder: "Victory House Fellowship",
+    },
+    campus: {
+      label: "Campus fellowship",
+      hint: "A student fellowship at a school or university.",
+      name: "Fellowship name",
+      placeholder: "Campus Christian Fellowship",
+    },
+    ministry: {
+      label: "Ministry",
+      hint: "A ministry or outreach with its own people to look after.",
+      name: "Ministry name",
+      placeholder: "Living Word Ministries",
+    },
+    mission: {
+      label: "Mission",
+      hint: "A mission agency, mission field or missionary team.",
+      name: "Mission name",
+      placeholder: "Harvest Field Mission",
+    },
+    ngo: {
+      label: "Faith-based NGO",
+      hint: "A charity or foundation with volunteers and donors.",
+      name: "Organisation name",
+      placeholder: "Hope Outreach Foundation",
+    },
+    other: {
+      label: "Other",
+      hint: "Any other community that gathers people.",
+      name: "Organisation name",
+      placeholder: "Your organisation’s name",
+    },
   },
 
   /* ============================================================

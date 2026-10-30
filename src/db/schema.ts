@@ -261,6 +261,13 @@ export const church = pgTable("church", {
   createdAt: timestamp().notNull().defaultNow(),
   metadata: text(),
   // ----- FlockInsight additional fields -----
+  /**
+   * What kind of organisation this is — church, fellowship, mission, … (see
+   * lib/org-type.ts). Asked at sign-up so a fellowship is not told to type its
+   * "Church name". A label only: nothing is gated on it. Every account that
+   * predates the column is a church, which is what the default says.
+   */
+  orgType: text().notNull().default("church"),
   timezone: text().notNull().default("Africa/Lagos"),
   /**
    * The language a team member sees before they have chosen one, and what

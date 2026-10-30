@@ -286,6 +286,57 @@ export const fr: PartialDictionary = {
     referralUnknown: "Nous ne reconnaissons pas ce code. Vérifiez-le auprès de la personne qui vous l’a donné, ou videz le champ pour continuer sans code.",
     referralPartnerCredited: "{name} sera crédité pour vous avoir amené.",
     referralByChurch: "Recommandé par {name}.",
+    createYourAccount: "Créez votre compte",
+    accountReady: "Votre compte est prêt.",
+    onlyReferring: "Vous venez seulement recommander d’autres organisations ?",
+  },
+
+  orgType: {
+    question: "Que créez-vous ?",
+    settingsLabel: "Type d’organisation",
+    settingsHint: "Nous dit ce que vous dirigez. Cela ne change ni votre forfait ni ce qui est activé.",
+    church: {
+      label: "Église",
+      hint: "Une église ou assemblée locale.",
+      name: "Nom de l'église",
+      placeholder: "Chapelle de la Grâce",
+    },
+    fellowship: {
+      label: "Communauté",
+      hint: "Un groupe de maison, de prière ou de cellule.",
+      name: "Nom de la communauté",
+      placeholder: "Communauté Maison de la Victoire",
+    },
+    campus: {
+      label: "Groupe biblique universitaire",
+      hint: "Un groupe d’étudiants dans une école ou une université.",
+      name: "Nom du groupe",
+      placeholder: "Groupe biblique du campus",
+    },
+    ministry: {
+      label: "Ministère",
+      hint: "Un ministère ou une œuvre qui accompagne ses propres membres.",
+      name: "Nom du ministère",
+      placeholder: "Ministère Parole Vivante",
+    },
+    mission: {
+      label: "Mission",
+      hint: "Une agence missionnaire, un champ de mission ou une équipe missionnaire.",
+      name: "Nom de la mission",
+      placeholder: "Mission Champ de la Moisson",
+    },
+    ngo: {
+      label: "ONG confessionnelle",
+      hint: "Une association ou fondation avec des bénévoles et des donateurs.",
+      name: "Nom de l’organisation",
+      placeholder: "Fondation Espoir et Partage",
+    },
+    other: {
+      label: "Autre",
+      hint: "Toute autre communauté qui rassemble des personnes.",
+      name: "Nom de l’organisation",
+      placeholder: "Le nom de votre organisation",
+    },
   },
 
   dashboard: {

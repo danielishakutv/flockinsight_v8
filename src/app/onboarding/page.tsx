@@ -19,11 +19,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { useT } from "@/components/i18n-provider";
+import { ORG_TYPES, cleanOrgType, type OrgType } from "@/lib/org-type";
+import { setNewOrganizationType } from "./actions";
 
 export default function OnboardingPage() {
   const t = useT();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [orgType, setOrgType] = useState<OrgType>("church");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -44,11 +47,19 @@ export default function OnboardingPage() {
         });
       }
       if (created.error || !created.data) {
-        toast.error(created.error?.message || "Could not create your church.");
+        toast.error(created.error?.message || "Could not create your organisation.");
         return;
       }
       await organization.setActive({ organizationId: created.data.id });
-      toast.success(t("common.churchCreated"));
+      if (orgType !== "church") {
+        try {
+          await setNewOrganizationType(orgType);
+        } catch (e) {
+          // Created and active either way; the type can be set in Settings.
+          console.error("[onboarding] could not record the organisation type", e);
+        }
+      }
+      toast.success(t("auth.accountReady"));
       router.push("/dashboard");
       router.refresh();
     } finally {
@@ -64,19 +75,34 @@ export default function OnboardingPage() {
         </div>
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">{t("common.setUpYourChurch")}</CardTitle>
+            <CardTitle className="text-2xl">{t("auth.createYourAccount")}</CardTitle>
             <CardDescription>
-              One more step — name your church to get started.
+              One more step — tell us what you run to get started.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="churchName">{t("common.churchName")}</Label>
+                <Label htmlFor="orgType">{t("orgType.question")}</Label>
+                <select
+                  id="orgType"
+                  value={orgType}
+                  onChange={(e) => setOrgType(cleanOrgType(e.target.value))}
+                  className="border-input bg-background focus-visible:ring-ring/50 h-11 w-full rounded-lg border px-3 text-base focus-visible:ring-[3px] focus-visible:outline-none sm:h-10 md:text-sm"
+                >
+                  {ORG_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {t(`orgType.${type}.label`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="churchName">{t(`orgType.${orgType}.name`)}</Label>
                 <Input
                   id="churchName"
                   name="churchName"
-                  placeholder={t("common.graceChapel")}
+                  placeholder={t(`orgType.${orgType}.placeholder`)}
                   required
                   autoFocus
                 />
@@ -88,7 +114,7 @@ export default function OnboardingPage() {
                 disabled={loading}
               >
                 {loading && <Loader2 className="animate-spin" />}
-                Create church
+                Continue
               </Button>
             </form>
             <button

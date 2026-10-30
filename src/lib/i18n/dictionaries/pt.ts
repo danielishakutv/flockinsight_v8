@@ -286,6 +286,57 @@ export const pt: PartialDictionary = {
     referralUnknown: "Não reconhecemos esse código. Confirme-o com quem o deu, ou apague o campo para continuar sem código.",
     referralPartnerCredited: "{name} receberá o crédito por o ter trazido.",
     referralByChurch: "Indicado por {name}.",
+    createYourAccount: "Crie a sua conta",
+    accountReady: "A sua conta está pronta.",
+    onlyReferring: "Só quer indicar outras organizações?",
+  },
+
+  orgType: {
+    question: "O que está a criar?",
+    settingsLabel: "Tipo de organização",
+    settingsHint: "Diz-nos o que dirige. Não altera o seu plano nem o que está ativado.",
+    church: {
+      label: "Igreja",
+      hint: "Uma igreja ou assembleia local.",
+      name: "Nome da igreja",
+      placeholder: "Capela da Graça",
+    },
+    fellowship: {
+      label: "Comunhão",
+      hint: "Um grupo familiar, de oração ou de célula.",
+      name: "Nome da comunhão",
+      placeholder: "Comunhão Casa da Vitória",
+    },
+    campus: {
+      label: "Grupo universitário",
+      hint: "Um grupo de estudantes numa escola ou universidade.",
+      name: "Nome do grupo",
+      placeholder: "Grupo Cristão do Campus",
+    },
+    ministry: {
+      label: "Ministério",
+      hint: "Um ministério ou obra com as suas próprias pessoas a cuidar.",
+      name: "Nome do ministério",
+      placeholder: "Ministério Palavra Viva",
+    },
+    mission: {
+      label: "Missão",
+      hint: "Uma agência missionária, campo missionário ou equipa missionária.",
+      name: "Nome da missão",
+      placeholder: "Missão Campo da Colheita",
+    },
+    ngo: {
+      label: "ONG de fé",
+      hint: "Uma associação ou fundação com voluntários e doadores.",
+      name: "Nome da organização",
+      placeholder: "Fundação Esperança",
+    },
+    other: {
+      label: "Outro",
+      hint: "Qualquer outra comunidade que reúne pessoas.",
+      name: "Nome da organização",
+      placeholder: "O nome da sua organização",
+    },
   },
 
   dashboard: {

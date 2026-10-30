@@ -1,0 +1,1 @@
+ALTER TABLE "church" ADD COLUMN "org_type" text DEFAULT 'church' NOT NULL;
