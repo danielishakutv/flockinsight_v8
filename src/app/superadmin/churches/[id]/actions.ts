@@ -248,7 +248,7 @@ export async function extendTrial(id: string, weeks: number): Promise<ActionResu
 
   await db
     .update(church)
-    .set({ trialEndsAt: newEnd, trialReminderStage: 0 })
+    .set({ trialEndsAt: newEnd, trialReminderStage: 0, trialSmsStage: 0 })
     .where(eq(church.id, id));
 
   await notifyChurchOfAdminAction({

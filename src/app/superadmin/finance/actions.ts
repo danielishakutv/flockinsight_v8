@@ -323,7 +323,7 @@ export async function setTrial(input: {
 
   await db
     .update(church)
-    .set({ trialEndsAt: ends, trialReminderStage: 0 })
+    .set({ trialEndsAt: ends, trialReminderStage: 0, trialSmsStage: 0 })
     .where(eq(church.id, input.churchId));
 
   await recordAudit({

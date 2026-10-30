@@ -56,7 +56,6 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
     for (const job of [
       "reminders",
       "storage",
-      "trial-reminders",
       "branch-reports",
       "usage-days",
       "blog-drafts",
@@ -74,7 +73,13 @@ describe("CRON_JOBS intervals match what each route actually does", () => {
    */
   it("sends the daily owner emails in the morning, UTC+1", () => {
     expect(CRON_JOBS.reminders.cron).toBe("0 7 * * *");
-    expect(CRON_JOBS["trial-reminders"].cron).toBe("0 6 * * *");
+  });
+
+  it("checks trial endings hourly, so the 3-hour warning is possible", () => {
+    // Daily, the last reminder a church got was three days before the lock.
+    // The day-based steps still wait for the church's daytime themselves.
+    expect(CRON_JOBS["trial-reminders"].intervalMinutes).toBe(60);
+    expect(CRON_JOBS["trial-reminders"].cron).toBe("0 * * * *");
   });
 
   it("runs first-timer follow-up hourly, on the hour", () => {

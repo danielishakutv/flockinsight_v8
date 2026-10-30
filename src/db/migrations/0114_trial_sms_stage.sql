@@ -1,0 +1,1 @@
+ALTER TABLE "church" ADD COLUMN "trial_sms_stage" integer DEFAULT 0 NOT NULL;

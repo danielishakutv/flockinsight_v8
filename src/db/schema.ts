@@ -324,6 +324,13 @@ export const church = pgTable("church", {
   // Which trial-ending reminders have been sent (0=none,1=14d,2=7d,3=3d) — idempotent cron.
   trialReminderStage: integer().notNull().default(0),
   /**
+   * The same idea for the trial-ending TEXTS, which run on their own shorter
+   * ladder (7 days, 3 days, 1 day) and only inside the SMS delivery window —
+   * see lib/trial-reminders.ts. Reset to 0 with the email stage whenever the
+   * trial is extended.
+   */
+  trialSmsStage: integer().notNull().default(0),
+  /**
    * The same ladder, for a comp that is about to run out (0=none,1=14d,2=7d,
    * 3=3d). Reset to 0 whenever a waiver is granted or changed, so a renewed
    * comp warns again next time rather than staying silent for ever.

@@ -64,10 +64,17 @@ export const CRON_JOBS = {
     intervalMinutes: 1440,
     cron: "0 4 * * *",
   },
+  /*
+   * Hourly, so the last warning can land three hours before the lock rather
+   * than at 07:00 Lagos three days before it. The ladder is in
+   * lib/trial-reminders.ts and every step is recorded on the church, so an
+   * hourly run sends each one once; the day-based ones still wait for the
+   * church's own daytime.
+   */
   "trial-reminders": {
     label: "Trial ending reminders",
-    intervalMinutes: 1440,
-    cron: "0 6 * * *",
+    intervalMinutes: 60,
+    cron: "0 * * * *",
   },
   reminders: {
     label: "Inactivity reminders",
