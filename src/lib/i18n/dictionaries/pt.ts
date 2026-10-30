@@ -289,6 +289,7 @@ export const pt: PartialDictionary = {
     createYourAccount: "Crie a sua conta",
     accountReady: "A sua conta está pronta.",
     onlyReferring: "Só quer indicar outras organizações?",
+    trialLine: "Os seus primeiros {count} domingos são grátis · Sem cartão",
   },
 
   orgType: {

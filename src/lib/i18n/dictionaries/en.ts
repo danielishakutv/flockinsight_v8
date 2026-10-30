@@ -342,6 +342,7 @@ export const en = {
     createYourAccount: "Create your account",
     accountReady: "Your account is ready.",
     onlyReferring: "Only here to refer others?",
+    trialLine: "Your first {count} Sundays are free · No card required",
   },
 
   /* ============================================================

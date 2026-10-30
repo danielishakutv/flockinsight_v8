@@ -41,6 +41,7 @@ import {
 } from "@/lib/country-profile";
 import { CURRENCIES } from "@/lib/money";
 import { ORG_TYPES, cleanOrgType, type OrgType } from "@/lib/org-type";
+import { FREE_SUNDAYS } from "@/lib/trial";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n-provider";
 
@@ -398,7 +399,7 @@ function SignupForm() {
         <CardDescription>
           {inviteMode
             ? "Set up your account to accept the invitation you were sent."
-            : "Free 30-day trial · No credit card required"}
+            : t("auth.trialLine", { count: FREE_SUNDAYS })}
         </CardDescription>
       </CardHeader>
       <CardContent>
