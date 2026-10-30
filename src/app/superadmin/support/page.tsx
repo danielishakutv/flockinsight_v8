@@ -62,7 +62,7 @@ export default async function SuperadminSupportPage({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b">
+      <div className="-mx-1 flex gap-1 overflow-x-auto border-b px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {FILTERS.map((f) => {
           const active = filter === f.key;
           return (
@@ -70,7 +70,7 @@ export default async function SuperadminSupportPage({
               key={f.key}
               href={`/superadmin/support?status=${f.key}`}
               className={cn(
-                "relative px-3 py-2 text-sm font-semibold transition-colors",
+                "relative shrink-0 px-3 py-2 text-sm font-semibold transition-colors",
                 active ? "text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -93,18 +93,26 @@ export default async function SuperadminSupportPage({
             <Link
               key={t.id}
               href={`/superadmin/support/${t.id}`}
-              className="bg-card flex items-center gap-3 rounded-2xl border p-4 shadow-sm transition hover:shadow-md"
+              className="bg-card flex items-start gap-3 rounded-2xl border p-4 shadow-sm transition hover:shadow-md"
             >
+              {/* The subject gets the width and two lines; who, where and
+                  when go underneath rather than beside it. */}
               <div className="min-w-0 flex-1">
-                <p className="truncate font-bold">{t.subject}</p>
+                <p className="line-clamp-2 leading-snug font-semibold break-words">
+                  {t.subject}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <TicketStatusBadge status={t.status} audience="admin" />
+                  <span className="text-muted-foreground text-xs">
+                    {format(parseISO(t.lastReplyAt.toISOString()), "MMM d, h:mm a")}
+                  </span>
+                </div>
+                <p className="mt-1.5 truncate text-xs font-medium">{t.churchName}</p>
                 <p className="text-muted-foreground truncate text-xs">
-                  {t.churchName} · {t.contactName ?? "—"} ·{" "}
-                  {categoryLabel(t.category)} ·{" "}
-                  {format(parseISO(t.lastReplyAt.toISOString()), "MMM d, h:mm a")}
+                  {t.contactName ?? "—"} · {categoryLabel(t.category)}
                 </p>
               </div>
-              <TicketStatusBadge status={t.status} audience="admin" />
-              <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+              <ChevronRight className="text-muted-foreground mt-0.5 size-5 shrink-0" />
             </Link>
           ))}
         </div>

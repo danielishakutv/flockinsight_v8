@@ -36,10 +36,11 @@ export default async function DenominationsPage() {
         <DenominationDialog />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Three small numbers side by side, not three tall cards stacked. */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <Card>
           <CardContent className="py-3">
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase">
+            <p className="text-muted-foreground text-[10px] leading-tight font-semibold uppercase sm:text-[11px]">
               Denominations
             </p>
             <p className="text-xl font-bold tabular-nums">{active.length}</p>
@@ -47,7 +48,7 @@ export default async function DenominationsPage() {
         </Card>
         <Card>
           <CardContent className="py-3">
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase">
+            <p className="text-muted-foreground text-[10px] leading-tight font-semibold uppercase sm:text-[11px]">
               Churches grouped
             </p>
             <p className="text-xl font-bold tabular-nums">{grouped}</p>
@@ -55,7 +56,7 @@ export default async function DenominationsPage() {
         </Card>
         <Card>
           <CardContent className="py-3">
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase">
+            <p className="text-muted-foreground text-[10px] leading-tight font-semibold uppercase sm:text-[11px]">
               Not yet grouped
             </p>
             <p className="text-xl font-bold tabular-nums">{unassigned}</p>
@@ -79,12 +80,12 @@ export default async function DenominationsPage() {
               {active.map((d) => (
                 <li
                   key={d.id}
-                  className="hover:bg-accent/30 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                  className="hover:bg-accent/30 flex items-start gap-3 px-4 py-3 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/superadmin/denominations/${d.id}`}
-                      className="hover:text-primary text-sm font-semibold"
+                      className="hover:text-primary leading-snug font-semibold break-words"
                     >
                       {d.name}
                       {d.abbreviation ? (
@@ -94,15 +95,15 @@ export default async function DenominationsPage() {
                         </span>
                       ) : null}
                     </Link>
+                    <p className="text-muted-foreground mt-0.5 text-xs tabular-nums">
+                      {d.churches} church{d.churches === 1 ? "" : "es"}
+                    </p>
                     {d.notes && (
                       <p className="text-muted-foreground truncate text-xs">
                         {d.notes}
                       </p>
                     )}
                   </div>
-                  <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                    {d.churches} church{d.churches === 1 ? "" : "es"}
-                  </span>
                   <DenominationRowActions
                     denomination={{
                       id: d.id,
@@ -124,7 +125,7 @@ export default async function DenominationsPage() {
       {archived.length > 0 && (
         <Card>
           <CardContent className="space-y-2 py-3">
-            <p className="text-muted-foreground text-[11px] font-semibold uppercase">
+            <p className="text-muted-foreground text-[10px] leading-tight font-semibold uppercase sm:text-[11px]">
               Archived ({archived.length})
             </p>
             <ul className="space-y-1">

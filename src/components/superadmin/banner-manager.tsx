@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Loader2, Plus, Trash2 } from "lucide-react";
+import { ImageIcon, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { saveBanner, deleteBanner, type BannerInput } from "@/app/superadmin/banners/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { RowActions } from "@/components/superadmin/list-kit";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,37 +116,43 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
       ) : (
         <div className="space-y-2">
           {banners.map((b) => (
-            <Card key={b.id}>
-              <CardContent className="flex flex-wrap items-center gap-3 py-3">
+            <Card key={b.id} className="gap-0 overflow-hidden py-0">
+              <div className="flex items-start gap-3 p-4">
                 {b.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={b.imageUrl} alt="" className="h-12 w-24 shrink-0 rounded object-cover" />
+                  <img src={b.imageUrl} alt="" className="h-12 w-20 shrink-0 rounded object-cover sm:w-24" />
                 ) : (
-                  <div className="bg-muted grid h-12 w-24 shrink-0 place-items-center rounded">
+                  <div className="bg-muted grid h-12 w-20 shrink-0 place-items-center rounded sm:w-24">
                     <ImageIcon className="text-muted-foreground size-5" />
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{b.title}</p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {b.placement} · {b.linkUrl || "no link"}
+                  <p className="leading-snug font-semibold break-words">{b.title}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Badge variant={b.active ? "success" : "secondary"}>
+                      {b.active ? "Active" : "Off"}
+                    </Badge>
+                    <span className="text-muted-foreground text-xs capitalize">
+                      {b.placement}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground mt-1 truncate text-xs">
+                    {b.linkUrl || "No link"}
                   </p>
                 </div>
-                <Badge variant={b.active ? "success" : "secondary"}>
-                  {b.active ? "Active" : "Off"}
-                </Badge>
-                <Button size="sm" variant="ghost" onClick={() => openEdit(b)}>
-                  Edit
+              </div>
+              <RowActions
+                moreLabel={`More actions for ${b.title}`}
+                more={
+                  <DropdownMenuItem variant="destructive" onSelect={() => remove(b)}>
+                    <Trash2 /> Delete banner
+                  </DropdownMenuItem>
+                }
+              >
+                <Button size="sm" variant="outline" onClick={() => openEdit(b)}>
+                  <Pencil className="size-4" /> Edit
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => remove(b)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </CardContent>
+              </RowActions>
             </Card>
           ))}
         </div>

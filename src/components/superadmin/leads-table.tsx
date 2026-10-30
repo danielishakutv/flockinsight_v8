@@ -124,15 +124,16 @@ export function LeadsTable({
   return (
     <Card>
       <CardContent className="space-y-4 py-5">
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Filters — one line that scrolls, not three rows of pills. */}
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
+              aria-pressed={status === t.id}
               onClick={() => go({ status: t.id })}
               className={cn(
-                "rounded-full px-3 py-1.5 text-sm font-semibold transition-colors",
+                "min-h-9 shrink-0 rounded-full px-3 text-sm font-semibold transition-colors",
                 status === t.id
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -145,7 +146,7 @@ export function LeadsTable({
 
         <div className="flex flex-wrap items-center gap-2">
           <form
-            className="relative min-w-56 flex-1"
+            className="relative w-full min-w-0 sm:w-auto sm:min-w-56 sm:flex-1"
             onSubmit={(e) => {
               e.preventDefault();
               go({ q: term.trim() || null });
@@ -163,7 +164,7 @@ export function LeadsTable({
             value={source === "all" ? ALL_SOURCES : source}
             onValueChange={(v) => go({ source: v === ALL_SOURCES ? null : v })}
           >
-            <SelectTrigger className="w-48" aria-label="Source">
+            <SelectTrigger className="min-w-0 flex-1 sm:w-48 sm:flex-none" aria-label="Source">
               <SelectValue placeholder="Any source" />
             </SelectTrigger>
             <SelectContent searchPlaceholder="Search sources…">
@@ -236,7 +237,7 @@ export function LeadsTable({
               return (
                 <div
                   key={r.id}
-                  className="hover:bg-accent/30 flex items-start gap-3 p-3 transition-colors"
+                  className="hover:bg-accent/30 flex flex-wrap items-start gap-x-3 gap-y-2 p-3 transition-colors sm:flex-nowrap"
                 >
                   <input
                     type="checkbox"
@@ -246,13 +247,13 @@ export function LeadsTable({
                     className="accent-primary mt-1.5 size-4 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/superadmin/growth/${r.id}`}
-                        className="hover:text-primary font-semibold"
-                      >
-                        {r.churchName}
-                      </Link>
+                    <Link
+                      href={`/superadmin/growth/${r.id}`}
+                      className="hover:text-primary leading-snug font-semibold break-words"
+                    >
+                      {r.churchName}
+                    </Link>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       <span
                         className={cn(
                           "rounded-full px-2 py-0.5 text-xs font-bold",
@@ -276,7 +277,7 @@ export function LeadsTable({
                         </span>
                       )}
                     </div>
-                    <p className="text-muted-foreground mt-0.5 truncate text-sm">
+                    <p className="text-muted-foreground mt-1 line-clamp-2 text-sm break-words">
                       {[
                         r.contactName,
                         r.phone,
@@ -288,11 +289,13 @@ export function LeadsTable({
                         .join(" · ")}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  {/* Under the lead on a phone, beside it from `sm`. */}
+                  <div className="flex w-full shrink-0 items-center gap-2 pl-7 sm:w-auto sm:pl-0 [&>*]:flex-1 sm:[&>*]:flex-none">
                     {r.phone && (
-                      <Button size="sm" variant="ghost" asChild>
-                        <a href={`tel:${r.phone}`} aria-label="Call">
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={`tel:${r.phone}`} aria-label={`Call ${r.churchName}`}>
                           <Phone className="size-4" />
+                          <span className="sm:sr-only">Call</span>
                         </a>
                       </Button>
                     )}

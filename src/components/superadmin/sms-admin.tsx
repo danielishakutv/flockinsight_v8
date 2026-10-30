@@ -8,7 +8,6 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
-  Search,
   Send,
   Radio,
   Wallet,
@@ -43,6 +42,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SenderIdDiagnostics } from "@/lib/sms-sender";
 import { Input } from "@/components/ui/input";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { AdminSearch, RowActions } from "@/components/superadmin/list-kit";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -622,77 +623,81 @@ export function SmsAdmin({
 
       {/* All churches + wallets */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardHeader className="space-y-3">
           <CardTitle className="text-lg">Church wallets</CardTitle>
-          <div className="relative w-48">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search"
-              className="h-9 pl-9"
-            />
-          </div>
+          <AdminSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Search churches"
+          />
         </CardHeader>
         <CardContent className="space-y-2">
           {filtered.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
+              className="flex min-w-0 flex-col overflow-hidden rounded-xl border"
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold">{c.name}</p>
-                  {c.status === "approved" && (
-                    <Badge variant="success">{c.senderId}</Badge>
-                  )}
-                  {c.status === "pending" && (
-                    <Badge variant="secondary">
-                      {c.stage === "submitted" ? "Processing" : "Awaiting review"}
-                    </Badge>
-                  )}
-                  {c.status === "rejected" && (
-                    <Badge variant="destructive">Rejected</Badge>
-                  )}
-                  {c.status === "revoked" && (
-                    <Badge variant="destructive">Revoked</Badge>
-                  )}
+              <div className="flex items-start justify-between gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="leading-snug font-semibold break-words">{c.name}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {c.status === "approved" && (
+                      <Badge variant="success">{c.senderId}</Badge>
+                    )}
+                    {c.status === "pending" && (
+                      <Badge variant="secondary">
+                        {c.stage === "submitted" ? "Processing" : "Awaiting review"}
+                      </Badge>
+                    )}
+                    {c.status === "rejected" && (
+                      <Badge variant="destructive">Rejected</Badge>
+                    )}
+                    {c.status === "revoked" && (
+                      <Badge variant="destructive">Revoked</Badge>
+                    )}
+                    {c.status === "none" && (
+                      <span className="text-muted-foreground text-xs">No sender ID</span>
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-bold tabular-nums">
+                    {formatMoney(c.balance, c.currency)}
+                  </p>
+                  <p className="text-muted-foreground text-[11px]">Wallet</p>
                 </div>
               </div>
-              <p className="font-bold tabular-nums">
-                {formatMoney(c.balance, c.currency)}
-              </p>
-              {c.status === "approved" && (
+              <RowActions
+                className="px-3 sm:px-3"
+                moreLabel={`More actions for ${c.name}`}
+                more={
+                  c.status === "approved" ? (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => revoke(c)}
+                      disabled={pending}
+                    >
+                      <Ban /> Revoke sender ID
+                    </DropdownMenuItem>
+                  ) : undefined
+                }
+              >
+                <Button size="sm" variant="outline" onClick={() => editId(c)}>
+                  <Pencil className="size-4" /> Sender ID
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => revoke(c)}
-                  disabled={pending}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    setTopUp(c);
+                    setAmount("");
+                    setNote("");
+                    setKind("credit");
+                  }}
                 >
-                  <Ban className="size-4" /> Revoke
+                  <Wallet className="size-4" /> Adjust wallet
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => editId(c)}
-                aria-label="Edit sender ID"
-              >
-                <Pencil className="size-4" /> ID
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setTopUp(c);
-                  setAmount("");
-                  setNote("");
-                  setKind("credit");
-                }}
-              >
-                <Wallet className="size-4" /> Adjust
-              </Button>
+              </RowActions>
             </div>
           ))}
         </CardContent>

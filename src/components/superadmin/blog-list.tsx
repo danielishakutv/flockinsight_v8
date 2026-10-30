@@ -21,6 +21,11 @@ import {
 } from "@/app/superadmin/blog/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { RowActions } from "@/components/superadmin/list-kit";
 import { Card, CardContent } from "@/components/ui/card";
 
 type Post = {
@@ -113,80 +118,101 @@ export function BlogList({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {posts.map((p) => (
-            <div
+            <article
               key={p.id}
-              className="bg-card flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-sm"
+              className="bg-card flex min-w-0 flex-col overflow-hidden rounded-2xl border shadow-sm"
             >
               <Link
                 href={`/superadmin/blog/${p.id}`}
-                className="min-w-0 flex-1"
+                className="group hover:bg-accent/40 block flex-1 p-4 transition-colors"
               >
-                <p className="truncate font-bold">{p.title}</p>
-                <p className="text-muted-foreground truncate text-xs">
-                  {p.authorName} · {p.views} view{p.views === 1 ? "" : "s"} ·{" "}
-                  {new Date(p.updatedAt).toLocaleDateString()}
+                <h3 className="group-hover:text-primary line-clamp-3 leading-snug font-semibold break-words transition-colors">
+                  {p.title}
+                </h3>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Badge variant={p.status === "published" ? "success" : "outline"}>
+                    {p.status === "published" ? "Published" : "Draft"}
+                  </Badge>
+                  {p.source === "ai" && p.status === "draft" && (
+                    <Badge variant="warning">AI draft · needs review</Badge>
+                  )}
                   {p.announcedAt && (
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      {" "}
-                      · Announced
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      Announced
                     </span>
                   )}
+                </div>
+                <p className="text-muted-foreground mt-1.5 truncate text-xs">
+                  {p.authorName} · {p.views} view{p.views === 1 ? "" : "s"} ·{" "}
+                  {new Date(p.updatedAt).toLocaleDateString()}
                 </p>
               </Link>
-              {p.source === "ai" && p.status === "draft" && (
-                <Badge variant="warning">AI draft · needs review</Badge>
-              )}
-              <Badge variant={p.status === "published" ? "success" : "outline"}>
-                {p.status === "published" ? "Published" : "Draft"}
-              </Badge>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" aria-label="Copy link" onClick={() => copy(p)}>
-                  {copiedId === p.id ? <Check className="size-4" /> : <Copy className="size-4" />}
-                </Button>
-                {p.status === "published" && (
-                  <Button variant="ghost" size="icon" aria-label="View" asChild>
-                    <a href={`${baseUrl}/blog/${p.slug}`} target="_blank" rel="noreferrer">
-                      <ExternalLink className="size-4" />
-                    </a>
+              {confirmId === p.id ? (
+                <div className="bg-destructive/5 flex flex-wrap items-center gap-2 border-t px-3 py-2.5 sm:justify-end sm:px-4">
+                  <p className="text-destructive mr-auto text-sm font-medium">
+                    Delete this post for good?
+                  </p>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
+                    Cancel
                   </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggle(p)}
-                  disabled={pending}
-                >
-                  <Eye className="size-4" />
-                  {p.status === "published" ? "Unpublish" : "Publish"}
-                </Button>
-                <Button variant="ghost" size="icon" aria-label="Edit" asChild>
-                  <Link href={`/superadmin/blog/${p.id}`}>
-                    <Pencil className="size-4" />
-                  </Link>
-                </Button>
-                {confirmId === p.id ? (
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={() => remove(p.id)}
                     disabled={pending}
                   >
-                    {pending ? <Loader2 className="size-4 animate-spin" /> : "Confirm"}
+                    {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    Delete
                   </Button>
-                ) : (
+                </div>
+              ) : (
+                <RowActions
+                  moreLabel={`More actions for ${p.title}`}
+                  more={
+                    <>
+                      <DropdownMenuItem onSelect={() => void copy(p)}>
+                        {copiedId === p.id ? <Check /> : <Copy />}
+                        Copy link
+                      </DropdownMenuItem>
+                      {p.status === "published" && (
+                        <DropdownMenuItem asChild>
+                          <a href={`${baseUrl}/blog/${p.slug}`} target="_blank" rel="noreferrer">
+                            <ExternalLink />
+                            View on the website
+                          </a>
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setConfirmId(p.id)}
+                      >
+                        <Trash2 />
+                        Delete post…
+                      </DropdownMenuItem>
+                    </>
+                  }
+                >
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/superadmin/blog/${p.id}`}>
+                      <Pencil className="size-4" />
+                      Edit
+                    </Link>
+                  </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Delete"
-                    onClick={() => setConfirmId(p.id)}
+                    variant={p.status === "published" ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => toggle(p)}
+                    disabled={pending}
                   >
-                    <Trash2 className="size-4" />
+                    <Eye className="size-4" />
+                    {p.status === "published" ? "Unpublish" : "Publish"}
                   </Button>
-                )}
-              </div>
-            </div>
+                </RowActions>
+              )}
+            </article>
           ))}
         </div>
       )}

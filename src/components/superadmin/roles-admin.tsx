@@ -266,10 +266,13 @@ export function RolesAdmin({
         ) : (
           <ul className="divide-y">
             {roles.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-3 p-4">
+              <li
+                key={r.id}
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+              >
                 <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-semibold">
-                    {r.name}
+                  <p className="leading-snug font-semibold break-words">{r.name}</p>
+                  <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <Badge variant="secondary">
                       {r.permissions.length} permission
                       {r.permissions.length === 1 ? "" : "s"}
@@ -351,9 +354,12 @@ export function RolesAdmin({
         </div>
         <ul className="divide-y">
           {admins.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center gap-3 p-4">
+            <li
+              key={a.id}
+              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+            >
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">
+                <p className="leading-snug font-semibold break-words">
                   {a.name ?? a.email}
                   {a.isSelf && (
                     <span className="text-muted-foreground ml-2 text-xs font-normal">
@@ -369,17 +375,22 @@ export function RolesAdmin({
                   permission that lets you change it back, and the only way out
                   of that is the database.
                 */
-                <span className="text-muted-foreground text-xs">
-                  {a.roleName ?? "Full access"} · ask another admin to change
-                  yours
-                </span>
+                <p className="text-muted-foreground text-xs sm:max-w-56 sm:text-right">
+                  <span className="text-foreground font-medium">
+                    {a.roleName ?? "Full access"}
+                  </span>{" "}
+                  · ask another admin to change yours
+                </p>
               ) : (
                 <div className="flex items-center gap-2">
                   <Select
                     value={a.roleId ?? FULL}
                     onValueChange={(v) => setAdminRole(a, v)}
                   >
-                    <SelectTrigger className="w-52">
+                    <SelectTrigger
+                      className="min-w-0 flex-1 sm:w-52 sm:flex-none"
+                      aria-label={`Role for ${a.name ?? a.email}`}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

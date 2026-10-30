@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { AdminChips } from "@/components/superadmin/list-kit";
 import {
   Dialog,
   DialogContent,
@@ -484,18 +485,16 @@ export function PartnersAdmin({
           <CardTitle className="text-base">Partners ({partners.length})</CardTitle>
           {partners.length > 0 && (
             <>
-              <div className="flex flex-wrap gap-1.5">
-                {(["all", ...PARTNER_STATUSES] as const).map((k) => (
-                  <Button
-                    key={k}
-                    size="sm"
-                    variant={show === k ? "default" : "outline"}
-                    onClick={() => setShow(k)}
-                  >
-                    {k === "all" ? "All" : PARTNER_STATUS_LABEL[k]} ({counts[k] ?? 0})
-                  </Button>
-                ))}
-              </div>
+              <AdminChips
+                label="Filter Partners by status"
+                value={show}
+                onChange={setShow}
+                options={(["all", ...PARTNER_STATUSES] as const).map((k) => ({
+                  key: k,
+                  label: k === "all" ? "All" : PARTNER_STATUS_LABEL[k],
+                  count: counts[k] ?? 0,
+                }))}
+              />
               <div className="relative">
                 <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                 <Input
@@ -520,7 +519,77 @@ export function PartnersAdmin({
               No Partner matches that.
             </p>
           ) : (
-            <ScrollableTable stickyFirstColumn hint="Scroll for more" label="Partners">
+            <>
+            {/* A card per Partner on a phone; the table from `sm`. */}
+            <ul className="divide-y sm:hidden">
+              {shown.map((p) => {
+                const verified =
+                  p.emailVerified && p.phoneVerified
+                    ? "Email and phone verified"
+                    : p.emailVerified
+                      ? "Email verified"
+                      : p.phoneVerified
+                        ? "Phone verified"
+                        : "Not verified";
+                return (
+                  <li key={p.id} className="space-y-2.5 px-4 py-3.5">
+                    <Link
+                      href={`/superadmin/partners/${p.id}`}
+                      className="hover:text-primary block leading-snug font-semibold break-words"
+                    >
+                      {p.displayName}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span
+                        className={cn(
+                          "rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
+                          PARTNER_STATUS_TONE[p.status],
+                        )}
+                      >
+                        {PARTNER_STATUS_LABEL[p.status]}
+                      </span>
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        {p.churches} church{p.churches === 1 ? "" : "es"}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 text-xs",
+                          p.emailVerified && p.phoneVerified
+                            ? "text-primary"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {p.emailVerified && p.phoneVerified && (
+                          <BadgeCheck className="size-3.5" />
+                        )}
+                        {verified}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground space-y-0.5 text-xs">
+                      <p className="font-mono">{p.code}</p>
+                      <p className="truncate">{p.email}</p>
+                      {p.phone && <p>{p.phone}</p>}
+                    </div>
+                    <div className="flex gap-2 [&>*]:flex-1">
+                      {p.status === "pending" && (
+                        <Button size="sm" onClick={() => approve(p)} disabled={pending}>
+                          Approve
+                        </Button>
+                      )}
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/superadmin/partners/${p.id}`}>Manage</Link>
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <ScrollableTable
+              stickyFirstColumn
+              hint="Scroll for more"
+              label="Partners"
+              className="hidden sm:block"
+            >
               <table className="w-full min-w-[42rem] text-sm">
                 <thead className="text-muted-foreground border-b text-left text-xs uppercase">
                   <tr>
@@ -604,6 +673,7 @@ export function PartnersAdmin({
                 </tbody>
               </table>
             </ScrollableTable>
+            </>
           )}
         </CardContent>
       </Card>

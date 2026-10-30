@@ -3,14 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Copy, KeyRound, Loader2, Search, Shield } from "lucide-react";
+import { ChevronRight, Copy, KeyRound, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { resetUserPasswordAction } from "@/app/superadmin/users/actions";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { AdminChips, AdminSearch, RowActions } from "@/components/superadmin/list-kit";
 import {
   Dialog,
   DialogContent,
@@ -50,9 +48,9 @@ export function UsersAdmin({ users }: { users: UserRow[] }) {
   }, [users, query, filter]);
 
   const FILTERS = [
-    { key: "all", label: "All" },
-    { key: "admins", label: "Superadmins" },
-    { key: "nochurch", label: "No church" },
+    { key: "all", label: "All", count: users.length },
+    { key: "admins", label: "Superadmins", count: users.filter((u) => u.isSuperAdmin).length },
+    { key: "nochurch", label: "No church", count: users.filter((u) => !u.churches).length },
   ] as const;
 
   function reset(u: UserRow) {
@@ -72,70 +70,68 @@ export function UsersAdmin({ users }: { users: UserRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-md flex-1">
-          <Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, email or church"
-            className="pl-9"
-          />
-        </div>
-        <div className="bg-muted flex gap-1 rounded-lg p-1">
-          {FILTERS.map((ftr) => (
-            <button
-              key={ftr.key}
-              type="button"
-              onClick={() => setFilter(ftr.key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
-                filter === ftr.key
-                  ? "bg-background shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {ftr.label}
-            </button>
-          ))}
-        </div>
+      <div className="space-y-3">
+        <AdminSearch
+          value={query}
+          onChange={setQuery}
+          placeholder="Search by name, email or church"
+        />
+        <AdminChips
+          label="Filter users"
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS}
+        />
       </div>
 
-      <div className="space-y-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         {filtered.map((u) => {
           const busy = busyId === u.id && pending;
           return (
-            <Card key={u.id}>
-              <CardContent className="flex flex-wrap items-center gap-3 py-3">
+            <article
+              key={u.id}
+              className="bg-card flex min-w-0 flex-col overflow-hidden rounded-xl border"
+            >
+              <Link
+                href={`/superadmin/users/${u.id}`}
+                className="group hover:bg-accent/40 flex flex-1 items-start gap-2 p-4 transition-colors"
+              >
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-semibold">{u.name}</p>
-                    {u.isSuperAdmin && (
-                      <Badge variant="default" className="gap-1">
-                        <Shield className="size-3" /> Admin
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {u.email}
-                    {u.churches ? ` · ${u.churches}` : ""}
-                  </p>
+                  <h3 className="group-hover:text-primary text-base leading-snug font-semibold break-words transition-colors">
+                    {u.name}
+                  </h3>
+                  {u.isSuperAdmin && (
+                    <Badge variant="default" className="mt-1.5 gap-1">
+                      <Shield className="size-3" /> Admin
+                    </Badge>
+                  )}
+                  <p className="text-muted-foreground mt-1.5 truncate text-xs">{u.email}</p>
+                  {u.churches && (
+                    <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                      {u.churches}
+                    </p>
+                  )}
                 </div>
+                <ChevronRight className="text-muted-foreground mt-0.5 size-5 shrink-0" />
+              </Link>
+              <RowActions moreLabel={`More actions for ${u.name}`}>
                 <Button size="sm" variant="outline" onClick={() => reset(u)} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-                  Reset
+                  Reset password
                 </Button>
                 <Button asChild size="sm">
                   <Link href={`/superadmin/users/${u.id}`}>
                     Manage <ChevronRight className="size-4" />
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </RowActions>
+            </article>
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-muted-foreground py-8 text-center text-sm">No users found.</p>
+          <p className="text-muted-foreground py-8 text-center text-sm xl:col-span-2">
+            No users found.
+          </p>
         )}
       </div>
 

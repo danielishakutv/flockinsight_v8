@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Loader2, Search } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   adjustWallet,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { AdminSearch } from "@/components/superadmin/list-kit";
 
 type ChurchRow = {
   id: string;
@@ -204,35 +205,33 @@ export function FinanceTabs({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                tab === t.id
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-accent",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          {/* One line that scrolls sideways rather than wrapping "Referrals"
+              onto a row of its own. */}
+          <div className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "min-h-9 shrink-0 rounded-lg px-3 text-sm font-medium transition-colors",
+                  tab === t.id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {pending && <Loader2 className="text-muted-foreground size-4 shrink-0 animate-spin" />}
         </div>
         {tab === "churches" && (
-          <div className="relative ml-auto min-w-48">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Find a church"
-              className="pl-9"
-            />
-          </div>
+          <AdminSearch value={q} onChange={setQ} placeholder="Find a church" />
         )}
-        {pending && <Loader2 className="text-muted-foreground size-4 animate-spin" />}
       </div>
 
       <div className="bg-card overflow-hidden rounded-2xl border">
@@ -585,34 +584,70 @@ function Table({
       </p>
     ) : null;
   }
+  // A column headed "" holds the row's buttons.
+  const actionCol = head[head.length - 1] === "" ? head.length - 1 : -1;
   return (
-    // One helper behind seven tabs, so the column count varies from two to six.
-    // No floor on the width: a table forced to 34rem would scroll a
-    // two-column list for no reason, while one that genuinely needs more room
-    // already grows past its container on its own and the scroller catches it.
-    <ScrollableTable stickyFirstColumn label={head[0]}>
-      <table className="w-full text-sm">
-      <thead className="text-muted-foreground border-b text-left text-xs">
-        <tr>
-          {head.map((h, i) => (
-            <th key={i} className={cn("px-4 py-2 font-medium", i === head.length - 1 && "text-right")}>
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="divide-y">
+    <>
+      {/*
+        On a phone each row is a card: what the row is about on its own line,
+        then the other columns as labelled pairs, then the buttons. A table at
+        390px either squeezed the church's name to a word a line or hid half
+        its columns behind a sideways scroll nobody found.
+      */}
+      <ul className={cn("divide-y sm:hidden", flush && "-mx-4 border-y")}>
         {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-accent/40">
-            {r.map((cell, j) => (
-              <td key={j} className={cn("px-4 py-2.5", j === r.length - 1 && "text-right")}>
-                {cell}
-              </td>
-            ))}
-          </tr>
+          <li key={i} className="space-y-2.5 px-4 py-3.5">
+            <div className="leading-snug font-semibold break-words">{r[0]}</div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {r.map((cell, j) =>
+                j === 0 || j === actionCol ? null : (
+                  <div key={j} className="min-w-0">
+                    <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+                      {head[j]}
+                    </dt>
+                    <dd className="mt-0.5 break-words">{cell}</dd>
+                  </div>
+                ),
+              )}
+            </dl>
+            {actionCol > 0 && (
+              <div className="[&>div]:justify-stretch [&>div]:gap-2 [&_button]:bg-background [&_button]:flex-1 [&_button]:border">
+                {r[actionCol]}
+              </div>
+            )}
+          </li>
         ))}
-      </tbody>
-      </table>
-    </ScrollableTable>
+      </ul>
+
+      {/* One helper behind seven tabs, so the column count varies from two to
+          six. No floor on the width: a table that genuinely needs more room
+          grows past its container on its own and the scroller catches it. */}
+      <div className="hidden sm:block">
+        <ScrollableTable stickyFirstColumn label={head[0]}>
+          <table className="w-full text-sm">
+            <thead className="text-muted-foreground border-b text-left text-xs">
+              <tr>
+                {head.map((h, i) => (
+                  <th key={i} className={cn("px-4 py-2 font-medium", i === head.length - 1 && "text-right")}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((r, i) => (
+                <tr key={i} className="hover:bg-accent/40">
+                  {r.map((cell, j) => (
+                    <td key={j} className={cn("px-4 py-2.5", j === r.length - 1 && "text-right")}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollableTable>
+      </div>
+    </>
   );
 }

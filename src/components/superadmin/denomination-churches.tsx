@@ -102,17 +102,19 @@ export function DenominationChurches({
               {members.map((m) => (
                 <li
                   key={m.id}
-                  className="flex items-center gap-2 px-4 py-2 text-sm"
+                  className="flex items-start gap-2 px-4 py-2.5 text-sm"
                 >
-                  <Link
-                    href={`/superadmin/churches/${m.id}`}
-                    className="hover:text-primary min-w-0 flex-1 truncate font-medium"
-                  >
-                    {m.name}
-                  </Link>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {[m.state, m.country].filter(Boolean).join(", ")}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/superadmin/churches/${m.id}`}
+                      className="hover:text-primary leading-snug font-medium break-words"
+                    >
+                      {m.name}
+                    </Link>
+                    <p className="text-muted-foreground text-xs">
+                      {[m.state, m.country].filter(Boolean).join(", ")}
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -188,7 +190,7 @@ export function DenominationChurches({
                         : "hover:bg-accent",
                     )}
                   >
-                    <span className="min-w-0 truncate">
+                    <span className="min-w-0 leading-snug break-words">
                       {c.name}
                       {c.denomination && (
                         <span className="text-muted-foreground font-normal">

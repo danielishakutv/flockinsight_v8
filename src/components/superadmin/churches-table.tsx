@@ -11,7 +11,6 @@ import {
   LogIn,
   PauseCircle,
   PlayCircle,
-  Search,
   Star,
   Trash2,
   TriangleAlert,
@@ -43,8 +42,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AdminChips,
+  AdminSearch,
+  AdminSort,
+  RowActions,
+} from "@/components/superadmin/list-kit";
 
 export type ChurchRow = {
   id: string;
@@ -98,11 +107,12 @@ const PAGE_SIZE = 100;
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="min-w-0">
-      <p className="text-sm font-bold tabular-nums leading-none">{value}</p>
-      <p className="text-muted-foreground mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
+    // Label first for the markup, number first on screen.
+    <div className="flex min-w-0 flex-col-reverse">
+      <dt className="text-muted-foreground mt-1 truncate text-[10px] font-semibold uppercase tracking-wide">
         {label}
-      </p>
+      </dt>
+      <dd className="text-sm font-bold tabular-nums leading-none">{value}</dd>
     </div>
   );
 }
@@ -224,66 +234,31 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 flex-1 sm:max-w-md">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <AdminSearch
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
+            onChange={(v) => {
+              setQuery(v);
               setPage(0);
             }}
             placeholder="Search by name, URL or owner email"
-            className="pl-9"
           />
+          <AdminSort value={sort} options={SORTS} onChange={setSort} />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-muted-foreground text-xs font-semibold">
-            Sort
-          </span>
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setSort(s.key)}
-              className={cn(
-                "rounded-full px-2.5 py-1 text-xs font-bold transition",
-                sort === s.key
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Health buckets, with counts — the shape of the platform at a glance. */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {FILTERS.map((f) => {
-          const n = counts[f.key] ?? 0;
-          if (f.key !== "all" && n === 0) return null;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => {
-                setFilter(f.key);
-                setPage(0);
-              }}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
-                filter === f.key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {f.label}
-              <span className="tabular-nums opacity-70">{n}</span>
-            </button>
-          );
-        })}
+        {/* Health buckets, with counts — the shape of the platform at a glance. */}
+        <AdminChips
+          label="Filter by health"
+          value={filter}
+          onChange={(k) => {
+            setFilter(k);
+            setPage(0);
+          }}
+          options={FILTERS.filter(
+            (f) => f.key === "all" || (counts[f.key] ?? 0) > 0,
+          ).map((f) => ({ ...f, count: counts[f.key] ?? 0 }))}
+        />
       </div>
 
       {filtered.length === 0 ? (
@@ -295,123 +270,141 @@ export function ChurchesTable({ churches }: { churches: ChurchRow[] }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {visible.map((c) => {
             const suspended = c.status === "suspended";
             const busy = busyId === c.id && pending;
+            const net = c.revenue - c.cost;
             return (
-              <div
+              <article
                 key={c.id}
-                className="bg-card rounded-xl border p-3 sm:p-3.5"
+                className="bg-card flex min-w-0 flex-col overflow-hidden rounded-xl border"
               >
-                <div className="flex flex-wrap items-start gap-3">
-                  <Link
-                    href={`/superadmin/churches/${c.id}`}
-                    className="group min-w-0 flex-1"
-                  >
-                    <div className="flex items-center gap-2">
-                      <p className="group-hover:text-primary truncate font-bold transition-colors">
-                        {c.name}
-                      </p>
-                      {c.verified && <VerifiedTick />}
-                      <HealthBadge health={c.health} />
-                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-                    </div>
-                    <p className="text-muted-foreground truncate text-xs">
-                      /{c.slug}
-                      {c.ownerEmail ? ` · ${c.ownerEmail}` : ""} · joined{" "}
-                      {format(parseISO(c.createdAt), "MMM d, yyyy")}
-                    </p>
-                  </Link>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleFeatured(c)}
-                      title={c.featured ? "Unfeature" : "Feature in directory"}
-                      className={c.featured ? "text-amber-500" : "text-muted-foreground"}
-                    >
-                      <Star className={c.featured ? "size-4 fill-current" : "size-4"} />
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => enter(c)}
-                      disabled={pending && enteringId === c.id}
-                      title={`Open ${c.name}'s workspace as super admin`}
-                    >
-                      {pending && enteringId === c.id ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <LogIn className="size-4" />
+                <Link
+                  href={`/superadmin/churches/${c.id}`}
+                  className="group hover:bg-accent/40 block flex-1 p-4 transition-colors"
+                >
+                  {/* The name first, on its own, allowed two lines. */}
+                  <div className="flex items-start gap-2">
+                    <h3 className="group-hover:text-primary line-clamp-2 min-w-0 flex-1 text-base leading-snug font-semibold break-words transition-colors">
+                      {c.name}
+                      {c.verified && (
+                        <VerifiedTick className="ml-1 inline-block size-4 align-[-2px]" />
                       )}
-                      Log in
-                    </Button>
-                    <Button
-                      variant={suspended ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => toggle(c)}
-                      disabled={busy}
-                    >
-                      {busy ? (
-                        <Loader2 className="animate-spin" />
-                      ) : suspended ? (
-                        <PlayCircle className="size-4" />
-                      ) : (
-                        <PauseCircle className="size-4" />
-                      )}
-                      {suspended ? "Reactivate" : "Suspend"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openDelete(c)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      aria-label={`Delete ${c.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    </h3>
+                    <ChevronRight className="text-muted-foreground mt-0.5 size-5 shrink-0" />
                   </div>
-                </div>
 
-                {/* Per-church numbers */}
-                <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3 sm:grid-cols-3 lg:grid-cols-6">
-                  <Metric label="Members" value={c.memberCount} />
-                  <Metric label="Staff" value={c.staffCount} />
-                  <Metric label="Groups" value={c.groupCount} />
-                  <Metric label="Services" value={c.sessionCount} />
-                  <div className="col-span-2 min-w-0">
-                    <p className="inline-flex items-center gap-1 text-sm font-bold tabular-nums leading-none">
-                      <HandCoins className="text-muted-foreground size-3.5" />
-                      {formatMoney(c.totalGiving, c.currency)}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                      Total giving
-                    </p>
-                  </div>
-                </div>
-                <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                  <span className="inline-flex items-center gap-1">
-                    <UsersRound className="size-3.5" />
-                    <LastSeen at={c.lastSeenAt} />
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <FunnelDots completed={c.funnelCompleted} />
-                    <span>{c.funnelCompleted}/5 set up</span>
-                  </span>
-                  {c.revenue > 0 && (
-                    <span
-                      title="Payments and wallet top-ups, minus SMS and storage costs"
-                      className={cn(
-                        "font-semibold",
-                        c.revenue - c.cost < 0 && "text-destructive",
-                      )}
-                    >
-                      {formatMoney(c.revenue - c.cost, "NGN")} net
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <HealthBadge health={c.health} />
+                    {c.featured && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                        <Star className="size-3 fill-current" />
+                        Featured
+                      </span>
+                    )}
+                    <span className="text-muted-foreground text-xs">
+                      Joined {format(parseISO(c.createdAt), "MMM d, yyyy")}
                     </span>
-                  )}
-                </div>
-              </div>
+                  </div>
+
+                  <div className="text-muted-foreground mt-1.5 space-y-0.5 text-xs">
+                    {c.ownerEmail && <p className="truncate">{c.ownerEmail}</p>}
+                    <p className="truncate">/{c.slug}</p>
+                  </div>
+
+                  {/* Per-church numbers */}
+                  <dl className="bg-muted/50 mt-3 grid grid-cols-4 gap-1 rounded-lg px-2 py-2.5 text-center">
+                    <Metric label="Members" value={c.memberCount} />
+                    <Metric label="Staff" value={c.staffCount} />
+                    <Metric label="Groups" value={c.groupCount} />
+                    <Metric label="Services" value={c.sessionCount} />
+                  </dl>
+
+                  <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <p className="inline-flex min-w-0 items-center gap-1.5 text-sm">
+                      <HandCoins className="text-muted-foreground size-4 shrink-0" />
+                      <span className="text-muted-foreground">Giving</span>
+                      <span className="truncate font-semibold tabular-nums">
+                        {formatMoney(c.totalGiving, c.currency)}
+                      </span>
+                    </p>
+                    {c.revenue > 0 && (
+                      <p
+                        title="Payments and wallet top-ups, minus SMS and storage costs"
+                        className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          net < 0 && "text-destructive",
+                        )}
+                      >
+                        {formatMoney(net, "NGN")}{" "}
+                        <span className="text-muted-foreground font-normal">net</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      <UsersRound className="size-3.5" />
+                      <LastSeen at={c.lastSeenAt} />
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <FunnelDots completed={c.funnelCompleted} />
+                      <span>{c.funnelCompleted}/5 set up</span>
+                    </span>
+                  </div>
+                </Link>
+
+                <RowActions
+                  moreLabel={`More actions for ${c.name}`}
+                  more={
+                    <>
+                      <DropdownMenuItem onSelect={() => toggleFeatured(c)}>
+                        <Star className={c.featured ? "fill-current" : undefined} />
+                        {c.featured ? "Remove from featured" : "Feature in directory"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => openDelete(c)}
+                      >
+                        <Trash2 />
+                        Delete church…
+                      </DropdownMenuItem>
+                    </>
+                  }
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => enter(c)}
+                    disabled={pending && enteringId === c.id}
+                    title={`Open ${c.name}'s workspace as super admin`}
+                  >
+                    {pending && enteringId === c.id ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <LogIn className="size-4" />
+                    )}
+                    Log in
+                  </Button>
+                  <Button
+                    variant={suspended ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggle(c)}
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <Loader2 className="animate-spin" />
+                    ) : suspended ? (
+                      <PlayCircle className="size-4" />
+                    ) : (
+                      <PauseCircle className="size-4" />
+                    )}
+                    {suspended ? "Reactivate" : "Suspend"}
+                  </Button>
+                </RowActions>
+              </article>
             );
           })}
         </div>
