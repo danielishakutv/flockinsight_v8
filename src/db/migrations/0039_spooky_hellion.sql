@@ -25,7 +25,11 @@ SELECT lower(replace("sms_sender_id", ' ', '')), "sms_sender_id", "id", 'exists'
 FROM "church"
 WHERE "sms_sender_id" IS NOT NULL
   AND (
-    "sms_sender_status" IN ('approved', 'revoked')
+    -- Compared as text: 'revoked' is added to the enum by 0017, and on a fresh
+    -- database drizzle applies 0017 and this file in one transaction, where
+    -- Postgres refuses a literal of a newly added enum value ("unsafe use of
+    -- new value"). Same rows either way.
+    "sms_sender_status"::text IN ('approved', 'revoked')
     OR ("sms_sender_status" = 'pending' AND "sms_sender_stage" = 'submitted')
   )
 ON CONFLICT ("sender_key") DO NOTHING;
