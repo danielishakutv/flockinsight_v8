@@ -98,9 +98,9 @@ export async function getPlans(): Promise<Plan[]> {
     features: [
       ...features[p.id],
       `${formatBytes(storageMb[p.id] * MB, 0)} of storage for photos, documents and media`,
-      emails[p.id] === null
-        ? "Email volume to suit"
-        : `${emails[p.id]!.toLocaleString()} emails a month`,
+      // Email is unlimited on every plan, and nothing stops a send at a
+      // number, so the cards say so rather than quoting an allowance.
+      "Unlimited email to your members",
     ],
   }));
 }
@@ -139,9 +139,7 @@ export function customPlanBullets(
         ? "1 admin account"
         : `Up to ${row.teamLimit.toLocaleString()} team members`,
     `${formatBytes(row.storageMb * MB, 0)} of storage for photos, documents and media`,
-    row.emailAllowance === null
-      ? "Email volume to suit"
-      : `${row.emailAllowance.toLocaleString()} emails a month`,
+    "Unlimited email to your members",
   ];
 }
 

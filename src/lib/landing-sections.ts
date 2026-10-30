@@ -228,7 +228,7 @@ export const sectionCopy: Record<"en" | "fr" | "pt", SectionCopy> = {
     summaryHeading: "In short",
     moduleTitle: "Eighteen modules, one login",
     moduleIntro:
-      "Pick the part you came for. Everything here is included on a paid plan — there is no module you discover later is extra.",
+      "Pick the part you came for. Every module here comes with one of our four plans, and the pricing page says which — nothing is sold separately on top.",
     moduleGroupAll: "Everything",
     replacesTitle: "One subscription, instead of eight",
     replacesIntro:
@@ -258,7 +258,7 @@ export const sectionCopy: Record<"en" | "fr" | "pt", SectionCopy> = {
     summaryHeading: "En résumé",
     moduleTitle: "Dix-huit modules, une seule connexion",
     moduleIntro:
-      "Choisissez ce qui vous intéresse. Tout est inclus dans un forfait payant — aucun module ne se révèle payant plus tard.",
+      "Choisissez ce qui vous intéresse. Chaque module fait partie de l'une de nos quatre formules, et la page des tarifs indique laquelle — rien n'est vendu en supplément.",
     moduleGroupAll: "Tout",
     replacesTitle: "Un seul abonnement, au lieu de huit",
     replacesIntro:
@@ -288,7 +288,7 @@ export const sectionCopy: Record<"en" | "fr" | "pt", SectionCopy> = {
     summaryHeading: "Em resumo",
     moduleTitle: "Dezoito módulos, uma só conta",
     moduleIntro:
-      "Escolha a parte que lhe interessa. Está tudo incluído num plano pago — não há módulo que depois se descubra ser à parte.",
+      "Escolha a parte que lhe interessa. Cada módulo vem com um dos nossos quatro planos, e a página de preços diz qual — nada é vendido à parte.",
     moduleGroupAll: "Tudo",
     replacesTitle: "Uma assinatura, em vez de oito",
     replacesIntro:

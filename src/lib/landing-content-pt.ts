@@ -12,7 +12,7 @@ import type { LandingContent } from "@/lib/landing-content";
 export const pt: LandingContent = {
   hero: {
     eyebrow: "Para igrejas, comunhões e ministérios",
-    title: "Gira toda a sua igreja",
+    title: "Gira toda a sua igreja ou ministério",
     titleAccent: "a partir de uma só conta",
     body: "Deixe de andar entre cadernos, folhas de cálculo e grupos de WhatsApp. Presenças, membros, grupos, turmas, ofertas, finanças da igreja e acompanhamento. SMS em massa e e-mail grátis, lembretes que se enviam sozinhos, eventos, formulários, pregações e a sua própria página pública — dezoito módulos, uma só conta, na sua própria moeda.",
     ctaPrimary: "Começar o meu teste grátis",
@@ -23,8 +23,8 @@ export const pt: LandingContent = {
   highlights: [
     { value: "18", label: "Módulos, uma só conta" },
     { value: "7", label: "Domingos grátis para experimentar" },
-    { value: "₦0", label: "Para começar — sem cartão" },
-    { value: "100%", label: "Os seus dados, exportáveis" },
+    { value: "40+", label: "Moedas, incluindo a sua" },
+    { value: "100%", label: "Os seus dados, para levar" },
   ],
 
   painsTitle: "As dores de cabeça diárias de dirigir um ministério",
@@ -82,7 +82,7 @@ export const pt: LandingContent = {
     {
       icon: "comms",
       title: "SMS em massa e e-mail grátis",
-      body: "Chegue a todos, a um grupo, ou a algumas pessoas. Um ID de remetente próprio para que as mensagens cheguem com o nome da sua igreja, e e-mail que não custa nada, por mais longo que seja.",
+      body: "Chegue a todos, a um grupo, ou a algumas pessoas. No Pro, SMS em massa a partir do seu próprio ID de remetente, com o nome da sua igreja; em todos os planos, e-mail que não custa nada, por mais longo que seja.",
     },
     {
       icon: "reminders",
@@ -200,11 +200,11 @@ export const pt: LandingContent = {
     },
     {
       q: "Quanto custa?",
-      a: "Cada igreja tem os primeiros sete domingos grátis, sem necessidade de cartão. Depois há planos pagos em naira, que diferem sobretudo no número de membros que pode ter. O e-mail é gratuito e ilimitado em todos os planos; os SMS são pagos por mensagem a partir de uma carteira que carrega.",
+      a: "Cada igreja tem os primeiros sete domingos grátis, sem necessidade de cartão. Depois, os planos diferem no número de membros que pode ter e nos módulos incluídos, e são apresentados na sua moeda. O e-mail é gratuito e ilimitado em todos os planos; os SMS são pagos por mensagem a partir de uma carteira que carrega.",
     },
     {
       q: "É mais barato pagar um ano de uma vez?",
-      a: "Sim — um ano custa dez meses em vez de doze: dois meses são grátis e é um pagamento em vez de doze. Na página de preços pode alternar entre mensal e anual para ver os dois valores antes de decidir, e uma igreja fora da Nigéria poupa também onze vezes a taxa de cartão.",
+      a: "Sim — um ano custa menos do que doze mensalidades e é um pagamento em vez de doze. Na página de preços pode alternar entre mensal e anual para ver os dois valores antes de decidir, e uma igreja fora da Nigéria poupa também onze vezes a taxa de cartão.",
     },
     {
       q: "Posso ganhar por apresentar outras igrejas?",
@@ -220,7 +220,7 @@ export const pt: LandingContent = {
     },
     {
       q: "Posso enviar SMS aos meus membros?",
-      a: "Sim. Pede uma vez um ID de remetente para que as mensagens cheguem com o nome da sua igreja em vez de um número desconhecido, e nós tratamos do registo junto das operadoras. Os SMS são cobrados por mensagem a partir da sua carteira. O e-mail é gratuito e ilimitado.",
+      a: "Sim, no plano Pro. Pede uma vez um ID de remetente para que as mensagens cheguem com o nome da sua igreja em vez de um número desconhecido, e nós tratamos do registo junto das operadoras. Os SMS são cobrados por mensagem a partir da sua carteira. O e-mail é gratuito e ilimitado em todos os planos.",
     },
     {
       q: "Posso trazer os meus registos existentes?",
@@ -232,7 +232,7 @@ export const pt: LandingContent = {
     },
     {
       q: "Posso recuperar os meus dados?",
-      a: "A qualquer momento. Cada parte dos seus registos é transferível em folha de cálculo ou PDF, e uma exportação completa dá-lhe tudo num só ficheiro com um dicionário de dados a explicar como os ficheiros se articulam. Os dados são da sua igreja.",
+      a: "A qualquer momento. A partir do Growth, os seus registos são transferíveis em folha de cálculo; no Pro, em relatórios PDF ou numa exportação completa de tudo num só ficheiro com um dicionário de dados a explicar como os ficheiros se articulam. Os dados são da sua igreja.",
     },
     {
       q: "Serve para uma denominação com várias congregações?",
@@ -258,7 +258,7 @@ export const pt: LandingContent = {
   footerTagline:
     "A dar às igrejas ferramentas de gestão modernas para crescerem e prosperarem.",
   pricing: {
-    title: "Preços simples para cada igreja",
+    title: "Preços simples para cada igreja e ministério",
     intro:
       "Comece gratuitamente e cresça ao ritmo da sua congregação. Não é preciso cartão para começar.",
     promo: "Promoção de lançamento: os seus primeiros 7 domingos são grátis",

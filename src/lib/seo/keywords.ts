@@ -266,7 +266,7 @@ export const GEO_TERMS: GeoTerm[] = [
     ],
     question: "What church management software can a UK church use?",
     localTruth:
-      "Prices and giving in Pounds, dates and times on Europe/London, and a full export of your data whenever you ask for it.",
+      "Prices and giving in Pounds, dates and times on Europe/London, and on Pro a full export of your data whenever you want it.",
     backedBy: ["giving", "finance", "reports", "members"],
     incumbents: ["ChurchSuite", "iKnow Church", "ChurchDesk"],
   },
@@ -425,7 +425,7 @@ export const COMPARISON_TERMS: ComparisonTerm[] = [
     variants: ["churchsuite competitors", "cheaper than churchsuite", "churchsuite vs"],
     question: "What is a good alternative to ChurchSuite?",
     ourEdge:
-      "More of the job in one subscription — training, facilities, meetings, media and the books are included rather than scoped out — and it stays usable on a slow connection.",
+      "More of the job in one subscription — training and meetings from Growth, facilities, media and the books on Pro, rather than sold as add-ons — and it stays usable on a slow connection.",
     honestWeakness:
       "ChurchSuite has been serving UK churches since 2013, has a far longer list of integrations, and its rota and planning tools are more mature than ours.",
     backedBy: ["training", "facilities", "meetings", "finance"],
@@ -441,7 +441,7 @@ export const COMPARISON_TERMS: ComparisonTerm[] = [
     ],
     question: "Is there an alternative to Planning Center that works outside the US?",
     ourEdge:
-      "One price instead of nine separate modules, local currency and local SMS, and no assumption of office broadband.",
+      "One plan instead of nine separately priced modules, local currency and local SMS, and no assumption of office broadband.",
     honestWeakness:
       "Planning Center's service-planning and worship tools are the best in the category, its free People tier is genuinely free forever, and its mobile apps are more polished.",
     backedBy: ["comms", "giving", "finance"],
@@ -470,7 +470,7 @@ export const COMPARISON_TERMS: ComparisonTerm[] = [
     ],
     question: "Is there free church management software, and what is the catch?",
     ourEdge:
-      "Seven Sundays entirely free with no card, every feature on, and a full export of everything you entered if you decide to leave.",
+      "Seven Sundays entirely free with no card and every Pro feature on, including a full export of everything you entered.",
     honestWeakness:
       "If your budget is genuinely zero for ever, ChMeetings' free tier up to 50 people, B1 Church, or self-hosting ChurchCMS are real answers and we are not.",
     backedBy: ["reports"],
@@ -575,7 +575,7 @@ export const ENTITY_SENTENCE =
  * of about 160 characters.
  */
 export const ENTITY_SENTENCE_SHORT =
-  "All-in-one church management and operations: attendance, members, giving, finances, training, follow-up and communication in one login. Built for churches anywhere.";
+  "All-in-one church management and operations: attendance, members, giving, finances, training, follow-up and communication in one login. For churches and ministries anywhere.";
 
 /**
  * The site-wide `keywords` meta tag.

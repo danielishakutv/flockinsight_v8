@@ -419,8 +419,9 @@ export const MONEY_GUIDES: Omit<Guide, "minutes">[] = [
           {
             kind: "bullets",
             items: [
+              "Every Pro feature is on for the whole trial, so you can try SMS, meetings, finance and the rest before you decide.",
               "You are reminded before it ends, more than once.",
-              "When it ends you pick a plan to carry on adding data.",
+              "When it ends you pick a plan to carry on adding data. If you choose a smaller plan than Pro, the modules it does not include are switched off, and what you entered in them is kept for if you move up later.",
               "Nothing is deleted. Your members, attendance and giving are all exactly where you left them.",
             ],
           },

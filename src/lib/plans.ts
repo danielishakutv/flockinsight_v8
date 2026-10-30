@@ -148,7 +148,7 @@ export const PLANS: Plan[] = [
       "Branches & denominations — one report across every branch, grouped by zone",
       "Automatic weekly or monthly branch reports by email",
       "Church advisor with 2,000 questions a month",
-      "For churches outside Nigeria: your own currency, timezone and language",
+      "Help rolling out across several countries",
       "Dedicated account manager",
       "Custom integrations & onboarding",
       "Service-level agreement (SLA)",

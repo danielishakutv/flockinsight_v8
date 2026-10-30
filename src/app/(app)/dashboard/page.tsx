@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { planLimitsFor, rowHasFeature } from "@/lib/plan-catalog";
+import { rowHasFeature } from "@/lib/plan-catalog";
 import { Suspense } from "react";
 import { InstallNotice } from "@/components/pwa/install-notice";
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
@@ -190,7 +190,6 @@ export default async function DashboardPage() {
     churchUsageSince(church.id, startOfMonth),
   ]);
 
-  const { emailAllowance } = await planLimitsFor(church);
   const smsAvailable = smsAvailableForCountry(church.country);
   const smsApproved = church.smsSenderStatus === "approved";
   const smsAffordable =
@@ -457,7 +456,9 @@ export default async function DashboardPage() {
             <WalletCard
               walletBalance={church.walletBalance}
               emailUsed={monthUsage.email}
-              emailAllowance={emailAllowance}
+              // Email is unlimited on every plan, and nothing stops a send at
+              // the old allowance, so the meter shows a count, not a ceiling.
+              emailAllowance={null}
               smsSent={monthUsage.sms}
               smsAffordable={smsAffordable}
               smsAvailable={smsAvailable}

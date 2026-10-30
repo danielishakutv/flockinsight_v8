@@ -363,14 +363,14 @@ export const auth = betterAuth({
          * table default, including trialEndsAt NULL — which the trial reads as
          * "grandfathered", never gated. An owner whose trial had ended could
          * open /onboarding and run a second church free for ever. Every church
-         * gets the same 7 Sundays the signup flow gives.
+         * gets the same 7 Sundays the signup flow gives, on the same plan.
          */
         afterCreateOrganization: async ({ organization: org }) => {
           try {
-            const { trialEndDate } = await import("./trial");
+            const { TRIAL_PLAN, trialEndDate } = await import("./trial");
             await db
               .update(church)
-              .set({ trialEndsAt: trialEndDate(new Date()) })
+              .set({ trialEndsAt: trialEndDate(new Date()), plan: TRIAL_PLAN })
               .where(and(eq(church.id, org.id), isNull(church.trialEndsAt)));
           } catch (e) {
             console.error("[auth] afterCreateOrganization trial start failed", e);

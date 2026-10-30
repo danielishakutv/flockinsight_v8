@@ -10,7 +10,7 @@ import { getT } from "@/lib/i18n/server";
 export const metadata = {
   title: "Book a free walkthrough",
   description:
-    "See FlockInsight on your own church's data in 20 minutes. We set it up with you — attendance, members, giving, SMS and follow-up. First 7 Sundays free.",
+    "See FlockInsight on your own church's data in 20 minutes. We set it up with you — attendance, members, giving, follow-up and messaging. First 7 Sundays free.",
 };
 
 const POINTS = [

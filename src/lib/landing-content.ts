@@ -43,7 +43,7 @@ export const HIGHLIGHTS: { value: string; label: string }[] = [
   { value: "18", label: "Modules, one login" },
   { value: "7", label: "Sundays free to try" },
   { value: "40+", label: "Currencies, yours included" },
-  { value: "100%", label: "Your data, exportable" },
+  { value: "100%", label: "Your data, yours to take" },
 ];
 
 export const FEATURES: LandingFeature[] = [
@@ -85,7 +85,7 @@ export const FEATURES: LandingFeature[] = [
   {
     icon: "comms",
     title: "Bulk SMS & free email",
-    body: "Reach everyone, one group, or a handful. Your own SMS sender ID so texts arrive from your church's name, and email that costs nothing however long it is.",
+    body: "Reach everyone, one group, or a handful. On Pro, bulk SMS from your own sender ID so texts arrive from your church's name; on every plan, email that costs nothing however long it is.",
   },
   {
     icon: "reminders",
@@ -125,7 +125,7 @@ export const FEATURES: LandingFeature[] = [
   {
     icon: "reports",
     title: "Reports & full export",
-    body: "Any part of your data as a spreadsheet or a PDF, or the whole thing in one file with a data dictionary. It is your church's data, and you can always take it.",
+    body: "Your records as spreadsheets from Growth; on Pro, PDF reports and the whole thing in one file with a data dictionary. It is your church's data, and you can always take it.",
   },
   {
     icon: "branches",
@@ -230,11 +230,11 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How much does it cost?",
-    a: "Your first seven Sundays are free, with no card required. After that, plans differ mainly by how many members you can hold, and are charged in your own currency. Email to members is free and unlimited on every plan; SMS is paid per message from a wallet you top up.",
+    a: "Your first seven Sundays are free, with no card required. After that, plans differ by how many members you can hold and which modules are on, and are shown in your own currency. Email to members is free and unlimited on every plan; SMS is paid per message from a wallet you top up.",
   },
   {
     q: "Is it cheaper to pay for a year?",
-    a: "Yes — a year costs ten months rather than twelve, so two months are free, and it is one payment instead of twelve. You can switch between monthly and yearly on the pricing page to see both figures before you decide, and a church outside Nigeria saves the card fee eleven times over as well.",
+    a: "Yes — a year costs less than twelve monthly payments, and it is one payment instead of twelve. You can switch between monthly and yearly on the pricing page to see both figures before you decide, and a church outside Nigeria saves the card fee eleven times over as well.",
   },
   {
     q: "Can I earn from introducing other churches?",
@@ -250,7 +250,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can I send SMS to my members?",
-    a: "Yes. You apply once for a sender ID so texts arrive from your church's name rather than an unknown number, and we handle the registration with the networks. SMS is charged per message from your wallet. Email is free and unlimited.",
+    a: "Yes, on the Pro plan. You apply once for a sender ID so texts arrive from your church's name rather than an unknown number, and we handle the registration with the networks. SMS is charged per message from your wallet. Email is free and unlimited on every plan.",
   },
   {
     q: "Can I move my existing records in?",
@@ -262,7 +262,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can I get my data out?",
-    a: "At any time. Every part of your records downloads as a spreadsheet or PDF, and a full export gives you the whole thing in one file with a data dictionary explaining how the files fit together. It is your church's data.",
+    a: "At any time. From Growth your records download as spreadsheets, and on Pro as PDF reports or a full export of the whole thing in one file with a data dictionary explaining how the files fit together. It is your church's data.",
   },
   {
     q: "Does it work for a denomination with several branches?",
@@ -447,9 +447,9 @@ export const en: LandingContent = {
    */
   hero: {
     eyebrow: "For churches, fellowships & ministries",
-    title: "Run your whole church",
+    title: "Run your whole church or ministry",
     titleAccent: "from one login",
-    body: "Stop juggling notebooks, spreadsheets and WhatsApp groups. Attendance, members, groups, classes, giving, church finances and follow-up. Bulk SMS and free email, reminders that send themselves, events, facilities, forms, sermons and your own public page — eighteen modules, one login, in your own currency.",
+    body: "Stop juggling notebooks, spreadsheets and WhatsApp groups. Attendance, members, groups, classes, giving, church finances and follow-up. Free email and bulk SMS, reminders that send themselves, events, facilities, forms, sermons and your own public page — eighteen modules, one login, in your own currency.",
     ctaPrimary: "Start my free trial",
     ctaSecondary: "See pricing",
     reassurance: "First 7 Sundays free • No card required • Cancel anytime",
@@ -475,7 +475,7 @@ export const en: LandingContent = {
   footerTagline:
     "Empowering churches with modern management tools to grow and thrive.",
   pricing: {
-    title: "Simple pricing for every church",
+    title: "Simple pricing for every church and ministry",
     intro: "Start free and grow as your congregation grows. No card required to begin.",
     promo: "Launch promo: your first 7 Sundays are free",
     mostPopular: "Most popular",

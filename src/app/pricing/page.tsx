@@ -59,7 +59,7 @@ export async function generateMetadata({
   return {
     title: "Pricing",
     description:
-      "Simple, affordable plans for churches of every size — built for Nigeria and Africa. Start free.",
+      "Simple, affordable plans for churches, fellowships and ministries of every size, in your own currency. First 7 Sundays free.",
     alternates: {
       canonical: canonicalFor("/pricing", locale),
       languages: languageAlternates("/pricing"),

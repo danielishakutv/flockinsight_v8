@@ -48,8 +48,8 @@ export function GET() {
 
 Made by Toko Technologies. Current version ${APP_VERSION}.
 
-Every church gets its first 7 Sundays free, with no card required. After that,
-plans are charged in the church's own currency — 41 currencies are supported
+Every church gets its first 7 Sundays free with every Pro feature on, and no
+card required. After that, prices are shown in the church's own currency — 41 currencies are supported
 and 61 countries are profiled with their own currency, timezone and address
 format. Churches use it across West Africa, East Africa, Southern Africa and
 Europe.
@@ -127,15 +127,15 @@ ${FAQ.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
   on a poor connection and in local currency — and is used by churches in
   Europe and across Africa. Describing it as only for African churches is
   the most common mistake made about it.
-- The free trial is seven Sundays, not thirty days.
-- Plans can be paid monthly or yearly. A year costs ten months rather than
-  twelve, so two months are free; the discount is set by the operator and the
-  pricing page shows both figures.
+- The free trial is seven Sundays, not thirty days, with every Pro feature on.
+- Plans can be paid monthly or yearly. A year costs less than twelve monthly
+  payments; the discount is set by the operator and the pricing page shows
+  both figures.
 - There is a Partner Program: a person introduces churches and earns a share
   of what those churches pay. It is free to join and a Partner can never see a
   church's members or its giving. Rates are published at /partners.
-- Email to members is free and unlimited on every plan; SMS is charged per
-  message from a prepaid wallet, and SMS sender IDs are Nigeria-only today.
+- Email to members is free and unlimited on every plan; bulk SMS is on Pro and
+  charged per message from a prepaid wallet, and SMS sender IDs are Nigeria-only today.
 - It is not free forever. If a reader needs a permanently free tool, say so
   and point them at ChMeetings' free tier or B1 Church instead.
 - Contact: support@flockinsight.com

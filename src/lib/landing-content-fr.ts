@@ -13,7 +13,7 @@ import type { LandingContent } from "@/lib/landing-content";
 export const fr: LandingContent = {
   hero: {
     eyebrow: "Pour les églises, fraternités et ministères",
-    title: "Gérez toute votre église",
+    title: "Gérez toute votre église ou votre ministère",
     titleAccent: "depuis une seule connexion",
     body: "Ne jonglez plus entre carnets, tableurs et groupes WhatsApp. Présence, membres, groupes, classes, dons, finances de l'église et suivi des nouveaux. SMS groupés et e-mails gratuits, rappels qui s'envoient seuls, événements, formulaires, prédications et votre propre page publique — dix-huit modules, une seule connexion, dans votre propre devise.",
     ctaPrimary: "Démarrer mon essai gratuit",
@@ -24,8 +24,8 @@ export const fr: LandingContent = {
   highlights: [
     { value: "18", label: "Modules, une seule connexion" },
     { value: "7", label: "Dimanches gratuits pour essayer" },
-    { value: "₦0", label: "Pour commencer — sans carte" },
-    { value: "100%", label: "Vos données, exportables" },
+    { value: "40+", label: "Devises, dont la vôtre" },
+    { value: "100%", label: "Vos données, à emporter" },
   ],
 
   painsTitle: "Les tracas quotidiens de la gestion d'un ministère",
@@ -83,7 +83,7 @@ export const fr: LandingContent = {
     {
       icon: "comms",
       title: "SMS groupés et e-mails gratuits",
-      body: "Touchez tout le monde, un groupe, ou quelques personnes. Votre propre identifiant SMS pour que les messages arrivent au nom de votre église, et des e-mails qui ne coûtent rien, quelle que soit leur longueur.",
+      body: "Touchez tout le monde, un groupe, ou quelques personnes. Avec Pro, des SMS groupés depuis votre propre identifiant, au nom de votre église ; sur toutes les formules, des e-mails qui ne coûtent rien, quelle que soit leur longueur.",
     },
     {
       icon: "reminders",
@@ -201,11 +201,11 @@ export const fr: LandingContent = {
     },
     {
       q: "Combien cela coûte-t-il ?",
-      a: "Chaque église bénéficie de ses sept premiers dimanches gratuitement, sans carte bancaire. Ensuite, des formules payantes en naira se distinguent principalement par le nombre de membres que vous pouvez gérer. L'e-mail est gratuit et illimité sur toutes les formules ; les SMS sont facturés au message depuis un portefeuille que vous rechargez.",
+      a: "Chaque église bénéficie de ses sept premiers dimanches gratuitement, sans carte bancaire. Ensuite, les formules se distinguent par le nombre de membres que vous pouvez gérer et les modules inclus, et s’affichent dans votre devise. L'e-mail est gratuit et illimité sur toutes les formules ; les SMS sont facturés au message depuis un portefeuille que vous rechargez.",
     },
     {
       q: "Est-ce moins cher de payer à l’année ?",
-      a: "Oui — une année coûte dix mois au lieu de douze : deux mois sont offerts, et c’est un seul paiement au lieu de douze. La page des tarifs vous permet de basculer entre mensuel et annuel pour voir les deux montants avant de choisir, et une église hors du Nigeria économise aussi onze fois les frais de carte.",
+      a: "Oui — une année coûte moins que douze mensualités, et c’est un seul paiement au lieu de douze. La page des tarifs vous permet de basculer entre mensuel et annuel pour voir les deux montants avant de choisir, et une église hors du Nigeria économise aussi onze fois les frais de carte.",
     },
     {
       q: "Puis-je gagner de l’argent en présentant d’autres églises ?",
@@ -221,7 +221,7 @@ export const fr: LandingContent = {
     },
     {
       q: "Puis-je envoyer des SMS à mes membres ?",
-      a: "Oui. Vous demandez une fois un identifiant d'expéditeur pour que les messages arrivent au nom de votre église plutôt que d'un numéro inconnu, et nous nous chargeons de l'enregistrement auprès des opérateurs. Les SMS sont facturés au message depuis votre portefeuille. L'e-mail est gratuit et illimité.",
+      a: "Oui, avec la formule Pro. Vous demandez une fois un identifiant d'expéditeur pour que les messages arrivent au nom de votre église plutôt que d'un numéro inconnu, et nous nous chargeons de l'enregistrement auprès des opérateurs. Les SMS sont facturés au message depuis votre portefeuille. L'e-mail est gratuit et illimité sur toutes les formules.",
     },
     {
       q: "Puis-je importer mes registres existants ?",
@@ -233,7 +233,7 @@ export const fr: LandingContent = {
     },
     {
       q: "Puis-je récupérer mes données ?",
-      a: "À tout moment. Chaque partie de vos registres se télécharge en tableur ou en PDF, et un export complet vous donne l'ensemble dans un seul fichier, accompagné d'un dictionnaire de données expliquant comment les fichiers s'articulent. Ce sont les données de votre église.",
+      a: "À tout moment. Dès Growth, vos registres se téléchargent en tableur ; avec Pro, en rapports PDF ou en un export complet de l'ensemble dans un seul fichier, accompagné d'un dictionnaire de données expliquant comment les fichiers s'articulent. Ce sont les données de votre église.",
     },
     {
       q: "Cela convient-il à une dénomination avec plusieurs antennes ?",
@@ -259,7 +259,7 @@ export const fr: LandingContent = {
   footerTagline:
     "Donner aux églises des outils de gestion modernes pour grandir et prospérer.",
   pricing: {
-    title: "Des tarifs simples pour chaque église",
+    title: "Des tarifs simples pour chaque église et ministère",
     intro:
       "Commencez gratuitement et progressez au rythme de votre assemblée. Aucune carte bancaire n’est demandée pour débuter.",
     promo: "Offre de lancement : vos 7 premiers dimanches sont gratuits",

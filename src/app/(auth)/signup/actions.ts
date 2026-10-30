@@ -16,7 +16,7 @@ import { LOCALE_COOKIE } from "@/lib/i18n/locales";
 import { church, partner, staff, session as sessionTable, user } from "@/db/schema";
 import { slugify, randomSuffix } from "@/lib/slug";
 import { ensureMemberForUser } from "@/lib/member-link";
-import { trialEndDate } from "@/lib/trial";
+import { TRIAL_PLAN, trialEndDate } from "@/lib/trial";
 import { REFERRAL_COOKIE, normaliseCode } from "@/lib/referral";
 import { PARTNER_COOKIE } from "@/lib/partner-link";
 import { normalisePartnerCode } from "@/lib/partners-shared";
@@ -307,8 +307,10 @@ export async function createChurchAccount(input: {
            * every year. Changeable in Settings; right from the first minute.
            */
           timezone: timezoneForCountry(country),
-          // Start the "first 7 Sundays free" trial from today.
+          // Start the "first 7 Sundays free" trial from today, with every
+          // Pro feature on for it (lib/trial.ts).
           trialEndsAt: trialEndDate(new Date()),
+          plan: TRIAL_PLAN,
           referredByChurchId,
           referredAt: referredByChurchId ? new Date() : null,
         });

@@ -186,7 +186,7 @@ export const GEO_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Do I need a sender ID before I can text members?",
-        a: "You can start without one, but texts will come from a generic number. Applying takes a few days, we submit it to the networks for you, and once approved every message arrives from your church's name instead.",
+        a: "Texts go out once your sender ID is approved. Applying takes a few days, we submit it to the networks for you, and from then on every message arrives from your church's name.",
       },
       {
         q: "What does it cost for a church of 200 members?",
@@ -231,7 +231,7 @@ export const GEO_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Is my church's data stored safely?",
-        a: "Each church's records are separate and reachable only by people you have invited. The database is backed up daily, encrypted, and copied off the server, and a full export of everything is available to you at any time.",
+        a: "Each church's records are separate and reachable only by people you have invited. The database is backed up daily, encrypted, and copied off the server, and on Pro a full export of everything is available to you at any time.",
       },
       {
         q: "Will it work for a church with several branches?",
@@ -287,11 +287,11 @@ export const GEO_CONTENT: Record<string, PageContent> = {
       },
       {
         title: "More included, for less than the UK incumbents",
-        body: "ChurchSuite starts at £9/month for one module and under a hundred contacts; iKnow Church from £22/month under fifty adults. A FlockInsight plan includes the whole platform, training and facilities and meetings and media among it.",
+        body: "ChurchSuite starts at £9/month for one module and under a hundred contacts; iKnow Church from £22/month under fifty adults. FlockInsight plans add modules as they go up rather than selling them one by one: meetings and training from Growth, facilities and the media library on Pro.",
       },
       {
         title: "Your data, exportable on demand",
-        body: "Every part of your records downloads as a spreadsheet or PDF, and a full export gives you the whole database in one file with a data dictionary. No request, no waiting period, no retention of your records as leverage.",
+        body: "Your records download as spreadsheets from Growth, and on Pro a full export gives you the whole database in one file with a data dictionary. No request, no waiting period, no retention of your records as leverage.",
       },
       {
         title: "Right for a diaspora congregation",
@@ -309,7 +309,7 @@ export const GEO_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Where is our data held, and can we get it out?",
-        a: "Each church's records are isolated and reachable only by people you invite, backed up daily, encrypted and copied off-server. A full export with a data dictionary is available to you at any time, without asking us.",
+        a: "Each church's records are isolated and reachable only by people you invite, backed up daily, encrypted and copied off-server. On Pro, a full export with a data dictionary is available to you at any time, without asking us.",
       },
       {
         q: "Is this only for African churches?",
@@ -484,7 +484,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Can I export the directory?",
-        a: "At any time, as a spreadsheet or PDF, or as part of a full export of the whole database with a data dictionary. It is your church's data and there is no request process.",
+        a: "At any time: as a spreadsheet from Growth, and on Pro as PDF reports or a full export of the whole database with a data dictionary. It is your church's data and there is no request process.",
       },
     ],
   },
@@ -532,7 +532,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
   "bulk sms for churches": {
     h1: "Text your whole church, from your church's own name",
     summary:
-      "FlockInsight sends bulk SMS to your whole congregation, one group, or a handful of people, arriving from your church's own registered sender ID rather than an unknown number. We handle the sender-ID registration with the networks for you. SMS is charged per message from a prepaid wallet; email to members is free and unlimited on every plan. SMS routes are currently Nigeria-only.",
+      "FlockInsight sends bulk SMS to your whole congregation, one group, or a handful of people, arriving from your church's own registered sender ID rather than an unknown number. We handle the sender-ID registration with the networks for you. Bulk SMS is on the Pro plan and charged per message from a prepaid wallet; email to members is free and unlimited on every plan. SMS routes are currently Nigeria-only.",
     points: [
       {
         title: "Your name on the message",
@@ -562,7 +562,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "How long does a sender ID take to approve?",
-        a: "Usually a few days, and the networks approve it, not us. You can send before it is approved, but messages will come from a generic number until it is.",
+        a: "Usually a few days, and the networks approve it, not us. Texts can be sent once it is approved; email works in the meantime.",
       },
       {
         q: "Can I see whether a message was delivered?",
@@ -611,7 +611,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Can an auditor get what they need?",
-        a: "Yes. Any report exports as a spreadsheet or PDF, a full export gives the whole database with a data dictionary, and the audit trail shows every change with the person who made it.",
+        a: "Yes. On Pro any report exports as a spreadsheet or PDF and a full export gives the whole database with a data dictionary, and from Growth the audit trail shows every change with the person who made it.",
       },
     ],
   },
@@ -796,7 +796,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
     faq: [
       {
         q: "How long does approval take?",
-        a: "Usually a few days. The networks decide, not us. You can send in the meantime and messages will come from a generic number until the ID is live.",
+        a: "Usually a few days. The networks decide, not us. Texts can be sent once the ID is live; email works in the meantime.",
       },
       {
         q: "Which countries is this available in?",
@@ -841,7 +841,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Which plan includes meetings?",
-        a: "Meetings are available on paid plans, and recurring meeting series are a Pro feature. Current plan contents are listed in full on the pricing page, and a write that is off-plan is refused with an explanation rather than failing silently somewhere you will not see it.",
+        a: "Meetings are on Growth and above, and recurring meeting series are a Pro feature. Current plan contents are listed in full on the pricing page, and a write that is off-plan is refused with an explanation rather than failing silently somewhere you will not see it.",
       },
     ],
   },
@@ -899,7 +899,7 @@ export const COMPARE_CONTENT: Record<string, CompareContent> = {
   ChurchSuite: {
     h1: "Looking for a ChurchSuite alternative?",
     summary:
-      "ChurchSuite is the incumbent for UK churches and a genuinely good product. FlockInsight is a broader platform for less money: eighteen modules in one subscription, including discipleship training, facilities booking, video meetings and a media library, priced in your own currency and built to stay usable on a poor connection. ChurchSuite has a decade more integrations and more mature rota and planning tools.",
+      "ChurchSuite is the incumbent for UK churches and a genuinely good product. FlockInsight is a broader platform for less money: eighteen modules across four plans rather than sold one by one, including discipleship training, facilities booking, video meetings and a media library, priced in your own currency and built to stay usable on a poor connection. ChurchSuite has a decade more integrations and more mature rota and planning tools.",
     chooseThemIf: [
       "You need a long list of third-party integrations, or a specific UK one.",
       "Rota and service planning is the centre of how you run Sundays.",
@@ -922,7 +922,7 @@ export const COMPARE_CONTENT: Record<string, CompareContent> = {
       },
       {
         title: "Your data out, on demand",
-        body: "Full export with a data dictionary, at any time, without a request process.",
+        body: "On Pro, a full export with a data dictionary at any time, without a request process.",
       },
     ],
     faq: [
@@ -1031,7 +1031,7 @@ export const COMPARE_CONTENT: Record<string, CompareContent> = {
   "free and open-source options": {
     h1: "Is there genuinely free church management software?",
     summary:
-      "Yes, and FlockInsight is not it. ChMeetings has a free tier up to fifty people, B1 Church is free and built by a nonprofit, and ChurchCMS is open source and free if you can host it. FlockInsight gives every church seven Sundays entirely free with no card and every feature switched on, then charges — and gives you a full export of everything you entered if you decide to leave.",
+      "Yes, and FlockInsight is not it. ChMeetings has a free tier up to fifty people, B1 Church is free and built by a nonprofit, and ChurchCMS is open source and free if you can host it. FlockInsight gives every church seven Sundays entirely free with no card and every Pro feature switched on, then charges — and gives you a full export of everything you entered if you decide to leave.",
     chooseThemIf: [
       "Your budget is genuinely zero for the long term, not just to start.",
       "You are under fifty people and ChMeetings' free tier covers you.",
@@ -1045,11 +1045,11 @@ export const COMPARE_CONTENT: Record<string, CompareContent> = {
     points: [
       {
         title: "Seven Sundays, everything on",
-        body: "Not a limited tier. The whole platform, no card required, so the trial tells you what the product actually is.",
+        body: "Not a limited tier. Everything in Pro, no card required, so the trial tells you what the product actually is.",
       },
       {
         title: "Leaving is not punished",
-        body: "A full export of your entire database with a data dictionary, at any time. The usual cost of free software is the difficulty of getting your data out of it; the usual cost of paid software is the same thing.",
+        body: "On Pro, a full export of your entire database with a data dictionary, at any time. The usual cost of free software is the difficulty of getting your data out of it; the usual cost of paid software is the same thing.",
       },
       {
         title: "What 'free' usually costs",

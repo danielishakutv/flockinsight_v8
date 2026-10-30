@@ -360,7 +360,11 @@ export function PlanBilling({
           const action =
             basePrices[p.key] === null || basePrices[p.key] === undefined
               ? "contact"
-              : isCurrent
+              : // Every trial is on Pro (lib/trial.ts), so the cheaper tiers
+                // are not a step down from anything the church chose.
+                onTrial || trialExpired
+                ? `Pay for ${p.name}`
+                : isCurrent
                 ? onTrial || !renewsDate
                   ? `Pay for ${p.name}`
                   : "Renew"
@@ -459,7 +463,7 @@ export function PlanBilling({
       {(paidAhead || onTrial) && (
         <p className="text-muted-foreground text-xs leading-relaxed">
           {onTrial
-            ? "Paying now never shortens your free trial: the months you buy start when the trial ends."
+            ? "Paying now never shortens your free trial: the months you buy start when the trial ends. A plan smaller than Pro takes effect as soon as you pay for it."
             : "Renewing early adds the new months after the ones you have already paid for."}{" "}
           {paidAhead &&
             "Switching to a different plan carries over what is left of your current one at its value — a cheaper plan runs longer, a dearer one shorter — so nothing you paid for is lost."}

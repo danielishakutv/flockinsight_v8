@@ -1,6 +1,19 @@
 // Free-trial helpers ("first 7 Sundays free"). Pure + client-safe.
 
 export const FREE_SUNDAYS = 7;
+
+/**
+ * The plan a church is on while its free Sundays last.
+ *
+ * The website promises the trial with every feature on, so a new church starts
+ * on Pro rather than on the schema's default Starter — which used to hide SMS,
+ * meetings, finance and training from the very people deciding whether to pay.
+ * Stored as the church's real plan rather than worked out on read, so every
+ * one of the many places that checks `church.plan` agrees without being
+ * taught about trials. It does not outlive the trial: an expired, unpaid trial
+ * is gated whatever its plan says, and paying sets the plan to the one bought.
+ */
+export const TRIAL_PLAN = "pro" as const;
 export const PROMO_TITLE = "Your first 7 Sundays are on us 🎉";
 export const PROMO_BLURB =
   "New churches use FlockInsight completely free for their first 7 Sundays — no card required. After that, keep everything going from just a small monthly plan.";

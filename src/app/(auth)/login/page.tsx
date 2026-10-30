@@ -192,7 +192,7 @@ function LoginForm() {
                 href="/signup"
                 className="text-primary font-semibold hover:underline"
               >
-                Create your church account
+                Create your account
               </Link>
             </p>
             <p className="text-xs">
