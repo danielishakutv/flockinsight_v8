@@ -257,7 +257,8 @@ export function SmsSettings({
                 </p>
                 <p className="text-muted-foreground text-sm">
                   Your sender ID has been submitted to the network for approval.
-                  This usually takes a few hours.
+                  The networks officially allow up to 14 days, though it is often
+                  sooner. We&apos;ll let you know when it is approved.
                 </p>
                 <Button
                   variant="outline"

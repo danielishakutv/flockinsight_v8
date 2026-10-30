@@ -171,7 +171,7 @@ export const COMMS_GUIDES: Omit<Guide, "minutes">[] = [
               {
                 title: "Wait, and check the status",
                 detail:
-                  "Use Check approval status. It usually takes a few hours and can take longer over a weekend. If the name is already approved on the network it is adopted instantly.",
+                  "Use Check approval status. The networks officially allow up to 14 days, though it is often sooner. If the name is already approved on the network it is adopted instantly.",
               },
               {
                 title: "Top up your wallet while you wait",
@@ -218,7 +218,7 @@ export const COMMS_GUIDES: Omit<Guide, "minutes">[] = [
       { label: "SMS settings", href: "/settings/sms" },
       { label: "Wallet", href: "/settings/wallet" },
     ],
-    tip: "Apply on the day you sign up, even if you don't plan to send yet. Approval takes hours, and you don't want to discover that on the morning you need to reach everyone.",
+    tip: "Apply on the day you sign up, even if you don't plan to send yet. Approval can take up to 14 days, and you don't want to discover that on the morning you need to reach everyone.",
     related: ["communication", "wallet-storage", "reminders"],
     keywords: ["sms", "sender id", "approval", "termii", "text message", "network"],
   },

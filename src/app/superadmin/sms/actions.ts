@@ -325,7 +325,7 @@ async function markProcessing(
   await notifyChurchManagers({
     churchId,
     title: "SMS sender ID submitted",
-    body: `Your SMS sender ID “${senderId}” is now with the network for approval. This usually takes a few working days — we'll let you know as soon as it's approved.`,
+    body: `Your SMS sender ID “${senderId}” is now with the network for approval. The networks officially allow up to 14 days, though it is often sooner — we'll let you know as soon as it's approved.`,
     linkUrl: "/settings/sms",
     email: { subject: "Your SMS sender ID is being reviewed" },
   });

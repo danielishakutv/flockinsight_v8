@@ -186,7 +186,7 @@ export const GEO_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "Do I need a sender ID before I can text members?",
-        a: "Texts go out once your sender ID is approved. Applying takes a few days, we submit it to the networks for you, and from then on every message arrives from your church's name.",
+        a: "Texts go out once your sender ID is approved. The networks officially allow up to 14 days, though it is often sooner; we submit it for you, and from then on every message arrives from your church's name.",
       },
       {
         q: "What does it cost for a church of 200 members?",
@@ -562,7 +562,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
       },
       {
         q: "How long does a sender ID take to approve?",
-        a: "Usually a few days, and the networks approve it, not us. Texts can be sent once it is approved; email works in the meantime.",
+        a: "Up to 14 days officially, and often sooner. The networks approve it, not us. Texts can be sent once it is approved; email works in the meantime.",
       },
       {
         q: "Can I see whether a message was delivered?",
@@ -796,7 +796,7 @@ export const SOLUTION_CONTENT: Record<string, PageContent> = {
     faq: [
       {
         q: "How long does approval take?",
-        a: "Usually a few days. The networks decide, not us. Texts can be sent once the ID is live; email works in the meantime.",
+        a: "Up to 14 days officially, often sooner. The networks decide, not us. Texts can be sent once the ID is live; email works in the meantime.",
       },
       {
         q: "Which countries is this available in?",
