@@ -206,7 +206,7 @@ export function DemoGate({
                 {/* Honeypot: hidden from people, irresistible to bots. */}
                 <input
                   type="text"
-                  name="website"
+                  name="fi_hp_extra"
                   tabIndex={-1}
                   autoComplete="off"
                   aria-hidden

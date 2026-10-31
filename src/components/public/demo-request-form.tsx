@@ -137,10 +137,14 @@ export function DemoRequestForm() {
         </div>
       </div>
 
-      {/* Honeypot — hidden from people, catnip for bots. */}
+      {/*
+        Honeypot — hidden from people, catnip for bots. Not called "website":
+        that is a name browser autofill knows, and an autofilled honeypot
+        throws away a real person's request.
+      */}
       <input
         type="text"
-        name="website"
+        name="fi_hp_extra"
         tabIndex={-1}
         autoComplete="off"
         aria-hidden="true"

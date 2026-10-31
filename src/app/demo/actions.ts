@@ -1,10 +1,12 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import { and, eq, gte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { lead } from "@/db/schema";
 import { logLeadActivity } from "@/lib/leads";
+import { announceWalkthroughRequest } from "@/lib/walkthrough-notify";
 
 export type DemoResult = { ok: true } | { ok: false; error: string };
 
@@ -46,7 +48,14 @@ export async function requestDemo(
   const d = parsed.data;
 
   // Silently accept and drop anything that filled the honeypot.
-  if (d.website && d.website.trim() !== "") return { ok: true };
+  // Logged, never silent: if a real person's browser ever fills it, the log
+  // is the only place their lost request can be found.
+  if (d.website && d.website.trim() !== "") {
+    console.warn(
+      `[walkthrough] honeypot filled, request dropped: ${d.contactName} / ${d.phone} / ${d.email ?? "-"} (honeypot: ${d.website.slice(0, 60)})`,
+    );
+    return { ok: true };
+  }
 
   const phoneDigits = d.phone.replace(/\D/g, "");
   const email = d.email?.toLowerCase() ?? null;
@@ -76,6 +85,7 @@ export async function requestDemo(
       .update(lead)
       .set({ nextFollowUpAt: new Date(Date.now() + 86_400_000) })
       .where(eq(lead.id, existing.id));
+    announce(existing.id, true, d, email);
     return { ok: true };
   }
 
@@ -117,5 +127,32 @@ export async function requestDemo(
     actorName: "Website",
   });
 
+  announce(row.id, false, d, email);
   return { ok: true };
+}
+
+/**
+ * Email the team and the person, push the team — after the response, so a
+ * slow mail provider never keeps somebody staring at a spinner. It used to do
+ * none of this: the form said "we've got it" and nobody was told.
+ */
+function announce(
+  leadId: string,
+  repeat: boolean,
+  d: z.output<typeof schema>,
+  email: string | null,
+) {
+  after(() =>
+    announceWalkthroughRequest({
+      leadId,
+      repeat,
+      churchName: d.churchName,
+      contactName: d.contactName,
+      phone: d.phone,
+      email,
+      city: d.city,
+      size: d.size,
+      note: d.note,
+    }).catch((e) => console.error("[walkthrough] announce failed for lead", leadId, e)),
+  );
 }

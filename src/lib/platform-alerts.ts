@@ -112,12 +112,30 @@ async function pendingSenderIdCount(): Promise<number> {
   return Number((res.rows[0] as { n?: string } | undefined)?.n ?? 0);
 }
 
+/**
+ * Walkthrough requests from the website nobody has picked up yet.
+ *
+ * Each one is emailed and pushed to the superadmins the moment it arrives
+ * (app/demo/actions.ts), but an email read on a phone and forgotten is
+ * exactly how a prospect goes cold. This keeps it on the dashboard until the
+ * lead is moved out of "new" or a contact is logged. A fortnight old and it
+ * has stopped being a request and become history.
+ */
+async function waitingWalkthroughCount(): Promise<number> {
+  const res = await db.execute(sql`
+    select count(*) as n from lead
+    where source = 'website' and status = 'new' and last_contacted_at is null
+      and created_at > now() - interval '14 days'
+  `);
+  return Number((res.rows[0] as { n?: string } | undefined)?.n ?? 0);
+}
+
 /** Everything currently wrong, independent of what has already been notified. */
 export async function evaluateConditions(
   float?: FloatOverview,
 ): Promise<EvaluatedAlert[]> {
   const f = float ?? (await getFloatOverviewFresh());
-  const [crons, backups, staleTickets, pendingSenders, recorderQuiet, untoldPartners] =
+  const [crons, backups, staleTickets, pendingSenders, recorderQuiet, untoldPartners, walkthroughs] =
     await Promise.all([
       getCronLiveness(),
       backupState(),
@@ -125,6 +143,7 @@ export async function evaluateConditions(
       pendingSenderIdCount(),
       recorderSilentMinutes(),
       untoldPartnerCount(),
+      waitingWalkthroughCount(),
     ]);
 
   const alerts: EvaluatedAlert[] = [];
@@ -256,6 +275,15 @@ export async function evaluateConditions(
         `${untoldPartners} Partner${untoldPartners === 1 ? " has" : "s have"} not been told about a change to their account ` +
         `for over ${PARTNER_STATUS_UNTOLD_HOURS}h — every email failed. Contact them another way, and check the mail provider.`,
       href: "/superadmin/partners",
+    });
+  }
+
+  if (walkthroughs > 0) {
+    alerts.push({
+      key: "leads.walkthrough.waiting",
+      severity: "warning",
+      message: `${walkthroughs} walkthrough request${walkthroughs === 1 ? "" : "s"} from the website waiting for a call.`,
+      href: "/superadmin/growth?status=open&source=website",
     });
   }
 

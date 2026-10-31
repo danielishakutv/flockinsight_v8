@@ -39,7 +39,10 @@ export async function enterDemo(input: {
   website?: string;
 }): Promise<EnterDemoResult> {
   // A bot that fills every box gets the same answer as a person and nothing else.
-  if (input.website && input.website.trim() !== "") return { ok: true };
+  if (input.website && input.website.trim() !== "") {
+    console.warn(`[demo] honeypot filled, visit refused: ${input.email} / ${input.phone}`);
+    return { ok: true };
+  }
 
   const contact = checkDemoContact(input);
   if (!contact.ok) return contact;
