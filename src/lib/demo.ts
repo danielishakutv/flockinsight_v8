@@ -153,11 +153,19 @@ export async function startDemoVisit(opts: {
   churchId: string;
   name?: string | null;
   email: string;
+  /**
+   * International ("+44…") when it came through the country picker, which has
+   * already held it to that country's length; anything else is the old free
+   * text box and gets the Nigerian normaliser it always had.
+   */
   phone: string;
+  /** The country they picked, by name, for the lead. */
+  country?: string | null;
 }): Promise<StartResult> {
   const email = cleanEmail(opts.email);
   if (!email) return { ok: false, error: "Enter a valid email address." };
-  const phone = normalizePhone(opts.phone || "") || opts.phone.trim();
+  const typed = (opts.phone || "").trim();
+  const phone = typed.startsWith("+") ? typed : normalizePhone(typed) || typed;
   if (phone.replace(/\D/g, "").length < 7)
     return { ok: false, error: "Enter a phone number we can reach you on." };
 
@@ -208,6 +216,7 @@ export async function startDemoVisit(opts: {
         contactName: opts.name?.trim() || null,
         email,
         phone,
+        ...(opts.country ? { country: opts.country } : {}),
         source: "demo",
         notes: "Opened the live demo church.",
       })

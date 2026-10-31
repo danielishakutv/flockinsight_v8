@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, MessageCircle, PhoneCall, Sparkles } from "lucide-react";
+import { CalendarCheck, FlaskConical, MessageCircle, PhoneCall, Sparkles } from "lucide-react";
 import { Wordmark } from "@/components/brand";
 import { PublicLanguageMenu } from "@/components/public/public-language-menu";
 import { DemoRequestForm } from "@/components/public/demo-request-form";
@@ -78,6 +78,20 @@ export default async function DemoPage() {
                 </li>
               ))}
             </ul>
+
+            {/* For the visitor who would rather look around alone first. */}
+            <div className="bg-muted/50 mt-8 rounded-xl border p-4">
+              <p className="font-bold">Rather look around on your own first?</p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Open a real FlockInsight workspace full of sample data — no
+                account, no card.
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href="/try">
+                  <FlaskConical /> Try the live demo
+                </Link>
+              </Button>
+            </div>
 
             <a
               href="https://wa.me/2348088256055"

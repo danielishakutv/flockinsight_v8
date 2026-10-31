@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { FlaskConical, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { signIn, authClient } from "@/lib/auth-client";
 import { landingPath } from "@/app/select-church/actions";
@@ -21,10 +21,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/components/i18n-provider";
 
-/** The demo account's login, when the server has been told one. */
-export type DemoLogin = { email: string; password: string };
-
-export function LoginForm({ demo }: { demo: DemoLogin | null }) {
+export function LoginForm({ demoOpen }: { demoOpen: boolean }) {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
@@ -211,18 +208,22 @@ export function LoginForm({ demo }: { demo: DemoLogin | null }) {
         )}
 
         {/*
-          Only when the server knows a real one (DEMO_LOGIN_EMAIL and
-          DEMO_LOGIN_PASSWORD). The pair used to be typed in here — the seed
-          script's local account — so every visitor to the live site was handed
-          a login that does not exist there, and the first thing a curious
-          pastor saw was "Invalid email or password".
+          A door, not a password. The demo login used to be printed here — first
+          the seed script's local account, which did not exist on the live
+          site, then the real one, which anybody could then change from
+          /profile. /try asks for an email and phone and signs them in on the
+          server. Shown only when the server has a demo account configured.
         */}
-        {!forPartner && demo && (
-          <div className="bg-muted/50 mt-6 rounded-lg p-3 text-center text-xs">
-            <span className="text-muted-foreground">{t("common.demoLogin")}</span>{" "}
-            <span className="font-mono font-medium break-all">
-              {demo.email} / {demo.password}
-            </span>
+        {!forPartner && demoOpen && (
+          <div className="bg-muted/50 mt-6 rounded-lg p-3 text-center">
+            <p className="text-muted-foreground text-xs">
+              Just looking? Walk round a church full of sample data.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-2">
+              <Link href="/try">
+                <FlaskConical /> Try the live demo
+              </Link>
+            </Button>
           </div>
         )}
       </CardContent>

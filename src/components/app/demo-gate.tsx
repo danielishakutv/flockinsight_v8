@@ -11,7 +11,10 @@ import {
   startDemo,
   verifyDemoCode,
 } from "@/app/(app)/demo-actions";
-import { DEMO_GRACE_MINUTES } from "@/lib/demo-shared";
+import { enterDemo } from "@/app/try/actions";
+import { checkDemoContact, DEMO_GRACE_MINUTES } from "@/lib/demo-shared";
+import { DEFAULT_DIAL_ISO2 } from "@/lib/dial-codes";
+import { CountryPhoneField } from "@/components/public/country-phone-field";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,12 +45,26 @@ export function DemoGate({
   mode,
   email,
   otpSent = false,
+  signedOut = false,
+  detectedCountry = null,
 }: {
   churchName: string;
   /** "ask" for a new visitor, "verify" when the fifteen minutes are up. */
   mode: "ask" | "verify";
   email?: string;
   otpSent?: boolean;
+  /**
+   * Nobody is signed in: this is the public door, and filling it in signs
+   * them in as the demo account. Otherwise they already signed in with the
+   * shared password and only owe us their details.
+   */
+  signedOut?: boolean;
+  /**
+   * ISO-2 from Cloudflare's CF-IPCountry. Production only answers Cloudflare,
+   * so this is nearly always set; when it is not (a VPN it cannot place, a
+   * local dev server) the form starts on Nigeria and they pick.
+   */
+  detectedCountry?: string | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -55,19 +72,37 @@ export function DemoGate({
   const [name, setName] = useState("");
   const [mail, setMail] = useState("");
   const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState(detectedCountry ?? DEFAULT_DIAL_ISO2);
+  const [website, setWebsite] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(otpSent);
 
+  const contact = checkDemoContact({ email: mail, phone, country, name });
+
   function begin(e: React.FormEvent) {
     e.preventDefault();
+    if (!contact.ok) {
+      toast.error(contact.error);
+      return;
+    }
     start(async () => {
-      const res = await startDemo({
+      const input = {
         name: name.trim() || undefined,
         email: mail.trim(),
         phone: phone.trim(),
-      });
+        country,
+      };
+      const res = signedOut
+        ? await enterDemo({ ...input, website })
+        : await startDemo(input);
       if (!res.ok) {
         toast.error(res.error);
+        return;
+      }
+      if (signedOut) {
+        // A whole new session cookie: a full navigation, so every server
+        // component reads it from the first request rather than a cached one.
+        window.location.assign("/dashboard");
         return;
       }
       router.refresh();
@@ -146,19 +181,14 @@ export function DemoGate({
                     autoFocus
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="d-phone">{t("demo.yourPhone")}</Label>
-                  <Input
-                    id="d-phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder={t("demo.phonePlaceholder")}
-                    required
-                  />
-                </div>
+                <CountryPhoneField
+                  idPrefix="d"
+                  country={country}
+                  onCountryChange={setCountry}
+                  phone={phone}
+                  onPhoneChange={setPhone}
+                  phoneLabel={t("demo.yourPhone")}
+                />
                 <div className="space-y-1.5">
                   <Label htmlFor="d-name">
                     {t("demo.nameOrChurch")}{" "}
@@ -173,11 +203,22 @@ export function DemoGate({
                     placeholder={t("demo.namePlaceholder")}
                   />
                 </div>
+                {/* Honeypot: hidden from people, irresistible to bots. */}
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  className="hidden"
+                />
                 <Button
                   type="submit"
                   size="lg"
                   className="w-full"
-                  disabled={pending || !mail.trim() || !phone.trim()}
+                  disabled={pending || !contact.ok}
                 >
                   {pending && <Loader2 className="animate-spin" />}
                   {t("demo.startExploring")}
