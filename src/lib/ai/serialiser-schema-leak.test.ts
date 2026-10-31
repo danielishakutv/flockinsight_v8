@@ -14,6 +14,8 @@ import {
   type Kind,
 } from "./serialiser";
 import { toPlatformFacts } from "./platform-facts-shared";
+import { toFinanceFacts } from "./finance-facts-shared";
+import { buildCostReport } from "@/lib/cost-to-serve-shared";
 import { SCHEMA_IDS, type SchemaId } from "./vocab";
 
 /*
@@ -177,9 +179,38 @@ function platformFacts() {
   });
 }
 
+function financeFacts() {
+  const report = buildCostReport({
+    months: ["2026-08", "2026-09", "2026-10"],
+    currentMonth: null,
+    churches: [
+      { id: "c1", name: "Adaeze Okafor Chapel", planKey: "growth", planLabel: "Growth", joined: "2026-01", onTrial: false, channel: "instagram", members: 80, storageBytes: 1e8 },
+      { id: "c2", name: "Grace Assembly", planKey: "starter", planLabel: "Starter", joined: "2026-02", onTrial: true, channel: "direct", members: 30, storageBytes: 0 },
+    ],
+    items: [
+      { id: "i1", name: "Contabo VPS", category: "hosting", amountNgn: 30_000, foreign: true, frequency: "monthly", startsOn: "2026-01-01", endsOn: null, spreadMonths: null, driver: "active_churches", channel: null },
+      { id: "i2", name: "Instagram ads", category: "marketing", amountNgn: 20_000, foreign: false, frequency: "monthly", startsOn: "2026-01-01", endsOn: null, spreadMonths: null, driver: "none", channel: "instagram" },
+    ],
+    payments: [{ churchId: "c1", paidAt: new Date("2026-08-02T10:00:00Z"), amount: 60_000, periodMonths: 3, gateway: "paystack", fee: null, international: false }],
+    topups: [],
+    walletSpend: [{ churchId: "c1", month: "2026-09", category: "sms", amount: 4_000 }],
+    creditsGiven: [],
+    partnerCommission: [],
+    income: [],
+    usage: [{ churchId: "c1", month: "2026-09", smsPages: 1000, emails: 20, meetingGb: 0, active: true }],
+    ai: [],
+    smsUnitCost: 2.5,
+    smsPrice: 4,
+    termiiMeasured: [{ month: "2026-09", spent: 2_800 }],
+    ngnPerUsd: 1500,
+  });
+  return toFinanceFacts(report, report.series, 30_000);
+}
+
 const FACTS: Record<SchemaId, () => unknown> = {
   "church-facts@1": churchFacts,
   "platform-facts@1": platformFacts,
+  "finance-facts@1": financeFacts,
 };
 
 type Slot = { path: string[]; kind: Kind };

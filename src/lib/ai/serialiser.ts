@@ -245,17 +245,84 @@ export const PLATFORM_FACTS_V1 = group({
   }),
 });
 
+/*
+ * The operator's profit and loss, as shapes rather than sums. Like the
+ * platform briefing, no amount of money ever leaves: margins are whole
+ * percentages, costs and revenue are shares of their totals, and the unit
+ * economics are counts (months, churches) and an index. No church is named,
+ * so church opt-in does not govern it; the kill switch and budget do.
+ */
+export const FINANCE_FACTS_V1 = group({
+  meta: group({ period: label(PERIOD) }),
+  churches: group({
+    paying: num("count"),
+    onTrial: num("count"),
+    notPaying: num("count"),
+    newPaying: num("count"),
+    costMoreThanTheyPay: num("count"),
+    payingCostMoreThanTheyPay: num("count"),
+  }),
+  margins: group({
+    profitable: label(YESNO),
+    grossPct: opt("pct"),
+    netPct: opt("pct"),
+  }),
+  costShare: group({
+    core: opt("rate"),
+    sms: opt("rate"),
+    mail: opt("rate"),
+    meetings: opt("rate"),
+    media: opt("rate"),
+    ai: opt("rate"),
+    payments: opt("rate"),
+    acquisition: opt("rate"),
+    overhead: opt("rate"),
+  }),
+  revenueShare: group({
+    plans: opt("rate"),
+    smsWallet: opt("rate"),
+    storageWallet: opt("rate"),
+    other: opt("rate"),
+  }),
+  sms: group({
+    markupPct: opt("pct"),
+    untracedShare: opt("rate"),
+  }),
+  unitEconomics: group({
+    breakEvenPayingChurches: opt("count"),
+    paybackMonths: opt("count"),
+    lifetimeValueToAcquisitionIndex: opt("index"),
+    monthlyChurn: opt("rate"),
+    dollarCostShare: opt("rate"),
+    notPayingShareOfServeCost: opt("rate"),
+  }),
+  trend: group({
+    revenue: label(TREND),
+    costs: label(TREND),
+    profit: label(TREND),
+  }),
+  planMarginPct: group({
+    starter: opt("pct"),
+    growth: opt("pct"),
+    pro: opt("pct"),
+    enterprise: opt("pct"),
+  }),
+});
+
 export type ChurchFacts = FactsOf<typeof CHURCH_FACTS_V1>;
 export type PlatformFacts = FactsOf<typeof PLATFORM_FACTS_V1>;
+export type FinanceFacts = FactsOf<typeof FINANCE_FACTS_V1>;
 
 export const SCHEMAS: Readonly<Record<SchemaId, GroupSpec>> = Object.freeze({
   "church-facts@1": CHURCH_FACTS_V1,
   "platform-facts@1": PLATFORM_FACTS_V1,
+  "finance-facts@1": FINANCE_FACTS_V1,
 });
 
 type FactsFor = {
   "church-facts@1": ChurchFacts;
   "platform-facts@1": PlatformFacts;
+  "finance-facts@1": FinanceFacts;
 };
 
 /* ------------------------------------------------------------------ *

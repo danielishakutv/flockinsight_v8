@@ -18,6 +18,7 @@ export const PERIOD = [
   "last_6_months",
   "last_90_days",
   "last_30_days",
+  "last_3_months",
 ] as const;
 
 export const TREND = ["rising", "steady", "falling", "not_enough_data"] as const;
@@ -51,7 +52,7 @@ export const AREA = [
   "Other",
 ] as const;
 
-export const SCHEMA_IDS = ["church-facts@1", "platform-facts@1"] as const;
+export const SCHEMA_IDS = ["church-facts@1", "platform-facts@1", "finance-facts@1"] as const;
 export type SchemaId = (typeof SCHEMA_IDS)[number];
 
 export function isSchemaId(v: unknown): v is SchemaId {

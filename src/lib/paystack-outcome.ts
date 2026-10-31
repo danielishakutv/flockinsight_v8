@@ -20,6 +20,11 @@ export type VerifyAnswer =
       /** Whole kobo, exactly as Paystack reported it. */
       amountKobo: number;
       currency: string;
+      /**
+       * What Paystack kept, in kobo (`data.fees`). Null when the answer did
+       * not carry it. Only read by the cost page, never by classifyCharge.
+       */
+      feesKobo?: number | null;
     }
   | { ok: false; error: string };
 

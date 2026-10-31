@@ -44,6 +44,7 @@ const PURE = new Set([
   "lib/ai/run-ai-rules.ts",
   "lib/ai/church-facts-shared.ts",
   "lib/ai/platform-facts-shared.ts",
+  "lib/ai/finance-facts-shared.ts",
   "lib/ai/ai-shared.ts",
   "lib/ai/settings-rules.ts",
 ]);

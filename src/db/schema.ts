@@ -2074,6 +2074,8 @@ export const walletTopup = pgTable(
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     paidAt: timestamp({ withTimezone: true }),
+    /** Paystack's fee on this top-up, as reported on verify. See payment.gatewayFee. */
+    gatewayFee: numeric({ precision: 14, scale: 2, mode: "number" }),
   },
   (t) => [index("wallet_topup_church_idx").on(t.churchId)],
 );
@@ -2217,6 +2219,13 @@ export const payment = pgTable(
     surchargeAmount: numeric({ precision: 14, scale: 2, mode: "number" })
       .notNull()
       .default(0),
+    /*
+     * What the gateway kept, in naira, exactly as Paystack reported it on
+     * verify (`data.fees`). Null when it was never asked: an offline payment,
+     * or a card payment from before this column. The cost page estimates
+     * those from Paystack's published rate and says so.
+     */
+    gatewayFee: numeric({ precision: 14, scale: 2, mode: "number" }),
     /*
      * Whether settling this payment moved the church's renewal date. False for
      * money a superadmin logged against a plan they had already set by hand —
@@ -7459,3 +7468,111 @@ export type AssistantConversation = typeof assistantConversation.$inferSelect;
 export type AssistantMessage = typeof assistantMessage.$inferSelect;
 export type AssistantAnswer = typeof assistantAnswer.$inferSelect;
 export type BlogDraftRun = typeof blogDraftRun.$inferSelect;
+
+/* ============================================================
+ * Cost to serve: what the platform pays for, and income that did not
+ * arrive through a plan payment.
+ *
+ * Most of the money picture is MEASURED and lives elsewhere already:
+ * subscription payments (payment), what churches spent from their wallets
+ * (wallet_txn debits), SMS pages sent (usage_stat), AI spend to the
+ * nano-dollar (ai_call), meeting egress (meeting_participant) and gateway
+ * fees (payment.gateway_fee). Nothing here repeats any of that. These two
+ * tables hold only what the platform cannot see for itself: the bills the
+ * operator pays (a server, a domain, an ad campaign) and income that is not
+ * a plan (a donation, a grant, a training fee). lib/cost-to-serve.ts puts
+ * them together.
+ *
+ * Neither table is ever deleted from. A cost that stops is ENDED (endsOn),
+ * so the months it was paid for keep it; one entered by mistake is
+ * archived. An income entry is voided with a reason. A deleted row would
+ * rewrite last quarter's profit without a trace.
+ * ========================================================== */
+
+export const platformCostItem = pgTable(
+  "platform_cost_item",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    /** Who is paid: "Contabo", "Termii", "Namecheap". */
+    vendor: text(),
+    /** One of COST_CATEGORIES in lib/cost-to-serve-shared.ts. */
+    category: text().notNull(),
+    /** In `currency`, per `frequency`. */
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull().default("NGN"),
+    /** one_off | monthly | quarterly | yearly */
+    frequency: text().notNull(),
+    /** The first day this cost applies. For a one-off, the day it was paid. */
+    startsOn: date().notNull(),
+    /** The last day it applies. Null while it is still being paid. */
+    endsOn: date(),
+    /**
+     * A one-off spread over this many months (a laptop over 24) instead of
+     * landing whole in the month it was bought. Null = all in that month.
+     */
+    spreadMonths: integer(),
+    /** What it lets the platform do, in the operator's own words. */
+    purpose: text(),
+    /** How it is shared between churches: one of COST_DRIVERS. */
+    driver: text().notNull(),
+    /** For marketing: the channel it buys ("instagram", "event"…), to price each channel. */
+    channel: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    /** Entered by mistake: left out of every figure, kept for the record. */
+    archivedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index("platform_cost_item_active_idx").on(t.archivedAt, t.startsOn),
+    check("platform_cost_item_amount_chk", sql`${t.amount} >= 0`),
+    check(
+      "platform_cost_item_frequency_chk",
+      sql`${t.frequency} in ('one_off','monthly','quarterly','yearly')`,
+    ),
+    check(
+      "platform_cost_item_dates_chk",
+      sql`${t.endsOn} is null or ${t.endsOn} >= ${t.startsOn}`,
+    ),
+    check(
+      "platform_cost_item_spread_chk",
+      sql`${t.spreadMonths} is null or (${t.frequency} = 'one_off' and ${t.spreadMonths} between 1 and 120)`,
+    ),
+  ],
+);
+
+export const platformIncomeEntry = pgTable(
+  "platform_income_entry",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** The day the money arrived. */
+    receivedOn: date().notNull(),
+    /** One of INCOME_CATEGORIES. "capital" is cash in, never profit. */
+    category: text().notNull(),
+    amount: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: text().notNull().default("NGN"),
+    /** What it was in naira on the day, so a later rate never rewrites it. */
+    amountNgn: numeric({ precision: 14, scale: 2, mode: "number" }).notNull(),
+    /** Who it came from, in words: "Bishop Ade, cash", "Tech grant". */
+    source: text(),
+    /** Set when a church paid it, so it counts in that church's revenue. */
+    churchId: text().references(() => church.id, { onDelete: "set null" }),
+    reference: text(),
+    description: text(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    voidedAt: timestamp({ withTimezone: true }),
+    voidReason: text(),
+  },
+  (t) => [
+    index("platform_income_entry_received_idx").on(t.receivedOn),
+    check("platform_income_entry_amount_chk", sql`${t.amount} > 0 and ${t.amountNgn} > 0`),
+  ],
+);
+
+export type PlatformCostItem = typeof platformCostItem.$inferSelect;
+export type PlatformIncomeEntry = typeof platformIncomeEntry.$inferSelect;

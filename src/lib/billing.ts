@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { church, payment } from "@/db/schema";
 import { parsePlanKey, planKeyOf, type PlanId } from "@/lib/plans";
@@ -389,12 +389,31 @@ export async function settleSubscriptionPayment(
         convertRemaining: true,
         actorName,
       });
+      await storeGatewayFee(p.id, v.ok ? v.feesKobo : null);
       if (claimed) return "success";
       // Another path won the claim a moment ago. Its awards may be mid-flight
       // or may have failed; both are idempotent, so make sure.
       await payAwardsFor(p.id);
       return "already";
     }
+  }
+}
+
+/**
+ * Keep what Paystack charged for this payment, for the cost page. Only fills
+ * an empty column, so whichever of the callback, webhook or cron gets here
+ * first writes it and nothing later can change it. A failure here is logged
+ * and swallowed: the payment has already been honoured and must stay so.
+ */
+async function storeGatewayFee(paymentId: string, feesKobo: number | null | undefined) {
+  if (feesKobo == null) return;
+  try {
+    await db
+      .update(payment)
+      .set({ gatewayFee: feesKobo / 100 })
+      .where(and(eq(payment.id, paymentId), isNull(payment.gatewayFee)));
+  } catch (e) {
+    console.error(`[billing] could not store the Paystack fee for payment ${paymentId}`, e);
   }
 }
 

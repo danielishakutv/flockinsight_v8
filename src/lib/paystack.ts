@@ -92,12 +92,19 @@ export async function paystackVerify(reference: string): Promise<
       status: String(data.data.status ?? ""),
       amountKobo: Math.round(Number(data.data.amount ?? 0)),
       currency: String(data.data.currency ?? ""),
+      feesKobo: feesFrom(data.data.fees),
       metadata: data.data.metadata,
     };
   } catch (e) {
     console.error(`[paystack] verify ${reference}: could not reach Paystack`, e);
     return { ok: false, error: "Could not reach Paystack." };
   }
+}
+
+/** Paystack's `fees`, in kobo, or null when it is missing or not a number. */
+function feesFrom(v: unknown): number | null {
+  const n = Number(v);
+  return v != null && Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
 /**

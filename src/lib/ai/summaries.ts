@@ -160,7 +160,7 @@ async function writeSummary(input: {
   locale: string;
   actorUserId: string;
   buildPayload: () => Promise<SafePayload | "thin">;
-  promptId: "analytics-church@1" | "analytics-platform@1";
+  promptId: "analytics-church@1" | "analytics-platform@1" | "finance-platform@1";
 }): Promise<{ ok: true } | { ok: false; reason: UiReason; message: string }> {
   try {
     let payload: SafePayload | "thin";
@@ -414,5 +414,68 @@ export async function generatePlatformSummary(actorUserId: string): Promise<Gene
     promptId: "analytics-platform@1",
   });
   const view = await getPlatformSummaryView();
+  return out.ok ? { ok: true, view } : { ...out, view };
+}
+
+/* ------------------------------------------------------------------ *
+ * The finance briefing (superadmin, cost & profit page). The same day
+ * claim and budget as the platform summary, under its own subject, so
+ * writing one never uses up the other's three tries.
+ * ------------------------------------------------------------------ */
+
+export const FINANCE_SUBJECT = "platform-finance";
+
+export async function getFinanceSummaryView(): Promise<PlatformSummaryView> {
+  const day = churchToday(PLATFORM_TIMEZONE);
+  const [latest, today, availability, [row]] = await Promise.all([
+    latestReady(FINANCE_SUBJECT),
+    todayRow(FINANCE_SUBJECT, day),
+    platformAvailability(),
+    db
+      .select({ n: sql<string>`count(*)` })
+      .from(aiCall)
+      .where(
+        and(
+          isNull(aiCall.churchId),
+          eq(aiCall.promptId, "finance-platform@1"),
+          eq(aiCall.budgetMonth, monthKey()),
+          eq(aiCall.status, "ok"),
+        ),
+      ),
+  ]);
+  return { latest, today, availability, monthCount: Number(row?.n ?? 0) };
+}
+
+export async function generateFinanceSummary(
+  actorUserId: string,
+  buildPayload: () => Promise<SafePayload | "thin">,
+): Promise<GenerateResult<PlatformSummaryView>> {
+  const day = churchToday(PLATFORM_TIMEZONE);
+  const a = await platformAvailability();
+  const refuse = async (reason: UiReason, message: string): Promise<GenerateResult<PlatformSummaryView>> => ({
+    ok: false,
+    reason,
+    message,
+    view: await getFinanceSummaryView(),
+  });
+  if (!a.configured) return refuse("not_configured", "AI is dormant: the server has no ANTHROPIC_API_KEY. Nothing was sent.");
+  if (a.killed) return refuse("killed", "AI is stopped by the kill switch in /superadmin/ai. Nothing was sent.");
+  if (a.analyticsPaused) return refuse("feature_paused", "The analytics AI feature is paused in /superadmin/ai.");
+
+  const claim = await claimDay({ subject: FINANCE_SUBJECT, churchId: null, day, locale: "en", actorUserId });
+  if (claim.kind === "ready") return { ok: true, view: await getFinanceSummaryView() };
+  if (claim.kind === "in_progress") return refuse("in_progress", "A briefing is already being written. Refresh in a minute.");
+  if (claim.kind === "tried_today") return refuse("tried_today", "Three attempts have been made today. Try again tomorrow.");
+
+  const out = await writeSummary({
+    claimId: claim.id,
+    subject: FINANCE_SUBJECT,
+    churchId: null,
+    locale: "en",
+    actorUserId,
+    buildPayload,
+    promptId: "finance-platform@1",
+  });
+  const view = await getFinanceSummaryView();
   return out.ok ? { ok: true, view } : { ...out, view };
 }

@@ -302,6 +302,11 @@ export async function settleTopup(
       .where(and(eq(table.id, t.id), ne(table.status, "success")))
       .returning({ id: table.id });
     if (claimed.length !== 1) return "already" as const;
+    // What Paystack kept, for the cost page. Only the unified wallet keeps it;
+    // sms_topup is the retired ledger.
+    if (kind === "wallet" && v.ok && v.feesKobo != null) {
+      await tx.update(walletTopup).set({ gatewayFee: v.feesKobo / 100 }).where(eq(walletTopup.id, t.id));
+    }
     const res = await creditIn(tx, {
       churchId: t.churchId,
       amount: Number(t.amount),

@@ -38,6 +38,18 @@ export const PROMPTS = Object.freeze({
     "Revenue appears only as percentage changes and shares: never state or estimate an amount of money. " +
     "When churches.total is under 30, say that the trends rest on a small number of churches. " +
     SHARED_RULES,
+  "finance-platform@1":
+    "You advise the operator of FlockInsight, a church-management platform, on whether the business makes money, from a JSON object of aggregate figures for meta.period. " +
+    "The JSON holds only counts, 0–1 shares, whole percentages, one index and trend words. It names no church, person, supplier or amount of money. " +
+    "Write in English. " +
+    "Write three to five short sentences in plain business language: whether the business is profitable and by what margin, what drives its costs (the largest costShare entries), how its revenue is made, and the unit economics where they are not null. " +
+    "Then write two or three practical actions, each on its own line beginning 'Suggestion:'. " +
+    "costShare and revenueShare are fractions of total cost and of total revenue. " +
+    "unitEconomics.lifetimeValueToAcquisitionIndex is what a paying church is worth over its lifetime as a percentage of what it costs to win one: 300 means three times. " +
+    "planMarginPct is each plan's margin after the cost of serving its churches. " +
+    "Never state or estimate an amount of money: speak in shares, percentages, counts and directions. " +
+    "When churches.paying is under 10, say that the figures rest on few paying churches. " +
+    SHARED_RULES,
   /*
    * The help assistant and the blog drafter keep their texts beside the code
    * that parses the replies, so one test pins both halves. The ids live here,
@@ -74,6 +86,7 @@ export const PROMPT_SCOPE: Readonly<Partial<Record<PromptId, "church" | "platfor
   Object.freeze({
     "analytics-church@1": "church",
     "analytics-platform@1": "platform",
+    "finance-platform@1": "platform",
     // A canned-answer draft and a blog post are the platform's own work and
     // must never be charged to a church. A help question can be either.
     // Neither advisor prompt is scoped: a superadmin acting as a church asks

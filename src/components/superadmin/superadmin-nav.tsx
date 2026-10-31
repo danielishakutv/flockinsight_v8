@@ -27,6 +27,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Rocket,
+  Scale,
   ScrollText,
   Search,
   ShieldCheck,
@@ -80,6 +81,7 @@ const ICONS: Record<string, LucideIcon> = {
   ScrollText,
   Database,
   Sparkles,
+  Scale,
 };
 
 type Item = { label: string; href: string; icon: LucideIcon };
