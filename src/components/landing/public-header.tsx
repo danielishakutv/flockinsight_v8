@@ -6,6 +6,7 @@ import { LandingHeaderAuth } from "@/components/landing-header-auth";
 import { GEO_TERMS, USE_CASE_TERMS, COMPARISON_TERMS } from "@/lib/seo/keywords";
 import { comparePath, countryPath, solutionPath } from "@/lib/seo/pages";
 import type { NavCopy } from "@/lib/landing-content";
+import { MenuDismiss } from "@/components/landing/menu-dismiss";
 
 /**
  * The public header.
@@ -36,10 +37,20 @@ import type { NavCopy } from "@/lib/landing-content";
  * poorly, and pages linked from every page of the site are crawled on the next
  * pass. The header and footer are where generated pages earn their crawl
  * budget. `<details>` again, so the desktop dropdowns are also free.
+ *
+ * ## Closing them
+ *
+ * A `<details>` closes only when its own summary is clicked again, so on its
+ * own a dropdown stayed open over the page after a click elsewhere or after
+ * following one of its links. `<MenuDismiss />` adds the closing every menu is
+ * expected to have; the menus still open with no JavaScript at all. A menu
+ * opts in with `data-dismissable`.
  */
 export function PublicHeader({ nav }: { nav: NavCopy }) {
   return (
     <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
+      {/* Closes the menus below on a click outside, Escape or navigation. */}
+      <MenuDismiss />
       {/*
         `px-3` and `gap-2` below `sm`, not `px-4 gap-4`.
         At 390px the wordmark plus the right-hand group came to 395px and the
@@ -120,7 +131,7 @@ export function PublicHeader({ nav }: { nav: NavCopy }) {
           <LandingHeaderAuth />
 
           {/* Mobile menu: native disclosure, no JS. */}
-          <details className="group relative lg:hidden">
+          <details data-dismissable className="group relative lg:hidden">
             <summary
               className="hover:bg-muted focus-visible:ring-ring grid size-10 cursor-pointer list-none place-items-center rounded-lg focus-visible:ring-2 focus-visible:outline-none [&::-webkit-details-marker]:hidden"
               aria-label="Menu"
@@ -187,7 +198,7 @@ function NavDropdown({
   children: React.ReactNode;
 }) {
   return (
-    <details className="group relative">
+    <details data-dismissable className="group relative">
       <summary className="hover:text-primary focus-visible:ring-ring flex cursor-pointer list-none items-center gap-1 rounded-md px-3 py-2 focus-visible:ring-2 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         {label}
         <ChevronDown
