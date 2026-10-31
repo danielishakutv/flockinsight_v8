@@ -82,8 +82,13 @@ export default async function AppLayout({
 
   // "First 7 Sundays free" gate. A superadmin acting-as a church bypasses it so
   // they can still help. Only an EXPIRED trial (no payment/waiver) blocks.
+  //
+  // Never the demonstration church. It is a showroom, not a customer: it reads
+  // as Enterprise everywhere else (entitlements, automationPaused), and its
+  // own trial running out on 25 Oct 2026 put a "your free trial has ended"
+  // paywall in front of every visitor the one-click door let in.
   const standing = computeStanding(church);
-  if (standing.gated && !impersonating) {
+  if (standing.gated && !impersonating && !church.isDemo) {
     /*
      * The gate is the moment a church actually decides, so it offers the
      * yearly price too. Before this it sold monthly only — the one screen
@@ -113,7 +118,7 @@ export default async function AppLayout({
     );
   }
   const showTrialBanner =
-    standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
+    !church.isDemo && standing.state === "trialing" && (standing.daysLeft ?? 99) <= 14;
   /*
    * The help assistant is never offered on the demo church: strangers share
    * it, it resets every two hours, and a panel that only ever says "turned
