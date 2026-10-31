@@ -17,7 +17,7 @@ export default async function AuthLayout({
       {/* soft brand glow */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_50%_0%,theme(colors.primary/12%),transparent)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_50%_0%,color-mix(in_oklab,var(--primary)_12%,transparent),transparent)]"
       />
       <Link href="/" className="mb-8">
         <Wordmark logoClassName="size-10" className="text-2xl" />

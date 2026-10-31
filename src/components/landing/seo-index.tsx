@@ -49,7 +49,7 @@ export function SeoIndex({
         <section className="relative overflow-hidden border-b">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_50%_0%,theme(colors.primary/10%),transparent)]"
+            className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_50%_0%,color-mix(in_oklab,var(--primary)_10%,transparent),transparent)]"
           />
           <div className="mx-auto max-w-4xl px-4 py-14 lg:px-8 lg:py-20">
             <nav aria-label="Breadcrumb">

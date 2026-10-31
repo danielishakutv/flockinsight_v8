@@ -179,7 +179,7 @@ export default async function LandingPage({ searchParams }: PageProps) {
         <section className="relative overflow-hidden">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(55%_50%_at_50%_0%,theme(colors.primary/10%),transparent)]"
+            className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(55%_50%_at_50%_0%,color-mix(in_oklab,var(--primary)_10%,transparent),transparent)]"
           />
           {/*
             A faint grid, masked to fade out. Gives the hero a surface to sit on

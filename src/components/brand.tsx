@@ -5,7 +5,9 @@ export function Logo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "grid place-items-center rounded-xl bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-sm",
+        // White, not primary-foreground: in dark mode that token is near-black,
+        // which drew the church as a dark smudge on the purple tile.
+        "grid place-items-center rounded-xl bg-gradient-to-br from-primary to-violet-500 text-white shadow-sm",
         className,
       )}
     >
@@ -35,7 +37,9 @@ export function Wordmark({
     <div className={cn("flex items-center gap-2.5", className)}>
       {showLogo && <Logo className={cn("size-9", logoClassName)} />}
       <span className={cn("text-xl font-extrabold tracking-tight", textClassName)}>
-        Flock<span className="text-primary">Insight</span>
+        {/* A lighter violet in dark mode: the primary shade sits too close to
+            a dark page for a word this size to read. */}
+        Flock<span className="text-primary dark:text-violet-300">Insight</span>
       </span>
     </div>
   );
