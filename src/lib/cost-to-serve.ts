@@ -185,6 +185,7 @@ export async function loadCostInputs(months: MonthKey[], now = new Date()) {
     aiRows,
     readings,
     pendingRows,
+    firstRecorded,
   ] = await Promise.all([
     dollarRate(),
     getSmsPrice(),
@@ -323,6 +324,16 @@ export async function loadCostInputs(months: MonthKey[], now = new Date()) {
       .from(termiiSnapshot)
       .where(and(eq(termiiSnapshot.ok, true), isNotNull(termiiSnapshot.balance), gte(termiiSnapshot.fetchedAt, new Date(since.getTime() - 3 * 86_400_000)))),
     db.select({ amount: sql<string>`coalesce(sum(${payment.amount}), 0)` }).from(payment).where(and(eq(payment.status, "pending"), notVoided)),
+    /*
+     * When team activity and email counts began being recorded at all (see
+     * recordedFrom). Only these two: both started after churches did. SMS
+     * pages and meeting data were recorded from the day each feature
+     * existed, so a month without them really is a month nobody used them.
+     */
+    Promise.all([
+      db.select({ d: sql<string | null>`min(${userActiveDay.day})::text` }).from(userActiveDay),
+      db.select({ d: sql<string | null>`min(${usageStat.day})::text` }).from(usageStat).where(eq(usageStat.metric, "email")),
+    ]),
   ]);
 
   const ids = new Set(churchRows.map((c) => c.id));
@@ -438,6 +449,10 @@ export async function loadCostInputs(months: MonthKey[], now = new Date()) {
       now,
     ).map((t) => ({ month: t.month, spent: t.spent })),
     ngnPerUsd: rate.ngnPerUsd,
+    recordedFrom: {
+      active: firstRecorded[0][0]?.d ? firstRecorded[0][0].d.slice(0, 7) : null,
+      emails: firstRecorded[1][0]?.d ? firstRecorded[1][0].d.slice(0, 7) : null,
+    },
   };
 
   return {

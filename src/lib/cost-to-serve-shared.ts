@@ -486,6 +486,24 @@ export type CostInputs = {
   termiiMeasured: { month: MonthKey; spent: number }[];
   /** Naira per dollar, for the meetings bill. */
   ngnPerUsd: number;
+  /**
+   * The first month each kind of usage was ever recorded. Before it, a month
+   * with nobody in it is a month nobody was counting, not one nobody used:
+   * team activity only began to be recorded in July 2026, while churches had
+   * signed up in June. Those months are shared between every church that
+   * existed instead. Null or missing = never recorded yet.
+   */
+  recordedFrom?: Partial<Record<UsageKind, MonthKey | null>>;
+};
+
+export type UsageKind = "active" | "emails" | "smsPages" | "meetings";
+
+/** Which usage a driver reads, for the drivers that read one. */
+const DRIVER_USAGE: Partial<Record<CostDriver, UsageKind>> = {
+  active_churches: "active",
+  emails: "emails",
+  sms_pages: "smsPages",
+  meetings: "meetings",
 };
 
 export type CostLine = {
@@ -774,7 +792,16 @@ export function buildCostReport(input: CostInputs): CostReport {
   const aiByChurchMonth = new Map<string, number>();
   for (const r of input.ai) if (r.churchId) aiByChurchMonth.set(`${r.churchId}|${r.month}`, (aiByChurchMonth.get(`${r.churchId}|${r.month}`) ?? 0) + r.amount);
 
+  /** A month before this driver's usage was ever recorded: nobody was counting. */
+  const unrecorded = (driver: CostDriver, m: MonthKey) => {
+    const kind = DRIVER_USAGE[driver];
+    if (!kind || !input.recordedFrom || !(kind in input.recordedFrom)) return false;
+    const from = input.recordedFrom[kind];
+    return from == null || m < from;
+  };
+
   function weights(driver: CostDriver, m: MonthKey): Map<string, number> {
+    if (unrecorded(driver, m)) driver = "all_churches";
     const w = new Map<string, number>();
     for (const c of input.churches) {
       if (c.joined > m) continue;
@@ -840,9 +867,11 @@ export function buildCostReport(input: CostInputs): CostReport {
     const def = categoryDef(item.category);
     let total = 0;
     let itemUntraced = 0;
+    const guessed: MonthKey[] = [];
     for (const m of months) {
       const amount = itemCostInMonth(item, m);
       if (amount === 0) continue;
+      if (SERVE_BUCKETS.includes(def.bucket) && item.driver !== "none" && unrecorded(item.driver, m)) guessed.push(m);
       total += amount;
       fixedTotal += amount;
       if (item.driver === "none" || !SERVE_BUCKETS.includes(def.bucket)) {
@@ -865,7 +894,15 @@ export function buildCostReport(input: CostInputs): CostReport {
         amount: total,
         basis: "entered",
         itemId: item.id,
-        detail: item.foreign ? "Priced in dollars: moves with the exchange rate" : undefined,
+        detail:
+          [
+            item.foreign ? "Priced in dollars: moves with the exchange rate" : null,
+            guessed.length
+              ? `${guessed.map((m) => monthLabel(m)).join(", ")}: usage was not recorded yet, so shared between every church`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(". ") || undefined,
         untraced: itemUntraced || undefined,
       });
   }

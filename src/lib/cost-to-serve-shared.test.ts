@@ -366,4 +366,24 @@ describe("buildCostReport", () => {
     expect(r.churches.find((c) => c.id === "a")?.status).toBe("paying");
     expect(r.breakEven.payingNow).toBe(1);
   });
+
+  it("shares a bill between every church in a month before usage was recorded, instead of calling it unused", () => {
+    const r = buildCostReport(
+      inputs({
+        months: ["2026-06", "2026-07"],
+        usage: [{ churchId: "a", month: "2026-07", smsPages: 0, emails: 0, meetingGb: 0, active: true }],
+        recordedFrom: { active: "2026-07" },
+      }),
+    );
+    // June: nobody counted, so both churches share it. July: only the active one.
+    expect(r.untraced).toBe(0);
+    expect(r.churches.find((c) => c.id === "b")!.costBy.core).toBe(10_000);
+    expect(r.churches.find((c) => c.id === "a")!.costBy.core).toBe(30_000);
+    expect(r.lines.find((l) => l.itemId === "i1")?.detail).toContain("Jun 2026: usage was not recorded yet");
+  });
+
+  it("still calls a recorded month with nobody in it unused", () => {
+    const r = buildCostReport(inputs({ usage: [], recordedFrom: { active: "2026-07" } }));
+    expect(r.untraced).toBe(20_000);
+  });
 });
