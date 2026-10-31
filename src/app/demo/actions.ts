@@ -4,9 +4,10 @@ import { after } from "next/server";
 import { z } from "zod";
 import { and, eq, gte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { lead } from "@/db/schema";
+import { lead, leadActivity } from "@/db/schema";
 import { logLeadActivity } from "@/lib/leads";
 import { announceWalkthroughRequest } from "@/lib/walkthrough-notify";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export type DemoResult = { ok: true } | { ok: false; error: string };
 
@@ -57,6 +58,17 @@ export async function requestDemo(
     return { ok: true };
   }
 
+  /*
+   * Per address, before anything is written or sent. This form now sends
+   * email, and a repeat request skipped the flood guard below entirely — so
+   * without this, one script could make us email the team without limit.
+   */
+  if (!rateLimit(`walkthrough:${await clientIp()}`, 5, 60 * 60_000).ok)
+    return {
+      ok: false,
+      error: "We've had several requests from here already — we'll be in touch. Or WhatsApp us on 0808 825 6055.",
+    };
+
   const phoneDigits = d.phone.replace(/\D/g, "");
   const email = d.email?.toLowerCase() ?? null;
 
@@ -85,7 +97,25 @@ export async function requestDemo(
       .update(lead)
       .set({ nextFollowUpAt: new Date(Date.now() + 86_400_000) })
       .where(eq(lead.id, existing.id));
-    announce(existing.id, true, d, email);
+    /*
+     * A repeat tells the team at most once a day, and never emails the person.
+     * The match is on phone OR email, and neither is a secret: emailing the
+     * address typed this time would let anybody who knows a phone number on
+     * file make us send mail to any address they like, as often as they like.
+     * They were confirmed when they first asked.
+     */
+    const [toldToday] = await db
+      .select({ id: leadActivity.id })
+      .from(leadActivity)
+      .where(
+        and(
+          eq(leadActivity.leadId, existing.id),
+          sql`${leadActivity.body} like 'Team emailed:%'`,
+          gte(leadActivity.createdAt, new Date(Date.now() - 86_400_000)),
+        ),
+      )
+      .limit(1);
+    if (!toldToday) announce(existing.id, true, d, null);
     return { ok: true };
   }
 
